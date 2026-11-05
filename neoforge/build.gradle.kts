@@ -1,0 +1,93 @@
+// The NeoForge port: the mod that runs common's host and fires api's events from NeoForge's. One jar for server
+// owners, holding api and common too.
+plugins {
+    `java-library`
+    id("net.neoforged.moddev") version "2.0.148"
+}
+
+version = providers.gradleProperty("hadron_version").get()
+base.archivesName = "hadron"
+
+java.toolchain.languageVersion = JavaLanguageVersion.of(21)
+
+repositories { mavenCentral() }
+
+neoForge {
+    version = providers.gradleProperty("neo_version").get()
+
+    parchment {
+        mappingsVersion = providers.gradleProperty("parchment_mappings_version").get()
+        minecraftVersion = providers.gradleProperty("parchment_minecraft_version").get()
+    }
+
+    runs {
+        register("server") {
+            server()
+            programArgument("--nogui")
+        }
+    }
+
+    mods {
+        register("hadron") {
+            sourceSet(project(":api").sourceSets.main.get())
+            sourceSet(project(":common").sourceSets.main.get())
+            sourceSet(sourceSets.main.get())
+        }
+    }
+}
+
+dependencies {
+    implementation(project(":common"))
+    // plugin.yml and plugins' config.yml. Minecraft doesn't ship a YAML parser, so it rides inside Hadron's jar.
+    // One version everywhere: the same one api compiles against and dev runs use.
+    jarJar("org.yaml:snakeyaml") { version { strictly("[2.2,3)"); prefer("2.2") } }
+    // Dev runs don't unpack jarJar, so the game needs it on its classpath there too.
+    "additionalRuntimeClasspath"("org.yaml:snakeyaml:2.2")
+}
+
+// api and common ship inside the mod's own jar, so server owners install one file.
+tasks.jar {
+    from(project(":api").sourceSets.main.get().output)
+    from(project(":common").sourceSets.main.get().output)
+}
+
+val generateModMetadata = tasks.register<ProcessResources>("generateModMetadata") {
+    val props = mapOf(
+        "hadron_version" to providers.gradleProperty("hadron_version").get(),
+        "minecraft_version_range" to providers.gradleProperty("minecraft_version_range").get(),
+        "neo_version_range" to providers.gradleProperty("neo_version_range").get(),
+    )
+    inputs.properties(props)
+    expand(props)
+    from("src/main/templates")
+    into(layout.buildDirectory.dir("generated/sources/modMetadata"))
+}
+sourceSets.main.get().resources.srcDir(generateModMetadata)
+neoForge.ideSyncTask(generateModMetadata)
+
+// A fresh clone's dev server starts without questions: the EULA accepted, a flat world, offline mode, and RCON so an
+// agent can run console commands (scripts/rcon.py). Files already there are left alone.
+val prepareDevServer = tasks.register("prepareDevServer") {
+    val run = layout.projectDirectory.dir("run").asFile
+    doLast {
+        run.mkdirs()
+        val eula = run.resolve("eula.txt")
+        if (!eula.exists()) eula.writeText("eula=true\n")
+        val props = run.resolve("server.properties")
+        if (!props.exists()) {
+            props.writeText(
+                """
+                online-mode=false
+                server-port=25599
+                level-type=minecraft\:flat
+                spawn-protection=0
+                enable-rcon=true
+                rcon.port=25598
+                rcon.password=hadron
+                broadcast-rcon-to-ops=false
+                """.trimIndent() + "\n"
+            )
+        }
+    }
+}
+tasks.named("runServer") { dependsOn(prepareDevServer) }

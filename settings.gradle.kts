@@ -10,8 +10,10 @@ plugins {
 
 rootProject.name = "hadron"
 
-// core: the NeoForge mod. Plugins build against its public dev.iredsc.hadron.api package.
-include("core")
+// api: what plugins compile against. Vanilla Minecraft only, so a plugin can't touch a loader's classes.
+// common: the plugin host itself, also vanilla only, shared by every loader.
+// neoforge: the NeoForge port. The only part rewritten for another loader.
+include("api", "common", "neoforge")
 
 // A plugin built the way plugin authors will, used to try the host on a real server.
 include("examples:hello")
