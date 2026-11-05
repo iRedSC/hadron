@@ -62,7 +62,7 @@ Hadron ships lightweight plugins server owners expect: essentials-style commands
 
 ## Order of work
 
-1. Plugin host: load, enable, disable and reload jars, each with its own class loader; undo everything a plugin registered.
+1. ~~Plugin host~~: done. Loads, enables, disables and hot-reloads jars, each with its own class loader, and undoes everything a plugin registered (listeners, commands, tasks, services, permission nodes). Ported from FTAM's Foundation.
 2. Hadron's API, first slice: commands, scheduler, config and storage, permissions, services, placeholders.
 3. Gradle plugin and project template, with the build checks.
 4. The skill, written against what 1 to 3 actually do, then tested by asking fresh agents for real plugins and fixing whatever they trip on.
