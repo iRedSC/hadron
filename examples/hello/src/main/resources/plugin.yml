@@ -1,0 +1,10 @@
+name: Hello
+version: ${version}
+minecraft: ${minecraft}
+main: dev.iredsc.hadron.examples.hello.HelloPlugin
+description: Says hello.
+commands:
+  hello:
+    description: Say hello
+    usage: /<command> [name]
+    aliases: [hi]
