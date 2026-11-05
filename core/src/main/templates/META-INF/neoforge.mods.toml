@@ -1,0 +1,25 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+
+[[mods]]
+modId="hadron"
+version="${hadron_version}"
+displayName="Hadron"
+description='''
+Bukkit-shaped plugins for NeoForge servers: jars in plugins/ that reload while the server runs.
+'''
+
+[[dependencies.hadron]]
+    modId="neoforge"
+    type="required"
+    versionRange="${neo_version_range}"
+    ordering="NONE"
+    side="BOTH"
+
+[[dependencies.hadron]]
+    modId="minecraft"
+    type="required"
+    versionRange="${minecraft_version_range}"
+    ordering="NONE"
+    side="BOTH"
