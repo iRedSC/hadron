@@ -41,9 +41,8 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
     private final List<PluginLoader> dependencies;
     private final Map<String, PluginCommand> commands = new LinkedHashMap<>();
     private JavaPlugin plugin;
-    volatile boolean enabled;
-    /** From construction until it starts unloading: when a plugin may still register services. */
-    volatile boolean alive = true;
+    private enum Phase { LOADED, ENABLED, UNLOADING, DISPOSED }
+    private volatile Phase phase = Phase.LOADED;
 
     PluginLoader(PluginDescription description, File original, File copy, File dataFolder, Server server,
             List<PluginLoader> dependencies, ClassLoader parent) throws MalformedURLException {
@@ -134,9 +133,30 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
         return plugin;
     }
 
+    boolean belongsTo(Server server) {
+        return this.server == server;
+    }
+
+    boolean alive() {
+        return phase == Phase.LOADED || phase == Phase.ENABLED;
+    }
+
+    boolean hasUnloadedDependencies() {
+        return dependencies.stream().anyMatch(dependency -> !dependency.alive());
+    }
+
+    void enable() {
+        if (phase != Phase.LOADED) throw new IllegalStateException("Can't enable " + this + " from " + phase);
+        phase = Phase.ENABLED;
+    }
+
+    void beginUnload() {
+        if (phase != Phase.DISPOSED) phase = Phase.UNLOADING;
+    }
+
     @Override
     public boolean enabled() {
-        return enabled;
+        return phase == Phase.ENABLED;
     }
 
     @Override
@@ -163,6 +183,7 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
 
     /** Releases the jar copy. Classes already loaded keep working for whoever still holds them. */
     void dispose() {
+        phase = Phase.DISPOSED;
         try {
             close();
         } catch (IOException ignored) {

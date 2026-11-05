@@ -24,8 +24,8 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
 public final class HadronMod {
     public static final String MOD_ID = "hadron";
 
-    /** The running server's host; null while none runs. Server thread only. */
-    private static PluginHost host;
+    /** Published to background dispatcher preparation; lifecycle changes stay on the server thread. */
+    private static volatile PluginHost host;
 
     public HadronMod(IEventBus modBus, ModContainer container) {
         NeoForge.EVENT_BUS.addListener(HadronMod::aboutToStart);
@@ -59,6 +59,7 @@ public final class HadronMod {
     }
 
     private static void stopped(ServerStoppedEvent event) {
+        if (host != null) host.stop();
         host = null;
         Hadron.Lifecycle.install(null);
     }
@@ -66,6 +67,7 @@ public final class HadronMod {
     /** Every new dispatcher: at startup, and on each datapack /reload. */
     private static void commands(RegisterCommandsEvent event) {
         HadronCommand.register(event.getDispatcher(), () -> host);
-        Commands.apply(event.getDispatcher());
+        PluginHost current = host;
+        if (current != null) current.commands().apply(event.getDispatcher());
     }
 }

@@ -8,6 +8,8 @@ import net.neoforged.bus.api.Event;
 /**
  * Plugins and what they register, like Bukkit's plugin manager. Everything registered here belongs to the plugin
  * passed in and is undone when it disables, so a reload never leaves an old listener or command behind.
+ * Registering commands and registering or removing listeners must run on the server thread; use Scheduler.runTask
+ * when calling from an asynchronous task.
  */
 public interface PluginManager {
     /**

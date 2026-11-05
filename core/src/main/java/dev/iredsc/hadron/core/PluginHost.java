@@ -103,11 +103,8 @@ public final class PluginHost implements PluginManager {
 
         static final class Failed extends State {
             final String why;
-            final Throwable error;
-
-            Failed(String why, Throwable error) {
+            Failed(String why) {
                 this.why = why;
-                this.error = error;
             }
         }
 
@@ -174,6 +171,7 @@ public final class PluginHost implements PluginManager {
     private final ServerImpl server;
     private final TaskScheduler scheduler;
     private final Services services;
+    private final Commands commands;
     private final Map<String, Entry> entries = new TreeMap<String, Entry>(String.CASE_INSENSITIVE_ORDER);
     private final List<Entry> enabledOrder = new ArrayList<Entry>();
     private final Set<String> off = new TreeSet<String>(String.CASE_INSENSITIVE_ORDER);
@@ -201,9 +199,8 @@ public final class PluginHost implements PluginManager {
         this.server = new ServerImpl(this, minecraft, folder, configFolder);
         this.scheduler = new TaskScheduler(this);
         this.services = new Services(this);
+        this.commands = new Commands(minecraft);
         readOff();
-        // Ctrl+C stops a dedicated server from a JVM shutdown hook; plugins should treat that as a shutdown.
-        Runtime.getRuntime().addShutdownHook(new Thread(() -> stopping = true, "Hadron shutdown"));
     }
 
     public Server server() {
@@ -220,6 +217,10 @@ public final class PluginHost implements PluginManager {
 
     Services services() {
         return services;
+    }
+
+    Commands commands() {
+        return commands;
     }
 
     // ---- Lifecycle, driven by Hadron ----
@@ -301,6 +302,9 @@ public final class PluginHost implements PluginManager {
                 List<Entry> order = new ArrayList<Entry>(enabledOrder);
                 Collections.reverse(order);
                 for (Entry e : order) disable(e, new State.Stopped());
+                for (Entry e : entries.values()) disable(e, new State.Stopped());
+                startupOrder = Collections.emptyList();
+                scheduler.close();
             }
         });
         deleteChildren(loadedDir);
@@ -524,6 +528,9 @@ public final class PluginHost implements PluginManager {
         List<Entry> order = new ArrayList<Entry>(enabledOrder);
         Collections.reverse(order);
         for (Entry e : order) if (which.contains(e)) disable(e, new State.Stopped());
+        List<Entry> remaining = new ArrayList<>(which);
+        Collections.reverse(remaining);
+        for (Entry e : remaining) if (e.state instanceof State.Loaded) disable(e, new State.Stopped());
     }
 
     /**
@@ -539,24 +546,20 @@ public final class PluginHost implements PluginManager {
     /** Loads each after what it needs. @return them in that order. A dependency cycle fails every plugin in it. */
     private List<Entry> loadInOrder(List<Entry> which) {
         List<Entry> left = new ArrayList<Entry>(which);
+        left.removeIf(e -> {
+            if (!off.contains(e.name)) return false;
+            e.state = new State.Off();
+            return true;
+        });
         List<Entry> order = new ArrayList<Entry>();
-        boolean progress = true;
-        while (!left.isEmpty() && progress) {
-            progress = false;
-            for (Entry e : new ArrayList<Entry>(left)) {
-                boolean ready = true;
-                for (String need : e.needs()) {
-                    Entry n = entries.get(need);
-                    if (n != null && left.contains(n)) {
-                        ready = false;
-                        break;
-                    }
-                }
-                if (!ready) continue;
-                left.remove(e);
-                order.add(e);
-                progress = true;
-            }
+        while (!left.isEmpty()) {
+            List<Entry> ready = left.stream().filter(e -> e.description.getDepend().stream()
+                    .noneMatch(need -> left.contains(entries.get(need)))).toList();
+            if (ready.isEmpty()) break;
+            Entry next = ready.stream().filter(e -> e.description.getSoftDepend().stream()
+                    .noneMatch(need -> left.contains(entries.get(need)))).findFirst().orElse(ready.getFirst());
+            left.remove(next);
+            order.add(next);
         }
         for (Entry e : left) {
             fail(e, "depends on itself through " + left.size() + " plugins: " + names(left), null);
@@ -605,6 +608,13 @@ public final class PluginHost implements PluginManager {
         // Pushed before any of the plugin's classes initialize (a static node in a constructor counts), and first,
         // so it runs last: nodes outlive the code that might still check them.
         loaded.undo.push(() -> Node.Lifecycle.release(owner));
+        loaded.undo.push(() -> {
+            JavaPlugin plugin = loader.plugin();
+            if (plugin != null) {
+                scheduler.cancelTasks(plugin);
+                services.unregisterAll(plugin);
+            }
+        });
         try {
             if (visibleToMods(d.getMain())) {
                 throw new PluginException(d.getMain() + " is also in a jar in mods/, which would run instead. Remove "
@@ -619,14 +629,10 @@ public final class PluginHost implements PluginManager {
             if (!JavaPlugin.class.isAssignableFrom(main)) {
                 throw new PluginException(d.getMain() + " doesn't extend JavaPlugin");
             }
+            if (main.getClassLoader() != loader) {
+                throw new PluginException("plugin.yml's main class " + d.getMain() + " must be in its own jar, not a dependency");
+            }
             final JavaPlugin plugin = (JavaPlugin) main.getConstructor().newInstance();
-            loaded.undo.push(new Runnable() {
-                @Override
-                public void run() {
-                    scheduler.cancelTasks(plugin);
-                    services.unregisterAll(plugin);
-                }
-            });
             for (PluginDescription.PermissionSpec p : d.getPermissions()) {
                 Node.Lifecycle.declare(p.node, p.fallback, p.description, loader);
             }
@@ -653,15 +659,21 @@ public final class PluginHost implements PluginManager {
             abandon(e, loaded, new PluginException(missing));
             return;
         }
+        if (loaded.loader.hasUnloadedDependencies()) {
+            disable(e, new State.Stopped());
+            load(e);
+            if (e.state instanceof State.Loaded) start(e);
+            return;
+        }
         PluginLoader loader = loaded.loader;
         State.Enabled running = new State.Enabled(loaded);
         e.state = running;
         long start = System.nanoTime();
         try {
-            loader.enabled = true;
+            loader.enable();
             loader.plugin().onEnable();
             for (PluginCommand c : loader.commands().values()) {
-                running.undo.push(Commands.register(minecraft, c, loader.logger()));
+                running.undo.push(commands.register(c, loader.logger()));
             }
             enabledOrder.add(e);
             LOG.info("Enabled " + e.description.getFullName() + " in " + (System.nanoTime() - start) / 1000000 + " ms");
@@ -691,8 +703,9 @@ public final class PluginHost implements PluginManager {
     /** Undoes a plugin that failed partway through loading or enabling. */
     private void abandon(Entry e, State.Running running, Throwable t) {
         Throwable cause = t instanceof InvocationTargetException && t.getCause() != null ? t.getCause() : t;
-        running.loader.enabled = false;
-        running.loader.alive = false;
+        running.loader.beginUnload();
+        JavaPlugin plugin = running.loader.plugin();
+        if (plugin != null) scheduler.awaitAsync(plugin, ASYNC_GRACE_MILLIS);
         undoAll(running, e.name);
         enabledOrder.remove(e);
         running.loader.dispose();
@@ -711,6 +724,7 @@ public final class PluginHost implements PluginManager {
         }
         State.Running running = (State.Running) e.state;
         JavaPlugin plugin = running.loader.plugin();
+        running.loader.beginUnload();
         if (running instanceof State.Enabled && plugin != null) {
             closeMenus(running.loader);
             int stillRunning = scheduler.awaitAsync(plugin, ASYNC_GRACE_MILLIS);
@@ -724,8 +738,6 @@ public final class PluginHost implements PluginManager {
                 LOG.error(e.name + " threw while disabling", t);
             }
         }
-        running.loader.enabled = false;
-        running.loader.alive = false;
         undoAll(running, e.name);
         enabledOrder.remove(e);
         running.loader.dispose();
@@ -733,7 +745,7 @@ public final class PluginHost implements PluginManager {
     }
 
     /**
-     * Closes every menu the plugin's code opened, while the plugin is still enabled, so the menu's own close handling
+     * Closes every menu the plugin's code opened, before onDisable, so the menu's own close handling
      * (handing back items, say) runs as usual and nobody keeps clicking the old version's code after a reload.
      */
     private void closeMenus(PluginLoader loader) {
@@ -761,7 +773,7 @@ public final class PluginHost implements PluginManager {
     }
 
     private void fail(Entry e, String why, Throwable error) {
-        e.state = new State.Failed(why, error);
+        e.state = new State.Failed(why);
         if (error != null && !(error instanceof PluginException)) {
             LOG.error(e.name + " didn't enable: " + why, error);
         } else {
@@ -872,15 +884,18 @@ public final class PluginHost implements PluginManager {
     /** Loaded or enabled, and not unloading: services may be registered from onLoad on. */
     boolean isAlive(JavaPlugin plugin) {
         ClassLoader loader = plugin.getClass().getClassLoader();
-        return loader instanceof PluginLoader && ((PluginLoader) loader).alive;
+        return loader instanceof PluginLoader context && context.belongsTo(server)
+                && context.plugin() == plugin && context.alive();
     }
 
     boolean isActive(JavaPlugin plugin) {
         ClassLoader loader = plugin.getClass().getClassLoader();
-        return loader instanceof PluginLoader && ((PluginLoader) loader).enabled;
+        return loader instanceof PluginLoader context && context.belongsTo(server)
+                && context.plugin() == plugin && context.enabled();
     }
 
     private State.Enabled running(JavaPlugin plugin, String what) {
+        requireServerThread();
         requireActive(plugin, what);
         Entry e = entries.get(plugin.getName());
         if (e == null || !(e.state instanceof State.Enabled)
@@ -906,6 +921,7 @@ public final class PluginHost implements PluginManager {
 
     @Override
     public void unregisterEvents(Object listener) {
+        requireServerThread();
         for (Entry e : entries.values()) {
             if (!(e.state instanceof State.Enabled)) continue;
             for (Events.Subscription s : ((State.Enabled) e.state).subscriptions) {
@@ -917,7 +933,13 @@ public final class PluginHost implements PluginManager {
     @Override
     public void registerCommand(LiteralArgumentBuilder<CommandSourceStack> command, JavaPlugin plugin) {
         State.Enabled running = running(plugin, "register commands");
-        running.undo.push(Commands.register(minecraft, command));
+        running.undo.push(commands.register(command));
+    }
+
+    private void requireServerThread() {
+        if (!minecraft.isSameThread()) {
+            throw new IllegalStateException("Register or remove listeners and commands on the server thread; use Scheduler.runTask");
+        }
     }
 
     @Override

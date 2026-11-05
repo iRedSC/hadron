@@ -89,7 +89,7 @@ final class TaskScheduler implements Scheduler {
         /** Runs unless cancelled or its plugin is no longer the running version; a one-shot then leaves the index. */
         @Override
         public void run() {
-            if (isAsync) started(owner);
+            if (isAsync && !started(owner)) return;
             try {
                 if (cancelled || !host.isActive(owner)) return;
                 body.run();
@@ -146,11 +146,21 @@ final class TaskScheduler implements Scheduler {
         }
     }
 
-    private void started(JavaPlugin plugin) {
+    private boolean started(JavaPlugin plugin) {
         synchronized (inFlight) {
+            if (!host.isActive(plugin)) return false;
             Integer n = inFlight.get(plugin);
             inFlight.put(plugin, n == null ? 1 : n + 1);
+            return true;
         }
+    }
+
+    synchronized void close() {
+        for (TaskImpl task : byId.values()) task.cancelled = true;
+        byId.clear();
+        queue.clear();
+        async.shutdownNow();
+        serverThread = null;
     }
 
     private void ended(JavaPlugin plugin) {
@@ -164,8 +174,9 @@ final class TaskScheduler implements Scheduler {
 
     /**
      * Waits up to {@code timeoutMillis} for the plugin's async runs already in progress to finish, so nothing of a
-     * disabling version is still working while it saves, or after its next version starts. Called on the server
-     * thread, where no new run can start meanwhile. @return how many were still running when it gave up; 0 when done.
+     * disabling version is still working while it saves, or after its next version starts. Called after the plugin
+     * closes admission, so queued workers cannot enter while waiting. @return how many were still running when it
+     * gave up; 0 when done.
      */
     int awaitAsync(JavaPlugin plugin, long timeoutMillis) {
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);

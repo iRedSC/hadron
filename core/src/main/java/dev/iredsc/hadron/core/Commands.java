@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.WeakHashMap;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
@@ -21,7 +22,7 @@ import org.slf4j.Logger;
 /**
  * Plugins' commands in Minecraft's Brigadier dispatcher. Brigadier can only add, so taking a command out edits the
  * root node's maps directly. A datapack {@code /reload} builds a new dispatcher, so every live plugin command is
- * added again to each new one ({@link #apply}). Server thread only.
+ * added again to each new one ({@link #apply}). Dispatcher preparation can run off the server thread.
  */
 final class Commands {
     private static final Field CHILDREN = field("children");
@@ -29,9 +30,13 @@ final class Commands {
     private static final Field ARGUMENTS = field("arguments");
 
     /** What plugins registered and haven't undone, in registration order. */
-    private static final List<Registration> live = new ArrayList<>();
+    private final List<Registration> live = new ArrayList<>();
+    private final Map<CommandDispatcher<CommandSourceStack>, Boolean> dispatchers = new WeakHashMap<>();
+    private final MinecraftServer server;
 
-    private Commands() {}
+    Commands(MinecraftServer server) {
+        this.server = server;
+    }
 
     private static Field field(String name) {
         try {
@@ -44,45 +49,82 @@ final class Commands {
         }
     }
 
-    /** One command a plugin added, and the node it displaced in the current dispatcher, if any. */
+    /** One command a plugin added, with independent ownership in each prepared dispatcher. */
     private static final class Registration {
         final LiteralArgumentBuilder<CommandSourceStack> builder;
-        CommandNode<CommandSourceStack> ours;
-        CommandNode<CommandSourceStack> displaced;
+        final Map<CommandDispatcher<CommandSourceStack>, Binding> bindings = new WeakHashMap<>();
 
         Registration(LiteralArgumentBuilder<CommandSourceStack> builder) {
             this.builder = builder;
         }
     }
 
+    private static final class Binding {
+        final CommandNode<CommandSourceStack> ours;
+        CommandNode<CommandSourceStack> displaced;
+
+        Binding(CommandNode<CommandSourceStack> ours, CommandNode<CommandSourceStack> displaced) {
+            this.ours = ours;
+            this.displaced = displaced;
+        }
+    }
+
     /** Adds the command to the running server now, and to every dispatcher a /reload makes. @return its undo. */
-    static Runnable register(MinecraftServer server, LiteralArgumentBuilder<CommandSourceStack> builder) {
+    synchronized Runnable register(LiteralArgumentBuilder<CommandSourceStack> builder) {
+        apply(server.getCommands().getDispatcher());
         Registration r = new Registration(builder);
         live.add(r);
-        add(server.getCommands().getDispatcher(), r);
-        resend(server);
-        return () -> {
-            live.remove(r);
-            remove(server.getCommands().getDispatcher(), r);
+        try {
+            for (CommandDispatcher<CommandSourceStack> dispatcher : List.copyOf(dispatchers.keySet())) add(dispatcher, r);
             resend(server);
-        };
+        } catch (RuntimeException | Error failure) {
+            try {
+                unregister(r);
+            } catch (RuntimeException | Error cleanup) {
+                failure.addSuppressed(cleanup);
+            }
+            throw failure;
+        }
+        return () -> unregister(r);
+    }
+
+    private synchronized void unregister(Registration r) {
+        if (live.remove(r)) {
+            for (var entry : new ArrayList<>(r.bindings.entrySet())) {
+                CommandDispatcher<CommandSourceStack> dispatcher = entry.getKey();
+                if (dispatcher == null) continue;
+                Binding binding = entry.getValue();
+                for (Registration other : live) {
+                    Binding next = other.bindings.get(dispatcher);
+                    if (next != null && next.displaced == binding.ours) next.displaced = binding.displaced;
+                }
+                remove(dispatcher, r.builder.getLiteral(), binding);
+            }
+            r.bindings.clear();
+            resend(server);
+        }
     }
 
     /** A plugin.yml command, under its name, its aliases and {@code <plugin>:<name>}. @return one undo for all. */
-    static Runnable register(MinecraftServer server, PluginCommand command, Logger log) {
+    synchronized Runnable register(PluginCommand command, Logger log) {
         List<String> labels = new ArrayList<>();
         labels.add(command.getName());
         labels.addAll(command.getAliases());
         labels.add(command.getPlugin().getName().toLowerCase(Locale.ROOT) + ":" + command.getName());
         List<Runnable> undo = new ArrayList<>();
-        for (String label : labels) undo.add(register(server, build(command, label, log)));
+        try {
+            for (String label : labels) undo.add(register(build(command, label, log)));
+        } catch (RuntimeException | Error failure) {
+            undo.reversed().forEach(Runnable::run);
+            throw failure;
+        }
         return () -> undo.reversed().forEach(Runnable::run);
     }
 
     /** Called for each new dispatcher (server start, datapack /reload), after mods have added theirs. */
-    static void apply(CommandDispatcher<CommandSourceStack> dispatcher) {
+    synchronized void apply(CommandDispatcher<CommandSourceStack> dispatcher) {
+        if (dispatchers.putIfAbsent(dispatcher, Boolean.TRUE) != null) return;
         for (Registration r : live) {
-            r.displaced = null;
             add(dispatcher, r);
         }
     }
@@ -92,17 +134,15 @@ final class Commands {
         CommandNode<CommandSourceStack> existing = dispatcher.getRoot().getChild(name);
         if (existing != null) {
             detach(dispatcher, name);
-            r.displaced = existing;
         }
-        r.ours = dispatcher.register(r.builder);
+        r.bindings.put(dispatcher, new Binding(dispatcher.register(r.builder), existing));
     }
 
-    private static void remove(CommandDispatcher<CommandSourceStack> dispatcher, Registration r) {
-        String name = r.builder.getLiteral();
+    private static void remove(CommandDispatcher<CommandSourceStack> dispatcher, String name, Binding binding) {
         // Only if it's still ours: a later plugin taking the name over keeps it.
-        if (dispatcher.getRoot().getChild(name) != r.ours) return;
+        if (dispatcher.getRoot().getChild(name) != binding.ours) return;
         detach(dispatcher, name);
-        if (r.displaced != null) dispatcher.getRoot().addChild(r.displaced);
+        if (binding.displaced != null) dispatcher.getRoot().addChild(binding.displaced);
     }
 
     @SuppressWarnings("unchecked")
