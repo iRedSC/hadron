@@ -1,0 +1,23 @@
+// What plugins compile against. Vanilla Minecraft only: no NeoForge or Fabric class is on the classpath, so the API
+// can't mention one, and a plugin built against it runs on every loader Hadron supports.
+plugins {
+    `java-library`
+    id("net.neoforged.moddev") version "2.0.148"
+}
+
+version = providers.gradleProperty("hadron_version").get()
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    // Agents read the API from the sources jar, so every release ships one.
+    withSourcesJar()
+}
+repositories { mavenCentral() }
+
+neoForge {
+    neoFormVersion = providers.gradleProperty("neoform_version").get()
+}
+
+dependencies {
+    // Plugins' config.yml. Minecraft doesn't ship a YAML parser, so it rides inside Hadron's jar.
+    api("org.yaml:snakeyaml:2.2")
+}
