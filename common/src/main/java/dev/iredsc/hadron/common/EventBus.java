@@ -12,10 +12,11 @@ import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
@@ -37,8 +38,9 @@ final class EventBus {
         private final String where;
         private final Logger log;
         private final AtomicInteger failures = new AtomicInteger();
-        /** Set when removed; a post already holding this handler then skips it, so unloaded code is never called. */
-        private volatile boolean removed;
+        /** Admission and removal share this monitor; calls already in progress are tracked until they finish. */
+        private boolean removed;
+        private final Map<Thread, Integer> calls = new HashMap<>();
         private EventBus bus;
 
         private Subscription(Listener listener, Class<?> type, EventHandler h, long order, MethodHandle handle,
@@ -54,24 +56,60 @@ final class EventBus {
         }
 
         void remove() {
-            if (removed) return;
-            removed = true;
+            deactivate();
+        }
+
+        void deactivate() {
+            synchronized (this) {
+                if (removed) return;
+                removed = true;
+            }
             bus.remove(this);
         }
 
+        boolean awaitIdle(long deadline) {
+            boolean interrupted = false;
+            boolean idle;
+            synchronized (this) {
+                while (calls.size() > (calls.containsKey(Thread.currentThread()) ? 1 : 0)) {
+                    long remaining = deadline - System.nanoTime();
+                    if (remaining <= 0) break;
+                    try {
+                        TimeUnit.NANOSECONDS.timedWait(this, remaining);
+                    } catch (InterruptedException exception) {
+                        interrupted = true;
+                    }
+                }
+                idle = calls.size() == (calls.containsKey(Thread.currentThread()) ? 1 : 0);
+            }
+            if (interrupted) Thread.currentThread().interrupt();
+            return idle;
+        }
+
         private void call(Event event) {
-            if (removed) return;
-            if (ignoreCancelled && event instanceof Cancellable c && c.isCancelled()) return;
+            Thread thread = Thread.currentThread();
+            synchronized (this) {
+                if (removed) return;
+                calls.merge(thread, 1, Integer::sum);
+            }
             try {
+                if (ignoreCancelled && event instanceof Cancellable c && c.isCancelled()) return;
                 handle.invoke(event);
             } catch (Throwable t) {
                 // A plugin's bug costs that plugin its event, not the server its tick. Logged in full a few times,
                 // then counted, so a handler on a frequent event can't flood the log.
                 int n = failures.incrementAndGet();
                 if (n <= 5) {
-                    log.error(where + " threw on " + event.getEventName(), t);
+                    log.error(where + " threw on " + event.getClass().getName(), t);
                 } else if (n % 1000 == 0) {
-                    log.error("{} has thrown {} times; last: {}", where, n, t.toString());
+                    log.error(where + " has thrown " + n + " times; latest failure", t);
+                }
+            } finally {
+                synchronized (this) {
+                    int remaining = calls.get(thread) - 1;
+                    if (remaining == 0) calls.remove(thread);
+                    else calls.put(thread, remaining);
+                    notifyAll();
                 }
             }
         }
@@ -84,7 +122,7 @@ final class EventBus {
     /** By the event class each handler takes. Guarded by this. */
     private final Map<Class<?>, List<Subscription>> byType = new LinkedHashMap<>();
     /** Every handler that hears a concrete event class, sorted; rebuilt after any change. */
-    private final Map<Class<?>, Subscription[]> baked = new ConcurrentHashMap<>();
+    private final Map<Class<?>, Subscription[]> baked = new HashMap<>();
     private final AtomicLong registered = new AtomicLong();
 
     /** Subscribes every {@code @EventHandler} method; all or nothing. */
@@ -112,7 +150,10 @@ final class EventBus {
 
     /** Runs every handler that hears the event. */
     void post(Event event) {
-        Subscription[] handlers = baked.computeIfAbsent(event.getClass(), this::bake);
+        Subscription[] handlers;
+        synchronized (this) {
+            handlers = baked.computeIfAbsent(event.getClass(), this::bake);
+        }
         for (Subscription s : handlers) s.call(event);
     }
 

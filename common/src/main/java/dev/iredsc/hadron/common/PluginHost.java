@@ -35,6 +35,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
+import java.util.concurrent.TimeUnit;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import net.minecraft.ChatFormatting;
@@ -722,8 +723,10 @@ public final class PluginHost implements PluginManager {
     private void abandon(Entry e, State.Running running, Throwable t) {
         Throwable cause = t instanceof InvocationTargetException && t.getCause() != null ? t.getCause() : t;
         running.loader.beginUnload();
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ASYNC_GRACE_MILLIS);
+        removeEvents(running, deadline);
         JavaPlugin plugin = running.loader.plugin();
-        if (plugin != null) scheduler.awaitAsync(plugin, ASYNC_GRACE_MILLIS);
+        if (plugin != null) scheduler.awaitAsync(plugin, remainingGraceMillis(deadline));
         undoAll(running, e.name);
         enabledOrder.remove(e);
         running.loader.dispose();
@@ -743,9 +746,11 @@ public final class PluginHost implements PluginManager {
         State.Running running = (State.Running) e.state;
         JavaPlugin plugin = running.loader.plugin();
         running.loader.beginUnload();
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ASYNC_GRACE_MILLIS);
+        removeEvents(running, deadline);
         if (running instanceof State.Enabled && plugin != null) {
             closeMenus(running.loader);
-            int stillRunning = scheduler.awaitAsync(plugin, ASYNC_GRACE_MILLIS);
+            int stillRunning = scheduler.awaitAsync(plugin, remainingGraceMillis(deadline));
             if (stillRunning > 0) {
                 LOG.warn(e.name + " still had " + stillRunning + " background task(s) running after "
                         + ASYNC_GRACE_MILLIS / 1000 + "s; disabling it anyway");
@@ -777,6 +782,20 @@ public final class PluginHost implements PluginManager {
                 }
             }
         }
+    }
+
+    private static long remainingGraceMillis(long deadline) {
+        return Math.max(0, TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()));
+    }
+
+    private static void removeEvents(State.Running running, long deadline) {
+        for (EventBus.Subscription subscription : running.subscriptions) subscription.deactivate();
+        boolean idle = true;
+        for (EventBus.Subscription subscription : running.subscriptions) {
+            if (!subscription.awaitIdle(deadline)) idle = false;
+        }
+        if (!idle) LOG.warn(running.loader.description().getName() + " still had event handlers running after "
+                + ASYNC_GRACE_MILLIS / 1000 + "s; disabling it anyway");
     }
 
     private static void undoAll(State.Running running, String name) {

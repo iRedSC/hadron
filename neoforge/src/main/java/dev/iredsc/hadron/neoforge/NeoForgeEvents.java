@@ -86,6 +86,14 @@ final class NeoForgeEvents {
         PluginHost host = hosts.get();
         if (host == null || !(event.getEntity() instanceof ServerPlayer p)
                 || !(event.getLevel() instanceof ServerLevel level)) return;
+        if (event instanceof BlockEvent.EntityMultiPlaceEvent multi) {
+            for (var snapshot : multi.getReplacedBlockSnapshots()) {
+                BlockPlaceEvent hadron = new BlockPlaceEvent(level, snapshot.getPos(), snapshot.getCurrentState(), p);
+                host.post(hadron);
+                if (hadron.isCancelled()) event.setCanceled(true);
+            }
+            return;
+        }
         BlockPlaceEvent hadron = new BlockPlaceEvent(level, event.getPos(), event.getPlacedBlock(), p);
         host.post(hadron);
         if (hadron.isCancelled()) event.setCanceled(true);

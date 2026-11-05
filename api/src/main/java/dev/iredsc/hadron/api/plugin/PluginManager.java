@@ -21,7 +21,7 @@ public interface PluginManager {
      */
     void registerEvents(Listener listener, JavaPlugin plugin);
 
-    /** Removes every handler {@code listener} registered. */
+    /** Removes every handler {@code listener} registered. A call already in progress may finish. */
     void unregisterEvents(Listener listener);
 
     /**

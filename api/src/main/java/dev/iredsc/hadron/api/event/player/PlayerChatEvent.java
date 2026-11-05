@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.event.Cancellable;
+import java.util.Objects;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -13,7 +14,7 @@ public class PlayerChatEvent extends PlayerEvent implements Cancellable {
     public PlayerChatEvent(ServerPlayer player, String rawText, Component message) {
         super(player);
         this.rawText = rawText;
-        this.message = message;
+        this.message = Objects.requireNonNull(message, "Chat message cannot be null; use setCancelled(true) to hide it");
     }
 
     /** Exactly what the player typed. */
@@ -27,7 +28,7 @@ public class PlayerChatEvent extends PlayerEvent implements Cancellable {
     }
 
     public void setMessage(Component message) {
-        this.message = message;
+        this.message = Objects.requireNonNull(message, "Chat message cannot be null; use setCancelled(true) to hide it");
     }
 
     @Override
