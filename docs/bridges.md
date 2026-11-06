@@ -1,35 +1,53 @@
 # Bridges
 
-A bridge makes one mod behave like vanilla for plugins. Nothing here is built yet; this is the target the core and the first bridges are built toward.
+A bridge makes one mod speak Hadron's events. Nothing here is built yet; this is the target the core and the first bridges are built toward.
 
 ## The goal
 
-**With a mod's bridge installed, everything that mod does to the world, players and items can be attributed to someone, intercepted, and gated by permissions, by the same plugins that handle vanilla.**
+**A server owner installs a plugin, and it acts on every mod's content without being edited, as long as the mods' bridges are installed.** A server owner running Hadron's regions plugin never wonders whether a mod's quarry, turret or drone is covered: either its bridge is installed and it is, or Hadron has told them which bridge to get.
 
-A bridge is done when it passes the acceptance test: run the mod's machines, weapons and tools inside a protected region, and a protection plugin denies what the region forbids while a logging plugin records the right player for each change. Neither plugin knows the mod exists.
+A bridge is done when it passes the acceptance test: run the mod's machines, weapons, tools, vehicles, storage and rituals inside a protected region, and a protection plugin denies what the region forbids while a logging plugin records the right player for each change, and an anti-dupe check finds every item and resource conserved. Neither plugin knows the mod exists. Cancelled actions must leave nothing behind: no consumed cost, no half-moved block entity, no fluid handed over while the block stays.
 
-## Core intercepts, bridges attribute
+## Core intercepts, bridges translate
 
 Per-mod events don't scale: plugins would have to learn every mod, and a protection plugin would only protect against the mods its author had heard of. So the work splits:
 
-- **Core intercepts.** It owns a small set of generic actions and fires them at the vanilla chokepoints every mod passes through: a block changes, an entity is hurt, something explodes, items move, a block is used, a menu opens. They are Hadron events, the same on every loader.
-- **Bridges attribute.** The question core can't answer is who is behind a machine, a turret, a projectile or a shared fake player. A bridge pushes an **actor** onto a stack when the mod's code starts acting for someone, and pops it after; every generic action carries the actor on top. An actor is a player, a fake player acting for an owner, a machine with an owner, or nobody (nature, or unknown).
+- **Core intercepts.** It owns the full event vocabulary ([events.md](events.md)), designed up front, and fires each event at the vanilla chokepoints every mod passes through. They are Hadron events, the same on every loader.
+- **Bridges translate.** A bridge does two jobs. It **attributes**: when the mod's code starts acting for someone it pushes an **actor** onto a stack, and pops it after, so every event carries who is behind a machine, a turret, a projectile or a shared fake player, and who controls it right now ([events.md](events.md#actors)). And it **routes**: wherever the mod skips vanilla, the bridge fires the core event the chokepoint would have fired. A mod's blast that never calls `Level.explode` fires `ExplosionEvent`; AE2 moving items between cells fires `InventoryMoveItemEvent`.
 
-Foundation already did this for OpenModularTurrets: `TurretShots.firing()` marks the turret's owner while its shot lands, and the ordinary damage path reads it.
+**A bridge never expresses an effect only through its own event.** It may publish extras (an AE2 network's contents, a machine's progress), but anything that touches the world, players or items reaches plugins as a core event, or plugins that don't know the mod can't see it. When no event fits exactly, the bridge fires the nearest parent in the hierarchy (`BlockChangeEvent`, `InventoryChangeEvent`) with its full payload, and the missing leaf is proposed for core. A bridge also opens an operation before its mod's first mutation, so a cancel stops the whole action instead of its last step ([events.md](events.md#operations-and-cancelling)).
 
-A bridge adds a mod-specific event only where the mod skips vanilla entirely, so no chokepoint sees it: Foundation's `ModBlastEvent` for DefenseTech's explosives, or AE2 moving items between storage cells.
+Foundation already did attribution for OpenModularTurrets: `TurretShots.firing()` marks the turret's owner while its shot lands, and the ordinary damage path reads it.
+
+### What core attributes on its own
+
+While a modded block entity or entity ticks, core makes it the actor, with no owner; while a player's packet is handled, that player is. Core also stores the causal actor on projectiles, summons, primed explosives and queued work, so attribution survives delays. So an unbridged mod's machine already appears as a `Machine` at its position, not as nobody. Bridges add owners and controllers core can't infer (a vehicle's driver, a drone's remote operator, a charmed mob's charmer).
+
+### Two kinds of gap
+
+- **Attribution gaps fail closed.** `Unknown` actors and actors with no owner are outsiders to protection: denied wherever a region or claim forbids outsiders. A missing bridge then shows up as a machine refusing to work in its owner's claim, which the owner notices and fixes, never as a grief nobody saw.
+- **Interception gaps can't fail closed.** An effect that skips every vanilla chokepoint (a ship moving, a direct chunk write, mana drained) produces no event, so nothing can deny it. Only the bridge closes this gap, which is why the coverage report names it separately.
 
 ### The chokepoint cost
 
-`Level.setBlock` and its neighbours run millions of times. A generic action fires only when someone listens and either an actor is on the stack or the position matters to a listener (a region, a logged area). Otherwise a server without bridges would get slower for nothing. This gets a benchmark before any bridge is built.
+`Level.setBlock` and its neighbours run millions of times. An event fires only when someone listens and either an actor is on the stack or the position matters to a listener (a region, a logged area). Otherwise a server without bridges would get slower for nothing. This gets a benchmark before any bridge is built.
+
+## Coverage report
+
+The owner never has to work out which bridges are missing. At startup, and on `/hadron coverage`, Hadron lists every installed mod that adds blocks, block entities, entities or items and has no bridge loaded, with:
+
+- what that leaves uncovered, split by kind: attribution (its machines act with no owner, so they're denied in claims) and interception (effects that skip vanilla, which nothing sees until the bridge is installed);
+- a link to the official bridge for that mod and version, when one exists.
+
+The list of official bridges ships in Hadron's jar and is updated each release. It also records mods verified to need no bridge, because everything they do goes through vanilla chokepoints and core attributes them correctly; those are reported as covered.
 
 ## What core covers with no bridge
 
 | Concern | Core, for every mod | A bridge adds |
 |---|---|---|
 | Permissions | `command.<name>` for every command; NeoForge's PermissionAPI answered by the one permissions source; `use.`, `place.`, `break.`, `open.`, `attack.` by registry id; `packet.<modid>.<payload>` for mods' network messages | Nodes for features that skip all of those, such as a keybind action checked only on the server |
-| Interception | Generic actions at vanilla chokepoints; fake players fire the ordinary events | Mod-specific events where the mod skips vanilla |
-| Attribution | Players, and fake players carrying a real player's id | Machines, turrets, projectiles, vehicles, drones, and shared fake players with no owner |
+| Interception | Every event in [events.md](events.md) at its vanilla chokepoint; fake players fire the ordinary events | The same core events, fired where the mod skips vanilla |
+| Attribution | Players, fake players carrying a real player's id, and the ticking block entity or entity as an ownerless actor | Owners, shooters, drivers, remote operators, and shared fake players |
 | Ownership and trust | Nothing | "Who owns this, and does it trust that player?", so claims and factions plugins can answer |
 | State | Item handlers through capabilities; registry ids | What plugins want to read: an AE2 network's contents, a machine's progress |
 
@@ -40,18 +58,18 @@ A bridge adds a mod-specific event only where the mod skips vanilla entirely, so
 
 A bridge has two parts:
 
-- **Its API**: loader-neutral interfaces and events, compiled against vanilla Minecraft and Hadron's `api`. Official plugins depend on it with `bridge-depend: [<mod id>]` and stay write-once.
+- **Its API**: loader-neutral interfaces and events for extras, compiled against vanilla Minecraft and Hadron's `api`. Official plugins depend on it with `bridge-depend: [<mod id>]` and stay write-once.
 - **Its implementation**: one small mod per loader. Mixin works the same on every loader, so a bridge into a mod that ships for several loaders shares its mixins and keeps only the per-loader glue separate.
 
-Each bridge owns exactly one mod id, so two bridges never compete to define the same mod's events.
+Each bridge owns exactly one mod id, so two bridges never compete to translate the same mod; a second bridge for a mod id fails to load, naming the first.
 
 ## Pilots
 
-Three mods, each stressing a different part, bridged by hand before anything is generalised; the generic actions are whatever the three turn out to share.
+Three mods, each stressing a different part, bridged by hand to test the vocabulary. Anything they do that no event fits becomes a new leaf in core, before more bridges are written.
 
 - **Mekanism**: machines acting through fake players (the digital miner). Tests attribution.
 - **AE2**: a storage network. Tests mod-specific state, and actions that skip vanilla.
-- **Superb Warfare**: projectiles, vehicles with drivers, drones with remote operators, artillery fired from afar. Tests attribution hardest; its blasts show whether it needs mod-specific explosion events.
+- **Superb Warfare**: projectiles, vehicles with drivers, drones with remote operators, artillery fired from afar. Tests attribution hardest, and routing its blasts through `ExplosionEvent`.
 
 Two plugin integrations come with them:
 
@@ -60,6 +78,7 @@ Two plugin integrations come with them:
 
 ## What's next
 
-1. Core's generic actions and the actor stack, with the chokepoint benchmark.
-2. The acceptance test as a kit any bridge can run.
-3. The three pilot bridges, then this document rewritten from what they taught.
+1. The actor stack and core's events at their chokepoints, with the chokepoint benchmark.
+2. The coverage report and the official bridge list.
+3. The acceptance test as a kit any bridge can run.
+4. The three pilot bridges, then this document rewritten from what they taught.

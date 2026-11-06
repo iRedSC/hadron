@@ -2,6 +2,8 @@
 
 Hadron is a Bukkit-shaped plugin host for modded Minecraft servers. Plugins are jars in `plugins/` that reload while the server runs, written against Minecraft's own classes plus Hadron's API. It does not run Bukkit plugins.
 
+**The goal: a server owner installs or makes a plugin, and it acts on every mod's content without being edited, as long as the mods' bridges are installed.** A regions plugin protects against a mod's quarry, turret and drone the day that mod's bridge is installed, and Hadron tells the owner which bridges are missing. Everything below serves that, or the agent writing the plugin.
+
 The first target is NeoForge 21.1 (Minecraft 1.21.1).
 
 ## Who it is for
@@ -29,7 +31,7 @@ The modules make this a compile error rather than a rule:
 - **`common`** is the plugin host: class loading, reload and undo, scheduler, services, Brigadier commands, Hadron's event bus. Also vanilla only. What only a loader knows comes through `Platform`.
 - **`neoforge`** is the port: `Platform`, the translation from NeoForge's events to Hadron's, and the mod class. A Fabric port rewrites only this.
 
-Hadron owns its events (`dev.iredsc.hadron.api.event`), named after Bukkit's: `Listener`, `@EventHandler(priority, ignoreCancelled)`, `Cancellable`, `PlayerJoinEvent`, `BlockBreakEvent`. They carry Minecraft's own types. The list grows with what the bundled plugins need, not as a full copy of any loader's events. Each port fires them from its loader's events where it has them, and from mixins where it doesn't.
+Hadron owns its events (`dev.iredsc.hadron.api.event`), named after Bukkit's: `Listener`, `@EventHandler(priority, ignoreCancelled)`, `Cancellable`, `PlayerJoinEvent`, `BlockBreakEvent`. They carry Minecraft's own types, and every action carries an actor saying who is behind it. They are the vocabulary plugins and bridges share, so the whole set is designed up front in [events.md](events.md): an event added late is one every existing plugin was blind to. Each port fires them from its loader's events where it has them, and from mixins where it doesn't; an event ships only once every port fires it.
 
 On Minecraft 1.21.1 Fabric runs with different class names than NeoForge, so a Fabric port renames each plugin jar's Minecraft references as it loads, as Paper does for Spigot plugins. If 26.1 and later ship unobfuscated, that step goes away.
 
@@ -40,7 +42,7 @@ On Minecraft 1.21.1 Fabric runs with different class names than NeoForge, so a F
 
 Pure-Java libraries that are the same everywhere (LuckPerms' API, WorldEdit's core API) are allowed in write-once plugins when plugin.yml declares them.
 
-See [bridges.md](bridges.md) for what a bridge is for and how one is judged done.
+See [bridges.md](bridges.md) for what a bridge is for, how one is judged done, and the coverage report that tells owners which bridges they're missing.
 
 ## Minecraft versions
 
@@ -83,7 +85,7 @@ Every error a plugin hits at runtime (a failed load, an exception in a listener)
 
 Hadron ships lightweight plugins server owners expect: essentials-style commands, regions, placeholders, holograms, chat formatting, and the LuckPerms provider. They are write-once plugins, written the way the skill tells agents to write plugins, so they double as its examples, and each Hadron port runs them first, which is how the port guides get written.
 
-**Regions** are Hadron's own, written from scratch under MIT, using FTAM's WorldGuard plugin only as a description of what it should do (commands, flags, nesting), never as code. It has its own selection wand and protects through core's generic actions and the actor stack, so it covers every mod a bridge covers. WorldEdit selections come from a small separate plugin, licensed GPL like WorldEdit, so no GPL code reaches Hadron or the regions plugin.
+**Regions** are Hadron's own, written from scratch under MIT, using FTAM's WorldGuard plugin only as a description of what it should do (commands, flags, nesting), never as code. It has its own selection wand and protects through core's events and the actor stack, so it covers every mod a bridge covers. WorldEdit selections come from a small separate plugin, licensed GPL like WorldEdit, so no GPL code reaches Hadron or the regions plugin.
 
 ## Out of scope
 
@@ -96,8 +98,8 @@ Hadron ships lightweight plugins server owners expect: essentials-style commands
 
 1. ~~Plugin host~~: done. Loads, enables, disables and hot-reloads jars, each with its own class loader, and undoes everything a plugin registered (listeners, commands, tasks, services, permission nodes). Ported from FTAM's Foundation.
 2. ~~Loader-neutral split~~: done. `api` and `common` on vanilla Minecraft, `neoforge` as the port, Hadron's own event bus, `loader:` for plugins that use mods directly, reserved node roots.
-3. Hadron's API, first slice: more events (from the bundled plugins' needs), config and storage, placeholders, the LuckPerms provider.
-4. Core's generic actions and the actor stack, with a benchmark for the chokepoint cost ([bridges.md](bridges.md)).
+3. Hadron's API, first slice: config and storage, placeholders, the LuckPerms provider.
+4. The actor stack and the events in [events.md](events.md) at their chokepoints, with a benchmark for the chokepoint cost; then the coverage report ([bridges.md](bridges.md)).
 5. Gradle plugin and project template, with the build checks.
 6. The skill, written against what exists, then tested by asking fresh agents for real plugins and fixing whatever they trip on.
 7. Headless test runner.
