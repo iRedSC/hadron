@@ -13,14 +13,27 @@ public final class ServerPings {
 
     /** The answer to send: {@code status} itself when no listener changed anything, so its cached JSON stays valid. */
     public static ServerStatus ping(SocketAddress address, ServerStatus status) {
-        if (!Hooks.listens(ServerListPingEvent.class)) return status;
+        boolean listening = Hooks.listens(ServerListPingEvent.class);
+        boolean hiding = NetVisibility.anyHiddenFromEveryone();
+        if (!listening && !hiding) return status;
         Optional<ServerStatus.Players> players = status.players();
         int online = players.map(ServerStatus.Players::online).orElse(0);
         int max = players.map(ServerStatus.Players::max).orElse(0);
         List<GameProfile> sample = players.map(ServerStatus.Players::sample).orElse(List.of());
+        if (hiding) {
+            // A player vanished from everyone isn't counted or listed, so the server list doesn't give them away.
+            List<GameProfile> shownSample = sample.stream()
+                    .filter(p -> !NetVisibility.hiddenFromEveryone(p.getId())).toList();
+            online = Math.max(0, online - NetVisibility.hiddenOnlineCount());
+            sample = shownSample;
+            if (!listening) {
+                return new ServerStatus(status.description(), Optional.of(new ServerStatus.Players(max, online,
+                        sample)), status.version(), status.favicon(), status.enforcesSecureChat(), status.isModded());
+            }
+        }
         ServerListPingEvent event = Hooks.post(new ServerListPingEvent(address, status.description(), online, max,
                 sample));
-        boolean playersChanged = event.getNumPlayers() != online || event.getMaxPlayers() != max
+        boolean playersChanged = hiding || event.getNumPlayers() != online || event.getMaxPlayers() != max
                 || !event.getPlayerSample().equals(sample);
         if (event.getMotd().equals(status.description()) && !playersChanged) return status;
         Optional<ServerStatus.Players> shown = playersChanged

@@ -7,6 +7,7 @@
     "ChunkMapAccessor",
     "CommandSourceStackMixin",
     "ConnectionMixin",
+    "ListPlayersCommandMixin",
     "PacketSendMixin",
     "PlayerInfoUpdatePacketAccessor",
     "ServerGamePacketListenerImplMixin",
@@ -14,5 +15,7 @@
     "TrackedEntityAccessor",
     "TrackedEntityMixin"
   ],
-  "injectors": { "defaultRequire": 1 }
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

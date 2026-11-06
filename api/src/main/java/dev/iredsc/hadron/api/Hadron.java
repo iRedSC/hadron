@@ -32,6 +32,11 @@ public final class Hadron {
         return getServer().getScheduler();
     }
 
+    /** The economy: balances, deposits, withdrawals and transfers in any registered currency. */
+    public static dev.iredsc.hadron.api.economy.Economy getEconomy() {
+        return dev.iredsc.hadron.api.economy.Economy.get();
+    }
+
     public static ServicesManager getServicesManager() {
         return getServer().getServicesManager();
     }

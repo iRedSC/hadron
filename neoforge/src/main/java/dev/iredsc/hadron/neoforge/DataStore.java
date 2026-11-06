@@ -42,7 +42,12 @@ final class DataStore implements PersistentData.Port.Store {
         serverThread(level, "blocks");
         if (from.equals(to)) return;
         CompoundTag tag = DataBlocks.take(level.getChunkAt(from), from);
-        DataBlocks.put(level.getChunkAt(to), to, tag);
+        LevelChunk target = level.getChunkAt(to);
+        DataBlocks.put(target, to, tag);
+        // If the block isn't at `to` yet, its arrival must not clear what was just moved there.
+        if (tag != null && !tag.isEmpty() && level.getBlockState(to).getBlock() != level.getBlockState(from).getBlock()) {
+            DataBlocks.expectArrival(target, to);
+        }
     }
 
     private static void serverThread(Level level, String holder) {

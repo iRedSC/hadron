@@ -26,7 +26,7 @@ import net.minecraft.world.entity.Entity;
  * whichever thread sends), so every set is concurrent and the plugin list is a copied array. While nothing is hidden,
  * every check is one volatile read.
  */
-final class NetVisibility {
+public final class NetVisibility {
     private NetVisibility() {}
 
     /** One plugin's hides. */
@@ -94,9 +94,43 @@ final class NetVisibility {
         return true;
     }
 
+    /** For {@code /list}: what a viewer is allowed to see. */
+    public static boolean canSeePlayer(ServerPlayer viewer, ServerPlayer target) {
+        return canSee(viewer, target);
+    }
+
     static boolean canSee(ServerPlayer viewer, Entity target) {
         if (!active || viewer == target) return true;
         return canSee(viewer.getUUID(), target.getUUID());
+    }
+
+    /** Whether any plugin has hidden this player from everyone: the server list and {@code /list} leave them out. */
+    public static boolean hiddenFromEveryone(UUID target) {
+        if (!active) return false;
+        for (Rules r : rules) {
+            if (r.fromAll.contains(target)) return true;
+        }
+        return false;
+    }
+
+    /** How many online players are hidden from everyone. Safe from the network thread: it only reads. */
+    static int hiddenOnlineCount() {
+        net.minecraft.server.MinecraftServer server = net.neoforged.neoforge.server.ServerLifecycleHooks.getCurrentServer();
+        if (server == null) return 0;
+        java.util.Set<UUID> seen = new java.util.HashSet<>();
+        for (Rules r : rules) seen.addAll(r.fromAll);
+        int count = 0;
+        for (UUID id : seen) if (server.getPlayerList().getPlayer(id) != null) count++;
+        return count;
+    }
+
+    /** Whether any plugin hides anyone from everyone, so the ping can skip its filtering. */
+    public static boolean anyHiddenFromEveryone() {
+        if (!active) return false;
+        for (Rules r : rules) {
+            if (!r.fromAll.isEmpty()) return true;
+        }
+        return false;
     }
 
     static boolean isHiddenFromAll(JavaPlugin plugin, Entity target) {

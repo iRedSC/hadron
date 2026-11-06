@@ -80,9 +80,10 @@ public final class PersistentData {
 
     /**
      * For bridges whose machines move blocks (contraptions, frames): moves the data of the block at {@code from} to
-     * {@code to}, replacing what {@code to} had, and leaves {@code from} with none. Call it once the block stands at
-     * {@code to} and before {@code from} is cleared, since replacing either block clears its data. For a block that
-     * leaves the world for a while, {@link PersistentDataContainer#copyTo} its data into {@link #newContainer()}
+     * {@code to}, replacing what {@code to} had, and leaves {@code from} with none. Call it before the block leaves
+     * {@code from} (removing it clears its data), in the same tick, whether or not it has reached {@code to} yet: its
+     * arrival keeps the data.
+     * For a block that leaves the world for longer than a tick, {@link PersistentDataContainer#copyTo} its data into {@link #newContainer()}
      * first and back afterwards. Pistons need nothing: Hadron moves their blocks' data itself. Server-thread only.
      */
     public static void move(ServerLevel level, BlockPos from, BlockPos to) {

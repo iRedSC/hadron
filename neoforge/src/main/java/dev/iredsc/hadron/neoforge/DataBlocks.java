@@ -47,6 +47,12 @@ public final class DataBlocks {
     };
 
     private final Long2ObjectOpenHashMap<CompoundTag> byPos = new Long2ObjectOpenHashMap<>();
+    /**
+     * Positions a bridge moved data to before the block itself arrived, with the game time it did. The arrival
+     * (a block write there in the same tick) keeps the data instead of clearing it, so {@code move} works whether
+     * the bridge calls it before or after placing the block. Never saved.
+     */
+    private it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap arriving;
 
     DataBlocks() {}
 
@@ -94,9 +100,23 @@ public final class DataBlocks {
         blocks.changed(chunk);
     }
 
+    /** Data moved here ahead of its block: the block's arrival this tick keeps it. */
+    static void expectArrival(LevelChunk chunk, BlockPos pos) {
+        DataBlocks blocks = of(chunk);
+        if (blocks == null) return;
+        if (blocks.arriving == null) blocks.arriving = new it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap();
+        blocks.arriving.put(pos.asLong(), chunk.getLevel().getGameTime());
+    }
+
     /** From the chunk's block write: the block at the position was replaced by a different block. */
     public void forget(LevelChunk chunk, BlockPos pos) {
-        if (byPos.remove(pos.asLong()) != null) changed(chunk);
+        long key = pos.asLong();
+        if (arriving != null && arriving.containsKey(key)) {
+            long when = arriving.remove(key);
+            if (arriving.isEmpty()) arriving = null;
+            if (when == chunk.getLevel().getGameTime()) return; // the moved block arriving: its data stays
+        }
+        if (byPos.remove(key) != null) changed(chunk);
     }
 
     private static DataBlocks orCreate(LevelChunk chunk) {

@@ -250,6 +250,15 @@ final class WorldsManager implements Worlds.Backend {
         open.put(dimension, new Open(level, border));
         store.put(d.withLoaded(true));
         NeoForge.EVENT_BUS.post(new LevelEvent.Load(level));
+        // As vanilla does for every level at startup: chunks forced before the unload or restart are forced again.
+        net.minecraft.world.level.ForcedChunksSavedData forced = level.getDataStorage()
+                .get(net.minecraft.world.level.ForcedChunksSavedData.factory(), "chunks");
+        if (forced != null) {
+            for (long chunk : forced.getChunks()) {
+                level.getChunkSource().updateChunkForced(new net.minecraft.world.level.ChunkPos(chunk), true);
+            }
+            net.neoforged.neoforge.common.world.chunk.ForcedChunkManager.reinstatePersistentChunks(level, forced);
+        }
 
         BlockPos spawn = d.spawn();
         if (spawn == null) {

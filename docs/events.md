@@ -167,11 +167,11 @@ Everything measured in amounts that isn't an item stack: energy, fluids in tanks
 
 | Event | What | Core chokepoint |
 |---|---|---|
-| `ResourceChangeEvent` | a holder's amount changes; old and new | bridge |
+| `ResourceChangeEvent` | a holder's amount changes; old and new | core for currencies (every economy call); bridges for everything else |
 | ├ `ResourceProduceEvent` | created: a generator, a reactor's waste, a quest's currency reward | bridge |
 | ├ `ResourceConsumeEvent` | destroyed: a machine spending power, a spell's mana, a vein depleted | bridge |
 | └ `ResourceConvertEvent` | one resource into another in one step: fuel to heat to steam | bridge |
-| `ResourceTransferEvent` | an amount moves between holders: a cable, a pipe, a wireless charger reaching a player in another dimension, a payment | the port's energy and fluid capability transfers, bridges |
+| `ResourceTransferEvent` | an amount moves between holders: a cable, a pipe, a wireless charger reaching a player in another dimension, a payment | core for currency transfers; bridges for energy, fluids and mods' resources |
 
 Economy plugins provide the `hadron:currency` holders, so a payment by any mod or plugin is one `ResourceTransferEvent`.
 

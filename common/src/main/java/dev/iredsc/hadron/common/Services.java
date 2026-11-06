@@ -93,6 +93,10 @@ final class Services implements ServicesManager {
 
     @Override
     public synchronized <T> T load(Class<T> service) {
+        // Vault habit: plugins look the economy up as a service. It is Hadron's own, whoever stores the accounts.
+        if (service == dev.iredsc.hadron.api.economy.Economy.class) {
+            return service.cast(dev.iredsc.hadron.api.economy.Economy.Lifecycle.running());
+        }
         List<Registration> list = byService.get(service);
         return list == null || list.isEmpty() ? null : service.cast(list.get(0).provider);
     }

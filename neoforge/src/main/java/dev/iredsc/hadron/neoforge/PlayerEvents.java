@@ -49,8 +49,21 @@ final class PlayerEvents {
     /** After {@code placeNewPlayer}'s join line was held back; the event's line replaces it. */
     private static void join(PlayerEvent.PlayerLoggedInEvent event) {
         if (!(event.getEntity() instanceof ServerPlayer p)) return;
+        createAccount(p);
         PlayerJoinEvent hadron = Hooks.post(new PlayerJoinEvent(p, PlayerMessages.takeJoin(p)));
         PlayerMessages.join(p, hadron.getJoinMessage());
+    }
+
+    /** Every player who has joined has an account, so paying an offline player works. */
+    private static void createAccount(ServerPlayer player) {
+        dev.iredsc.hadron.api.economy.Economy economy = dev.iredsc.hadron.api.economy.Economy.Lifecycle.running();
+        if (economy == null) return;
+        try {
+            economy.createAccount(player.getUUID());
+        } catch (RuntimeException e) {
+            com.mojang.logging.LogUtils.getLogger().warn("Couldn't create {}'s economy account: {}",
+                    player.getGameProfile().getName(), e.getMessage());
+        }
     }
 
     /** After {@code removePlayerFromWorld}'s quit line was held back; the event's line replaces it. */
