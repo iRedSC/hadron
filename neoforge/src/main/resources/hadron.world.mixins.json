@@ -3,6 +3,23 @@
   "minVersion": "0.8",
   "package": "dev.iredsc.hadron.neoforge.mixin.world",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
+  "mixins": [
+    "CommandsMixin",
+    "ExplosionAccessor",
+    "ExplosionMixin",
+    "ForcedChunkManagerMixin",
+    "LevelMixin",
+    "NetworkRegistryMixin",
+    "PacketUtilsMixin",
+    "PortalForcerMixin",
+    "PortalShapeMixin",
+    "ServerChunkCacheMixin",
+    "ServerCommonPacketListenerImplMixin",
+    "ServerConfigurationPacketListenerImplMixin",
+    "ServerGamePacketListenerImplMixin",
+    "ServerLevelMixin",
+    "ServerPayloadContextMixin",
+    "ServerPlayerMixin"
+  ],
   "injectors": { "defaultRequire": 1 }
 }
