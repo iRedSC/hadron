@@ -14,8 +14,13 @@ import net.neoforged.neoforge.common.util.FakePlayer;
 public final class EntityActors {
     private EntityActors() {}
 
-    /** The entity as an actor: a player, a fake player, or an entity carrying its remembered attribution. Cached. */
+    /**
+     * The entity as an actor: a player, a fake player, or an entity carrying its remembered attribution. If a bridge
+     * pushed this same entity with its own attribution (a turret firing for its owner), that actor wins. Cached.
+     */
     public static Actor of(Entity entity) {
+        Actor top = Actors.currentOr(null);
+        if (top != null && isSelf(top, entity)) return top;
         EntityState state = (EntityState) entity;
         Actor actor = state.hadron$actor();
         if (actor == null) {

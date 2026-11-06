@@ -13,6 +13,7 @@
     "MobMixin",
     "ProjectileMixin",
     "ServerLevelMixin",
+    "ServerPlayerGameModeMixin",
     "ServerPlayerMixin",
     "TamableAnimalMixin"
   ],

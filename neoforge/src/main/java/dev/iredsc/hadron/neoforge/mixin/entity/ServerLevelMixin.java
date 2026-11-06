@@ -19,16 +19,22 @@ abstract class ServerLevelMixin {
     @WrapMethod(method = "tickNonPassenger")
     private void hadron$tickEntity(Entity entity, Operation<Void> original) {
         EntityMoves.beforeTick(entity);
-        try (Actors.Scope scope = Actors.push(EntityActors.of(entity))) {
+        long scope = Actors.Port.enter(EntityActors.of(entity));
+        try {
             original.call(entity);
+        } finally {
+            Actors.Port.exit(scope);
         }
     }
 
     @WrapMethod(method = "tickPassenger")
     private void hadron$tickPassenger(Entity vehicle, Entity passenger, Operation<Void> original) {
         EntityMoves.beforeTick(passenger);
-        try (Actors.Scope scope = Actors.push(EntityActors.of(passenger))) {
+        long scope = Actors.Port.enter(EntityActors.of(passenger));
+        try {
             original.call(vehicle, passenger);
+        } finally {
+            Actors.Port.exit(scope);
         }
     }
 

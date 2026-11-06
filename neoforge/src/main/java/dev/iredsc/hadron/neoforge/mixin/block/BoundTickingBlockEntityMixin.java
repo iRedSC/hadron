@@ -32,15 +32,16 @@ public abstract class BoundTickingBlockEntityMixin {
     private void hadron$tickAsMachine(BlockEntityTicker<BlockEntity> ticker, Level level, BlockPos pos,
             BlockState state, BlockEntity blockEntity, Operation<Void> original) {
         if (hadron$origin == 0) hadron$origin = BlockHooks.modded(blockEntity.getType()) ? (byte) 2 : (byte) 1;
-        Actors.Scope scope = null;
-        if (hadron$origin == 2 && level instanceof ServerLevel server) {
-            hadron$machine = BlockHooks.machine(hadron$machine, server, blockEntity);
-            scope = Actors.push(hadron$machine);
+        if (hadron$origin != 2 || !(level instanceof ServerLevel server)) {
+            original.call(ticker, level, pos, state, blockEntity);
+            return;
         }
+        hadron$machine = BlockHooks.machine(hadron$machine, server, blockEntity);
+        long scope = Actors.Port.enter(hadron$machine);
         try {
             original.call(ticker, level, pos, state, blockEntity);
         } finally {
-            BlockHooks.close(scope, blockEntity.getType());
+            Actors.Port.exit(scope);
         }
     }
 }

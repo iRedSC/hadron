@@ -33,11 +33,11 @@ public abstract class LevelMixin {
     private boolean hadron$destroyBlock(BlockPos pos, boolean dropBlock, Entity entity, int recursionLeft,
             Operation<Boolean> original) {
         if (BlockHooks.cancelDestroy((Level) (Object) this, pos, entity)) return false;
-        long previous = BlockHooks.suppressAt(pos);
+        BlockHooks.suppressAt((Level) (Object) this, pos);
         try {
             return original.call(pos, dropBlock, entity, recursionLeft);
         } finally {
-            BlockHooks.restoreSuppressAt(previous);
+            BlockHooks.restoreSuppressAt();
         }
     }
 }

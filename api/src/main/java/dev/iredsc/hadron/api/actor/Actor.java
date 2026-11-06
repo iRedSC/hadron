@@ -17,13 +17,14 @@ import net.minecraft.world.entity.Entity;
  *     case Actor.FakePlayer f -> ...
  *     case Actor.Machine m -> ...
  *     case Actor.EntityActor e -> ...
+ *     case Actor.Server s -> ...
  *     case Actor.Nature n -> ...
  *     case Actor.Unknown u -> ...
  * }
  * }</pre>
  *
- * Protection should treat {@link Unknown}, and any actor whose {@link Attribution#actingFor()} is empty, as an
- * outsider: a gap then shows up as a machine refusing to work in a claim, never as a silent grief.
+ * Protection should let {@link Server} through, and treat {@link Unknown}, and any other actor whose
+ * {@link Attribution#actingFor()} is empty, as an outsider: a gap then shows up as a machine refusing to work in a claim, never as a silent grief.
  */
 public sealed interface Actor {
     /** The people behind this actor; empty for {@link Nature} and {@link Unknown}. */
@@ -71,6 +72,22 @@ public sealed interface Actor {
         public EntityActor {
             Objects.requireNonNull(entity, "entity");
             Objects.requireNonNull(attribution, "attribution; use Attribution.none() for nobody");
+        }
+    }
+
+    /**
+     * The server itself, acting on an operator's orders: the console, a command block, RCON. Trusted: protection lets
+     * it through, and a logger records it as an admin action. {@code name} is how the source calls itself, such as
+     * {@code Server} for the console or {@code @} for a command block.
+     */
+    record Server(String name) implements Actor {
+        public Server {
+            Objects.requireNonNull(name, "name");
+        }
+
+        @Override
+        public Attribution attribution() {
+            return Attribution.none();
         }
     }
 

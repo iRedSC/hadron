@@ -51,10 +51,16 @@ final class ItemEvents {
         ItemDropEvent hadron = Hooks.post(new ItemDropEvent(level, entity.position(), stack, ItemHooks.actor(player)));
         if (!hadron.isCancelled()) return;
         player.getInventory().add(stack); // takes what fits out of stack
+        // A drop from a menu's cursor goes back on the cursor, which is where it came from; with a full inventory
+        // that's the only place it fits.
+        if (!stack.isEmpty() && player.containerMenu.getCarried().isEmpty()) {
+            player.containerMenu.setCarried(stack.copy());
+            stack.setCount(0);
+        }
         if (stack.isEmpty()) {
             event.setCanceled(true);
         } else {
-            entity.setItem(stack); // no room for the rest: it drops rather than vanish
+            entity.setItem(stack); // nowhere for the rest: it drops rather than vanish
         }
         ItemHooks.resync(player);
     }

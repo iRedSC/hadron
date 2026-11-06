@@ -20,8 +20,7 @@ import org.slf4j.LoggerFactory;
  * }
  * }</pre>
  *
- * Scopes should close in the reverse order they opened; try-with-resources does that. A scope is reused once
- * closed, so never keep one after closing it.
+ * Scopes should close in the reverse order they opened; try-with-resources does that.
  *
  * <p>Attribution also survives delays: whatever spawns a projectile, summon or queued task should
  * {@link #remember(Entity, Attribution)} who caused it, so a shell landing ten seconds later still knows.
@@ -34,38 +33,49 @@ public final class Actors {
     private Actors() {}
 
     /**
-     * One thread's actors. Frames and their scopes are reused, so a push on a hot path (every entity tick, every
-     * packet) allocates nothing once the stack has grown to its usual depth.
+     * One thread's actors. Frames are reused, so a push allocates at most its {@link Scope}, and the port's own hot
+     * paths ({@link Port#enter}) allocate nothing.
      */
+    private static final long TOKEN_MASK = (1L << 40) - 1;
+
     private static final class Stack {
         Actor[] actors = new Actor[16];
         Operation[] operations = new Operation[16];
-        Scope[] scopes = new Scope[16];
+        /** Which push holds each frame; a closed scope's token no longer matches, so closing it again does nothing. */
+        long[] tokens = new long[16];
         int depth;
         long nextToken;
 
-        Scope push(Actor actor, Operation operation) {
+        long push(Actor actor, Operation operation) {
             if (depth == actors.length) {
                 actors = Arrays.copyOf(actors, depth * 2);
                 operations = Arrays.copyOf(operations, depth * 2);
-                scopes = Arrays.copyOf(scopes, depth * 2);
+                tokens = Arrays.copyOf(tokens, depth * 2);
             }
-            Scope scope = scopes[depth];
-            if (scope == null) scopes[depth] = scope = new Scope(this, depth);
-            scope.token = ++nextToken;
+            // Wraps within 40 bits, never 0, so it always fits beside the index in a Port handle.
+            long token = nextToken = (nextToken + 1) & TOKEN_MASK;
+            if (token == 0) token = nextToken = 1;
             actors[depth] = actor;
             operations[depth] = operation;
+            tokens[depth] = token;
             depth++;
-            return scope;
+            return token;
         }
 
-        void popTo(int newDepth) {
-            for (int i = newDepth; i < depth; i++) {
+        /** Closes the push at that index if it is still the one holding the token, and any left open above it. */
+        void close(int index, long token) {
+            if (depth <= index || tokens[index] != token) return;
+            if (depth > index + 1) {
+                LOG.warn("{} actor push(es) were left open inside {} and have been closed with it. Close every "
+                        + "Actors.push and Operation.begin with try-with-resources.", depth - index - 1,
+                        actors[index], new IllegalStateException("leaked actor scope"));
+            }
+            for (int i = index; i < depth; i++) {
                 actors[i] = null;
                 operations[i] = null;
-                scopes[i].token = 0;
+                tokens[i] = 0;
             }
-            depth = newDepth;
+            depth = index;
         }
     }
 
@@ -76,28 +86,21 @@ public final class Actors {
     public static final class Scope implements AutoCloseable {
         private final Stack stack;
         private final int index;
-        /** Which push this scope stands for right now; 0 once closed. Scopes are reused, so a stale one is ignored. */
-        private long token;
+        private final long token;
 
-        private Scope(Stack stack, int index) {
+        private Scope(Stack stack, int index, long token) {
             this.stack = stack;
             this.index = index;
+            this.token = token;
         }
 
         @Override
         public void close() {
-            long mine = token;
-            if (mine == 0 || stack.depth <= index || stack.scopes[index] != this) return;
             if (stack != STACK.get()) {
                 throw new IllegalStateException("An actor scope was closed on a different thread from the one that "
                         + "opened it; open and close it on the same thread, with try-with-resources");
             }
-            if (stack.depth > index + 1) {
-                LOG.warn("{} actor push(es) were left open inside {} and have been closed with it. Close every "
-                        + "Actors.push and Operation.begin with try-with-resources.", stack.depth - index - 1,
-                        stack.actors[index], new IllegalStateException("leaked actor scope"));
-            }
-            stack.popTo(index);
+            stack.close(index, token);
         }
     }
 
@@ -107,7 +110,12 @@ public final class Actors {
      */
     public static Scope push(Actor actor) {
         Stack stack = STACK.get();
-        return stack.push(checked(actor), stack.depth == 0 ? null : stack.operations[stack.depth - 1]);
+        return scope(stack, checked(actor), stack.depth == 0 ? null : stack.operations[stack.depth - 1]);
+    }
+
+    private static Scope scope(Stack stack, Actor actor, Operation operation) {
+        int index = stack.depth;
+        return new Scope(stack, index, stack.push(actor, operation));
     }
 
     /** Runs the work with that actor on top. */
@@ -146,7 +154,7 @@ public final class Actors {
     }
 
     static Scope enter(Actor actor, Operation operation) {
-        return STACK.get().push(checked(actor), operation);
+        return scope(STACK.get(), checked(actor), operation);
     }
 
     static Operation currentOperation() {
@@ -222,6 +230,22 @@ public final class Actors {
 
         public static void installMemory(Memory installed) {
             memory = Objects.requireNonNull(installed, "memory");
+        }
+
+        /**
+         * Pushes an actor without allocating, for paths that run every tick (entity ticks, machine ticks, packets).
+         * Returns a handle for {@link #exit}, which must be called in a {@code finally} on the same thread.
+         */
+        public static long enter(Actor actor) {
+            Stack stack = STACK.get();
+            int index = stack.depth;
+            long token = stack.push(checked(actor), index == 0 ? null : stack.operations[index - 1]);
+            return ((long) index << 40) | token;
+        }
+
+        /** Pops what {@link #enter} pushed, and anything left open above it. */
+        public static void exit(long handle) {
+            STACK.get().close((int) (handle >>> 40), handle & TOKEN_MASK);
         }
     }
 }

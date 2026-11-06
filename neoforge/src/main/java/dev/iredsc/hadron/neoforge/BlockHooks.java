@@ -105,12 +105,33 @@ public final class BlockHooks {
     /** What the current thread is doing to blocks. Reused, so entering and leaving a tick allocates nothing. */
     private static final class Context {
         int suppressed;
-        long suppressPos = NO_POS;
+        /**
+         * A change already decided for one position this game tick: TNT asked about before it is lit, so the removal
+         * that follows is refused or let through without asking again. Consumed by that removal.
+         */
+        LevelAccessor decidedLevel;
+        long decidedPos = NO_POS;
+        long decidedTime;
+        boolean decidedCancelled;
+        /** Positions whose change is being reported by a specific event, innermost last, per level. */
+        LevelAccessor[] suppressLevels = new LevelAccessor[8];
+        long[] suppressPositions = new long[8];
+        int suppressDepth;
+        /** Suppression set below these marks belongs to code outside a plugin callback, which can't see it. */
+        int suppressedFloor;
+        int suppressDepthFloor;
+
+        boolean suppresses(LevelAccessor level, BlockPos pos) {
+            if (suppressed > suppressedFloor) return true;
+            int top = suppressDepth - 1;
+            return top >= suppressDepthFloor && suppressLevels[top] == level && suppressPositions[top] == pos.asLong();
+        }
         /** Block ticks being run, innermost last. */
         Block[] tickBlocks = new Block[8];
         long[] tickPositions = new long[8];
         Actor[] tickActors = new Actor[8];
-        Actors.Scope[] tickScopes = new Actors.Scope[8];
+        /** {@link Actors.Port#enter} handles, 0 where the tick pushed nothing. */
+        long[] tickScopes = new long[8];
         int ticks;
         int forming;
         Actor fertilizer;
@@ -149,16 +170,69 @@ public final class BlockHooks {
         CONTEXT.get().suppressed--;
     }
 
-    /** Silences the generic hook for one position; returns what to hand {@link #restoreSuppressAt} after. */
-    public static long suppressAt(BlockPos pos) {
+    /**
+     * TNT is about to be lit, by a player's flint and steel, a dispenser, a flaming arrow or a mod: asked as a
+     * {@link BlockBreakEvent} before the primed TNT exists, so a cancel leaves the block and spawns nothing. The block's
+     * removal that follows obeys the same answer. True when cancelled.
+     */
+    public static boolean cancelIgnition(Level level, BlockPos pos, BlockState state, Entity igniter) {
+        if (!(level instanceof ServerLevel server)) return false;
         Context ctx = CONTEXT.get();
-        long previous = ctx.suppressPos;
-        ctx.suppressPos = pos.asLong();
-        return previous;
+        if (ctx.decidedLevel == level && ctx.decidedPos == pos.asLong() && ctx.decidedTime == level.getGameTime()) {
+            return ctx.decidedCancelled; // already asked by the item use that lit it
+        }
+        Actor actor = igniter != null ? actorFor(igniter) : Actors.currentOr(null);
+        if (actor == null || !Hooks.listens(BlockBreakEvent.class)) return false;
+        boolean cancelled = Hooks.post(new BlockBreakEvent(server, pos, state,
+                level.getFluidState(pos).createLegacyBlock(), actor)).isCancelled();
+        ctx.decidedLevel = level;
+        ctx.decidedPos = pos.asLong();
+        ctx.decidedTime = level.getGameTime();
+        ctx.decidedCancelled = cancelled;
+        return cancelled;
     }
 
-    public static void restoreSuppressAt(long previous) {
-        CONTEXT.get().suppressPos = previous;
+    /** Drops a decision nothing will consume, such as an item use that was refused before anything happened. */
+    public static void forgetIgnition() {
+        Context ctx = CONTEXT.get();
+        ctx.decidedLevel = null;
+        ctx.decidedPos = NO_POS;
+    }
+
+    /** Silences the generic hook for one position in one level, until {@link #restoreSuppressAt()}. */
+    public static void suppressAt(LevelAccessor level, BlockPos pos) {
+        Context ctx = CONTEXT.get();
+        int i = ctx.suppressDepth;
+        if (i == ctx.suppressLevels.length) {
+            ctx.suppressLevels = java.util.Arrays.copyOf(ctx.suppressLevels, i * 2);
+            ctx.suppressPositions = java.util.Arrays.copyOf(ctx.suppressPositions, i * 2);
+        }
+        ctx.suppressLevels[i] = level;
+        ctx.suppressPositions[i] = pos.asLong();
+        ctx.suppressDepth = i + 1;
+    }
+
+    public static void restoreSuppressAt() {
+        Context ctx = CONTEXT.get();
+        ctx.suppressLevels[--ctx.suppressDepth] = null;
+    }
+
+    /**
+     * Hides the current suppression from code a plugin's handler runs, so a handler's own block changes are checked
+     * like any other. Returns what to hand {@link #resumeSuppression} after the handlers return.
+     */
+    public static long pauseSuppression() {
+        Context ctx = CONTEXT.get();
+        long saved = ((long) ctx.suppressedFloor << 32) | (ctx.suppressDepthFloor & 0xFFFFFFFFL);
+        ctx.suppressedFloor = ctx.suppressed;
+        ctx.suppressDepthFloor = ctx.suppressDepth;
+        return saved;
+    }
+
+    public static void resumeSuppression(long saved) {
+        Context ctx = CONTEXT.get();
+        ctx.suppressedFloor = (int) (saved >>> 32);
+        ctx.suppressDepthFloor = (int) saved;
     }
 
     // ---------------------------------------------------------------------------------------------------------------
@@ -219,17 +293,6 @@ public final class BlockHooks {
         return new Actor.Machine(level, blockEntity.getBlockPos(), attribution);
     }
 
-    /** Closes a scope opened around a tick, without letting another mod's unclosed scope crash the server. */
-    public static void close(Actors.Scope scope, Object ticking) {
-        if (scope == null) return;
-        try {
-            scope.close();
-        } catch (IllegalStateException e) {
-            LOG.warn("Something left an actor scope open while {} ticked; Hadron could not restore the actor stack. "
-                    + "Close every Actors.push and Operation.begin with try-with-resources.", ticking, e);
-        }
-    }
-
     // ---------------------------------------------------------------------------------------------------------------
     // Block ticks
 
@@ -248,10 +311,10 @@ public final class BlockHooks {
         }
         Block block = state.getBlock();
         Actor actor = Actor.Nature.INSTANCE;
-        Actors.Scope scope = null;
+        long scope = 0;
         if (modded(block)) {
             actor = Actor.Unknown.INSTANCE;
-            if (Actors.isEmpty()) scope = Actors.push(actor);
+            if (Actors.isEmpty()) scope = Actors.Port.enter(actor);
         }
         ctx.tickBlocks[i] = block;
         ctx.tickPositions[i] = pos.asLong();
@@ -263,12 +326,11 @@ public final class BlockHooks {
     public static void exitTick() {
         Context ctx = CONTEXT.get();
         int i = --ctx.ticks;
-        Actors.Scope scope = ctx.tickScopes[i];
-        Block block = ctx.tickBlocks[i];
+        long scope = ctx.tickScopes[i];
         ctx.tickBlocks[i] = null;
         ctx.tickActors[i] = null;
-        ctx.tickScopes[i] = null;
-        close(scope, block);
+        ctx.tickScopes[i] = 0;
+        if (scope != 0) Actors.Port.exit(scope);
     }
 
     /** Weather forming snow and ice: every change while it runs is a {@link BlockFormEvent}. */
@@ -378,7 +440,13 @@ public final class BlockHooks {
             return false;
         }
         Context ctx = CONTEXT.get();
-        if (ctx.suppressed > 0 || ctx.suppressPos == pos.asLong()) return false;
+        if (ctx.decidedPos == pos.asLong() && ctx.decidedLevel == level) {
+            boolean refuse = ctx.decidedCancelled && ctx.decidedTime == level.getGameTime();
+            ctx.decidedLevel = null;
+            ctx.decidedPos = NO_POS;
+            if (ctx.decidedTime == level.getGameTime()) return refuse;
+        }
+        if (ctx.suppresses(level, pos)) return false;
         Actor actor = Actors.currentOr(null);
         boolean ticking = ctx.ticking() && (actor == null || actor == ctx.tickActor());
         boolean fire = isFire(after);
@@ -424,7 +492,7 @@ public final class BlockHooks {
             return false;
         }
         Context ctx = CONTEXT.get();
-        if (ctx.suppressed > 0 || ctx.suppressPos == pos.asLong()) return false;
+        if (ctx.suppresses(level, pos)) return false;
         Actor actor = actorFor(entity);
         boolean ticking = ctx.ticking() && entity == null && (actor == null || actor == ctx.tickActor());
         Kind kind;
@@ -541,7 +609,7 @@ public final class BlockHooks {
     public static boolean cancelBucketEmpty(BucketItem bucket, Player player, Level level, BlockPos pos,
             BlockHitResult hit, ItemStack container) {
         if (!(level instanceof ServerLevel server) || !(bucket.content instanceof FlowingFluid)
-                || CONTEXT.get().suppressPos == pos.asLong() || !Hooks.listens(BucketEmptyEvent.class)) {
+                || CONTEXT.get().suppresses(level, pos) || !Hooks.listens(BucketEmptyEvent.class)) {
             return false;
         }
         BlockState before = level.getBlockState(pos);
@@ -567,7 +635,7 @@ public final class BlockHooks {
     /** An empty bucket is about to take fluid from {@code pos}. {@code player} is null for a dispenser. */
     public static boolean cancelBucketFill(Player player, LevelAccessor level, BlockPos pos, BlockState before,
             ItemStack bucket, Direction face) {
-        if (!(level instanceof ServerLevel server) || CONTEXT.get().suppressPos == pos.asLong()
+        if (!(level instanceof ServerLevel server) || CONTEXT.get().suppresses(server, pos)
                 || !Hooks.listens(BucketFillEvent.class)) {
             return false;
         }
@@ -588,26 +656,24 @@ public final class BlockHooks {
     public static ItemStack dispense(BlockSource source, ItemStack stack, Supplier<ItemStack> work) {
         ServerLevel level = source.level();
         BlockPos pos = source.pos();
-        Actors.Scope scope = Actors.push(new Actor.Machine(level, pos, Actors.remembered(source.blockEntity())));
-        try {
+        try (Actors.Scope scope = Actors.push(new Actor.Machine(level, pos,
+                Actors.remembered(source.blockEntity())))) {
             BlockPos target = pos.relative(source.state().getValue(DispenserBlock.FACING));
             BlockState state = level.getBlockState(target);
             boolean fill = stack.is(Items.BUCKET) && state.getBlock() instanceof BucketPickup
                     && (level.getFluidState(target).isSource() || state.getBlock() instanceof PowderSnowBlock);
             boolean empty = stack.getItem() instanceof BucketItem bucket && bucket.content != Fluids.EMPTY;
-            if (!fill && !empty) return work.get();
+            if (!fill && !empty) return EntitySpawnRefunds.dispensing(stack, work);
             if (fill ? cancelBucketFill(null, level, target, state, stack, null)
                     : cancelBucketEmpty((BucketItem) stack.getItem(), null, level, target, null, stack)) {
                 return stack;
             }
-            long previous = suppressAt(target);
+            suppressAt(level, target);
             try {
                 return work.get();
             } finally {
-                restoreSuppressAt(previous);
+                restoreSuppressAt();
             }
-        } finally {
-            close(scope, source.state().getBlock());
         }
     }
 

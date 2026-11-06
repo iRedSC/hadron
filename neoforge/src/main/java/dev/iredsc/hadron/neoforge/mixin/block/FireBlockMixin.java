@@ -20,11 +20,11 @@ public abstract class FireBlockMixin {
     @WrapMethod(method = "checkBurnOut")
     private void hadron$burnOnce(Level level, BlockPos pos, int chance, RandomSource random, int age, Direction face,
             Operation<Void> original) {
-        long previous = BlockHooks.suppressAt(pos);
+        BlockHooks.suppressAt(level, pos);
         try {
             original.call(level, pos, chance, random, age, face);
         } finally {
-            BlockHooks.restoreSuppressAt(previous);
+            BlockHooks.restoreSuppressAt();
         }
     }
 

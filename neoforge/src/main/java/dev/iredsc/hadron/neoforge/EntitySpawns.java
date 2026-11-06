@@ -57,8 +57,15 @@ public final class EntitySpawns {
             default -> new EntitySpawnEvent(entity, entity instanceof Mob mob ? mob.getSpawnType() : null,
                     EntityActors.fromStack(entity, fallback(entity)));
         };
-        return !Hooks.post(event).isCancelled();
+        attempts++;
+        boolean cancelled = Hooks.post(event).isCancelled();
+        if (cancelled) refused++;
+        return !cancelled;
     }
+
+    /** Spawns asked about and refused so far on the server thread; {@link EntitySpawnRefunds} compares them. */
+    static int attempts;
+    static int refused;
 
     /** With nothing on the stack: the world spawned it (natural mobs, weather), or a mod did and didn't say. */
     private static Actor fallback(Entity entity) {

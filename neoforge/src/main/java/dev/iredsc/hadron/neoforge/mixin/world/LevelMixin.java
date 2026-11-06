@@ -2,6 +2,7 @@ package dev.iredsc.hadron.neoforge.mixin.world;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.neoforge.Hooks;
 import dev.iredsc.hadron.neoforge.WorldActors;
@@ -34,7 +35,10 @@ public abstract class LevelMixin {
             return original.call(source, damageSource, calculator, x, y, z, radius, fire, interaction, particles,
                     small, large, sound);
         }
-        try (Actors.Scope scope = dev.iredsc.hadron.api.actor.Operation.begin(WorldActors.of(source))) {
+        // Inside an operation already open (a bridge's spell), the blast joins it; otherwise it is its own.
+        Actor actor = WorldActors.of(source);
+        try (Actors.Scope scope = dev.iredsc.hadron.api.actor.Operation.current() != null ? Actors.push(actor)
+                : dev.iredsc.hadron.api.actor.Operation.begin(actor)) {
             return original.call(source, damageSource, calculator, x, y, z, radius, fire, interaction, particles,
                     small, large, sound);
         }

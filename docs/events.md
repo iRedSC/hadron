@@ -35,10 +35,11 @@ Many effects are one action with many parts: a spell hits ten entities, a gadget
 | `FakePlayer` | a fake player | Mekanism's digital miner, a deployer |
 | `Machine` | a block entity at a position | a quarry, a turret block, a pump, a quest submission block |
 | `EntityActor` | an identifiable entity | a drone, a vehicle, a projectile, a summon, a seagull stealing food, a boss |
+| `Server` | the server on an operator's orders; trusted by protection | the console, RCON, a command block |
 | `Nature` | the world on its own, with no entity behind it | fire spreading, water flowing, crops growing |
 | `Unknown` | a mod acted and nothing said who | an unbridged mod's scheduled task |
 
-Every actor except `Nature` and `Unknown` carries up to three people, as UUIDs so they work while offline:
+Every actor except `Server`, `Nature` and `Unknown` carries up to three people, as UUIDs so they work while offline:
 
 - **responsible**: who answers for it. A machine's owner, a summon's summoner, a gun's shooter, the player whose gadget queued the build.
 - **controller**: who directs it right now, if different. A vehicle's driver, a drone's remote operator, the player who charmed a mob.

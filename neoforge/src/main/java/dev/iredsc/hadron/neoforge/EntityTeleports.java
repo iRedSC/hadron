@@ -47,9 +47,11 @@ public final class EntityTeleports {
     public static boolean ask(Entity entity, ServerLevel toLevel, double x, double y, double z) {
         if (!(entity.level() instanceof ServerLevel from) || active != null || quiet > 0) return true;
         boolean isMarked = marked == entity && markedTick == entity.tickCount;
-        if (isMarked && markedAsked) return true;
-        if (!Hooks.listens(EntityTeleportEvent.class)) return true;
         TeleportCause cause = isMarked ? markedCause : TeleportCause.UNKNOWN;
+        boolean asked = isMarked && markedAsked;
+        // A mark covers exactly the next teleport: an approval never carries over to a second teleport this tick.
+        if (isMarked) marked = null;
+        if (asked || !Hooks.listens(EntityTeleportEvent.class)) return true;
         return !Hooks.post(new EntityTeleportEvent(entity, toLevel != null ? toLevel : from, new Vec3(x, y, z), cause,
                 actor(entity, cause))).isCancelled();
     }

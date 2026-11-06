@@ -31,7 +31,15 @@ public final class Hooks {
     /** Fires the event if a host is running, and returns it so the caller can read what listeners changed. */
     public static <E extends Event> E post(E event) {
         PluginHost host = hosts.get();
-        if (host != null) host.post(event);
+        if (host == null) return event;
+        // A handler's own block changes are its own actions, checked like any other: the suppression that keeps
+        // this event's effect from being reported twice must not hide them.
+        long saved = BlockHooks.pauseSuppression();
+        try {
+            host.post(event);
+        } finally {
+            BlockHooks.resumeSuppression(saved);
+        }
         return event;
     }
 }

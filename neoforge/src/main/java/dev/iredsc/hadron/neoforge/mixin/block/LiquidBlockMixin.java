@@ -17,11 +17,11 @@ public abstract class LiquidBlockMixin {
             target = "Lnet/minecraft/world/level/Level;setBlockAndUpdate(Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/level/block/state/BlockState;)Z"))
     private boolean hadron$form(Level level, BlockPos pos, BlockState formed, Operation<Boolean> original) {
         if (BlockHooks.cancelForm(level, pos, formed)) return false;
-        long previous = BlockHooks.suppressAt(pos);
+        BlockHooks.suppressAt(level, pos);
         try {
             return original.call(level, pos, formed);
         } finally {
-            BlockHooks.restoreSuppressAt(previous);
+            BlockHooks.restoreSuppressAt();
         }
     }
 }

@@ -26,8 +26,11 @@ public abstract class PacketUtilsMixin {
             original.call(packet, listener);
             return;
         }
-        try (Actors.Scope scope = Actors.push(WorldActors.player(game.player))) {
+        long scope = Actors.Port.enter(WorldActors.player(game.player));
+        try {
             original.call(packet, listener);
+        } finally {
+            Actors.Port.exit(scope);
         }
     }
 }

@@ -234,7 +234,36 @@ public final class ItemHooks {
                 return true;
             }
         }
-        if (slot == null || !takesResult(menu, slot, button, type, player)) return false;
+        // A shift-click takes a result as many times as it fits; each take is asked about on its own, by takeOnce.
+        if (slot == null || type == ClickType.QUICK_MOVE || !takesResult(menu, slot, button, type, player)) {
+            return false;
+        }
+        return resultCancelled(menu, slot, slotId, player, actor, crafts, trades, changes);
+    }
+
+    /**
+     * A shift-click is about to move one result into the player's inventory: one craft, one trade. Asked before every
+     * take, so cancelling stops the batch where it is and a plugin always knows how many were made. True to stop.
+     */
+    public static boolean cancelQuickTake(AbstractContainerMenu menu, int slotId, ServerPlayer player) {
+        if (slotId < 0 || !menu.isValidSlotIndex(slotId)) return false;
+        boolean crafts = Hooks.listens(ItemCraftEvent.class);
+        boolean trades = Hooks.listens(TradeEvent.class);
+        boolean changes = Hooks.listens(ItemChangeEvent.class);
+        if (!crafts && !trades && !changes) return false;
+        Slot slot = menu.getSlot(slotId);
+        if (!slot.hasItem() || !slot.mayPickup(player)) return false;
+        // Rule 8: when nothing will fit, nothing is taken, so nothing is asked.
+        if (player.getInventory().getSlotWithRemainingSpace(slot.getItem()) < 0
+                && player.getInventory().getFreeSlot() < 0) {
+            return false;
+        }
+        return resultCancelled(menu, slot, slotId, player, actor(player), crafts, trades, changes);
+    }
+
+    /** The craft, trade or item change taking this result makes. True when cancelled. */
+    private static boolean resultCancelled(AbstractContainerMenu menu, Slot slot, int slotId, ServerPlayer player,
+            Actor actor, boolean crafts, boolean trades, boolean changes) {
         ServerLevel level = player.serverLevel();
         ItemStack result = slot.getItem();
 
@@ -315,7 +344,6 @@ public final class ItemHooks {
         return switch (type) {
             case PICKUP -> carried.isEmpty() || ItemStack.isSameItemSameComponents(carried, item)
                     && carried.getCount() + item.getCount() <= carried.getMaxStackSize();
-            case QUICK_MOVE -> true;
             case SWAP -> (button >= 0 && button < 9 || button == 40) && player.getInventory().getItem(button).isEmpty();
             case THROW -> carried.isEmpty();
             default -> false;

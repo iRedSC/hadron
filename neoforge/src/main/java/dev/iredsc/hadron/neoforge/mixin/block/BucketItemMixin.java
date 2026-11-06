@@ -27,11 +27,11 @@ public abstract class BucketItemMixin {
         if (BlockHooks.cancelBucketEmpty((BucketItem) (Object) this, player, level, pos, hit, container)) {
             return false;
         }
-        long previous = BlockHooks.suppressAt(pos);
+        BlockHooks.suppressAt(level, pos);
         try {
             return original.call(player, level, pos, hit, container);
         } finally {
-            BlockHooks.restoreSuppressAt(previous);
+            BlockHooks.restoreSuppressAt();
         }
     }
 
@@ -43,11 +43,11 @@ public abstract class BucketItemMixin {
         if (BlockHooks.cancelBucketFill(player, level, pos, state, player.getItemInHand(hand), hit.getDirection())) {
             return ItemStack.EMPTY;
         }
-        long previous = BlockHooks.suppressAt(pos);
+        BlockHooks.suppressAt(level, pos);
         try {
             return original.call(pickup, player, level, pos, state);
         } finally {
-            BlockHooks.restoreSuppressAt(previous);
+            BlockHooks.restoreSuppressAt();
         }
     }
 }
