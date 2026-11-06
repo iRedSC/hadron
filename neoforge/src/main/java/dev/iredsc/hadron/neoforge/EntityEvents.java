@@ -294,7 +294,7 @@ final class EntityEvents {
             default -> TeleportCause.UNKNOWN;
         };
         if (cause == TeleportCause.COMMAND) {
-            EntityTeleports.mark(entity, cause, false);
+            EntityTeleports.mark(entity, cause, false, null);
             return;
         }
         if (!Hooks.listens(dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.class)) return;
@@ -303,9 +303,27 @@ final class EntityEvents {
                 EntityTeleports.actor(entity, cause)));
         if (hadron.isCancelled()) {
             event.setCanceled(true);
-        } else {
-            EntityTeleports.mark(entity, cause, true);
+            return;
         }
+        var to = hadron.getTo();
+        if (hadron.getToLevel() != level && cause != TeleportCause.ENDER_PEARL) {
+            // Chorus fruit and endermen search this level for ground and may step back; another level can't be
+            // handed to that search, so the teleport is done here instead.
+            event.setCanceled(true);
+            EntityTeleports.redirect(entity, new EntityTeleports.Destination(hadron.getToLevel(), to.x, to.y, to.z,
+                    hadron.getToYRot(), hadron.getToXRot()));
+            return;
+        }
+        // NeoForge's event carries only a position in this level; a new level (a pearl's) or facing is applied by the
+        // teleport method called next, which consumes the mark.
+        event.setTargetX(to.x);
+        event.setTargetY(to.y);
+        event.setTargetZ(to.z);
+        boolean turned = hadron.getToYRot() != entity.getYRot() || hadron.getToXRot() != entity.getXRot();
+        EntityTeleports.mark(entity, cause, true, hadron.getToLevel() != level || turned
+                ? new EntityTeleports.Destination(hadron.getToLevel(), to.x, to.y, to.z, hadron.getToYRot(),
+                        hadron.getToXRot())
+                : null);
     }
 
     private static void deathExp(LivingExperienceDropEvent event) {

@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.neoforge.mixin.item;
 
 import com.llamalad7.mixinextras.sugar.Local;
+import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.neoforge.ItemHooks;
 import java.util.ArrayList;
 import java.util.List;
@@ -16,11 +17,26 @@ import net.minecraft.world.level.block.state.BlockState;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.ModifyVariable;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
-/** ItemCraftEvent for the crafter block, after it found a recipe and before it consumes or makes anything. */
+/**
+ * The crafter block when powered: PrepareItemCraftEvent once it has worked out its result (emptied, it clicks and
+ * crafts nothing), then ItemCraftEvent before it consumes or makes anything.
+ */
 @Mixin(CrafterBlock.class)
 abstract class CrafterBlockMixin {
+    /** The result, just assembled, before the crafter checks whether it is empty. */
+    @ModifyVariable(method = "dispenseFrom", ordinal = 0, at = @At(value = "INVOKE", ordinal = 0,
+            target = "Lnet/minecraft/world/item/ItemStack;isEmpty()Z"))
+    private ItemStack hadron$prepare(ItemStack result, BlockState state, ServerLevel level, BlockPos pos) {
+        if (!(level.getBlockEntity(pos) instanceof CrafterBlockEntity crafter)) return result;
+        RecipeHolder<CraftingRecipe> recipe = CrafterBlock.getPotentialResults(level, crafter.asCraftInput())
+                .orElse(null);
+        return ItemHooks.prepareCraft(level, new InventoryHolder.Block(level, pos), null, null, crafter.getItems(),
+                recipe, result, ItemHooks.machine(level, pos));
+    }
+
     @Inject(method = "dispenseFrom", cancellable = true, at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/level/block/entity/CrafterBlockEntity;setCraftingTicksRemaining(I)V"))
     private void hadron$craft(BlockState state, ServerLevel level, BlockPos pos, CallbackInfo ci,

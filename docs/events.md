@@ -75,6 +75,7 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 | `BlockMoveEvent` | blocks relocate with their data and scheduled ticks; source to target mapping, and the space swept through | |
 | ├ `BlockPistonExtendEvent`, `BlockPistonRetractEvent` | | `PistonBaseBlock` |
 | └ `StructureMoveEvent` | a contraption, ship or spatial transfer assembles, moves, rotates or disassembles; old and new transforms | bridge (Create, Valkyrien Skies, AE2 spatial IO) |
+| `BlockDropItemEvent` | a broken block's drops are about to appear; the item entities and experience are editable, and a cancel drops nothing | `Block.dropResources` (NeoForge's `BlockDropsEvent`), so player mining, `destroyBlock` and blocks losing their support |
 | `BlockUseEvent` | an actor right-clicks or activates a block, including remotely through a linked terminal | `useItemOn`, `useWithoutItem` |
 | `BlockRedstoneEvent` | an actor changes the signal a block emits without changing its state | bridge (Integrated Dynamics, LaserIO) |
 | `BlockDamageEvent` | a block takes lasting partial damage short of breaking | bridge (Create Big Cannons) |
@@ -96,7 +97,7 @@ Payload: the entity, its position, and what changed.
 | └ `EntityCaptureEvent` | an entity is stored into an item, block or player's carry state (bucket, mob catcher, Carry On) | `Bucketable`, bridges |
 | `EntityDamageEvent` | an entity is hurt; damage source, actor, and the weapon or spell | `hurt` |
 | `EntityDeathEvent` | an entity is dying; drops, experience and where each item goes are editable; not cancellable | `die` |
-| └ `PlayerDeathEvent` | a player is dying; each item, including extra slots, is assigned to kept, dropped, grave or destroyed | |
+| └ `PlayerDeathEvent` | a player is dying; each item, including extra slots, is assigned to kept, dropped, grave or destroyed; the death line is editable and replaces vanilla's | `ServerPlayer.die` |
 | `EntityRegainHealthEvent` | healed, including absorption | `heal`, `setAbsorptionAmount` |
 | `EntityCombustEvent` | an entity is set on fire | `igniteForSeconds`, `setRemainingFireTicks` |
 | `EntityPotionEffectEvent` | a registered effect added, changed or removed | `addEffect`, `removeEffect` |
@@ -106,7 +107,7 @@ Payload: the entity, its position, and what changed.
 | └ `EntityKnockbackEvent` | knockback from a hit or blast | `LivingEntity.knockback` |
 | `EntityMoveEvent` | an entity with an actor or controller (a player, a vehicle) crosses into another block | movement ticks, only when a listener's area is involved |
 | └ `PlayerMoveEvent` | | |
-| `EntityTeleportEvent` | an entity moves other than by walking; cause, and everything travelling with it (passengers, pets, leashed mobs) | `teleportTo`, `changeDimension` |
+| `EntityTeleportEvent` | an entity moves other than by walking; cause, and everything travelling with it (passengers, pets, leashed mobs); the destination (world, position, facing) is editable | `teleportTo`, `changeDimension` |
 | `EntityTargetEvent` | a mob or turret picks a target | `setTarget` |
 | `EntityControlChangeEvent` | who controls an entity changes without mounting: charmed, enthralled, a drone linked to a monitor, a guard assigned; expiry is *(after)* | bridge |
 | `EntityRelationshipChangeEvent` | reputation or a lasting relationship changes (villager gossip, an NPC's marriage) | `GossipContainer`, bridges |
@@ -139,6 +140,7 @@ Payload: the entity, its position, and what changed.
 | `ItemCraftEvent` | an actor turns inputs into outputs by a recipe: a table, an autocrafter, a cutting board, a forge ritual; every input, output and cost | `ResultSlot`, bridges |
 | `ItemSmeltEvent` | a machine processes items, including world and belt items (Create fans); every input, catalyst and output | `AbstractFurnaceBlockEntity`, bridges |
 | `PrepareAnvilEvent` | | `AnvilMenu` |
+| `PrepareItemCraftEvent` | a crafting grid worked out its result; replace it, or set it empty to forbid; not cancellable | `CraftingMenu.slotChangedCraftingGrid` (2x2 grid, table, mods' menus on vanilla's grid), `CrafterBlock.dispenseFrom`, `CrafterMenu` |
 | `TradeEvent` | an exchange with a villager or a mod's trader | `MerchantMenu` |
 | `ItemHeldEvent` | a player changes hotbar slot | `ServerboundSetCarriedItemPacket` |
 | `EquipEvent` | something is about to be worn: right-click equip, an armour-slot click, a dispenser, a mob picking up gear, or a mod's extra slot. Cancelled, it stays where it was | `ArmorItem.use`, `ElytraItem.use`, `ArmorSlot.mayPlace`, `ArmorItem.dispenseArmor`, `Mob.equipItemIfPossible`; bridges for extra slots |
@@ -195,7 +197,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 | Event | What |
 |---|---|
 | `PlayerLoginEvent` | before join; deny with a message |
-| `PlayerJoinEvent`, `PlayerQuitEvent`, `PlayerKickEvent` | |
+| `PlayerJoinEvent`, `PlayerQuitEvent`, `PlayerKickEvent` | the join and quit lines are editable and replace vanilla's |
 | `PlayerChatEvent` | |
 | `PlayerRespawnEvent` | respawn location editable |
 | `PlayerChangedWorldEvent` *(after)* | |
@@ -206,6 +208,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 | `PlayerAdvancementDoneEvent` *(after)* | |
 | `PlayerSwapHandItemsEvent` | |
 | `PlayerBedEnterEvent`, `PlayerBedLeaveEvent` | |
+| `PlayerFishEvent` | each step of fishing with any rod whose bobber is a `FishingHook`: cast, bite, escape, reel-in; the catch and its experience editable. An `EntityEvent` about the bobber, so it carries the actor (the player or a fake player) |
 | `PlayerModPacketEvent` | a mod's network message from this player; payload id. The catch-all for keybind actions only the server sees |
 
 ### Server: `ServerEvent`
@@ -213,6 +216,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 | Event | What |
 |---|---|
 | `ServerLoadEvent` *(after)* | once per start, after plugins enable |
+| `ServerListPingEvent` | a client's server list asks about the server; MOTD, shown player counts and the hover sample editable; not an action, so no actor |
 | `CommandExecuteEvent` | any command about to run, from a player, the console, a quest reward or a mod; actor and authority |
 | `AccessControlChangeEvent` | a claim, team, party, alliance or trust list changes: boundaries, members, flags; who changed it |
 | `DataRevealEvent` | server data about a block, entity or inventory is about to be sent to a player who didn't open it (Jade, WTHIT, map radar); fields removable |

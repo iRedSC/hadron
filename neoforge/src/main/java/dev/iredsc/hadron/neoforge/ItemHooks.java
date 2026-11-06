@@ -20,6 +20,7 @@ import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.api.event.item.ItemRepairEvent;
 import dev.iredsc.hadron.api.event.item.ItemSmeltEvent;
 import dev.iredsc.hadron.api.event.item.ItemUseEvent;
+import dev.iredsc.hadron.api.event.item.PrepareItemCraftEvent;
 import dev.iredsc.hadron.api.event.item.TradeEvent;
 import dev.iredsc.hadron.neoforge.mixin.item.MerchantResultSlotAccessor;
 import dev.iredsc.hadron.neoforge.mixin.item.ResultSlotAccessor;
@@ -429,6 +430,40 @@ public final class ItemHooks {
         List<ItemStack> out = new ArrayList<>();
         for (int i = from; i <= to; i++) out.add(menu.getSlot(i).getItem());
         return ones(out);
+    }
+
+    // ---- Crafting grids -----------------------------------------------------------------------------------------
+
+    /**
+     * A crafting grid's result was just worked out. Returns what it should offer, which a listener may have changed.
+     * {@code menu} and {@code viewer} are null for a crafter crafting on its own. An empty grid offering nothing is
+     * skipped: there is nothing to decide.
+     */
+    public static ItemStack prepareCraft(ServerLevel level, InventoryHolder holder, AbstractContainerMenu menu,
+            ServerPlayer viewer, List<ItemStack> matrix, RecipeHolder<?> recipe, ItemStack result, Actor actor) {
+        if (!Hooks.listens(PrepareItemCraftEvent.class)) return result;
+        if (result.isEmpty() && matrix.stream().allMatch(ItemStack::isEmpty)) return result;
+        PrepareItemCraftEvent event = Hooks.post(new PrepareItemCraftEvent(level, holder, menu, viewer, matrix,
+                recipe, result, actor));
+        ItemStack chosen = event.getResult();
+        // Unchanged, hand back vanilla's own stack, so nothing downstream sees a copy where it expected the original.
+        return ItemStack.matches(chosen, result) ? result : chosen;
+    }
+
+    /**
+     * The leftovers of taking a grid's result. Where no recipe matches, the result can only be one a plugin offered
+     * through {@link PrepareItemCraftEvent}, and vanilla's fallback would hand every ingredient back, making it free;
+     * instead one of each is used up.
+     */
+    public static net.minecraft.core.NonNullList<ItemStack> craftLeftovers(Level level,
+            net.minecraft.world.item.crafting.CraftingInput input,
+            net.minecraft.core.NonNullList<ItemStack> vanilla) {
+        if (!(level instanceof ServerLevel) || !Hooks.listens(PrepareItemCraftEvent.class)) return vanilla;
+        if (level.getRecipeManager().getRecipeFor(net.minecraft.world.item.crafting.RecipeType.CRAFTING, input, level)
+                .isPresent()) {
+            return vanilla;
+        }
+        return net.minecraft.core.NonNullList.withSize(vanilla.size(), ItemStack.EMPTY);
     }
 
     // ---- Machines -----------------------------------------------------------------------------------------------

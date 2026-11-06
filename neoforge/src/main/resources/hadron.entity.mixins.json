@@ -6,8 +6,10 @@
   "mixins": [
     "AbstractHorseMixin",
     "BlockAttachedEntityMixin",
+    "DeathMessageMixin",
     "EntityMixin",
     "EntityTypeMixin",
+    "FishingHookMixin",
     "HangingEntityItemMixin",
     "LivingEntityMixin",
     "MobMixin",

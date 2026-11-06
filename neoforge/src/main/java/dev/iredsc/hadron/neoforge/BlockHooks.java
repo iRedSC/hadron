@@ -823,6 +823,12 @@ public final class BlockHooks {
         return true;
     }
 
+    /** Who broke the block whose drops are falling: the breaker, else whoever acts now or the ticking block. */
+    static Actor dropActor(Entity breaker) {
+        Actor actor = actorFor(breaker);
+        return actor != null ? actor : currentOr(Actor.Unknown.INSTANCE);
+    }
+
     static Actor orUnknown(Actor actor) {
         return orElse(actor, Actor.Unknown.INSTANCE);
     }
