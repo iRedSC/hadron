@@ -3,6 +3,26 @@
   "minVersion": "0.8",
   "package": "dev.iredsc.hadron.neoforge.mixin.block",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
+  "mixins": [
+    "BlockStateBaseMixin",
+    "BoneMealItemMixin",
+    "BoundTickingBlockEntityMixin",
+    "BucketItemMixin",
+    "DispenserBlockMixin",
+    "ExplosionMixin",
+    "FireBlockMixin",
+    "FlowingFluidMixin",
+    "FungusBlockMixin",
+    "LeavesBlockMixin",
+    "LevelMixin",
+    "LiquidBlockMixin",
+    "MushroomBlockMixin",
+    "PistonBaseBlockAccessor",
+    "PistonBaseBlockMixin",
+    "ServerLevelMixin",
+    "ServerPlayerGameModeMixin",
+    "SignBlockEntityMixin",
+    "TreeGrowerMixin"
+  ],
   "injectors": { "defaultRequire": 1 }
 }
