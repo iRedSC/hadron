@@ -11,8 +11,10 @@
     "LevelMixin",
     "NetworkRegistryMixin",
     "PacketUtilsMixin",
+    "PlayerListMixin",
     "PortalForcerMixin",
     "PortalShapeMixin",
+    "QuitMessageMixin",
     "ServerChunkCacheMixin",
     "ServerCommonPacketListenerImplMixin",
     "ServerConfigurationPacketListenerImplMixin",
@@ -20,7 +22,8 @@
     "ServerGamePacketListenerImplMixin",
     "ServerLevelMixin",
     "ServerPayloadContextMixin",
-    "ServerPlayerMixin"
+    "ServerPlayerMixin",
+    "ServerStatusPacketListenerImplMixin"
   ],
   "injectors": {
     "defaultRequire": 1

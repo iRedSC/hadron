@@ -46,12 +46,18 @@ final class PlayerEvents {
         NeoForge.EVENT_BUS.addListener(PlayerEvents::bedLeave);
     }
 
+    /** After {@code placeNewPlayer}'s join line was held back; the event's line replaces it. */
     private static void join(PlayerEvent.PlayerLoggedInEvent event) {
-        if (event.getEntity() instanceof ServerPlayer p) Hooks.post(new PlayerJoinEvent(p));
+        if (!(event.getEntity() instanceof ServerPlayer p)) return;
+        PlayerJoinEvent hadron = Hooks.post(new PlayerJoinEvent(p, PlayerMessages.takeJoin(p)));
+        PlayerMessages.join(p, hadron.getJoinMessage());
     }
 
+    /** After {@code removePlayerFromWorld}'s quit line was held back; the event's line replaces it. */
     private static void quit(PlayerEvent.PlayerLoggedOutEvent event) {
-        if (event.getEntity() instanceof ServerPlayer p) Hooks.post(new PlayerQuitEvent(p));
+        if (!(event.getEntity() instanceof ServerPlayer p)) return;
+        PlayerQuitEvent hadron = Hooks.post(new PlayerQuitEvent(p, PlayerMessages.takeQuit(p)));
+        PlayerMessages.quit(p, hadron.getQuitMessage());
     }
 
     private static void chat(ServerChatEvent event) {

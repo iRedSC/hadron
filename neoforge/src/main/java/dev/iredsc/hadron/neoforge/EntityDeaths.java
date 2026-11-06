@@ -73,10 +73,16 @@ public final class EntityDeaths {
         int exp = ((EntityState) entity).hadron$deathExp();
         ((EntityState) entity).hadron$setDeathExp(0);
         List<ItemStack> kept = new ArrayList<>();
+        // A player's death line was held back in die(); the event decides it, and it is shown once listeners finish.
+        boolean heldLine = entity instanceof ServerPlayer p && PlayerMessages.deathHeld(p);
         EntityDeathEvent event = entity instanceof ServerPlayer player
-                ? new PlayerDeathEvent(player, source, stacks, kept, exp, EntityActors.damage(source, player))
+                ? new PlayerDeathEvent(player, source, stacks, kept, exp, PlayerMessages.takeDeath(player),
+                        EntityActors.damage(source, player))
                 : new EntityDeathEvent(entity, source, stacks, exp, EntityActors.damage(source, entity));
         Hooks.post(event);
+        if (heldLine && event instanceof PlayerDeathEvent death) {
+            PlayerMessages.death(death.getPlayer(), death.getDeathMessage());
+        }
 
         // A stack listed as both kept and dropped is kept, so a listener that forgets to remove it can't duplicate it.
         Set<ItemStack> keptSet = Collections.newSetFromMap(new IdentityHashMap<>());

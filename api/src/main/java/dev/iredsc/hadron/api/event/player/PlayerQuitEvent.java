@@ -1,10 +1,33 @@
 package dev.iredsc.hadron.api.event.player;
 
+import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
-/** A player is leaving; they're still in the world while this runs, so it's the place to save their data. */
+/**
+ * A player is leaving; they're still in the world while this runs, so it's the place to save their data.
+ * {@link #getQuitMessage()} is the "left the game" line about to be broadcast; change it with
+ * {@link #setQuitMessage}, or set null for none. It replaces vanilla's line.
+ */
 public class PlayerQuitEvent extends PlayerEvent {
+    private Component quitMessage;
+
     public PlayerQuitEvent(ServerPlayer player) {
+        this(player, null);
+    }
+
+    /** @param quitMessage the line about to be broadcast, or null for none */
+    public PlayerQuitEvent(ServerPlayer player, Component quitMessage) {
         super(player);
+        this.quitMessage = quitMessage;
+    }
+
+    /** The line about to be broadcast to everyone, or null when none will be. */
+    public Component getQuitMessage() {
+        return quitMessage;
+    }
+
+    /** Broadcast this instead; null or an empty component broadcasts nothing. */
+    public void setQuitMessage(Component quitMessage) {
+        this.quitMessage = quitMessage;
     }
 }

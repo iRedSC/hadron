@@ -5,6 +5,7 @@ import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockChangeEvent;
+import dev.iredsc.hadron.api.event.block.BlockDropItemEvent;
 import dev.iredsc.hadron.api.event.block.BlockFormEvent;
 import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.block.BlockMultiPlaceEvent;
@@ -27,8 +28,10 @@ import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.piston.PistonStructureResolver;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.material.PushReaction;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.common.util.BlockSnapshot;
+import net.neoforged.neoforge.event.level.BlockDropsEvent;
 import net.neoforged.neoforge.event.level.BlockEvent;
 import net.neoforged.neoforge.event.level.PistonEvent;
 
@@ -44,6 +47,28 @@ final class BlockEvents {
         NeoForge.EVENT_BUS.addListener(BlockEvents::placeBlock);
         NeoForge.EVENT_BUS.addListener(BlockEvents::piston);
         NeoForge.EVENT_BUS.addListener(BlockEvents::fluidPlace);
+        // Last, so plugins see the drops mods' listeners settled on.
+        NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, BlockEvents::drops);
+    }
+
+    /**
+     * {@code Block.dropResources}, for every break with drops: player mining, {@code destroyBlock} by anything, a
+     * block popping off its support. A cancel empties the drops rather than cancelling NeoForge's event, so what the
+     * block does after breaking (an infested block's silverfish) still happens: only the drops are refused.
+     */
+    private static void drops(BlockDropsEvent event) {
+        if (!Hooks.listens(BlockDropItemEvent.class)) return;
+        List<net.minecraft.world.entity.item.ItemEntity> items = event.getDrops();
+        BlockDropItemEvent hadron = Hooks.post(new BlockDropItemEvent(event.getLevel(), event.getPos(),
+                event.getState(), event.getBlockEntity(), items, event.getTool(), event.getDroppedExperience(),
+                BlockHooks.dropActor(event.getBreaker())));
+        if (hadron.isCancelled()) {
+            items.clear();
+            event.setDroppedExperience(0);
+            return;
+        }
+        items.removeIf(item -> item == null || item.getItem().isEmpty());
+        event.setDroppedExperience(hadron.getExperience());
     }
 
     /** A player or fake player mining a block, through the game mode. Fired before anything drops. */

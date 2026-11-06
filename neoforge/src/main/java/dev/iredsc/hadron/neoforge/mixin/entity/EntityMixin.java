@@ -132,7 +132,12 @@ abstract class EntityMixin implements EntityState {
     @WrapMethod(method = "teleportTo(DDD)V")
     private void hadron$teleport(double x, double y, double z, Operation<Void> original) {
         Entity self = (Entity) (Object) this;
-        if (!EntityTeleports.ask(self, null, x, y, z)) return;
+        EntityTeleports.Destination to = EntityTeleports.ask(self, null, x, y, z, self.getYRot(), self.getXRot());
+        if (to == null) return;
+        if (to.differs(self, null, x, y, z, self.getYRot(), self.getXRot())) {
+            EntityTeleports.redirect(self, to); // another level or facing needs the method that takes them
+            return;
+        }
         EntityTeleports.during(self, () -> original.call(x, y, z));
     }
 
@@ -140,16 +145,26 @@ abstract class EntityMixin implements EntityState {
     private boolean hadron$teleportTo(ServerLevel level, double x, double y, double z, Set<RelativeMovement> relative,
             float yRot, float xRot, Operation<Boolean> original) {
         Entity self = (Entity) (Object) this;
-        if (!EntityTeleports.ask(self, level, x, y, z)) return false;
-        return EntityTeleports.during(self, () -> original.call(level, x, y, z, relative, yRot, xRot));
+        EntityTeleports.Destination to = EntityTeleports.ask(self, level, x, y, z, yRot, xRot);
+        if (to == null) return false;
+        // Relative flags only shape the packet; the coordinates passed are absolute, so a new destination keeps them.
+        return EntityTeleports.during(self, () -> original.call(to.level(), to.x(), to.y(), to.z(), relative,
+                to.yRot(), to.xRot()));
     }
 
     @WrapMethod(method = "changeDimension")
     private Entity hadron$changeDimension(DimensionTransition transition, Operation<Entity> original) {
         Entity self = (Entity) (Object) this;
-        var to = transition.pos();
-        if (!EntityTeleports.ask(self, transition.newLevel(), to.x, to.y, to.z)) return null;
-        return EntityTeleports.during(self, () -> original.call(transition));
+        var pos = transition.pos();
+        EntityTeleports.Destination to = EntityTeleports.ask(self, transition.newLevel(), pos.x, pos.y, pos.z,
+                transition.yRot(), transition.xRot());
+        if (to == null) return null;
+        DimensionTransition going = to.differs(self, transition.newLevel(), pos.x, pos.y, pos.z, transition.yRot(),
+                transition.xRot())
+                ? new DimensionTransition(to.level(), to.position(), transition.speed(), to.yRot(), to.xRot(),
+                        transition.missingRespawnBlock(), transition.postDimensionTransition())
+                : transition;
+        return EntityTeleports.during(self, () -> original.call(going));
     }
 
     /** Getting off a vehicle places the rider with a teleport; that is part of the dismount, not a teleport. */

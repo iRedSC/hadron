@@ -57,6 +57,9 @@ Core fires these for vanilla's paths; the bridge covers its mod's.
 | `EquipmentChangeEvent` | every vanilla slot, after the fact | the mod's extra slots |
 | `ItemChangeEvent` | anvil and grindstone results | the enclosing action that changes a stack in place (a gun spending ammo, a wand spending a reagent), once per action |
 | `ItemCraftEvent` | every vanilla workstation and the crafter | the mod's crafting, with every input, output and cost |
+| `PrepareItemCraftEvent` | the 2x2 grid, crafting tables, the crafter, and mods' menus built on vanilla's crafting grid | the mod's own crafting grids, when they work out a result; honour the result a listener sets |
+| `BlockDropItemEvent` | every drop through `Block.dropResources` (player mining, `destroyBlock`, blocks losing support) | drops the mod spawns itself when it breaks or harvests a block, before spawning them; honour the edited list and experience |
+| `PlayerFishEvent` | any rod whose bobber is a `FishingHook` | fishing that doesn't use a `FishingHook` (a mod's own bobber entity), at each step it has |
 | `ItemSmeltEvent` | furnaces, campfires, brewing stands | the mod's machines, including items processed in the world or on belts |
 | `ItemEnchantEvent`, `ItemRepairEvent` | enchanting table, anvil, grindstone, Mending | the mod's enchanting and repairs |
 | `TradeEvent` | every merchant menu | the mod's own trading |
