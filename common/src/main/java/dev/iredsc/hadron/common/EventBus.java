@@ -16,6 +16,7 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
@@ -121,8 +122,11 @@ final class EventBus {
 
     /** By the event class each handler takes. Guarded by this. */
     private final Map<Class<?>, List<Subscription>> byType = new LinkedHashMap<>();
-    /** Every handler that hears a concrete event class, sorted; rebuilt after any change. */
-    private final Map<Class<?>, Subscription[]> baked = new HashMap<>();
+    /**
+     * Every handler that hears a concrete event class, sorted. Replaced whole after any change, so reads never lock:
+     * a bake racing a change lands in the map being thrown away.
+     */
+    private volatile Map<Class<?>, Subscription[]> baked = new ConcurrentHashMap<>();
     private final AtomicLong registered = new AtomicLong();
 
     /** Subscribes every {@code @EventHandler} method; all or nothing. */
@@ -137,7 +141,7 @@ final class EventBus {
                 s.bus = this;
                 byType.computeIfAbsent(s.type, k -> new ArrayList<>()).add(s);
             }
-            baked.clear();
+            baked = new ConcurrentHashMap<>();
         }
         return out;
     }
@@ -145,16 +149,30 @@ final class EventBus {
     private synchronized void remove(Subscription s) {
         List<Subscription> list = byType.get(s.type);
         if (list != null && list.remove(s) && list.isEmpty()) byType.remove(s.type);
-        baked.clear();
+        baked = new ConcurrentHashMap<>();
     }
 
     /** Runs every handler that hears the event. */
     void post(Event event) {
-        Subscription[] handlers;
-        synchronized (this) {
-            handlers = baked.computeIfAbsent(event.getClass(), this::bake);
+        for (Subscription s : handlers(event.getClass())) s.call(event);
+    }
+
+    /**
+     * Whether anything hears this event class. Cheap after the first call, so a chokepoint that runs millions of
+     * times asks this before building the event.
+     */
+    boolean listens(Class<?> type) {
+        return handlers(type).length > 0;
+    }
+
+    private Subscription[] handlers(Class<?> type) {
+        Map<Class<?>, Subscription[]> current = baked;
+        Subscription[] found = current.get(type);
+        if (found == null) {
+            found = bake(type);
+            current.putIfAbsent(type, found);
         }
-        for (Subscription s : handlers) s.call(event);
+        return found;
     }
 
     private synchronized Subscription[] bake(Class<?> type) {

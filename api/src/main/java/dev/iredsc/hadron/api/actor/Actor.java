@@ -1,0 +1,96 @@
+package dev.iredsc.hadron.api.actor;
+
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
+
+/**
+ * Who is behind an action. Sealed, so a {@code switch} over it must handle every case:
+ *
+ * <pre>{@code
+ * switch (event.getActor()) {
+ *     case Actor.Player p -> ...
+ *     case Actor.FakePlayer f -> ...
+ *     case Actor.Machine m -> ...
+ *     case Actor.EntityActor e -> ...
+ *     case Actor.Nature n -> ...
+ *     case Actor.Unknown u -> ...
+ * }
+ * }</pre>
+ *
+ * Protection should treat {@link Unknown}, and any actor whose {@link Attribution#actingFor()} is empty, as an
+ * outsider: a gap then shows up as a machine refusing to work in a claim, never as a silent grief.
+ */
+public sealed interface Actor {
+    /** The people behind this actor; empty for {@link Nature} and {@link Unknown}. */
+    Attribution attribution();
+
+    /** Who protection checks; see {@link Attribution#actingFor()}. */
+    default Optional<UUID> actingFor() {
+        return attribution().actingFor();
+    }
+
+    /** A real player, acting directly. They are responsible for it. */
+    record Player(ServerPlayer player) implements Actor {
+        public Player {
+            Objects.requireNonNull(player, "player");
+        }
+
+        @Override
+        public Attribution attribution() {
+            return Attribution.of(player.getUUID());
+        }
+    }
+
+    /** A fake player: a mod's machine using the player code path, such as a deployer or a digital miner. */
+    record FakePlayer(ServerPlayer fake, Attribution attribution) implements Actor {
+        public FakePlayer {
+            Objects.requireNonNull(fake, "fake");
+            Objects.requireNonNull(attribution, "attribution; use Attribution.none() for nobody");
+        }
+    }
+
+    /** A block entity acting from its position: a quarry, a turret block, a pump. */
+    record Machine(ServerLevel level, BlockPos pos, Attribution attribution) implements Actor {
+        public Machine {
+            Objects.requireNonNull(level, "level");
+            pos = Objects.requireNonNull(pos, "pos").immutable();
+            Objects.requireNonNull(attribution, "attribution; use Attribution.none() for nobody");
+        }
+    }
+
+    /**
+     * An identifiable entity: a drone, a vehicle, a projectile, a summon, a wild mob. A mob is always this, even
+     * when it spawned naturally, so a logger never loses which creature did it.
+     */
+    record EntityActor(Entity entity, Attribution attribution) implements Actor {
+        public EntityActor {
+            Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(attribution, "attribution; use Attribution.none() for nobody");
+        }
+    }
+
+    /** The world on its own, with no entity behind it: fire spreading, water flowing, crops growing. */
+    record Nature() implements Actor {
+        public static final Nature INSTANCE = new Nature();
+
+        @Override
+        public Attribution attribution() {
+            return Attribution.none();
+        }
+    }
+
+    /** A mod acted and nothing said who. Protection treats it as an outsider. */
+    record Unknown() implements Actor {
+        public static final Unknown INSTANCE = new Unknown();
+
+        @Override
+        public Attribution attribution() {
+            return Attribution.none();
+        }
+    }
+}

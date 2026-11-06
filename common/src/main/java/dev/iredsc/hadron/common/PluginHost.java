@@ -990,6 +990,11 @@ public final class PluginHost implements PluginManager {
         events.post(event);
     }
 
+    /** For the loader port: whether any plugin hears this event class, so a hot chokepoint can skip building it. */
+    public boolean listens(Class<? extends Event> type) {
+        return events.listens(type);
+    }
+
     /** Loaded or enabled, as in Bukkit; null otherwise. */
     @Override
     public JavaPlugin getPlugin(String name) {
