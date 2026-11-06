@@ -4,10 +4,13 @@
   "package": "dev.iredsc.hadron.neoforge.mixin.worlds",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "CommandsSuggestionsMixin",
     "MinecraftServerAccessor",
     "PersistentEntitySectionManagerDiscardMixin",
     "ServerChunkCacheDiscardMixin",
     "ServerLevelSeedMixin"
   ],
-  "injectors": { "defaultRequire": 1 }
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

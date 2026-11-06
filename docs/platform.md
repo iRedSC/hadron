@@ -39,5 +39,5 @@ Bukkit's `WorldCreator` and `createWorld`, for Multiverse.
 - **Create** a world from a dimension type the server has (overworld, nether, end, or a datapack's or mod's) and a generator: a copy of an existing dimension's, flat, void, or a noise settings id, with its own seed.
 - **Load, unload and delete** while the server runs (`Worlds.load` brings back a created world that is unloaded; `Worlds.created()` lists them all). Players in a world being unloaded are moved out first. Unloading without saving discards the changes. Time, weather and game rules follow the overworld; spawn is per world.
 - **Created worlds come back on restart:** Hadron saves each world's definition and recreates it before plugins enable, so a plugin can rely on its worlds existing in `onEnable`.
-- **Vanilla clients can join them**, with no client mod: a created world is an ordinary dimension to the client.
+- **Vanilla clients can join them**, with no client mod: a created world is an ordinary dimension to the client, and commands suggest it even to players who joined before it was created.
 - A world belongs to the server, not to the plugin that made it: disabling the plugin doesn't unload it.
