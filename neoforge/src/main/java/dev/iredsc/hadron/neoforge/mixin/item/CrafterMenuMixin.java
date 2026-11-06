@@ -34,6 +34,9 @@ abstract class CrafterMenuMixin {
         if (!(player instanceof ServerPlayer viewer)) return result;
         CrafterMenu menu = (CrafterMenu) (Object) this;
         var recipe = CrafterBlock.getPotentialResults(viewer.level(), container.asCraftInput()).orElse(null);
+        // A crafter only crafts recipes, so with none matching there is nothing for a plugin to change: showing a
+        // plugin's result here would promise an item the powered crafter can't make.
+        if (recipe == null) return result;
         return ItemHooks.prepareCraft(viewer.serverLevel(), InventoryHolders.ofMenu(menu, viewer), menu, viewer,
                 container.getItems(), recipe, result, ItemHooks.actor(viewer));
     }

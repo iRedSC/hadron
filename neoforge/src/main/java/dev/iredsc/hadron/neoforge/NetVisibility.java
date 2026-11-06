@@ -299,6 +299,28 @@ public final class NetVisibility {
 
     // ---- What reaches a viewer ----
 
+    /**
+     * The entity whose own sound is being broadcast right now (a hidden player's hurt sound, footsteps), set around
+     * {@code Entity.playSound} and {@code Player.playSound} on the server thread. Vanilla sends those as positional
+     * sounds that don't name their entity, so this is how a hidden entity's sounds stay hidden.
+     */
+    private static Entity soundSource;
+
+    /** Runs an entity's own sound with it as the source, when anyone is hidden; otherwise just runs it. */
+    public static void playingSound(Entity source, Runnable play) {
+        if (!active || !(source.level() instanceof ServerLevel)) {
+            play.run();
+            return;
+        }
+        Entity previous = soundSource;
+        soundSource = source;
+        try {
+            play.run();
+        } finally {
+            soundSource = previous;
+        }
+    }
+
     /** Removes hidden players' tab entries, and drops packets naming a hidden entity outside its own tracking. */
     static Packet<?> filter(ServerPlayer viewer, Packet<?> packet) {
         if (!active) return packet;
@@ -307,7 +329,10 @@ public final class NetVisibility {
         if (packet instanceof ClientboundBlockDestructionPacket p) id = p.getId();
         else if (packet instanceof ClientboundTakeItemEntityPacket p) id = p.getPlayerId();
         else if (packet instanceof ClientboundSoundEntityPacket p) id = p.getId();
-        else return packet;
+        else if (packet instanceof net.minecraft.network.protocol.game.ClientboundSoundPacket) {
+            Entity source = soundSource;
+            return source != null && viewer.server.isSameThread() && !canSee(viewer, source) ? null : packet;
+        } else return packet;
         // Entity ids resolve only on the server thread, where vanilla sends these.
         if (!viewer.server.isSameThread()) return packet;
         Entity e = viewer.serverLevel().getEntity(id);

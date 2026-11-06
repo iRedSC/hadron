@@ -100,6 +100,31 @@ public final class DataBlocks {
         blocks.changed(chunk);
     }
 
+    /**
+     * Data cleared while NeoForge captures block snapshots (a placement waiting for its event, a tree growing): kept
+     * aside for the rest of the tick, and put back if the capture is rolled back. Server thread only.
+     */
+    private static final java.util.Map<LevelChunk, Long2ObjectOpenHashMap<CompoundTag>> STASH = new java.util.WeakHashMap<>();
+    private static long stashTime = Long.MIN_VALUE;
+
+    private static void stash(LevelChunk chunk, long key, CompoundTag tag) {
+        long now = chunk.getLevel().getGameTime();
+        if (now != stashTime) {
+            STASH.clear();
+            stashTime = now;
+        }
+        STASH.computeIfAbsent(chunk, c -> new Long2ObjectOpenHashMap<>()).put(key, tag);
+    }
+
+    /** From the chunk's block write while a capture is rolled back: puts back what the capture cleared there. */
+    public static void restoreStashed(LevelChunk chunk, BlockPos pos) {
+        if (STASH.isEmpty() || chunk.getLevel().getGameTime() != stashTime) return;
+        Long2ObjectOpenHashMap<CompoundTag> stashed = STASH.get(chunk);
+        if (stashed == null) return;
+        CompoundTag tag = stashed.remove(pos.asLong());
+        if (tag != null) put(chunk, pos, tag);
+    }
+
     /** Data moved here ahead of its block: the block's arrival this tick keeps it. */
     static void expectArrival(LevelChunk chunk, BlockPos pos) {
         DataBlocks blocks = of(chunk);
@@ -116,7 +141,10 @@ public final class DataBlocks {
             if (arriving.isEmpty()) arriving = null;
             if (when == chunk.getLevel().getGameTime()) return; // the moved block arriving: its data stays
         }
-        if (byPos.remove(key) != null) changed(chunk);
+        CompoundTag removed = byPos.remove(key);
+        if (removed == null) return;
+        if (chunk.getLevel().captureBlockSnapshots) stash(chunk, key, removed);
+        changed(chunk);
     }
 
     private static DataBlocks orCreate(LevelChunk chunk) {

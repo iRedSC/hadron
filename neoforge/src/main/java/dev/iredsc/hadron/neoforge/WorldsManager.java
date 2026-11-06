@@ -100,6 +100,9 @@ final class WorldsManager implements Worlds.Backend {
         for (Definition d : store.all()) {
             if (!d.loaded()) continue;
             try {
+                WorldCreator.checkedKey(d.key());
+                ResourceKey<Level> dimension = dimension(d.key());
+                refuseTaken(dimension);
                 open(d);
                 LOG.info("Hadron loaded created world {}", d.key());
             } catch (RuntimeException e) {
@@ -120,6 +123,7 @@ final class WorldsManager implements Worlds.Backend {
             requireSame(saved, creator);
             return loadSaved(saved);
         }
+        WorldCreator.checkedKey(key);
         ResourceKey<Level> dimension = dimension(key);
         refuseTaken(dimension);
         refuseClosing(dimension);
@@ -142,6 +146,7 @@ final class WorldsManager implements Worlds.Backend {
     }
 
     private ServerLevel loadSaved(Definition saved) {
+        WorldCreator.checkedKey(saved.key());
         ResourceKey<Level> dimension = dimension(saved.key());
         Open loaded = open.get(dimension);
         if (loaded != null) return loaded.level();
@@ -186,8 +191,20 @@ final class WorldsManager implements Worlds.Backend {
             throw new IllegalArgumentException("Can't move players out of " + dimension.location() + " into "
                     + to.dimension().location() + ": pick another loaded world");
         }
+        // Players are asked to leave like any teleport, so listeners may send them somewhere else; anyone a listener
+        // kept here is moved anyway, without events, since a world being unloaded can't keep anyone in it.
+        ServerLevel target = to;
+        Vec3 spot = at;
         for (ServerPlayer player : List.copyOf(level.players())) {
-            player.teleportTo(to, at.x, at.y, at.z, player.getYRot(), player.getXRot());
+            player.teleportTo(target, spot.x, spot.y, spot.z, player.getYRot(), player.getXRot());
+        }
+        for (ServerPlayer player : List.copyOf(level.players())) {
+            EntityTeleports.quietly(() -> player.teleportTo(target, spot.x, spot.y, spot.z, player.getYRot(),
+                    player.getXRot()));
+        }
+        if (!level.players().isEmpty()) {
+            throw new IllegalStateException("Couldn't move every player out of " + dimension.location() + ", so it "
+                    + "stays loaded: " + level.players().stream().map(p -> p.getGameProfile().getName()).toList());
         }
         server.forgeGetWorldMap().remove(dimension);
         server.markWorldsDirty();
@@ -300,8 +317,9 @@ final class WorldsManager implements Worlds.Backend {
     /** Closes every unloaded world: at the end of each tick, and at once while the server stops. */
     void finishClosing() {
         if (closing.isEmpty()) return;
+        // Each world stays marked closing until its storage is closed (and its folder deleted), so a listener on the
+        // unload event can't open a second copy over the same files or delete them from under the first.
         List<Map.Entry<ResourceKey<Level>, Closing>> pending = new ArrayList<>(closing.entrySet());
-        closing.clear();
         for (var entry : pending) {
             ResourceKey<Level> dimension = entry.getKey();
             Closing c = entry.getValue();
@@ -325,6 +343,7 @@ final class WorldsManager implements Worlds.Backend {
                 WorldsHooks.removeSeed(dimension);
             }
             if (c.delete) deleteFolder(dimension);
+            closing.remove(dimension, c);
         }
     }
 

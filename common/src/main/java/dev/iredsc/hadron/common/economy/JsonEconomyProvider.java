@@ -151,7 +151,19 @@ final class JsonEconomyProvider implements EconomyProvider {
         }
     }
 
+    /**
+     * One writer at a time, whatever thread: a timed-out or interrupted wait in {@link #close} must never let a second
+     * save write the temp file while the first still is. The snapshot is taken inside, so the last write is the newest.
+     */
+    private final Object writing = new Object();
+
     private void save() {
+        synchronized (writing) {
+            saveLocked();
+        }
+    }
+
+    private void saveLocked() {
         String json;
         synchronized (this) {
             pending = null;

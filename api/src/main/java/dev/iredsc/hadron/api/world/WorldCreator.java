@@ -42,7 +42,28 @@ public final class WorldCreator {
 
     /** A world whose dimension id is {@code key}; use your plugin's name as the namespace, e.g. {@code myplugin:mining}. */
     public WorldCreator(ResourceLocation key) {
-        this.key = Objects.requireNonNull(key, "key");
+        this.key = checkKey(Objects.requireNonNull(key, "key"));
+    }
+
+    /**
+     * A world's id is also its folder name ({@code dimensions/<namespace>/<path>}), so the path must be one plain
+     * name: no {@code /}, which would nest one world's folder inside another's, and no {@code .} or {@code ..}.
+     */
+    static ResourceLocation checkKey(ResourceLocation key) {
+        String path = key.getPath();
+        if (path.isEmpty() || path.contains("/") || path.equals(".") || path.equals("..")
+                || key.getNamespace().equals(".") || key.getNamespace().equals("..")) {
+            throw new IllegalArgumentException("World id " + key + " must be one plain name after the colon, since it "
+                    + "is also the world's folder: use letters, digits, _ and -, like "
+                    + key.getNamespace().replace("..", "myplugin").replace(".", "myplugin") + ":"
+                    + path.replace("/", "_").replace("..", "world").replace(".", "world"));
+        }
+        return key;
+    }
+
+    /** For Hadron's port: the same check for ids read back from saved definitions. */
+    public static ResourceLocation checkedKey(ResourceLocation key) {
+        return checkKey(key);
     }
 
     /** Bukkit's {@code WorldCreator.name}. */

@@ -61,8 +61,12 @@ final class NetPackets {
         final boolean outgoing;
         /** Guarded by LOCK. */
         final List<Handler> all = new ArrayList<Handler>();
-        /** Concrete packet class to its handlers in run order; filled on first sight, cleared on every change. */
-        final ConcurrentHashMap<Class<?>, Handler[]> byClass = new ConcurrentHashMap<Class<?>, Handler[]>();
+        /**
+         * Concrete packet class to its handlers in run order; filled on first sight, replaced whole on every change.
+         * Resolving happens outside the map's own locking, so a registration racing a first-seen packet can't
+         * deadlock: a resolve that raced a change lands in the map being thrown away.
+         */
+        volatile ConcurrentHashMap<Class<?>, Handler[]> byClass = new ConcurrentHashMap<Class<?>, Handler[]>();
         volatile boolean any;
 
         Side(boolean outgoing) {
@@ -71,15 +75,19 @@ final class NetPackets {
 
         /** Under LOCK. */
         void changed() {
-            byClass.clear();
+            byClass = new ConcurrentHashMap<Class<?>, Handler[]>();
             any = !all.isEmpty();
         }
 
         /** Null when nobody listens to this class. */
         Handler[] handlers(Class<?> type) {
             if (!any) return null;
-            Handler[] h = byClass.get(type);
-            if (h == null) h = byClass.computeIfAbsent(type, this::resolve);
+            ConcurrentHashMap<Class<?>, Handler[]> map = byClass;
+            Handler[] h = map.get(type);
+            if (h == null) {
+                h = resolve(type);
+                map.putIfAbsent(type, h);
+            }
             return h.length == 0 ? null : h;
         }
 

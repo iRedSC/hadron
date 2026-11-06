@@ -20,6 +20,9 @@ import net.minecraft.world.item.crafting.RecipeHolder;
  *
  * <p>Set the result to change what the grid offers, or {@code ItemStack.EMPTY} to forbid it. Not cancellable, as in
  * Bukkit. A result offered where no recipe matches uses up one of each ingredient when taken.
+ *
+ * <p>At a crafter, only a matching recipe's result can be changed or emptied; with no recipe matching, the crafter
+ * makes nothing and this event doesn't fire for it.
  */
 public class PrepareItemCraftEvent extends ItemEvent {
     private final InventoryHolder holder;

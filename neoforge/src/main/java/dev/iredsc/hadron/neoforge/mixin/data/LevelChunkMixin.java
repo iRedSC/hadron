@@ -39,6 +39,9 @@ public abstract class LevelChunkMixin implements DataChunk {
         if (blocks != null && old != state && old.getBlock() != state.getBlock()) {
             blocks.forget((LevelChunk) (Object) this, pos);
         }
+        // A cancelled placement or growth puts the old block back: its data comes back with it.
+        LevelChunk self = (LevelChunk) (Object) this;
+        if (self.getLevel().restoringBlockSnapshots) DataBlocks.restoreStashed(self, pos);
         return old;
     }
 }
