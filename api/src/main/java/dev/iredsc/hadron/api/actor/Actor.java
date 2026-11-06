@@ -76,9 +76,9 @@ public sealed interface Actor {
     }
 
     /**
-     * The server itself, acting on an operator's orders: the console, a command block, RCON. Trusted: protection lets
-     * it through, and a logger records it as an admin action. {@code name} is how the source calls itself, such as
-     * {@code Server} for the console or {@code @} for a command block.
+     * The server itself, acting on an operator's orders: the console, RCON, a command block, a datapack function.
+     * Trusted: protection lets it through, and a logger records it as an admin action. {@code name} says which, such
+     * as {@code Server} for the console, {@code @} for a command block, or {@code function mypack:tick}.
      */
     record Server(String name) implements Actor {
         public Server {

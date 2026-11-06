@@ -16,10 +16,13 @@
     "ServerChunkCacheMixin",
     "ServerCommonPacketListenerImplMixin",
     "ServerConfigurationPacketListenerImplMixin",
+    "ServerFunctionManagerMixin",
     "ServerGamePacketListenerImplMixin",
     "ServerLevelMixin",
     "ServerPayloadContextMixin",
     "ServerPlayerMixin"
   ],
-  "injectors": { "defaultRequire": 1 }
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

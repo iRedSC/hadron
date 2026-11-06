@@ -18,11 +18,12 @@ import net.minecraft.world.phys.Vec3;
  *       the cursor, creative drops. Cancelled, the item goes back into the player's inventory; if the inventory has
  *       no room for it, it drops anyway rather than vanish.
  *   <li>dispensers and droppers spitting an item out. Cancelled, it stays in the dispenser.
+ *   <li>mobs throwing an item: an allay delivering, a villager sharing food or gifting a hero, a piglin bartering.
+ *       Cancelled, the item goes into the mob's own inventory; what doesn't fit is thrown anyway rather than vanish.
  * </ul>
  *
  * Not here: items a block or mob drops when it breaks or dies (those are the break and death events'), and items a
- * mod ejects from its own storage, which bridges fire this for before taking the item out. Mobs throwing items (an
- * allay delivering, a villager sharing food) are not seen yet.
+ * mod ejects from its own storage, which bridges fire this for before taking the item out.
  */
 public class ItemDropEvent extends ItemEvent implements Cancellable {
     private final Vec3 position;

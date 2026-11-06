@@ -35,7 +35,7 @@ Many effects are one action with many parts: a spell hits ten entities, a gadget
 | `FakePlayer` | a fake player | Mekanism's digital miner, a deployer |
 | `Machine` | a block entity at a position | a quarry, a turret block, a pump, a quest submission block |
 | `EntityActor` | an identifiable entity | a drone, a vehicle, a projectile, a summon, a seagull stealing food, a boss |
-| `Server` | the server on an operator's orders; trusted by protection | the console, RCON, a command block |
+| `Server` | the server on an operator's orders; trusted by protection | the console, RCON, a command block, a datapack function |
 | `Nature` | the world on its own, with no entity behind it | fire spreading, water flowing, crops growing |
 | `Unknown` | a mod acted and nothing said who | an unbridged mod's scheduled task |
 
@@ -127,7 +127,7 @@ Payload: the entity, its position, and what changed.
 
 | Event | What | Core chokepoint |
 |---|---|---|
-| `ItemDropEvent` | an item enters the world from an actor: a player throwing it, a dropper, a mod ejecting it. Cancelled, the item goes back where it came from | player drops, dispensers and droppers; bridges for mods' ejects |
+| `ItemDropEvent` | an item enters the world from an actor: a player throwing it, a dropper, a mod ejecting it. Cancelled, the item goes back where it came from | player drops, dispensers and droppers, mobs' throws (`BehaviorUtils.throwItem`); bridges for mods' ejects |
 | `ItemPickupEvent` | an actor picks an item up: a player, a hopper, a magnet; the final destination, including inside a backpack | `ItemEntity.playerTouch`, hopper suck |
 | `ItemDespawnEvent`, `ItemMergeEvent` | | `ItemEntity` |
 | `ItemUseEvent` | an item used: eating starts, a weapon fires, a wand casts, a monitor links a drone | `useItem` |

@@ -35,6 +35,7 @@ import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.WorldlyContainer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.npc.InventoryCarrier;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -124,6 +125,22 @@ public final class ItemHooks {
     }
 
     // ---- Drops and pickups --------------------------------------------------------------------------------------
+
+    /**
+     * A mob is about to throw an item (vanilla's one throw method, which allays, villagers and piglins all use). True
+     * when cancelled and the whole stack went into the mob's inventory; otherwise {@code stack} is left holding what
+     * is still thrown.
+     */
+    public static boolean cancelMobThrow(LivingEntity mob, ItemStack stack) {
+        if (!(mob.level() instanceof ServerLevel level) || stack.isEmpty() || !Hooks.listens(ItemDropEvent.class)) {
+            return false;
+        }
+        if (!Hooks.post(new ItemDropEvent(level, mob.position(), stack, actor(mob))).isCancelled()) return false;
+        if (!(mob instanceof InventoryCarrier carrier)) return false; // nowhere to keep it: thrown rather than lost
+        ItemStack left = carrier.getInventory().addItem(stack);
+        stack.setCount(left.getCount());
+        return stack.isEmpty();
+    }
 
     /** A dispenser or dropper is about to spit one item out; true leaves it in the dispenser. */
     public static boolean dispense(BlockSource source, ItemStack stack) {

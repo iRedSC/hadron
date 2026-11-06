@@ -4,6 +4,7 @@
   "package": "dev.iredsc.hadron.neoforge.mixin.item",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "BehaviorUtilsMixin",
     "AbstractContainerMenuMixin",
     "AbstractFurnaceBlockEntityMixin",
     "AnvilMenuMixin",
