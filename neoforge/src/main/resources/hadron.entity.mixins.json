@@ -3,6 +3,18 @@
   "minVersion": "0.8",
   "package": "dev.iredsc.hadron.neoforge.mixin.entity",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
+  "mixins": [
+    "AbstractHorseMixin",
+    "BlockAttachedEntityMixin",
+    "EntityMixin",
+    "EntityTypeMixin",
+    "HangingEntityItemMixin",
+    "LivingEntityMixin",
+    "MobMixin",
+    "ProjectileMixin",
+    "ServerLevelMixin",
+    "ServerPlayerMixin",
+    "TamableAnimalMixin"
+  ],
   "injectors": { "defaultRequire": 1 }
 }
