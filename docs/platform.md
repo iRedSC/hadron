@@ -41,3 +41,16 @@ Bukkit's `WorldCreator` and `createWorld`, for Multiverse.
 - **Created worlds come back on restart:** Hadron saves each world's definition and recreates it before plugins enable, so a plugin can rely on its worlds existing in `onEnable`.
 - **Vanilla clients can join them**, with no client mod: a created world is an ordinary dimension to the client, and commands suggest it even to players who joined before it was created.
 - A world belongs to the server, not to the plugin that made it: disabling the plugin doesn't unload it.
+
+## Text and placeholders
+
+Every message a server owner writes (config lines, join and death messages, tab lists, scoreboards, holograms) uses one format, and placeholders are part of it.
+
+- **MiniMessage is the format:** `<green>`, `<bold>`, `<hover:show_text:'…'>`, `<click:run_command:'/spawn'>`, `<gradient:red:gold>`. Legacy `&` codes are accepted as shorthand and converted to their exact MiniMessage meaning when the text is loaded (`&b` becomes a reset then aqua, as legacy colours always reset formatting), so configs pasted from old plugins look the same.
+- **Placeholders are tags with a path:** `<viewer.name>`, `<killer.balance:gems>`, `<owner.world.name>`, `<server.online>`. A tag with a dot is a placeholder; a formatting tag never has one, so the two can't be confused.
+- **The subject is always named.** The first part of the path is a context the code rendering the text provides. Hadron standardises the common ones (`viewer`, who reads it; `subject`, who or what it's about; `target`, the other side of it; `world`; `server`), and a plugin can add its own for its messages, such as a death message's `victim` and `killer`, each also reachable as the standard role it fills. A plugin declares the contexts it provides, so a template naming one that isn't there is caught when the config is checked, not when the message is shown.
+- **Placeholders belong to types, not to plugins.** A provider registers `balance` on players once, and it works for every context that is a player: `<viewer.balance>`, `<killer.balance>`. Paths chain through types: a player has a `world`, a world has a `name`. Values are typed (text, number, money, duration, boolean), so they format consistently, with arguments after a colon (`<viewer.balance:gems>`).
+- **Names are short until they clash:** `<viewer.balance>`, or `<viewer.myeco/balance>` when two plugins define `balance` on players.
+- **Missing contexts have a fallback:** `<killer.name ? "the world">`.
+- **Player-written text is never parsed.** A chat message is inserted into a template as a value, so a player typing `<server.ops>` or `<click:…>` gets exactly those characters shown.
+- **Cost is declared:** a provider says how long its value stays fresh, so a tab list re-rendering every tick doesn't recompute an expensive value every tick. Providers run on the server thread.
