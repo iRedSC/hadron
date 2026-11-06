@@ -731,6 +731,7 @@ public final class PluginHost implements PluginManager {
         JavaPlugin plugin = running.loader.plugin();
         if (plugin != null) scheduler.awaitAsync(plugin, remainingGraceMillis(deadline));
         undoAll(running, e.name);
+        if (plugin != null) runDisableHooks(plugin);
         if (enabledOrder.remove(e) && plugin != null) post(new PluginDisableEvent(plugin));
         running.loader.dispose();
         fail(e, cause instanceof PluginException ? cause.getMessage() : "threw " + cause, cause);
@@ -765,6 +766,7 @@ public final class PluginHost implements PluginManager {
             }
         }
         undoAll(running, e.name);
+        if (plugin != null) runDisableHooks(plugin);
         if (enabledOrder.remove(e) && plugin != null) post(new PluginDisableEvent(plugin));
         running.loader.dispose();
         e.state = next;
@@ -991,6 +993,28 @@ public final class PluginHost implements PluginManager {
     /** For the loader port: fires a Hadron event from a loader event. */
     public void post(Event event) {
         events.post(event);
+    }
+
+    /**
+     * Hadron's own modules (the economy, worlds, packets, persistent data) undo what a plugin registered with them
+     * here: each hook runs once for every plugin that disables or fails to enable, after the plugin's own undo.
+     * Registered once per JVM, so a hook outlives server restarts in singleplayer.
+     */
+    public static void onPluginDisable(java.util.function.Consumer<JavaPlugin> hook) {
+        DISABLE_HOOKS.add(java.util.Objects.requireNonNull(hook, "hook"));
+    }
+
+    private static final java.util.List<java.util.function.Consumer<JavaPlugin>> DISABLE_HOOKS =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    private void runDisableHooks(JavaPlugin plugin) {
+        for (java.util.function.Consumer<JavaPlugin> hook : DISABLE_HOOKS) {
+            try {
+                hook.accept(plugin);
+            } catch (Throwable t) {
+                LOG.error("Undoing what " + plugin.getName() + " registered with Hadron failed", t);
+            }
+        }
     }
 
     /** For the loader port: whether any plugin hears this event class, so a hot chokepoint can skip building it. */

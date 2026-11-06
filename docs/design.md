@@ -90,7 +90,7 @@ Hadron ships lightweight plugins server owners expect: essentials-style commands
 ## Out of scope
 
 - Running Bukkit plugins.
-- Plugins adding blocks, items or other registry content (needs a mod).
+- Plugins adding blocks, items or other registry content (needs a mod). Worlds are the exception: a plugin can create, load and unload worlds while the server runs, from the dimension types and generators the server already has ([platform.md](platform.md)).
 - A rank system (LuckPerms has one).
 - FTAM's serials and anti-dupe system (stays private).
 
