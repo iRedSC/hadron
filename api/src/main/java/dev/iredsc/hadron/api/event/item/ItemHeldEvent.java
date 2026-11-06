@@ -1,0 +1,50 @@
+package dev.iredsc.hadron.api.event.item;
+
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.Cancellable;
+import java.util.Objects;
+import net.minecraft.server.level.ServerPlayer;
+
+/**
+ * A player is about to change their selected hotbar slot. Replaces Bukkit's {@code PlayerItemHeldEvent}. Cancel it
+ * and the selection stays; the player's client is moved back. Always a player, so {@link #getPlayer()} is never empty;
+ * {@link #getUser()} returns them directly. {@link #getItem()} is the stack in the new slot (live; don't change it).
+ */
+public class ItemHeldEvent extends ItemEvent implements Cancellable {
+    private final ServerPlayer user;
+    private final int previousSlot;
+    private final int newSlot;
+    private boolean cancelled;
+
+    public ItemHeldEvent(ServerPlayer player, int previousSlot, int newSlot, Actor actor) {
+        super(Objects.requireNonNull(player, "player").serverLevel(), player.getInventory().getItem(newSlot), actor);
+        this.user = player;
+        this.previousSlot = previousSlot;
+        this.newSlot = newSlot;
+    }
+
+    /** The player changing slot. */
+    public ServerPlayer getUser() {
+        return user;
+    }
+
+    /** The hotbar slot (0-8) selected until now. */
+    public int getPreviousSlot() {
+        return previousSlot;
+    }
+
+    /** The hotbar slot (0-8) being selected. */
+    public int getNewSlot() {
+        return newSlot;
+    }
+
+    @Override
+    public boolean isCancelled() {
+        return cancelled;
+    }
+
+    @Override
+    public void setCancelled(boolean cancel) {
+        this.cancelled = cancel;
+    }
+}

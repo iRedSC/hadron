@@ -3,6 +3,32 @@
   "minVersion": "0.8",
   "package": "dev.iredsc.hadron.neoforge.mixin.item",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
-  "injectors": { "defaultRequire": 1 }
+  "mixins": [
+    "AbstractContainerMenuMixin",
+    "AbstractFurnaceBlockEntityMixin",
+    "AnvilMenuMixin",
+    "BrewingStandBlockEntityMixin",
+    "CampfireBlockEntityAccessor",
+    "CampfireBlockEntityMixin",
+    "CompoundContainerAccessor",
+    "CrafterBlockMixin",
+    "DefaultDispenseItemBehaviorMixin",
+    "DropperBlockMixin",
+    "EnchantmentMenuMixin",
+    "ExperienceOrbMixin",
+    "HopperBlockEntityMixin",
+    "ItemCombinerMenuAccessor",
+    "ItemEntityAccessor",
+    "ItemEntityMixin",
+    "ItemStackMixin",
+    "MerchantResultSlotAccessor",
+    "MobMixin",
+    "ResultSlotAccessor",
+    "ServerGamePacketListenerImplMixin",
+    "ServerPlayerMixin",
+    "VanillaInventoryCodeHooksMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
 }
