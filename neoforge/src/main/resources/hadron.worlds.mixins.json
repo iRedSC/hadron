@@ -3,6 +3,11 @@
   "minVersion": "0.8",
   "package": "dev.iredsc.hadron.neoforge.mixin.worlds",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
+  "mixins": [
+    "MinecraftServerAccessor",
+    "PersistentEntitySectionManagerDiscardMixin",
+    "ServerChunkCacheDiscardMixin",
+    "ServerLevelSeedMixin"
+  ],
   "injectors": { "defaultRequire": 1 }
 }
