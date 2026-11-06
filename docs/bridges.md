@@ -61,6 +61,8 @@ A bridge has two parts:
 - **Its API**: loader-neutral interfaces and events for extras, compiled against vanilla Minecraft and Hadron's `api`. Official plugins depend on it with `bridge-depend: [<mod id>]` and stay write-once.
 - **Its implementation**: one small mod per loader. Mixin works the same on every loader, so a bridge into a mod that ships for several loaders shares its mixins and keeps only the per-loader glue separate.
 
+[bridge-hooks.md](bridge-hooks.md) lists exactly what a bridge must hook: the events only bridges fire, and where core's coverage of an event stops.
+
 Each bridge owns exactly one mod id, so two bridges never compete to translate the same mod; a second bridge for a mod id fails to load, naming the first.
 
 ## Pilots

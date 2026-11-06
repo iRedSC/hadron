@@ -12,7 +12,7 @@ import net.minecraft.world.item.trading.MerchantOffer;
 /**
  * An actor is about to make an exchange with a trader: a player taking a villager's or wandering trader's offer, or a
  * mod's trader. Cancel it and nothing changes hands, and the offer's use count and the trader's experience stay. A
- * shift-click trades as many times as it can and fires once.
+ * shift-click fires once for each trade it makes, so cancelling stops the batch where it is.
  *
  * <p>Core fires it for every merchant menu, vanilla's and mods' that use it. Bridges fire it for their mod's own
  * trading.

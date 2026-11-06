@@ -141,7 +141,8 @@ Payload: the entity, its position, and what changed.
 | `PrepareAnvilEvent` | | `AnvilMenu` |
 | `TradeEvent` | an exchange with a villager or a mod's trader | `MerchantMenu` |
 | `ItemHeldEvent` | a player changes hotbar slot | `ServerboundSetCarriedItemPacket` |
-| `EquipmentChangeEvent` | armour, hands, or a mod's extra slot (Curios, Accessories) changes; with the attribute changes it brings | `setItemSlot`, bridges for extra slots |
+| `EquipEvent` | something is about to be worn: right-click equip, an armour-slot click, a dispenser, a mob picking up gear, or a mod's extra slot. Cancelled, it stays where it was | `ArmorItem.use`, `ElytraItem.use`, `ArmorSlot.mayPlace`, `ArmorItem.dispenseArmor`, `Mob.equipItemIfPossible`; bridges for extra slots |
+| `EquipmentChangeEvent` *(after)* | armour, hands, or a mod's extra slot (Curios, Accessories) changed, whatever did it; with the attribute changes it brings | `setItemSlot`, bridges for extra slots |
 
 ### Containers: `InventoryEvent`
 

@@ -16,8 +16,8 @@ import net.minecraft.world.item.crafting.RecipeHolder;
  * {@code CraftItemEvent}. Cancel it and nothing is consumed or made.
  *
  * <p>Core fires it for players and fake players at every vanilla workstation, and for the crafter block. A
- * shift-click crafts as many as fit and fires once, for one craft's inputs and output. Bridges fire it for their mod's
- * crafting, with every input, output and cost.
+ * shift-click fires once for each craft it takes, so cancelling stops the batch where it is. Bridges fire it for their
+ * mod's crafting, with every input, output and cost.
  */
 public class ItemCraftEvent extends ItemEvent implements Cancellable {
     private final InventoryHolder holder;

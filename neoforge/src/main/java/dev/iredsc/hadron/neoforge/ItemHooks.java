@@ -12,6 +12,7 @@ import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
 import dev.iredsc.hadron.api.event.item.ItemConsumeEvent;
 import dev.iredsc.hadron.api.event.item.ItemCraftEvent;
 import dev.iredsc.hadron.api.event.item.ItemDamageEvent;
+import dev.iredsc.hadron.api.event.item.EquipEvent;
 import dev.iredsc.hadron.api.event.item.ItemDropEvent;
 import dev.iredsc.hadron.api.event.item.ItemEnchantEvent;
 import dev.iredsc.hadron.api.event.item.ItemMergeEvent;
@@ -35,6 +36,7 @@ import net.minecraft.world.Container;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.WorldlyContainer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.npc.InventoryCarrier;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
@@ -123,6 +125,55 @@ public final class ItemHooks {
             player.containerMenu.sendAllDataToRemote();
         }
     }
+
+    // ---- Equipping -----------------------------------------------------------------------------------------------
+
+    /** Something is about to go into a vanilla equipment slot; true leaves it out. */
+    public static boolean cancelEquip(LivingEntity entity, EquipmentSlot slot, ItemStack item) {
+        if (!(entity.level() instanceof ServerLevel level) || item.isEmpty() || !Hooks.listens(EquipEvent.class)) {
+            return false;
+        }
+        boolean cancelled = Hooks.post(new EquipEvent(level, entity, slot, entity.getItemBySlot(slot), item,
+                actor(entity))).isCancelled();
+        if (cancelled) resync(entity);
+        return cancelled;
+    }
+
+    /**
+     * A player right-clicked armour or an elytra in their hand. Asked only when the swap will really happen: not when
+     * the worn item has Curse of Binding or is the same item.
+     */
+    public static boolean cancelRightClickEquip(Player player, InteractionHand hand) {
+        ItemStack held = player.getItemInHand(hand);
+        EquipmentSlot slot = player.getEquipmentSlotForItem(held);
+        ItemStack worn = player.getItemBySlot(slot);
+        if (EnchantmentHelper.has(worn, net.minecraft.world.item.enchantment.EnchantmentEffectComponents
+                .PREVENT_ARMOR_CHANGE) && !player.isCreative() || ItemStack.matches(held, worn)) {
+            return false;
+        }
+        return cancelEquip(player, slot, held);
+    }
+
+    /**
+     * An armour slot was asked whether it accepts a stack. A menu asks right before it puts the stack there, often
+     * more than once per click, so one answer is kept per slot and stack for the rest of the tick.
+     */
+    public static boolean cancelSlotEquip(Object armorSlot, LivingEntity owner, EquipmentSlot slot, ItemStack stack) {
+        if (!(owner.level() instanceof ServerLevel level)) return false;
+        long now = level.getGameTime();
+        if (lastSlot == armorSlot && lastStack == stack && lastTime == now) return lastAnswer;
+        boolean cancelled = cancelEquip(owner, slot, stack);
+        lastSlot = armorSlot;
+        lastStack = stack;
+        lastTime = now;
+        lastAnswer = cancelled;
+        return cancelled;
+    }
+
+    private static Object lastSlot;
+    private static ItemStack lastStack;
+    private static long lastTime;
+    private static boolean lastAnswer;
 
     // ---- Drops and pickups --------------------------------------------------------------------------------------
 
