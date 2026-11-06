@@ -2,33 +2,43 @@ package dev.iredsc.hadron.api.event.block;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
 
-/** A block's state is about to change, from {@link #getBefore()} to {@link #getAfter()}. Cancel it and it doesn't. */
+/**
+ * A block's state or its block entity's data is about to change, from {@link #getBefore()} to {@link #getAfter()}.
+ * Cancel it and nothing in {@link #getBlocks()} changes.
+ *
+ * <p>Fired as it is when an actor changes a block in a way no subclass names, such as opening a door or a machine
+ * switching itself on. Listen here to hear every change, including breaks, places, burns, flows and growth.
+ */
 public class BlockChangeEvent extends BlockEvent implements Cancellable {
-    private final BlockState before;
-    private final BlockState after;
     private boolean cancelled;
 
     public BlockChangeEvent(ServerLevel level, BlockPos pos, BlockState before, BlockState after, Actor actor) {
-        this(level, pos, before, after, after, actor);
+        this(level, BlockChange.of(level, pos, before, after), actor);
     }
 
-    protected BlockChangeEvent(ServerLevel level, BlockPos pos, BlockState before, BlockState after, BlockState about,
+    public BlockChangeEvent(ServerLevel level, BlockChange change, Actor actor) {
+        this(level, change.getPos(), change.getAfter(), List.of(change), actor);
+    }
+
+    /** For changes spanning several spaces; {@code about} is the block at {@code pos} the event is about. */
+    protected BlockChangeEvent(ServerLevel level, BlockPos pos, BlockState about, List<BlockChange> blocks,
             Actor actor) {
-        super(level, pos, about, actor);
-        this.before = before;
-        this.after = after;
+        super(level, pos, about, blocks, actor);
     }
 
+    /** The state at {@link #getPos()} before the change. */
     public BlockState getBefore() {
-        return before;
+        return primary().getBefore();
     }
 
+    /** The state at {@link #getPos()} after the change. */
     public BlockState getAfter() {
-        return after;
+        return primary().getAfter();
     }
 
     @Override
