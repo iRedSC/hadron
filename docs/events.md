@@ -82,13 +82,15 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 
 Fluid placed or drained without a bucket (a Refined Storage constructor, a hose pulley) is a `BlockPlaceEvent` or `BlockBreakEvent` plus a `ResourceTransferEvent` in one operation.
 
+As in Bukkit, `BlockMultiPlaceEvent` extends `BlockPlaceEvent`, `BlockSpreadEvent` extends `BlockFormEvent` which extends `BlockGrowEvent`, and the bucket events extend `BlockChangeEvent`, so a listener for the broader event never misses the narrower one. `BlockFromToEvent.getPos()` is the block flowed into; `getFromPos()` is the source. An explosion's blocks are reported once, in `ExplosionEvent`'s editable list, not as one break event each.
+
 ### Entities: `EntityEvent`
 
 Payload: the entity, its position, and what changed.
 
 | Event | What | Core chokepoint |
 |---|---|---|
-| `EntitySpawnEvent` | an entity enters the world; reason (natural, spawner, egg, breeding, summoned, released from capture, actor) | `addFreshEntity` |
+| `EntitySpawnEvent` | an entity enters the world; reason (natural, spawner, egg, breeding, summoned, released from capture, actor). Not for dropped items, experience orbs or falling blocks, whose cancelling would destroy what they carry; see `ItemDropEvent` | `addFreshEntity` |
 | `EntityRemoveEvent` | an entity leaves the world other than by dying or unloading; reason (killed without damage, dismissed, converted, discarded) | `Entity.remove` with a reason other than unload |
 | └ `EntityCaptureEvent` | an entity is stored into an item, block or player's carry state (bucket, mob catcher, Carry On) | `Bucketable`, bridges |
 | `EntityDamageEvent` | an entity is hurt; damage source, actor, and the weapon or spell | `hurt` |
@@ -124,7 +126,7 @@ Payload: the entity, its position, and what changed.
 
 | Event | What | Core chokepoint |
 |---|---|---|
-| `ItemDropEvent` | an item enters the world from an actor: a player throwing it, a dropper, a mod ejecting it | `ItemEntity` spawn with an actor |
+| `ItemDropEvent` | an item enters the world from an actor: a player throwing it, a dropper, a mod ejecting it. Cancelled, the item goes back where it came from | player drops, dispensers and droppers; bridges for mods' ejects |
 | `ItemPickupEvent` | an actor picks an item up: a player, a hopper, a magnet; the final destination, including inside a backpack | `ItemEntity.playerTouch`, hopper suck |
 | `ItemDespawnEvent`, `ItemMergeEvent` | | `ItemEntity` |
 | `ItemUseEvent` | an item used: eating starts, a weapon fires, a wand casts, a monitor links a drone | `useItem` |
@@ -157,7 +159,7 @@ An inventory is identified by what holds it (a block, an entity, a player, an it
 
 ### Resources: `ResourceEvent`
 
-Everything measured in amounts that isn't an item stack: energy, fluids in tanks, chemicals, heat, mana, LP, aura, radiation, ore left in a virtual vein, skill points, money. A resource is a registry-style id (`hadron:energy`, `hadron:fluid/minecraft:water`, `botania:mana`, `hadron:currency/coins`) with a unit. A holder is a block, an entity, an item, a chunk, or an account.
+Everything measured in amounts that isn't an item stack: energy, fluids in tanks, chemicals, heat, mana, LP, aura, radiation, ore left in a virtual vein, skill points, money. A resource is a registry-style id (`hadron:energy`, `hadron:fluid/minecraft/water`, `botania:mana`, `hadron:currency/coins`; a colon can't appear in an id's path, so a fluid's namespace becomes a path segment) with a unit. A holder is a block, an entity, an item, a chunk, or an account.
 
 | Event | What | Core chokepoint |
 |---|---|---|
@@ -214,6 +216,16 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 | `DataRevealEvent` | server data about a block, entity or inventory is about to be sent to a player who didn't open it (Jade, WTHIT, map radar); fields removable |
 | `PluginEnableEvent`, `PluginDisableEvent` *(after)* | |
 | `ServiceRegisterEvent`, `ServiceUnregisterEvent` *(after)* | a provider appeared or left |
+
+## Not shipped yet
+
+Designed but not in `api`, because core can't yet fire them for every actor without breaking rule 7 or making a cancel unsafe. A plugin can't listen for them, so none of them can look like coverage.
+
+- `EntityRemoveEvent`, `EntityCaptureEvent`: cancelling at `Entity.remove` can duplicate (a cancelled arrow pickup); each cause needs its own hook.
+- `EntityLeashEvent`, `EntityUnleashEvent`, `EntityShearEvent`, `ArmorStandManipulateEvent`: need hooks inside interface methods or per-path logic.
+- `EntityAttributeChangeEvent`, `EntityRelationshipChangeEvent`, `FoodLevelChangeEvent`: the vanilla classes that change don't know their entity.
+- `BiomeChangeEvent`: biome writes are too hot and scattered for one hook.
+- `ResourceTransferEvent` from the port's energy and fluid capabilities: no single point sees both ends; bridges fire it meanwhile.
 
 ## Left out
 

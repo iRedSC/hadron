@@ -166,7 +166,7 @@ public final class BlockHooks {
 
     /** The actor for something an entity does: the player, a fake player for whatever is on the stack, or the entity. */
     static Actor actorFor(Entity entity) {
-        Actor top = Actors.current().orElse(null);
+        Actor top = Actors.currentOr(null);
         if (entity == null) return top;
         if (entity instanceof FakePlayer fake) {
             if (top instanceof Actor.FakePlayer f && f.fake() == fake) return top;
@@ -183,7 +183,7 @@ public final class BlockHooks {
 
     /** Who is acting when no entity is named: the stack, a block's tick, or nobody known. */
     private static Actor currentOr(Actor fallback) {
-        Actor top = Actors.current().orElse(null);
+        Actor top = Actors.currentOr(null);
         if (top != null) return top;
         Context ctx = CONTEXT.get();
         return ctx.ticking() ? ctx.tickActor() : fallback;
@@ -251,7 +251,7 @@ public final class BlockHooks {
         Actors.Scope scope = null;
         if (modded(block)) {
             actor = Actor.Unknown.INSTANCE;
-            if (Actors.current().isEmpty()) scope = Actors.push(actor);
+            if (Actors.isEmpty()) scope = Actors.push(actor);
         }
         ctx.tickBlocks[i] = block;
         ctx.tickPositions[i] = pos.asLong();
@@ -379,7 +379,7 @@ public final class BlockHooks {
         }
         Context ctx = CONTEXT.get();
         if (ctx.suppressed > 0 || ctx.suppressPos == pos.asLong()) return false;
-        Actor actor = Actors.current().orElse(null);
+        Actor actor = Actors.currentOr(null);
         boolean ticking = ctx.ticking() && (actor == null || actor == ctx.tickActor());
         boolean fire = isFire(after);
         if (actor == null && !ticking && ctx.forming == 0 && !fire) return false;

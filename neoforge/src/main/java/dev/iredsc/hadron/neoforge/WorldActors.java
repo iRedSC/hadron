@@ -15,12 +15,12 @@ public final class WorldActors {
 
     /** The actor on the stack, or {@link Actor.Unknown} when nothing said who. */
     public static Actor orUnknown() {
-        return Actors.current().orElse(Actor.Unknown.INSTANCE);
+        return Actors.currentOr(Actor.Unknown.INSTANCE);
     }
 
     /** The actor on the stack, or {@link Actor.Nature} for vanilla's own processes with nobody behind them. */
     public static Actor orNature() {
-        return Actors.current().orElse(Actor.Nature.INSTANCE);
+        return Actors.currentOr(Actor.Nature.INSTANCE);
     }
 
     /** A real player, reusing the one actor made for them. */

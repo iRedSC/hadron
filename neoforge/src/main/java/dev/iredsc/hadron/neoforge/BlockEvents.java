@@ -155,7 +155,7 @@ final class BlockEvents {
             BlockEntity[] be = entities.get(entry.getKey());
             changes.add(BlockChange.live(level, entry.getKey(), entry.getValue()[0], entry.getValue()[1], be[0], be[1]));
         }
-        Actor actor = Actors.current().orElse(Actor.Nature.INSTANCE);
+        Actor actor = Actors.currentOr(Actor.Nature.INSTANCE);
         BlockMoveEvent hadron = extend
                 ? new BlockPistonExtendEvent(level, pos, piston, facing, sticky, moves, swept, changes, actor)
                 : new BlockPistonRetractEvent(level, pos, piston, facing, sticky, moves, swept, changes, actor);

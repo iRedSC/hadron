@@ -100,7 +100,7 @@ public final class ItemHooks {
     public static Actor container(Container container) {
         if (container instanceof BlockEntity be) return machine(be.getLevel(), be.getBlockPos());
         if (container instanceof Entity entity) return actor(entity);
-        return Actors.current().orElse(Actor.Unknown.INSTANCE);
+        return Actors.currentOr(Actor.Unknown.INSTANCE);
     }
 
     /** Vanilla's own processes on an entity (despawning, merging): nature, unless something else is acting. */
@@ -185,7 +185,7 @@ public final class ItemHooks {
     /** An item is about to lose {@code damage} durability; returns how much it really loses (0 when cancelled). */
     public static int damage(ItemStack stack, ServerLevel level, LivingEntity entity, int damage) {
         if (damage <= 0 || !Hooks.listens(ItemDamageEvent.class)) return damage;
-        Actor actor = entity != null ? actor(entity) : Actors.current().orElse(Actor.Unknown.INSTANCE);
+        Actor actor = entity != null ? actor(entity) : Actors.currentOr(Actor.Unknown.INSTANCE);
         ItemDamageEvent event = Hooks.post(new ItemDamageEvent(level, holder(entity), entity, stack, damage, actor));
         return event.isCancelled() ? 0 : event.getDamage();
     }
@@ -193,7 +193,7 @@ public final class ItemHooks {
     /** An item ran out of durability and is breaking (after). */
     public static void broke(ItemStack stack, ServerLevel level, LivingEntity entity) {
         if (!Hooks.listens(ItemBreakEvent.class)) return;
-        Actor actor = entity != null ? actor(entity) : Actors.current().orElse(Actor.Unknown.INSTANCE);
+        Actor actor = entity != null ? actor(entity) : Actors.currentOr(Actor.Unknown.INSTANCE);
         Hooks.post(new ItemBreakEvent(level, entity, stack, actor));
     }
 

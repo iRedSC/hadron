@@ -8,6 +8,8 @@ import dev.iredsc.hadron.api.Node;
 import dev.iredsc.hadron.api.Permissions;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.Event;
+import dev.iredsc.hadron.api.event.server.PluginDisableEvent;
+import dev.iredsc.hadron.api.event.server.PluginEnableEvent;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.PluginCommand;
@@ -690,6 +692,7 @@ public final class PluginHost implements PluginManager {
                 running.undo.push(commands.register(c, loader.logger()));
             }
             enabledOrder.add(e);
+            post(new PluginEnableEvent(loader.plugin()));
             LOG.info("Enabled " + e.description.getFullName() + " in " + (System.nanoTime() - start) / 1000000 + " ms");
         } catch (Throwable t) {
             abandon(e, running, t);
@@ -728,7 +731,7 @@ public final class PluginHost implements PluginManager {
         JavaPlugin plugin = running.loader.plugin();
         if (plugin != null) scheduler.awaitAsync(plugin, remainingGraceMillis(deadline));
         undoAll(running, e.name);
-        enabledOrder.remove(e);
+        if (enabledOrder.remove(e) && plugin != null) post(new PluginDisableEvent(plugin));
         running.loader.dispose();
         fail(e, cause instanceof PluginException ? cause.getMessage() : "threw " + cause, cause);
     }
@@ -762,7 +765,7 @@ public final class PluginHost implements PluginManager {
             }
         }
         undoAll(running, e.name);
-        enabledOrder.remove(e);
+        if (enabledOrder.remove(e) && plugin != null) post(new PluginDisableEvent(plugin));
         running.loader.dispose();
         e.state = next;
     }

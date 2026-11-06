@@ -20,7 +20,7 @@ public abstract class CommandsMixin {
     @WrapMethod(method = "performCommand(Lcom/mojang/brigadier/ParseResults;Ljava/lang/String;)V")
     private void hadron$attribute(ParseResults<CommandSourceStack> parse, String command, Operation<Void> original) {
         if (Hooks.host() != null && parse.getContext().getSource().getEntity() instanceof ServerPlayer player
-                && Actors.current().isEmpty()) {
+                && Actors.isEmpty()) {
             try (Actors.Scope scope = Actors.push(WorldActors.player(player))) {
                 original.call(parse, command);
             }
