@@ -176,6 +176,7 @@ public final class PluginHost implements PluginManager {
     private final ServerImpl server;
     private final TaskScheduler scheduler;
     private final Services services;
+    private final dev.iredsc.hadron.common.economy.EconomyCore economy;
     private final Platform platform;
     private final EventBus events = new EventBus();
     private final Commands commands;
@@ -209,6 +210,7 @@ public final class PluginHost implements PluginManager {
         this.scheduler = new TaskScheduler(this);
         this.services = new Services(this);
         this.commands = new Commands(minecraft);
+        this.economy = new dev.iredsc.hadron.common.economy.EconomyCore(this, minecraft, new File(serverDir, "hadron"));
         readOff();
     }
 
@@ -247,6 +249,7 @@ public final class PluginHost implements PluginManager {
             LOG.error("Can't create " + folder.getAbsolutePath() + ", so no plugins will load");
         }
         deleteChildren(loadedDir);
+        economy.start();
         for (Map.Entry<File, Stamp> jar : scan().entrySet()) adopt(jar.getKey(), jar.getValue());
         manage(new Runnable() {
             @Override
@@ -323,6 +326,7 @@ public final class PluginHost implements PluginManager {
                 scheduler.close();
             }
         });
+        economy.close();
         deleteChildren(loadedDir);
     }
 
@@ -923,8 +927,8 @@ public final class PluginHost implements PluginManager {
         if (!isActive(plugin)) throw new IllegalStateException(plugin.getName() + " can't " + what + " while it isn't enabled");
     }
 
-    /** Loaded or enabled, and not unloading: services may be registered from onLoad on. */
-    boolean isAlive(JavaPlugin plugin) {
+    /** Loaded or enabled, and not unloading: services may be registered from onLoad on. For Hadron's own modules too. */
+    public boolean isAlive(JavaPlugin plugin) {
         ClassLoader loader = plugin.getClass().getClassLoader();
         return loader instanceof PluginLoader context && context.belongsTo(server)
                 && context.plugin() == plugin && context.alive();
