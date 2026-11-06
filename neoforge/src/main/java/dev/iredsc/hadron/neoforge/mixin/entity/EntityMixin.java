@@ -1,0 +1,192 @@
+package dev.iredsc.hadron.neoforge.mixin.entity;
+
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
+import dev.iredsc.hadron.api.event.entity.EntityCombustEvent;
+import dev.iredsc.hadron.neoforge.EntityActors;
+import dev.iredsc.hadron.neoforge.EntityState;
+import dev.iredsc.hadron.neoforge.EntityTeleports;
+import dev.iredsc.hadron.neoforge.Hooks;
+import java.util.Set;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.RelativeMovement;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.portal.DimensionTransition;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+
+/** Per-entity state in fields, and the teleport, fire and air chokepoints every entity shares. */
+@Mixin(Entity.class)
+abstract class EntityMixin implements EntityState {
+    @Shadow
+    public abstract Level level();
+
+    @Shadow
+    public abstract int getRemainingFireTicks();
+
+    @Shadow
+    public abstract boolean fireImmune();
+
+    @Shadow
+    public abstract int getAirSupply();
+
+    @Unique private Actor hadron$actor;
+    @Unique private boolean hadron$tracked;
+    @Unique private Level hadron$trackedLevel;
+    @Unique private double hadron$trackedX;
+    @Unique private double hadron$trackedY;
+    @Unique private double hadron$trackedZ;
+    @Unique private boolean hadron$converted;
+    @Unique private boolean hadron$dying;
+    @Unique private int hadron$deathExp;
+
+    @Override
+    public Actor hadron$actor() {
+        return hadron$actor;
+    }
+
+    @Override
+    public void hadron$setActor(Actor actor) {
+        hadron$actor = actor;
+    }
+
+    @Override
+    public boolean hadron$tracked() {
+        return hadron$tracked;
+    }
+
+    @Override
+    public Level hadron$trackedLevel() {
+        return hadron$trackedLevel;
+    }
+
+    @Override
+    public double hadron$trackedX() {
+        return hadron$trackedX;
+    }
+
+    @Override
+    public double hadron$trackedY() {
+        return hadron$trackedY;
+    }
+
+    @Override
+    public double hadron$trackedZ() {
+        return hadron$trackedZ;
+    }
+
+    @Override
+    public void hadron$track(Level level, double x, double y, double z) {
+        hadron$tracked = true;
+        hadron$trackedLevel = level;
+        hadron$trackedX = x;
+        hadron$trackedY = y;
+        hadron$trackedZ = z;
+    }
+
+    @Override
+    public void hadron$untrack() {
+        hadron$tracked = false;
+        hadron$trackedLevel = null;
+    }
+
+    @Override
+    public boolean hadron$converted() {
+        return hadron$converted;
+    }
+
+    @Override
+    public void hadron$setConverted(boolean converted) {
+        hadron$converted = converted;
+    }
+
+    @Override
+    public boolean hadron$dying() {
+        return hadron$dying;
+    }
+
+    @Override
+    public void hadron$setDying(boolean dying) {
+        hadron$dying = dying;
+    }
+
+    @Override
+    public int hadron$deathExp() {
+        return hadron$deathExp;
+    }
+
+    @Override
+    public void hadron$setDeathExp(int exp) {
+        hadron$deathExp = exp;
+    }
+
+    // Teleports. Entity's own methods; ServerPlayer's overrides are in ServerPlayerMixin.
+
+    @WrapMethod(method = "teleportTo(DDD)V")
+    private void hadron$teleport(double x, double y, double z, Operation<Void> original) {
+        Entity self = (Entity) (Object) this;
+        if (!EntityTeleports.ask(self, null, x, y, z)) return;
+        EntityTeleports.during(self, () -> original.call(x, y, z));
+    }
+
+    @WrapMethod(method = "teleportTo(Lnet/minecraft/server/level/ServerLevel;DDDLjava/util/Set;FF)Z")
+    private boolean hadron$teleportTo(ServerLevel level, double x, double y, double z, Set<RelativeMovement> relative,
+            float yRot, float xRot, Operation<Boolean> original) {
+        Entity self = (Entity) (Object) this;
+        if (!EntityTeleports.ask(self, level, x, y, z)) return false;
+        return EntityTeleports.during(self, () -> original.call(level, x, y, z, relative, yRot, xRot));
+    }
+
+    @WrapMethod(method = "changeDimension")
+    private Entity hadron$changeDimension(DimensionTransition transition, Operation<Entity> original) {
+        Entity self = (Entity) (Object) this;
+        var to = transition.pos();
+        if (!EntityTeleports.ask(self, transition.newLevel(), to.x, to.y, to.z)) return null;
+        return EntityTeleports.during(self, () -> original.call(transition));
+    }
+
+    /** Getting off a vehicle places the rider with a teleport; that is part of the dismount, not a teleport. */
+    @WrapMethod(method = "dismountTo")
+    private void hadron$dismountTo(double x, double y, double z, Operation<Void> original) {
+        EntityTeleports.during((Entity) (Object) this, () -> original.call(x, y, z));
+    }
+
+    @Inject(method = "handlePortal", at = @At("HEAD"))
+    private void hadron$portal(CallbackInfo ci) {
+        EntityTeleports.portal((Entity) (Object) this);
+    }
+
+    // Catching fire: only when it isn't already burning, so standing in fire is one event, not one a tick.
+    @WrapMethod(method = "igniteForTicks")
+    private void hadron$ignite(int ticks, Operation<Void> original) {
+        Entity self = (Entity) (Object) this;
+        if (!(level() instanceof ServerLevel) || getRemainingFireTicks() > 0 || ticks <= getRemainingFireTicks()
+                || fireImmune() || !Hooks.listens(EntityCombustEvent.class)) {
+            original.call(ticks);
+            return;
+        }
+        EntityCombustEvent event = Hooks.post(new EntityCombustEvent(self, ticks,
+                EntityActors.fromStack(self, Actor.Nature.INSTANCE)));
+        if (!event.isCancelled()) original.call(event.getDuration());
+    }
+
+    @WrapMethod(method = "setAirSupply")
+    private void hadron$air(int air, Operation<Void> original) {
+        Entity self = (Entity) (Object) this;
+        if (!(level() instanceof ServerLevel) || !self.isAddedToLevel() || air == getAirSupply()
+                || !Hooks.listens(EntityAirChangeEvent.class)) {
+            original.call(air);
+            return;
+        }
+        EntityAirChangeEvent event = Hooks.post(new EntityAirChangeEvent(self, getAirSupply(), air,
+                EntityActors.fromStack(self, Actor.Nature.INSTANCE)));
+        if (!event.isCancelled()) original.call(event.getAmount());
+    }
+}
