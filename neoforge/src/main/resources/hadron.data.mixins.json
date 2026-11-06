@@ -3,6 +3,10 @@
   "minVersion": "0.8",
   "package": "dev.iredsc.hadron.neoforge.mixin.data",
   "compatibilityLevel": "JAVA_21",
-  "mixins": [],
+  "mixins": [
+    "LevelChunkMixin",
+    "PistonBaseBlockMixin",
+    "PistonMovingBlockEntityMixin"
+  ],
   "injectors": { "defaultRequire": 1 }
 }
