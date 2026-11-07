@@ -1,8 +1,8 @@
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java
-index a4b3924..3d772e1 100644
+index 6124d77..a5765d3 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java
-@@ -178,7 +178,7 @@ final class EntityEvents {
+@@ -180,7 +180,7 @@ final class EntityEvents {
          }
          if (!Hooks.listens(EntityDismountEvent.class)) return;
          boolean forced = rider.isRemoved() || !rider.isAlive() || vehicle.isRemoved() || !vehicle.isAlive()
@@ -12,10 +12,10 @@ index a4b3924..3d772e1 100644
              event.setCanceled(true);
          }
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityMoves.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityMoves.java
-index aad971c..c0094a7 100644
+index b481d20..85096ad 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityMoves.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityMoves.java
-@@ -61,7 +61,7 @@ public final class EntityMoves {
+@@ -62,7 +62,7 @@ public final class EntityMoves {
              player.connection.teleport(from.x, from.y, from.z, player.getYRot(), player.getXRot());
              return;
          }
@@ -25,10 +25,10 @@ index aad971c..c0094a7 100644
          // The driver's client moves the vehicle itself; tell it where the vehicle really is.
          if (driver instanceof ServerPlayer player) player.connection.send(new ClientboundMoveVehiclePacket(entity));
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityTeleports.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityTeleports.java
-index 57eb404..24fb11b 100644
+index d670aad..c34b65d 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityTeleports.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityTeleports.java
-@@ -3,29 +3,23 @@ package dev.iredsc.hadron.neoforge;
+@@ -5,30 +5,25 @@ import org.jspecify.annotations.Nullable;
  import dev.iredsc.hadron.api.actor.Actor;
  import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
  import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
@@ -56,15 +56,18 @@ index 57eb404..24fb11b 100644
   */
  public final class EntityTeleports {
 -    /** Entities in a teleport already asked about, or being moved by the port itself, with their passengers. */
+-    @StaticState(reason = "entities mid-teleport on the server thread, removed when their teleport ends")
 -    private static final Set<Entity> travelling = Collections.newSetFromMap(new IdentityHashMap<>());
 +    /** The entity whose teleport is in progress, or null. */
-+    private static Entity active;
++    @StaticState(reason = "the entity mid-teleport on the server thread, cleared when its teleport ends")
++    private static @Nullable Entity active;
 +    /** Above zero while the port moves something itself (putting back a cancelled move). */
++    @StaticState(reason = "a count of the port's own moves in progress on the server thread, back to zero when each ends")
 +    private static int quiet;
      /** A cause NeoForge told us about for this entity in this tick, and whether it was already asked. */
-     private static Entity marked;
-     private static int markedTick;
-@@ -36,13 +30,9 @@ public final class EntityTeleports {
+     @StaticState(reason = "a cause NeoForge reported for an entity's next teleport this tick; checked against the tick and cleared when used")
+     private static @Nullable Entity marked;
+@@ -44,13 +39,9 @@ public final class EntityTeleports {
  
      private EntityTeleports() {}
  
@@ -81,16 +84,16 @@ index 57eb404..24fb11b 100644
      }
  
      /**
-@@ -87,7 +77,7 @@ public final class EntityTeleports {
+@@ -95,7 +86,7 @@ public final class EntityTeleports {
              float xRot) {
          Destination requested = new Destination(toLevel != null ? toLevel
                  : entity.level() instanceof ServerLevel own ? own : null, x, y, z, yRot, xRot);
 -        if (!(entity.level() instanceof ServerLevel from) || suppressed(entity)) return requested;
 +        if (!(entity.level() instanceof ServerLevel from) || active != null || quiet > 0) return requested;
          boolean isMarked = marked == entity && markedTick == entity.tickCount;
-         TeleportCause cause = isMarked ? markedCause : TeleportCause.UNKNOWN;
+         TeleportCause cause = isMarked && markedCause != null ? markedCause : TeleportCause.UNKNOWN;
          boolean asked = isMarked && markedAsked;
-@@ -111,51 +101,14 @@ public final class EntityTeleports {
+@@ -119,51 +110,14 @@ public final class EntityTeleports {
      }
  
      /**
@@ -144,7 +147,7 @@ index 57eb404..24fb11b 100644
      /** Who sends it: the entity itself when it walked into a portal or threw a pearl, otherwise the stack. */
      static Actor actor(Entity entity, TeleportCause cause) {
          return switch (cause) {
-@@ -166,37 +119,31 @@ public final class EntityTeleports {
+@@ -174,37 +128,31 @@ public final class EntityTeleports {
  
      /** Runs an approved teleport, so the methods it calls don't ask again, then resets the move check. */
      public static <T> T during(Entity entity, Supplier<T> teleport) {
@@ -193,10 +196,10 @@ index 57eb404..24fb11b 100644
      public static void portal(Entity entity) {
          if (entity.level() instanceof ServerLevel) mark(entity, TeleportCause.PORTAL, false, null);
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/EntityMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/EntityMixin.java
-index eee4feb..701bb84 100644
+index 9b668e1..5ac9ff8 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/EntityMixin.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/EntityMixin.java
-@@ -147,8 +147,6 @@ abstract class EntityMixin implements EntityState {
+@@ -148,8 +148,6 @@ abstract class EntityMixin implements EntityState {
          Entity self = (Entity) (Object) this;
          EntityTeleports.Destination to = EntityTeleports.ask(self, level, x, y, z, yRot, xRot);
          if (to == null) return false;
@@ -206,10 +209,10 @@ index eee4feb..701bb84 100644
          return EntityTeleports.during(self, () -> original.call(to.level(), to.x(), to.y(), to.z(), relative,
                  to.yRot(), to.xRot()));
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/LivingEntityMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/LivingEntityMixin.java
-index 2b5760b..6f85cde 100644
+index e520fcc..e2f4158 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/LivingEntityMixin.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/LivingEntityMixin.java
-@@ -5,7 +5,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+@@ -6,7 +6,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
  import dev.iredsc.hadron.neoforge.EntityActors;
  import dev.iredsc.hadron.neoforge.EntityDeaths;
  import dev.iredsc.hadron.neoforge.EntitySpawnRefunds;
@@ -217,7 +220,7 @@ index 2b5760b..6f85cde 100644
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.world.damagesource.DamageSource;
  import net.minecraft.world.entity.LivingEntity;
-@@ -18,7 +17,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+@@ -19,7 +18,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  
  /**
   * Brackets the death loot, so the death event can decide drops and experience together; refunds a released bow or
@@ -226,7 +229,7 @@ index 2b5760b..6f85cde 100644
   */
  @Mixin(LivingEntity.class)
  abstract class LivingEntityMixin implements EntityActors.Hurting {
-@@ -63,13 +62,6 @@ abstract class LivingEntityMixin implements EntityActors.Hurting {
+@@ -64,13 +63,6 @@ abstract class LivingEntityMixin implements EntityActors.Hurting {
          }
      }
  

@@ -1,5 +1,5 @@
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/WorldsManager.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/WorldsManager.java
-index f7db737..ce88b3c 100644
+index 49d762a..8e80bbf 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/WorldsManager.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/WorldsManager.java
 @@ -71,15 +71,11 @@ final class WorldsManager implements Worlds.Backend {
@@ -91,17 +91,18 @@ index f7db737..ce88b3c 100644
      }
  
      @Override
-@@ -221,9 +191,6 @@ final class WorldsManager implements Worlds.Backend {
+@@ -223,10 +193,6 @@ final class WorldsManager implements Worlds.Backend {
              throw new IllegalArgumentException("Can't move players out of " + dimension.location() + " into "
                      + to.dimension().location() + ": pick another loaded world");
          }
 -        // Saved first: if the file can't be written, nothing has happened yet.
 -        Definition definition = store.get(dimension.location());
+-        if (definition == null) throw notOurs(dimension, "unload");
 -        store.put(definition.withLoaded(false));
          // Players are asked to leave like any teleport, so listeners may send them somewhere else; anyone a listener
          // kept here is moved anyway, without events, since a world being unloaded can't keep anyone in it.
          ServerLevel target = to;
-@@ -236,16 +203,14 @@ final class WorldsManager implements Worlds.Backend {
+@@ -239,16 +205,14 @@ final class WorldsManager implements Worlds.Backend {
                      player.getXRot()));
          }
          if (!level.players().isEmpty()) {
@@ -119,11 +120,11 @@ index f7db737..ce88b3c 100644
 +        server.markWorldsDirty();
 +        server.overworld().getWorldBorder().removeListener(loaded.border());
 +        open.remove(dimension);
-+        store.put(store.get(dimension.location()).withLoaded(false));
++        store.put(java.util.Objects.requireNonNull(store.get(dimension.location())).withLoaded(false));
          closing.put(dimension, new Closing(level, save, false));
          // While the server runs, a world closes at the end of the tick, never inside its own tick or a chunk task.
          if (!server.isRunning()) finishClosing();
-@@ -255,54 +220,22 @@ final class WorldsManager implements Worlds.Backend {
+@@ -258,54 +222,22 @@ final class WorldsManager implements Worlds.Backend {
      public void delete(ResourceLocation key) {
          onServerThread("delete");
          ResourceKey<Level> dimension = dimension(key);
@@ -181,7 +182,7 @@ index f7db737..ce88b3c 100644
          ResourceKey<Level> dimension = dimension(d.key());
          Holder<DimensionType> type = WorldsGenerators.dimensionType(server, d.type());
          ChunkGenerator generator = WorldsGenerators.build(server, d.generator());
-@@ -311,14 +244,7 @@ final class WorldsManager implements Worlds.Backend {
+@@ -314,14 +246,7 @@ final class WorldsManager implements Worlds.Backend {
          WorldsLevelData data = new WorldsLevelData(server.getWorldData(), server.getWorldData().overworldData(),
                  firstSpawn, d.angle(), (pos, angle) -> {
                      Definition current = store.get(d.key());
@@ -197,7 +198,7 @@ index f7db737..ce88b3c 100644
                  });
          // Before the constructor: ChunkMap builds the generator's random state from getSeed while it runs.
          WorldsHooks.putSeed(dimension, d.seed());
-@@ -331,13 +257,6 @@ final class WorldsManager implements Worlds.Backend {
+@@ -334,13 +259,6 @@ final class WorldsManager implements Worlds.Backend {
              WorldsHooks.removeSeed(dimension);
              throw new IllegalStateException("Couldn't build world " + d.key() + ": " + e, e);
          }
@@ -211,7 +212,7 @@ index f7db737..ce88b3c 100644
          server.forgeGetWorldMap().put(dimension, level);
          server.markWorldsDirty();
          // As vanilla's nether and end: the border follows the overworld's.
-@@ -345,22 +264,8 @@ final class WorldsManager implements Worlds.Backend {
+@@ -348,22 +266,8 @@ final class WorldsManager implements Worlds.Backend {
          BorderChangeListener border = new BorderChangeListener.DelegateBorderChangeListener(level.getWorldBorder());
          overworld.getWorldBorder().addListener(border);
          level.getWorldBorder().applySettings(overworld.getWorldBorder().createSettings());
@@ -236,7 +237,7 @@ index f7db737..ce88b3c 100644
          NeoForge.EVENT_BUS.post(new LevelEvent.Load(level));
          // As vanilla does for every level at startup: chunks forced before the unload or restart are forced again.
          net.minecraft.world.level.ForcedChunksSavedData forced = level.getDataStorage()
-@@ -381,62 +286,7 @@ final class WorldsManager implements Worlds.Backend {
+@@ -384,62 +288,7 @@ final class WorldsManager implements Worlds.Backend {
              int radius = server.getGameRules().getInt(GameRules.RULE_SPAWN_CHUNK_RADIUS) + 1;
              if (radius > 1) level.getChunkSource().addRegionTicket(TicketType.START, new ChunkPos(spawn), radius, Unit.INSTANCE);
          }
@@ -300,7 +301,7 @@ index f7db737..ce88b3c 100644
      }
  
      /** A spot to stand: the surface, or for a world with a ceiling (the nether) the first open floor below it. */
-@@ -473,66 +323,45 @@ final class WorldsManager implements Worlds.Backend {
+@@ -476,66 +325,45 @@ final class WorldsManager implements Worlds.Backend {
          for (var entry : pending) {
              ResourceKey<Level> dimension = entry.getKey();
              Closing c = entry.getValue();
@@ -387,7 +388,7 @@ index f7db737..ce88b3c 100644
          }
      }
  
-@@ -550,29 +379,16 @@ final class WorldsManager implements Worlds.Backend {
+@@ -553,29 +381,16 @@ final class WorldsManager implements Worlds.Backend {
              throw new IllegalArgumentException("minecraft:overworld is the server's main world; give the new world "
                      + "your own id, like myplugin:" + "world");
          }
@@ -422,10 +423,10 @@ index f7db737..ce88b3c 100644
                      + "the end of it; load it again from a task on the next tick: "
                      + "Hadron.getScheduler().runTask(plugin, () -> ...)");
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/WorldsStore.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/WorldsStore.java
-index 9e1316e..d050297 100644
+index 1126d63..ebb3c36 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/WorldsStore.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/WorldsStore.java
-@@ -17,8 +17,6 @@ import java.nio.file.StandardCopyOption;
+@@ -18,8 +18,6 @@ import java.nio.file.StandardCopyOption;
  import java.util.ArrayList;
  import java.util.Collection;
  import java.util.LinkedHashMap;
@@ -434,7 +435,7 @@ index 9e1316e..d050297 100644
  import java.util.List;
  import java.util.Map;
  import net.minecraft.core.BlockPos;
-@@ -31,11 +29,7 @@ import org.slf4j.Logger;
+@@ -32,11 +30,7 @@ import org.slf4j.Logger;
  /**
   * Every created world's definition, in {@code <world>/hadron/worlds.json}: plain ids and numbers, so the file reads
   * the same on every Minecraft version. Written whenever a world is created, loaded, unloaded, deleted or moves its
@@ -447,7 +448,7 @@ index 9e1316e..d050297 100644
   */
  final class WorldsStore {
      private static final Logger LOG = LogUtils.getLogger();
-@@ -61,9 +55,7 @@ final class WorldsStore {
+@@ -62,9 +56,7 @@ final class WorldsStore {
      }
  
      private final Path file;
@@ -458,7 +459,7 @@ index 9e1316e..d050297 100644
      /** Entries this version couldn't read (a removed mod's block, a hand edit), written back untouched. */
      private final List<JsonElement> unreadable = new ArrayList<>();
  
-@@ -72,10 +64,6 @@ final class WorldsStore {
+@@ -73,10 +65,6 @@ final class WorldsStore {
          read();
      }
  
@@ -466,10 +467,10 @@ index 9e1316e..d050297 100644
 -        return file;
 -    }
 -
-     Definition get(ResourceLocation key) {
+     @Nullable Definition get(ResourceLocation key) {
          return worlds.get(key);
      }
-@@ -84,52 +72,22 @@ final class WorldsStore {
+@@ -85,52 +73,22 @@ final class WorldsStore {
          return List.copyOf(worlds.values());
      }
  
@@ -529,7 +530,7 @@ index 9e1316e..d050297 100644
          } catch (Exception e) {
              Path aside = file.resolveSibling(file.getFileName() + ".unreadable");
              LOG.error("Hadron couldn't read {} ({}); moved it to {} and starts with no created worlds. Fix the file "
-@@ -141,14 +99,6 @@ final class WorldsStore {
+@@ -142,14 +100,6 @@ final class WorldsStore {
              }
              return;
          }
@@ -544,7 +545,7 @@ index 9e1316e..d050297 100644
          for (JsonElement element : list) {
              try {
                  Definition d = fromJson(element.getAsJsonObject());
-@@ -161,24 +111,20 @@ final class WorldsStore {
+@@ -162,24 +112,20 @@ final class WorldsStore {
          }
      }
  
