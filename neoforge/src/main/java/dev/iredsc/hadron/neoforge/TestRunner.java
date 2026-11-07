@@ -82,6 +82,10 @@ final class TestRunner {
         try {
             address = server.getConnection().startMemoryChannel();
             List<File> jars = suites();
+            for (File jar : jars) {
+                String name = pluginName(jar);
+                if (name != null) suitePlugins.add(name);
+            }
             for (File jar : jars) runSuite(jar);
         } catch (Throwable t) {
             report.problem("The test run itself failed, so later tests didn't run: " + stack(t));
@@ -110,6 +114,22 @@ final class TestRunner {
         return out;
     }
 
+    /** The plugin name of every suite in this run. */
+    private final List<String> suitePlugins = new ArrayList<>();
+
+    private static String pluginName(File file) {
+        try (JarFile jar = new JarFile(file)) {
+            var yml = jar.getEntry("plugin.yml");
+            if (yml == null) return null;
+            try (InputStream in = jar.getInputStream(yml)) {
+                Object parsed = new Yaml().load(in);
+                return parsed instanceof Map<?, ?> m && m.get("name") != null ? m.get("name").toString() : null;
+            }
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
     private void runSuite(File file) throws IOException {
         String pluginName;
         List<String> classNames;
@@ -130,6 +150,8 @@ final class TestRunner {
             }
         }
         TestReport.Suite suite = report.suite(file.getName(), pluginName);
+        // Every other suite's plugin is off while this one runs, so their listeners can't change its results.
+        Hooks.host().isolateForTest(pluginName, suitePlugins);
         JavaPlugin plugin = Hadron.getPluginManager().getPlugin(pluginName);
         if (plugin == null || !Hadron.getPluginManager().isPluginEnabled(pluginName)) {
             report.broken(suite, pluginName + " didn't enable, so none of its tests ran. The server log ("
