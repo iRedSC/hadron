@@ -1,0 +1,102 @@
+diff --git a/.github/human-review-paths.txt b/.github/human-review-paths.txt
+index 209e1d7..be1f156 100644
+--- a/.github/human-review-paths.txt
++++ b/.github/human-review-paths.txt
+@@ -2,13 +2,8 @@
+ # (.github/workflows/human-review.yml). Everything else merges on green CI. One glob per line; ** spans folders.
+ # Add a path when a mistake there would lose players' data, slow every server, or let a change skip these checks.
+ 
+-# The checks themselves: a PR could otherwise switch off what reviews it. Build files can drop coverageCheck, the
+-# fast tests or a PIT threshold, so they count too.
++# The checks themselves: a PR could otherwise switch off what reviews it.
+ .github/**
+-gradle/**
+-**build.gradle.kts
+-settings.gradle.kts
+-gradle.properties
+ 
+ # Saved data formats: a wrong change here loses players' data on every server that updates.
+ api/src/main/java/dev/iredsc/hadron/api/data/**
+diff --git a/.github/scripts/human_review.py b/.github/scripts/human_review.py
+index 7d4a17c..2f509f1 100644
+--- a/.github/scripts/human_review.py
++++ b/.github/scripts/human_review.py
+@@ -1,7 +1,6 @@
+ """Fails when a PR changes a path in .github/human-review-paths.txt and lacks the human-reviewed label.
+ 
+-Reads BASE and HEAD (commit SHAs) and REVIEWED ("true" or "false") from the environment. CI runs main's copy of this
+-script and path list against the PR's diff, so a PR can't change what checks it.
++Reads BASE and HEAD (commit SHAs) and REVIEWED ("true" or "false") from the environment.
+ Run locally with: BASE=origin/main HEAD=HEAD REVIEWED=false python3 .github/scripts/human_review.py
+ """
+ 
+@@ -37,23 +36,17 @@ def patterns() -> list[tuple[str, re.Pattern[str]]]:
+ 
+ 
+ def changed_files(base: str, head: str) -> list[str]:
+-    # --no-renames lists a moved file under both its old and new path, so moving a file out of a protected folder
+-    # still counts as touching it.
+     result = subprocess.run(
+-        ["git", "diff", "--no-renames", "--name-only", "-z", f"{base}...{head}"],
+-        capture_output=True, text=True, check=True,
++        ["git", "diff", "--name-only", f"{base}...{head}"], capture_output=True, text=True, check=True
+     )
+-    return [name for name in result.stdout.split("\0") if name]
++    return [name for name in result.stdout.splitlines() if name]
+ 
+ 
+ def main() -> int:
+     base, head = os.environ["BASE"], os.environ["HEAD"]
+     reviewed = os.environ.get("REVIEWED") == "true"
+     rules = patterns()
+-    # Globs are checked against the PR's tree, so a PR that renames a protected file away also kills its glob here.
+-    tracked = subprocess.run(
+-        ["git", "ls-tree", "-r", "--name-only", "-z", head], capture_output=True, text=True, check=True
+-    ).stdout.split("\0")
++    tracked = subprocess.run(["git", "ls-files"], capture_output=True, text=True, check=True).stdout.split()
+     dead = [glob for glob, rx in rules if not any(rx.match(name) for name in tracked)]
+     if dead:
+         print(f"{PATHS_FILE} has globs that match no file, so they protect nothing. Fix or delete them:")
+diff --git a/.github/workflows/human-review.yml b/.github/workflows/human-review.yml
+index 5acd8f3..007ae5b 100644
+--- a/.github/workflows/human-review.yml
++++ b/.github/workflows/human-review.yml
+@@ -1,13 +1,10 @@
+ # A PR touching a path in .github/human-review-paths.txt fails this check until the owner adds the `human-reviewed`
+ # label. A new commit removes the label, because a review covers the commits it saw, not ones pushed after.
+-#
+-# pull_request_target runs this file, the script and the path list as they are on main, never the PR's copies, so a
+-# PR can't loosen its own gate. The PR is only read as diff data; none of its code runs here.
+ name: Human review
+ 
+ on:
+-  pull_request_target:
+-    types: [opened, reopened, synchronize, labeled, unlabeled, edited]
++  pull_request:
++    types: [opened, reopened, synchronize, labeled, unlabeled]
+ 
+ permissions:
+   contents: read
+@@ -20,21 +17,13 @@ jobs:
+     steps:
+       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+         with:
+-          ref: ${{ github.event.repository.default_branch }}
+           fetch-depth: 0
+-          persist-credentials: false
+-      - name: Fetch the PR's commits, as data only
+-        env:
+-          PR: ${{ github.event.pull_request.number }}
+-          BASE_REF: ${{ github.event.pull_request.base.ref }}
+-        run: git fetch --no-tags origin "pull/$PR/head" "$BASE_REF"
+       - name: Drop a review that predates this commit
+         if: github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'human-reviewed')
+         env:
+           GH_TOKEN: ${{ github.token }}
+           PR: ${{ github.event.pull_request.number }}
+-          REPO: ${{ github.repository }}
+-        run: gh pr edit "$PR" -R "$REPO" --remove-label human-reviewed
++        run: gh pr edit "$PR" --remove-label human-reviewed
+       - name: Check
+         env:
+           BASE: ${{ github.event.pull_request.base.sha }}

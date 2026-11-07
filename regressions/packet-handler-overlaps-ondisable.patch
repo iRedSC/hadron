@@ -1,0 +1,149 @@
+diff --git a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
+index 644791c..5f75307 100644
+--- a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
++++ b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
+@@ -816,7 +816,6 @@ public final class PluginHost implements PluginManager {
+                 LOG.warn(e.name + " still had " + stillRunning + " background task(s) running after "
+                         + ASYNC_GRACE_MILLIS / 1000 + "s; " + (callOnDisable ? "disabling" : "stopping") + " it anyway");
+             }
+-            runBeforeDisableHooks(plugin, deadline);
+             if (callOnDisable && running instanceof State.Enabled) {
+                 try {
+                     plugin.onDisable();
+@@ -1098,28 +1097,6 @@ public final class PluginHost implements PluginManager {
+     private static final java.util.List<java.util.function.Consumer<JavaPlugin>> DISABLE_HOOKS =
+             new java.util.concurrent.CopyOnWriteArrayList<>();
+ 
+-    /**
+-     * Hadron's modules that call plugin code off the server thread (packet handlers) wait here for those calls to
+-     * finish, so none overlaps the plugin's onDisable. Each hook runs once the plugin no longer counts as enabled and
+-     * before onDisable, with the milliseconds left of the disable grace period; it must return by then.
+-     */
+-    public static void beforePluginDisable(java.util.function.ObjLongConsumer<JavaPlugin> hook) {
+-        BEFORE_DISABLE_HOOKS.add(java.util.Objects.requireNonNull(hook, "hook"));
+-    }
+-
+-    private static final java.util.List<java.util.function.ObjLongConsumer<JavaPlugin>> BEFORE_DISABLE_HOOKS =
+-            new java.util.concurrent.CopyOnWriteArrayList<>();
+-
+-    private void runBeforeDisableHooks(JavaPlugin plugin, long deadline) {
+-        for (java.util.function.ObjLongConsumer<JavaPlugin> hook : BEFORE_DISABLE_HOOKS) {
+-            try {
+-                hook.accept(plugin, remainingGraceMillis(deadline));
+-            } catch (Throwable t) {
+-                LOG.error("Waiting for " + plugin.getName() + "'s calls in progress failed", t);
+-            }
+-        }
+-    }
+-
+     private void runDisableHooks(JavaPlugin plugin) {
+         for (java.util.function.Consumer<JavaPlugin> hook : DISABLE_HOOKS) {
+             try {
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java
+index 7c098f8..712aa91 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java
+@@ -10,7 +10,6 @@ import java.util.ArrayList;
+ import java.util.Comparator;
+ import java.util.List;
+ import java.util.concurrent.ConcurrentHashMap;
+-import java.util.concurrent.TimeUnit;
+ import net.minecraft.network.protocol.Packet;
+ import net.minecraft.network.protocol.PacketFlow;
+ import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
+@@ -125,7 +124,6 @@ final class NetPackets {
+                 throw new IllegalStateException(plugin.getName() + " can't register packet handlers while it isn't "
+                         + "enabled; register them in onEnable");
+             }
+-            RUNNING.computeIfAbsent(plugin, p -> new int[1]);
+             Handler h = new Handler(plugin, type, priority, body, registered++, side);
+             side.all.add(h);
+             side.changed();
+@@ -133,43 +131,9 @@ final class NetPackets {
+         }
+     }
+ 
+-    /** Each plugin's handler calls in progress, so disabling can wait for them; a count is its own monitor. */
+-    private static final ConcurrentHashMap<JavaPlugin, int[]> RUNNING = new ConcurrentHashMap<>();
+-    /** The plugin whose handler this thread is inside, so a handler that disables its own plugin doesn't wait on itself. */
+-    private static final ThreadLocal<JavaPlugin> INSIDE = new ThreadLocal<>();
+-
+-    /**
+-     * Before-disable hook: waits up to {@code millis} for the plugin's handler calls already running, typically on a
+-     * network thread, so none overlaps its onDisable. New calls are skipped already, since the plugin no longer counts
+-     * as enabled.
+-     */
+-    static void awaitRunning(JavaPlugin plugin, long millis) {
+-        int[] count = RUNNING.get(plugin);
+-        if (count == null) return;
+-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(millis);
+-        synchronized (count) {
+-            int own = INSIDE.get() == plugin ? 1 : 0;
+-            while (count[0] > own) {
+-                long left = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
+-                if (left <= 0) {
+-                    plugin.getLogger().warn(count[0] - own + " packet handler call(s) still running after the disable "
+-                            + "grace period; disabling anyway");
+-                    return;
+-                }
+-                try {
+-                    count.wait(left);
+-                } catch (InterruptedException e) {
+-                    Thread.currentThread().interrupt();
+-                    return;
+-                }
+-            }
+-        }
+-    }
+-
+     /** Disable hook: drops every handler the plugin registered, so none of its classes stay reachable. */
+     static void remove(JavaPlugin plugin) {
+         synchronized (LOCK) {
+-            RUNNING.remove(plugin);
+             for (Side side : new Side[] {OUT, IN}) {
+                 boolean changed = side.all.removeIf(h -> {
+                     if (h.plugin != plugin) return false;
+@@ -253,29 +217,15 @@ final class NetPackets {
+         for (Handler h : handlers) {
+             // A dispatch may hold a snapshot from before an unregister or a disable. The plugin stops counting as
+             // enabled before its onDisable runs, so no handler runs against what onDisable closed.
+-            // Counted before the enabled check, so a disable that sees no call running can't miss one starting.
+-            // Made at registration and dropped at disable, so a stale snapshot never brings a disabled plugin back.
+-            int[] count = RUNNING.get(h.plugin);
+-            if (count == null) continue;
+-            synchronized (count) {
+-                count[0]++;
+-            }
+-            JavaPlugin outer = INSIDE.get();
++            if (!h.active || !h.plugin.isEnabled()) continue;
++            event.current = h;
+             try {
+-                if (!h.active || !h.plugin.isEnabled()) continue;
+-                event.current = h;
+-                INSIDE.set(h.plugin);
+                 @SuppressWarnings("unchecked")
+                 PacketHandler<Packet<?>> body = (PacketHandler<Packet<?>>) h.body;
+                 body.handle(event);
+             } catch (Throwable t) {
+                 h.plugin.getLogger().error("A packet handler for " + packet.getClass().getSimpleName()
+                         + (outgoing ? " sent to " : " from ") + player.getGameProfile().getName() + " threw", t);
+-            } finally {
+-                INSIDE.set(outer);
+-                synchronized (count) {
+-                    if (--count[0] == 0) count.notifyAll();
+-                }
+             }
+         }
+         return event.cancelled ? null : event.packet;
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPort.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPort.java
+index 8dd0d27..36bb88b 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPort.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPort.java
+@@ -30,7 +30,6 @@ final class NetPort implements NetBackend {
+         // Lowest, so the name a plugin asked for is the one shown, whatever mods add earlier.
+         NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST, NetNames::nameFormat);
+         NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST, NetNames::tabListNameFormat);
+-        PluginHost.beforePluginDisable(NetPackets::awaitRunning);
+         PluginHost.onPluginDisable(plugin -> {
+             NetPackets.remove(plugin);
+             NetVisibility.remove(plugin);

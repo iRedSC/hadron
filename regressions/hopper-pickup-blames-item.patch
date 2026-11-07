@@ -1,0 +1,22 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java
+index 7fa4706..839fd31 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java
+@@ -240,15 +240,8 @@ public final class ItemHooks {
+     public static boolean hopperPickup(Container hopper, ItemEntity item) {
+         if (!Hooks.listens(ItemPickupEvent.class) || !(item.level() instanceof ServerLevel level)) return false;
+         if (!canAccept(hopper, item.getItem(), null)) return false; // nothing would move: rule 8, no phantom pickup
+-        Actor actor = container(hopper);
+-        // An item landing on a hopper is taken during the item's own tick, which puts the item on the actor stack;
+-        // the hopper is still the one taking it.
+-        if (actor instanceof Actor.EntityActor e && e.entity() == item) {
+-            actor = hopper instanceof BlockEntity be && be.getLevel() instanceof ServerLevel server
+-                    ? new Actor.Machine(server, be.getBlockPos(), Actors.remembered(be))
+-                    : hopper instanceof Entity entity ? derive(entity) : Actor.Unknown.INSTANCE;
+-        }
+-        return Hooks.post(new ItemPickupEvent(level, item, InventoryHolders.of(hopper, null), actor)).isCancelled();
++        return Hooks.post(new ItemPickupEvent(level, item, InventoryHolders.of(hopper, null), container(hopper)))
++                .isCancelled();
+     }
+ 
+     /** A mob is about to pick an item entity up; true leaves it on the ground. */

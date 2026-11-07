@@ -1,0 +1,231 @@
+diff --git a/gradle/hadron-test-server.gradle.kts b/gradle/hadron-test-server.gradle.kts
+index d9be0da..62707e0 100644
+--- a/gradle/hadron-test-server.gradle.kts
++++ b/gradle/hadron-test-server.gradle.kts
+@@ -129,23 +129,9 @@ tasks.named<JavaExec>("runHadronWatch") {
+                         + "hadronRerun, or stop it with hadronWatchStop first.")
+             }
+         }
+-        for (name in listOf("run", "done", "reports", "report.txt", "report.json", "watch.properties", "stop",
+-                "last-run.properties", "hadron.fingerprint")) {
++        for (name in listOf("run", "done", "reports", "report.txt", "report.json", "watch.properties", "stop")) {
+             root.resolve(name).deleteRecursively()
+         }
+-        // The record of the Hadron this server loads, which hadronWatch wrote after building it; reruns compare it.
+-        root.resolve("hadron.fingerprint.pending").renameTo(root.resolve("hadron.fingerprint"))
+         HadronTestServer.prepare(root.resolve("run"), mod)
+     }
+-    // It exits 0 only when hadronWatchStop asked it to stop, so anything else (a crash, a hung test, a test that
+-    // stopped the server) fails the build rather than ending it green.
+-    doLast {
+-        val code = (this as JavaExec).executionResult.get().exitValue
+-        if (code != 0) {
+-            val why = if (code == 3) "a test hung, so the watchdog ended it"
+-                else "it crashed or was stopped by something other than hadronWatchStop"
+-            throw GradleException("The watching test server exited with code $code: $why. Its log says more: "
+-                    + root.resolve("run/logs/latest.log") + ". Start hadronWatch again.")
+-        }
+-    }
+ }
+diff --git a/gradle/hadron-test.gradle.kts b/gradle/hadron-test.gradle.kts
+index b0c4939..600b528 100644
+--- a/gradle/hadron-test.gradle.kts
++++ b/gradle/hadron-test.gradle.kts
+@@ -57,17 +57,9 @@ abstract class HadronWatchTask : HadronTestTask() {
+     @get:Input
+     abstract val waitForReport: Property<Boolean>
+ 
+-    /** Hadron as the server loads it (its compiled classes and resources, or its jars). */
++    /** Hadron's own sources: a server started before one of them changed would test against the old Hadron. */
+     @get:Internal
+-    abstract val hadronLoaded: ConfigurableFileCollection
+-
+-    /** The build files that shape the server, path to hash, read as Gradle configured this build. */
+-    @get:Input
+-    abstract val hadronConfig: MapProperty<String, String>
+-
+-    /** The build's root folder, so fingerprint paths read like the repo's. */
+-    @get:Internal
+-    abstract val buildRoot: Property<String>
++    abstract val hadronSources: ConfigurableFileCollection
+ 
+     @get:Input
+     abstract val watchCommand: Property<String>
+@@ -81,23 +73,16 @@ abstract class HadronWatchTask : HadronTestTask() {
+     fun stage() {
+         val dir = watchDir.get().asFile
+         if (!waitForReport.get()) {
+-            // What the server about to start loads: its run task moves this into place as it starts.
+-            writeFingerprint(dir.resolve(PENDING_FINGERPRINT), fingerprint())
+             put(dir)
+             return
+         }
+-        serverStarted(dir) ?: throw GradleException("No Hadron test server is watching, so there's "
++        val started = serverStarted(dir) ?: throw GradleException("No Hadron test server is watching, so there's "
+                 + "nothing to rerun on. Start one with ./gradlew ${watchCommand.get()} (it keeps running: give it its "
+                 + "own terminal or the background), then run this again.")
+-        val loaded = readFingerprint(dir.resolve(FINGERPRINT)) ?: throw GradleException("The watching test server "
+-                + "has no record of the Hadron it loaded (${dir.resolve(FINGERPRINT)}), so this can't tell whether it is "
+-                + "current. Stop it with hadronWatchStop and start ./gradlew ${watchCommand.get()} again.")
+-        val now = fingerprint()
+-        val changed = (loaded.keys + now.keys).filter { loaded[it] != now[it] }.sorted()
+-        if (changed.isNotEmpty()) {
+-            throw GradleException("Hadron changed since the watching test server started (${changed.take(5)
+-                .joinToString()}${if (changed.size > 5) " and ${changed.size - 5} more" else ""}), so it would test "
+-                    + "this plugin against the old Hadron. Stop it with hadronWatchStop and start "
++        val changed = hadronSources.asFileTree.files.filter { it.lastModified() > started }.maxByOrNull { it.lastModified() }
++        if (changed != null) {
++            throw GradleException("Hadron's own code changed since the watching test server started ($changed), so "
++                    + "it would test this plugin against the old Hadron. Stop it with hadronWatchStop and start "
+                     + "./gradlew ${watchCommand.get()} again.")
+         }
+         val token = put(dir)
+@@ -143,37 +128,7 @@ abstract class HadronWatchTask : HadronTestTask() {
+         return token
+     }
+ 
+-    /** Every loaded file and build file, by path, to its content's hash: equal maps mean the same Hadron. */
+-    private fun fingerprint(): Map<String, String> {
+-        val out = sortedMapOf<String, String>()
+-        out.putAll(hadronConfig.get())
+-        val base = File(buildRoot.get())
+-        for (root in hadronLoaded.files) {
+-            val name = root.relativeTo(base).invariantSeparatorsPath
+-            if (root.isFile) out[name] = sha(root)
+-            else if (root.isDirectory) root.walkTopDown().filter { it.isFile }.forEach {
+-                out[name + "/" + it.relativeTo(root).invariantSeparatorsPath] = sha(it)
+-            }
+-            else out[name] = "missing"
+-        }
+-        return out
+-    }
+-
+     companion object {
+-        const val FINGERPRINT = "hadron.fingerprint"
+-        const val PENDING_FINGERPRINT = "hadron.fingerprint.pending"
+-
+-        fun sha(file: File): String = java.security.MessageDigest.getInstance("SHA-256").digest(file.readBytes())
+-            .joinToString("") { "%02x".format(it) }
+-
+-        fun writeFingerprint(file: File, entries: Map<String, String>) {
+-            file.parentFile.mkdirs()
+-            file.writeText(entries.entries.joinToString("\n", postfix = "\n") { "${it.value} ${it.key}" })
+-        }
+-
+-        fun readFingerprint(file: File): Map<String, String>? = if (!file.isFile) null else
+-            file.readLines().filter { it.isNotBlank() }.associate { it.substringAfter(' ') to it.substringBefore(' ') }
+-
+         /** When the watching server started, or null if none is running. */
+         fun serverStarted(dir: File): Long? {
+             val file = dir.resolve("watch.properties")
+@@ -293,17 +248,7 @@ hadronTest.configure {
+ }
+ 
+ val startCommand = project.path + ":hadronWatch"
+-// What a watching server loads of Hadron, and the tasks that build it, so a rerun can tell the server is current.
+-val hadronModules = listOf("api", "common", "test-api", "neoforge")
+-val loadedHadron = rootProject.files(hadronModules.flatMap { listOf("$it/build/classes/java/main", "$it/build/resources/main") })
+-val hadronBuiltBy = hadronModules.map { ":$it:classes" }
+-// The build files that shape the server, hashed as Gradle read them to configure this build.
+-val hadronConfigFiles = listOf("gradle.properties", "settings.gradle.kts", "build.gradle.kts",
+-    "gradle/hadron-test-server.gradle.kts") + hadronModules.map { "$it/build.gradle.kts" }
+-val hadronConfigHashes = hadronConfigFiles.associateWith { path ->
+-    rootProject.file(path).let { if (it.isFile) HadronWatchTask.sha(it) else "missing" }
+-}
+-val firstRun = watchRoot.file("last-run.properties").asFile
++val hadronSourceDirs = rootProject.files(listOf("api", "common", "test-api", "neoforge").map { "$it/src/main" })
+ 
+ val hadronWatch = tasks.register<HadronTestTask>("hadronWatch") {
+     group = "verification"
+@@ -320,26 +265,7 @@ val hadronWatchStage = tasks.register<HadronWatchTask>("hadronWatchStage") {
+     watchCommand.set(startCommand)
+ }
+ 
+-hadronWatchStage.configure {
+-    dependsOn(hadronBuiltBy)
+-    hadronLoaded.from(loadedHadron)
+-    hadronConfig.set(hadronConfigHashes)
+-    buildRoot.set(rootProject.projectDir.path)
+-}
+-
+-hadronWatch.configure {
+-    dependsOn(hadronWatchStage, ":neoforge:runHadronWatch")
+-    // The server ran and stopped as asked (its run task fails on any other exit); it must also have run a build.
+-    val last = firstRun
+-    val log = watchRoot.file("run/logs/latest.log").asFile
+-    doLast {
+-        if (!last.isFile) {
+-            throw GradleException("The watching test server stopped before it finished running any tests, so it "
+-                    + "never proved it works. Its log says why: $log")
+-        }
+-        logger.lifecycle("The Hadron test server stopped. Its last run: $last")
+-    }
+-}
++hadronWatch.configure { dependsOn(hadronWatchStage, ":neoforge:runHadronWatch") }
+ 
+ tasks.register<HadronWatchTask>("hadronRerun") {
+     group = "verification"
+@@ -348,10 +274,7 @@ tasks.register<HadronWatchTask>("hadronRerun") {
+     watchDir.set(watchRoot)
+     suiteJar.set(suiteName)
+     waitForReport.set(true)
+-    dependsOn(hadronBuiltBy)
+-    hadronLoaded.from(loadedHadron)
+-    hadronConfig.set(hadronConfigHashes)
+-    buildRoot.set(rootProject.projectDir.path)
++    hadronSources.from(hadronSourceDirs)
+     watchCommand.set(startCommand)
+ }
+ 
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWatch.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWatch.java
+index 5f0a3f7..b5663e9 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWatch.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWatch.java
+@@ -51,8 +51,7 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
+  *   <li>{@code reports/NNNN/report.txt} and {@code .json}, one pair per rerun, the last {@value #KEEP_REPORTS} kept;
+  *       {@code report.txt} and {@code report.json} in {@code <dir>} are the latest.</li>
+  *   <li>{@code watch.properties}: the server's {@code pid} and when it {@code started}, there while it runs.</li>
+- *   <li>{@code last-run.properties}: the latest run's answer, kept for the life of the server.</li>
+- *   <li>{@code stop}: asks the server to stop; the server exits 0 only then.</li>
++ *   <li>{@code stop}: asks the server to stop.</li>
+  * </ul>
+  *
+  * <p>A rerun starts each suite as a cold run would: the old plugin is unloaded, its data folder deleted, the
+@@ -87,8 +86,6 @@ final class TestWatch {
+     private final TestRunner runner;
+     private final Shared shared;
+     private State state = State.WAITING;
+-    /** Whether hadronWatchStop asked it to stop, the only stop that exits 0. */
+-    private volatile boolean stopAsked;
+     private volatile Current current;
+     private int ticks;
+     private int runs;
+@@ -112,10 +109,8 @@ final class TestWatch {
+             if (active != null) active.tick();
+         });
+         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> {
+-            // 0 only when asked to stop: a crash or a test stopping the server must fail hadronWatch, not end it green.
+-            boolean asked = active != null && active.stopAsked;
+             if (active != null) active.stopped();
+-            TestRunner.exitLater(asked ? 0 : 1);
++            TestRunner.exitLater(0);
+         });
+     }
+ 
+@@ -143,7 +138,6 @@ final class TestWatch {
+         File stop = new File(dir, "stop");
+         if (stop.exists()) {
+             stop.delete();
+-            stopAsked = true;
+             TestRunner.LOG.info("Stopping the Hadron test server, as asked");
+             server.halt(false);
+             return;
+@@ -285,8 +279,6 @@ final class TestWatch {
+         answer.setProperty("report", text.getAbsolutePath());
+         answer.setProperty("json", TestReport.jsonFile(text).getAbsolutePath());
+         write(new File(done, c.request().token() + ".properties"), answer);
+-        // Never pruned: hadronWatch reads it as proof the server finished a run.
+-        write(new File(dir, "last-run.properties"), answer);
+         TestRunner.LOG.info("\n{}\nRerun {} report: {} and {}", c.report().render(), c.run(), text,
+                 TestReport.jsonFile(text));
+     }

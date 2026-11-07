@@ -1,0 +1,86 @@
+diff --git a/api/src/main/java/dev/iredsc/hadron/api/net/PacketEvent.java b/api/src/main/java/dev/iredsc/hadron/api/net/PacketEvent.java
+index 60ee098..0b89bd8 100644
+--- a/api/src/main/java/dev/iredsc/hadron/api/net/PacketEvent.java
++++ b/api/src/main/java/dev/iredsc/hadron/api/net/PacketEvent.java
+@@ -20,8 +20,6 @@ public interface PacketEvent<T extends Packet<?>> extends Cancellable {
+      * a different kind of packet, cancel this one and send yours with {@code player.connection.send}.
+      *
+      * @throws IllegalStateException in a MONITOR handler, which may only look
+-     * @throws IllegalArgumentException for a packet of another class (a {@code PosRot} for a {@code Pos}), since the
+-     *     handlers still to run were chosen for, and cast to, this packet's class
+      */
+     void setPacket(T packet);
+ 
+diff --git a/api/src/main/java/dev/iredsc/hadron/api/net/Packets.java b/api/src/main/java/dev/iredsc/hadron/api/net/Packets.java
+index 23deb02..bc9f891 100644
+--- a/api/src/main/java/dev/iredsc/hadron/api/net/Packets.java
++++ b/api/src/main/java/dev/iredsc/hadron/api/net/Packets.java
+@@ -35,8 +35,7 @@ import net.minecraft.network.protocol.game.ServerGamePacketListener;
+  * <p>A packet a handler sends goes through every handler too, its own included: don't send the kind of packet a
+  * handler handles from that handler.
+  *
+- * <p>Everything registered is removed when the plugin disables, and no handler is called once its {@code onDisable}
+- * has begun (a call already under way on a network thread may still finish). A packet class nobody listens to costs nothing.
++ * <p>Everything registered is removed when the plugin disables. A packet class nobody listens to costs nothing.
+  */
+ public final class Packets {
+     private Packets() {}
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java
+index 7c098f8..a607c0b 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java
+@@ -39,8 +39,6 @@ final class NetPackets {
+         final PacketHandler<?> body;
+         final long order;
+         final Side side;
+-        /** False once unregistered: a dispatch that took its snapshot earlier skips it. */
+-        volatile boolean active = true;
+ 
+         Handler(JavaPlugin plugin, Class<?> type, EventPriority priority, PacketHandler<?> body, long order, Side side) {
+             this.plugin = plugin;
+@@ -54,7 +52,6 @@ final class NetPackets {
+         @Override
+         public void unregister() {
+             synchronized (LOCK) {
+-                active = false;
+                 side.all.remove(this);
+                 side.changed();
+             }
+@@ -171,12 +168,7 @@ final class NetPackets {
+         synchronized (LOCK) {
+             RUNNING.remove(plugin);
+             for (Side side : new Side[] {OUT, IN}) {
+-                boolean changed = side.all.removeIf(h -> {
+-                    if (h.plugin != plugin) return false;
+-                    h.active = false;
+-                    return true;
+-                });
+-                if (changed) side.changed();
++                if (side.all.removeIf(h -> h.plugin == plugin)) side.changed();
+             }
+         }
+     }
+@@ -262,7 +254,6 @@ final class NetPackets {
+             }
+             JavaPlugin outer = INSIDE.get();
+             try {
+-                if (!h.active || !h.plugin.isEnabled()) continue;
+                 event.current = h;
+                 INSIDE.set(h.plugin);
+                 @SuppressWarnings("unchecked")
+@@ -319,15 +310,6 @@ final class NetPackets {
+             if (!outgoing && replacement instanceof ClientboundBundlePacket) {
+                 throw new IllegalArgumentException("A received packet can't be replaced with a bundle");
+             }
+-            // The handlers still to run were chosen for this packet's class, and each casts to it.
+-            if (replacement.getClass() != packet.getClass()) {
+-                throw new IllegalArgumentException("setPacket needs another " + packet.getClass().getSimpleName()
+-                        + ", not a " + replacement.getClass().getSimpleName() + ": later handlers expect the kind "
+-                        + "they registered for. To " + (outgoing ? "send" : "handle") + " a different kind of packet, "
+-                        + "cancel this one with setCancelled(true) and " + (outgoing
+-                                ? "send yours with player.connection.send"
+-                                : "have the server handle yours from runOnServerThread with yours.handle(player.connection)"));
+-            }
+             packet = replacement;
+         }
+ 

@@ -1,0 +1,31 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/world/ServerCommonPacketListenerImplMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/world/ServerCommonPacketListenerImplMixin.java
+index 6f24a3a..d1ecf1f 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/world/ServerCommonPacketListenerImplMixin.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/world/ServerCommonPacketListenerImplMixin.java
+@@ -13,11 +13,7 @@ import org.spongepowered.asm.mixin.Final;
+ import org.spongepowered.asm.mixin.Mixin;
+ import org.spongepowered.asm.mixin.Shadow;
+ 
+-/**
+- * Every server-side disconnect of an in-game player: /kick, timeouts, mods, rejected packets. Vanilla rejects some
+- * packets on the connection's thread (a bad keep-alive, illegal chat characters, chat out of order); those kicks move
+- * to the server thread, decision and disconnect together, so listeners never run off it.
+- */
++/** Every server-side disconnect of an in-game player: /kick, timeouts, mods, rejected packets. */
+ @Mixin(ServerCommonPacketListenerImpl.class)
+ public abstract class ServerCommonPacketListenerImplMixin {
+     @Shadow @Final protected MinecraftServer server;
+@@ -27,13 +23,6 @@ public abstract class ServerCommonPacketListenerImplMixin {
+         // Shutdown and a newer login of the same account can't be refused.
+         if ((Object) this instanceof ServerGamePacketListenerImpl game && server.isRunning()
+                 && details.reason() != PlayerList.DUPLICATE_LOGIN_DISCONNECT_MESSAGE) {
+-            if (!server.isSameThread()) {
+-                DisconnectionDetails asked = details;
+-                server.execute(() -> {
+-                    if (game.isAcceptingMessages()) hadron$kick(asked, original);
+-                });
+-                return;
+-            }
+             Component reason = WorldHooks.kick(game.player, details.reason());
+             if (reason == null) return;
+             if (reason != details.reason()) {
