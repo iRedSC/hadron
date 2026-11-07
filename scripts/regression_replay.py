@@ -206,11 +206,21 @@ def gradle(args: list[str], log: Path) -> int:
     """Runs Gradle in the throwaway tree under the shared lock. No timeout: the release job has its own, which ends
     every process, and Ctrl-C reaches Gradle, which cancels its build."""
     log.parent.mkdir(parents=True, exist_ok=True)
-    cmd = ["flock", LOCK, "./gradlew", "--console=plain", *args]
-    with log.open("w") as out:
+    cmd = ["./gradlew", "--console=plain", *args]
+    # The shared lock is taken here rather than by wrapping Gradle in flock(1): flock dies on Ctrl-C while its child
+    # runs on, so waiting on it wouldn't wait for the build. Both take the same flock(2) lock, so other runs still queue.
+    with log.open("w") as out, open(LOCK, "a") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
         out.write("$ " + " ".join(cmd) + "\n")
         out.flush()
-        return subprocess.run(cmd, cwd=TREE, stdout=out, stderr=subprocess.STDOUT).returncode
+        proc = subprocess.Popen(cmd, cwd=TREE, stdout=out, stderr=subprocess.STDOUT)
+        try:
+            return proc.wait()
+        except KeyboardInterrupt:
+            # Gradle got the same Ctrl-C and is cancelling; let it finish before the tree is reset under it. A second
+            # Ctrl-C stops waiting.
+            proc.wait()
+            raise
 
 
 def compile_trouble(log: Path) -> str | None:
