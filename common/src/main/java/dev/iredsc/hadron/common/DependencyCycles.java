@@ -1,10 +1,12 @@
 package dev.iredsc.hadron.common;
 
 import java.util.ArrayDeque;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * Why plugins left over by dependency ordering can't start, from their names and depend: lists alone, so the reasons
@@ -14,10 +16,16 @@ final class DependencyCycles {
     private DependencyCycles() {}
 
     /**
-     * Why {@code name} can't start. {@code left} maps each plugin still waiting, in load order, to its depend: list; a
+     * Why {@code asked} can't start. {@code waiting} maps each plugin still waiting, in load order, to its depend: list; a
      * plugin outside it has already started or isn't there.
      */
-    static String reason(String name, Map<String, List<String>> left) {
+    static String reason(String asked, Map<String, List<String>> waiting) {
+        // Names match whatever their case, as the host resolves depend: entries; each is written as its plugin spells it.
+        Map<String, String> spelled = new TreeMap<>(String.CASE_INSENSITIVE_ORDER);
+        for (String plugin : waiting.keySet()) spelled.put(plugin, plugin);
+        Map<String, List<String>> left = new LinkedHashMap<>();
+        waiting.forEach((plugin, needs) -> left.put(plugin, needs.stream().map(n -> spelled.getOrDefault(n, n)).toList()));
+        String name = spelled.getOrDefault(asked, asked);
         Set<String> cycle = cycleThrough(name, left);
         if (cycle.equals(Set.of(name))) {
             return "depends on itself: remove " + name + " from its own depend: list in plugin.yml";

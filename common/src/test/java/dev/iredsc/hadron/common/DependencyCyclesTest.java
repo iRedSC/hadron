@@ -33,4 +33,11 @@ class DependencyCyclesTest {
         assertTrue(reason.contains("leads to A, B"), reason);
         assertFalse(reason.contains("C") || reason.contains("D"), "names a cycle it doesn't reach: " + reason);
     }
+
+    @Test
+    void namesMatchWhateverTheirCaseAsTheHostResolvesThem() {
+        String cycle = DependencyCycles.reason("Alpha", left("Alpha", "beta", "Beta", "alpha"));
+        assertTrue(cycle.contains("Alpha") && cycle.contains("Beta") && cycle.contains("depend on each other"), cycle);
+        assertTrue(DependencyCycles.reason("Alpha", left("Alpha", "ALPHA")).startsWith("depends on itself: remove Alpha"));
+    }
 }
