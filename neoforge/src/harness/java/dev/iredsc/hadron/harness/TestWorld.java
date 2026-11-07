@@ -345,17 +345,15 @@ final class TestWorld implements TestContext {
             if (ran == 0 && !moved) return;
             // The world streaming in, as between two real ticks: nothing arrived but chunks and light, and either
             // something did arrive (the clients' acknowledgements are queued) or chunks loaded (a loaded chunk's
-            // entities finish in a queued task). Let it run, but it never holds the test up for long. A task that
+            // entities finish in a queued task). It gets CHUNK_ROUNDS rather than SETTLE_ROUNDS. A task that
             // re-queues itself is still caught once chunk loading stops.
             boolean streaming = effects() == effectsBefore && (moved || ran > queued);
-            if (streaming) {
-                if (round >= CHUNK_ROUNDS) return;
-                continue;
-            }
-            if (++busy >= SETTLE_ROUNDS) {
-                // Returning now would let the next line (assertNoChat, assertNotSent) pass before what's pending
-                // arrives.
-                throw new IllegalStateException("Packets or server tasks were still arriving after " + SETTLE_ROUNDS
+            // Returning while packets or queued tasks still arrive would let the next line (assertNoChat,
+            // assertNotSent) pass before what's pending arrives: only chunk loading alone may outlast its rounds.
+            boolean onlyLoading = !moved && queued == 0;
+            if (streaming ? round >= CHUNK_ROUNDS && !onlyLoading : ++busy >= SETTLE_ROUNDS) {
+                throw new IllegalStateException("Packets or server tasks were still arriving after " + (streaming
+                        ? CHUNK_ROUNDS : SETTLE_ROUNDS)
                         + " rounds of letting them through without a tick, so the harness can't tell when this "
                         + "action's effects have all arrived. Something keeps making work without the server ticking: "
                         + "a task that re-queues itself, or a listener that answers every packet with another. Make it "
@@ -363,6 +361,7 @@ final class TestWorld implements TestContext {
                         + "in the last round: " + queued + " queued, " + (ran - queued) + " chunk loading."
                         + lastPacketsOfEach());
             }
+            if (streaming && round >= CHUNK_ROUNDS) return;
         }
     }
 
