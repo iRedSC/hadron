@@ -1,0 +1,128 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CloneCommandsMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CloneCommandsMixin.java
+deleted file mode 100644
+index b43ca7c..0000000
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CloneCommandsMixin.java
++++ /dev/null
+@@ -1,18 +0,0 @@
+-package dev.iredsc.hadron.neoforge.mixin.block;
+-
+-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+-import dev.iredsc.hadron.neoforge.BlockHooks;
+-import net.minecraft.server.commands.CloneCommands;
+-import org.spongepowered.asm.mixin.Mixin;
+-import org.spongepowered.asm.mixin.injection.At;
+-
+-/** Empties a replaced container only once its replacement is allowed: see {@link BlockHooks#deferClear}. */
+-@Mixin(CloneCommands.class)
+-public abstract class CloneCommandsMixin {
+-    @WrapOperation(method = "clone", at = @At(value = "INVOKE",
+-            target = "Lnet/minecraft/world/Clearable;tryClear(Ljava/lang/Object;)V"))
+-    private static void hadron$deferClear(Object blockEntity, Operation<Void> original) {
+-        BlockHooks.deferClear(blockEntity, () -> original.call(blockEntity));
+-    }
+-}
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/FillCommandMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/FillCommandMixin.java
+deleted file mode 100644
+index 6305cd6..0000000
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/FillCommandMixin.java
++++ /dev/null
+@@ -1,18 +0,0 @@
+-package dev.iredsc.hadron.neoforge.mixin.block;
+-
+-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+-import dev.iredsc.hadron.neoforge.BlockHooks;
+-import net.minecraft.server.commands.FillCommand;
+-import org.spongepowered.asm.mixin.Mixin;
+-import org.spongepowered.asm.mixin.injection.At;
+-
+-/** Empties a replaced container only once its replacement is allowed: see {@link BlockHooks#deferClear}. */
+-@Mixin(FillCommand.class)
+-public abstract class FillCommandMixin {
+-    @WrapOperation(method = "fillBlocks", at = @At(value = "INVOKE",
+-            target = "Lnet/minecraft/world/Clearable;tryClear(Ljava/lang/Object;)V"))
+-    private static void hadron$deferClear(Object blockEntity, Operation<Void> original) {
+-        BlockHooks.deferClear(blockEntity, () -> original.call(blockEntity));
+-    }
+-}
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/SetBlockCommandMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/SetBlockCommandMixin.java
+deleted file mode 100644
+index 462c759..0000000
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/SetBlockCommandMixin.java
++++ /dev/null
+@@ -1,18 +0,0 @@
+-package dev.iredsc.hadron.neoforge.mixin.block;
+-
+-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+-import dev.iredsc.hadron.neoforge.BlockHooks;
+-import net.minecraft.server.commands.SetBlockCommand;
+-import org.spongepowered.asm.mixin.Mixin;
+-import org.spongepowered.asm.mixin.injection.At;
+-
+-/** Empties a replaced container only once its replacement is allowed: see {@link BlockHooks#deferClear}. */
+-@Mixin(SetBlockCommand.class)
+-public abstract class SetBlockCommandMixin {
+-    @WrapOperation(method = "setBlock", at = @At(value = "INVOKE",
+-            target = "Lnet/minecraft/world/Clearable;tryClear(Ljava/lang/Object;)V"))
+-    private static void hadron$deferClear(Object blockEntity, Operation<Void> original) {
+-        BlockHooks.deferClear(blockEntity, () -> original.call(blockEntity));
+-    }
+-}
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/StructureTemplateMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/StructureTemplateMixin.java
+deleted file mode 100644
+index 6131817..0000000
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/StructureTemplateMixin.java
++++ /dev/null
+@@ -1,24 +0,0 @@
+-package dev.iredsc.hadron.neoforge.mixin.block;
+-
+-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+-import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+-import com.llamalad7.mixinextras.sugar.Local;
+-import dev.iredsc.hadron.neoforge.BlockHooks;
+-import net.minecraft.world.level.ServerLevelAccessor;
+-import net.minecraft.world.level.levelgen.structure.templatesystem.StructureTemplate;
+-import org.spongepowered.asm.mixin.Mixin;
+-import org.spongepowered.asm.mixin.injection.At;
+-
+-/**
+- * A structure placed over a container (a structure block, {@code /place template}) empties it only once the
+- * replacement is allowed: see {@link BlockHooks#deferClear}. World generation empties at once, as vanilla does.
+- */
+-@Mixin(StructureTemplate.class)
+-public abstract class StructureTemplateMixin {
+-    @WrapOperation(method = "placeInWorld", at = @At(value = "INVOKE",
+-            target = "Lnet/minecraft/world/Clearable;tryClear(Ljava/lang/Object;)V"))
+-    private void hadron$deferClear(Object blockEntity, Operation<Void> original,
+-            @Local(argsOnly = true) ServerLevelAccessor level) {
+-        BlockHooks.deferClear(level, blockEntity, () -> original.call(blockEntity));
+-    }
+-}
+diff --git a/neoforge/src/main/resources/hadron.block.mixins.json b/neoforge/src/main/resources/hadron.block.mixins.json
+index 9915335..f20f9a6 100644
+--- a/neoforge/src/main/resources/hadron.block.mixins.json
++++ b/neoforge/src/main/resources/hadron.block.mixins.json
+@@ -9,11 +9,9 @@
+     "BoundTickingBlockEntityMixin",
+     "BucketItemMixin",
+     "CarvedPumpkinBlockMixin",
+-    "CloneCommandsMixin",
+     "CommonHooksPlaceMixin",
+     "DispenserBlockMixin",
+     "ExplosionMixin",
+-    "FillCommandMixin",
+     "FireBlockMixin",
+     "FlowingFluidMixin",
+     "FungusBlockMixin",
+@@ -27,9 +25,7 @@
+     "PistonStructureResolverMixin",
+     "ServerLevelMixin",
+     "ServerPlayerGameModeMixin",
+-    "SetBlockCommandMixin",
+     "SignBlockEntityMixin",
+-    "StructureTemplateMixin",
+     "TntBlockMixin",
+     "TreeGrowerMixin",
+     "WitherSkullBlockMixin"

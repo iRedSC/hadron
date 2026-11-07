@@ -1,0 +1,173 @@
+diff --git a/gradle/hadron-coverage.gradle.kts b/gradle/hadron-coverage.gradle.kts
+index 6ba74f0..0a4e843 100644
+--- a/gradle/hadron-coverage.gradle.kts
++++ b/gradle/hadron-coverage.gradle.kts
+@@ -18,16 +18,13 @@ object HadronCoverage {
+ 
+     class CoversRef(val type: String, val method: String)
+ 
+-    // code: the method's bytecode, or null when it has none (abstract, native).
+     class MethodInfo(val access: Int, val name: String, val desc: String, val annotations: List<String>,
+-                     val covers: List<CoversRef>, val code: ByteArray?)
++                     val covers: List<CoversRef>)
+ 
+     class ClassInfo(val name: String, val access: Int, val superName: String?, val interfaces: List<String>,
+                     val methods: List<MethodInfo>, val recordComponents: Set<String>,
+                     // Access flags of nested classes as declared in source, and each nested class's enclosing class.
+-                    val innerAccess: Map<String, Int>, val outer: Map<String, String?>, val annotations: List<String>,
+-                    // For each invokedynamic constant, the class of its bootstrap method.
+-                    val indyBootstrapOwner: Map<Int, String>)
++                    val innerAccess: Map<String, Int>, val outer: Map<String, String?>, val annotations: List<String>)
+ 
+     val ACC_PUBLIC = 0x0001
+     val ACC_PROTECTED = 0x0004
+@@ -46,11 +43,6 @@ object HadronCoverage {
+         private val input = DataInputStream(bytes.inputStream())
+         private lateinit var utf: Array<String?>
+         private lateinit var classRef: IntArray
+-        // Raw references, resolved once the whole class is read: invokedynamic -> bootstrap index,
+-        // method handle -> member, member -> class.
+-        private lateinit var indyBootstrap: IntArray
+-        private lateinit var handleRef: IntArray
+-        private lateinit var memberClass: IntArray
+ 
+         private fun u(index: Int) = utf[index]!!
+         private fun cls(index: Int) = if (index == 0) null else u(classRef[index])
+@@ -106,20 +98,15 @@ object HadronCoverage {
+             val count = input.readUnsignedShort()
+             utf = arrayOfNulls(count)
+             classRef = IntArray(count)
+-            indyBootstrap = IntArray(count) { -1 }
+-            handleRef = IntArray(count)
+-            memberClass = IntArray(count)
+             var i = 1
+             while (i < count) {
+                 when (val tag = input.readUnsignedByte()) {
+                     1 -> utf[i] = input.readUTF()
+                     7 -> classRef[i] = input.readUnsignedShort()
+                     8, 16, 19, 20 -> input.readUnsignedShort()
+-                    10, 11 -> { memberClass[i] = input.readUnsignedShort(); input.readUnsignedShort() }
+-                    18 -> { indyBootstrap[i] = input.readUnsignedShort(); input.readUnsignedShort() }
+-                    3, 4, 9, 12, 17 -> input.readInt()
++                    3, 4, 9, 10, 11, 12, 17, 18 -> input.readInt()
+                     5, 6 -> { input.readLong(); i++ }
+-                    15 -> { input.readUnsignedByte(); handleRef[i] = input.readUnsignedShort() }
++                    15 -> { input.readUnsignedByte(); input.readUnsignedShort() }
+                     else -> error("constant pool tag $tag")
+                 }
+                 i++
+@@ -137,28 +124,18 @@ object HadronCoverage {
+                 val mName = u(input.readUnsignedShort())
+                 val mDesc = u(input.readUnsignedShort())
+                 val annotations = mutableListOf<Pair<String, Map<String, Any>>>()
+-                var code: ByteArray? = null
+                 repeat(input.readUnsignedShort()) {
+                     val attr = u(input.readUnsignedShort())
+                     val length = input.readInt()
+-                    when (attr) {
+-                        "RuntimeVisibleAnnotations", "RuntimeInvisibleAnnotations" -> readAnnotations(annotations)
+-                        "Code" -> {
+-                            input.readUnsignedShort(); input.readUnsignedShort()
+-                            val codeLength = input.readInt()
+-                            code = ByteArray(codeLength).also { input.readFully(it) }
+-                            input.skipBytes(length - 8 - codeLength)
+-                        }
+-                        else -> input.skipBytes(length)
+-                    }
++                    if (attr == "RuntimeVisibleAnnotations" || attr == "RuntimeInvisibleAnnotations") readAnnotations(annotations)
++                    else input.skipBytes(length)
+                 }
+-                MethodInfo(mAccess, mName, mDesc, annotations.map { it.first }, coversOf(annotations), code)
++                MethodInfo(mAccess, mName, mDesc, annotations.map { it.first }, coversOf(annotations))
+             }
+             val components = mutableSetOf<String>()
+             val innerAccess = mutableMapOf<String, Int>()
+             val outer = mutableMapOf<String, String?>()
+             val classAnnotations = mutableListOf<Pair<String, Map<String, Any>>>()
+-            var bootstrapMethods = IntArray(0)
+             repeat(input.readUnsignedShort()) {
+                 val attr = u(input.readUnsignedShort())
+                 val length = input.readInt()
+@@ -175,22 +152,11 @@ object HadronCoverage {
+                         outer[inner] = outerName
+                     }
+                     "RuntimeVisibleAnnotations", "RuntimeInvisibleAnnotations" -> readAnnotations(classAnnotations)
+-                    "BootstrapMethods" -> bootstrapMethods = IntArray(input.readUnsignedShort()) {
+-                        val handle = input.readUnsignedShort()
+-                        input.skipBytes(2 * input.readUnsignedShort())
+-                        handle
+-                    }
+                     else -> input.skipBytes(length)
+                 }
+             }
+-            val indyOwners = mutableMapOf<Int, String>()
+-            for (index in indyBootstrap.indices) {
+-                val bsm = indyBootstrap[index]
+-                if (bsm < 0 || bsm >= bootstrapMethods.size) continue
+-                cls(memberClass[handleRef[bootstrapMethods[bsm]]])?.let { indyOwners[index] = it }
+-            }
+             return ClassInfo(name, access, superName, interfaces, methods, components, innerAccess, outer,
+-                    classAnnotations.map { it.first }, indyOwners)
++                    classAnnotations.map { it.first })
+         }
+     }
+ 
+@@ -256,28 +222,10 @@ object HadronCoverage {
+             return public || protected
+         }
+ 
+-        /**
+-         * Written by the compiler, not by hand: a record's own equals, hashCode and toString (which hand the work to
+-         * ObjectMethods) and its plain accessors (which only read the field), and an enum's values and valueOf. Only
+-         * the bytecode can tell: a record method written in source, with the same name, is Hadron's code.
+-         */
+         fun generated(c: ClassInfo, m: MethodInfo): Boolean {
+-            val code = m.code
+-            val record = c.superName == "java/lang/Record"
+-            if (record && code != null && ((m.name == "toString" && m.desc == "()Ljava/lang/String;")
+-                            || (m.name == "hashCode" && m.desc == "()I")
+-                            || (m.name == "equals" && m.desc == "(Ljava/lang/Object;)Z"))) {
+-                // aload_0, [aload_1,] invokedynamic #n 0 0, return: nothing but the ObjectMethods call.
+-                val at = if (code.size > 1 && code[1] == 0x2B.toByte()) 2 else 1
+-                return code.size == at + 6 && code[0] == 0x2A.toByte() && code[at] == 0xBA.toByte()
+-                        && c.indyBootstrapOwner[(code[at + 1].toInt() and 0xFF shl 8) or (code[at + 2].toInt() and 0xFF)] ==
+-                        "java/lang/runtime/ObjectMethods" && (code[at + 5].toInt() and 0xFF) in 0xAC..0xB0
+-            }
+-            if (record && code != null && m.name in c.recordComponents && m.desc.startsWith("()")) {
+-                // aload_0, getfield #n, return: the field and nothing else.
+-                return code.size == 5 && code[0] == 0x2A.toByte() && code[1] == 0xB4.toByte()
+-                        && (code[4].toInt() and 0xFF) in 0xAC..0xB0
+-            }
++            if ((m.name == "toString" && m.desc == "()Ljava/lang/String;") || (m.name == "hashCode" && m.desc == "()I")
++                    || (m.name == "equals" && m.desc == "(Ljava/lang/Object;)Z")) return true
++            if (m.name in c.recordComponents && m.desc.startsWith("()")) return true
+             if (c.superName == "java/lang/Enum" && (m.name == "values" && m.desc.startsWith("()")
+                             || m.name == "valueOf" && m.desc.startsWith("(Ljava/lang/String;)"))) return true
+             return false
+@@ -295,17 +243,6 @@ object HadronCoverage {
+         }.sortedWith(compareBy({ simple(it.first.name) }, { it.second }, { it.third }))
+     }
+ 
+-    /** The class and every class it is nested in: JUnit skips a @Nested class's tests when any of them is @Disabled. */
+-    fun enclosing(c: ClassInfo, all: Map<String, ClassInfo>): List<ClassInfo> {
+-        val out = mutableListOf(c)
+-        var at = c
+-        while (true) {
+-            at = at.outer[at.name]?.let { all[it] } ?: return out
+-            if (at in out) return out
+-            out += at
+-        }
+-    }
+-
+     fun runCoverage(apiDirs: Iterable<File>, testDirs: Iterable<File>): List<String> {
+         val api = readClasses(apiDirs)
+         val tests = readClasses(testDirs)
+@@ -321,7 +258,7 @@ object HadronCoverage {
+                 problems += "$where has @Covers but isn't a test: put @Covers on the @HadronTest or @Test method that proves it."
+                 continue
+             }
+-            if (m.annotations.any { it in DISABLED } || enclosing(test, tests).any { c -> c.annotations.any { it in DISABLED } }) {
++            if (m.annotations.any { it in DISABLED } || test.annotations.any { it in DISABLED }) {
+                 problems += "$where is disabled, so it proves nothing: enable it or move its @Covers to a test that runs."
+                 continue
+             }

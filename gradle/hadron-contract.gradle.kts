@@ -57,7 +57,7 @@ object ContractDocs {
         "testing.md" to Rules(
             // The harness's internals, Hadron's own suite, and how bundles are made: not what a test author needs.
             sections = listOf("## How a run works", "## What Hadron's own tests cover", "## Blind tests",
-                    "## Mutation testing"),
+                    "## Regression replay", "## Mutation testing"),
             replace = listOf(
                 "`./gradlew test` (`:api:test`, `:common:test`, a plugin's own `test`)" to "`./gradlew test`",
                 "`examples/hello`'s `HelloFastTest` is the example to copy: it checks the plugin's packed " +

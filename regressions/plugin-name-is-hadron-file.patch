@@ -1,0 +1,43 @@
+diff --git a/api/src/main/java/dev/iredsc/hadron/api/plugin/PluginDescription.java b/api/src/main/java/dev/iredsc/hadron/api/plugin/PluginDescription.java
+index a6cb7b6..779b4e5 100644
+--- a/api/src/main/java/dev/iredsc/hadron/api/plugin/PluginDescription.java
++++ b/api/src/main/java/dev/iredsc/hadron/api/plugin/PluginDescription.java
+@@ -20,11 +20,6 @@ import java.util.regex.Pattern;
+  */
+ public final class PluginDescription {
+     private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_.-]+");
+-    /**
+-     * The name is also the plugin's data folder, {@code plugins/<name>/}. Starting with a letter or digit keeps it out of
+-     * {@code .loaded} (Hadron's jar cache, emptied at every start) and away from {@code .} and {@code ..}.
+-     */
+-    private static final Pattern FOLDER_SAFE = Pattern.compile("[A-Za-z0-9].*");
+ 
+     /** A command under {@code commands:}. */
+     public static final class CommandSpec {
+@@ -77,12 +72,6 @@ public final class PluginDescription {
+         if (!NAME.matcher(name).matches()) {
+             throw new PluginException("plugin.yml name '" + name + "' may only use letters, digits, _ . and -");
+         }
+-        if (!FOLDER_SAFE.matcher(name).matches() || name.equalsIgnoreCase("disabled.txt")
+-                || name.toLowerCase(Locale.ROOT).endsWith(".jar")) {
+-            throw new PluginException("plugin.yml name '" + name + "' would make the plugin's data folder plugins/"
+-                    + name + " one of Hadron's own files there. Start the name with a letter or digit and don't end it "
+-                    + "in .jar, such as name: " + suggestion(name));
+-        }
+         version = required(yaml, "version");
+         main = required(yaml, "main");
+         description = optional(yaml, "description", "");
+@@ -176,13 +165,6 @@ public final class PluginDescription {
+         return name + " v" + version;
+     }
+ 
+-    /** A usable name close to a refused one, for the error message. */
+-    private static String suggestion(String name) {
+-        String trimmed = name.replaceAll("(?i)(\\.jar)+$", "").replaceAll("^[^A-Za-z0-9]+", "");
+-        if (trimmed.equalsIgnoreCase("disabled.txt")) trimmed = "";
+-        return trimmed.isEmpty() ? "MyPlugin" : trimmed;
+-    }
+-
+     /** A line of plugin.yml with the key written right, for messages that refuse it. */
+     private static String example(String key) {
+         return switch (key) {

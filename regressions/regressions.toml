@@ -1,0 +1,535 @@
+# Every bug Hadron has fixed, the patch that undoes its fix, and the tests that must fail without it.
+# `python3 scripts/regression_replay.py` (or ./gradlew regressionReplay) applies each regressions/<id>.patch in a
+# throwaway worktree and runs the entry's guards; every guard must FAIL. See docs/testing.md, "Regression replay".
+#
+#   id         names the patch file, regressions/<id>.patch
+#   bug        what went wrong, in one line
+#   fix        the commit the fix landed in; `refresh <id> --from-fix` derives the patch from it and `paths`
+#   paths      the fix's files that the patch undoes
+#   guards     tests that fail without the fix: { test = "Class.method", tier = "fast" | "in-game" }
+#   unguarded  instead of guards: why no test can guard it (the replay lists it and doesn't fail on it)
+#   note       how the patch differs from a plain revert of `paths`, for whoever refreshes it
+#
+# A bug fix adds its entry here in the same change (docs/coding-standards.md, "Growing this file").
+
+
+# ---- Found by the PR #9 review ----
+
+
+[[regression]]
+id = "packet-handler-overlaps-ondisable"
+bug = "A packet handler already running on a network thread could overlap its plugin's onDisable and use what it closed."
+fix = "5e68bb9"
+paths = [
+    "common/src/main/java/dev/iredsc/hadron/common/PluginHost.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPort.java",
+]
+guards = [
+    { test = "NamesAndPacketsTests.aPacketHandlerAlreadyRunningFinishesBeforeItsPluginsOnDisable", tier = "in-game" },
+]
+
+[[regression]]
+id = "packet-handlers-disable-and-replace"
+bug = "A disabling plugin's packet handlers kept running until onDisable, and setPacket accepted another packet class, breaking later handlers."
+fix = "b670bad"
+paths = [
+    "api/src/main/java/dev/iredsc/hadron/api/net/PacketEvent.java",
+    "api/src/main/java/dev/iredsc/hadron/api/net/Packets.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java",
+]
+guards = [
+    { test = "NamesAndPacketsTests.aDisablingPluginsPacketHandlersStopBeforeItsOnDisable", tier = "in-game" },
+    { test = "NamesAndPacketsTests.replacingAPacketWithAnotherKindIsRefusedSoLaterHandlersStillRun", tier = "in-game" },
+]
+note = "Keeps 5e68bb9's running-call count in NetPackets.run; drops only the active/isEnabled skip and the class check."
+
+[[regression]]
+id = "name-tag-leaves-stale-team-member"
+bug = "A name tag change left the old name in the player's team on other clients."
+fix = "b670bad"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetNames.java",
+]
+guards = [
+    { test = "NamesAndPacketsTests.aNameTagReplacesTheTeamMemberOtherClientsSeeAndGivesItBack", tier = "in-game" },
+]
+
+[[regression]]
+id = "hidden-entity-in-riders-and-leashes"
+bug = "A hidden entity still showed in riders, leashes, damage sources and arrow owners."
+fix = "82296a8"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetVisibility.java",
+]
+guards = [
+    { test = "VisibilityTests.aHiddenPlayerIsLeftOutOfVisibleEntitiesRidersLeashesDamageAndArrows", tier = "in-game" },
+]
+
+[[regression]]
+id = "data-write-to-unloaded-world"
+bug = "Writes through a data container of an unloaded world were silently lost."
+fix = "a41359e"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/DataStore.java",
+]
+guards = [
+    { test = "DataTests.dataKeptFromAWorldThatWasUnloadedRefusesWritesThatWouldBeLost", tier = "in-game" },
+]
+
+[[regression]]
+id = "worlds-not-all-or-nothing"
+bug = "World create, unload and delete could leave half-built worlds, unclosed files, reused folders, or delete a mod's dimension."
+fix = "394ac5d"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/WorldsManager.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/WorldsStore.java",
+]
+guards = [
+    { test = "WorldsLifecycleTests.aModsLoadListenerThrowingLeavesNoHalfBuiltWorld", tier = "in-game" },
+    { test = "WorldsLifecycleTests.aDefinitionThatCantBeSavedRefusesTheWorld", tier = "in-game" },
+    { test = "WorldsLifecycleTests.aModsUnloadListenerThrowingStillClosesTheWorld", tier = "in-game" },
+    { test = "WorldsLifecycleTests.aFolderThatCantBeRemovedIsNeverReusedByANewWorld", tier = "in-game" },
+    { test = "WorldsLifecycleTests.aWorldWhoseIdAModNowHoldsIsNotDeleted", tier = "in-game" },
+]
+note = "WorldsManager and WorldsStore as at 394ac5d^, with the later quietly(player, ...) call kept so it compiles."
+
+[[regression]]
+id = "contract-leak-check-skips-test-project"
+bug = "contractLeakCheck never scanned the test project's build files and scripts copied into the blind bundle."
+fix = "5aad7c1"
+paths = [
+    "gradle/contract/ContractLeakCheck.java",
+    "gradle/hadron-contract.gradle.kts",
+]
+unguarded = "A build script: no test runs contractBundle with a leak planted in the test project."
+
+[[regression]]
+id = "coverage-exempts-handwritten-methods"
+bug = "coverageCheck exempted handwritten equals, hashCode and toString, and credited a @Covers under a @Disabled outer class."
+fix = "eb43926"
+paths = [
+    "gradle/hadron-coverage.gradle.kts",
+]
+unguarded = "A build script: no test runs coverageCheck on a planted uncovered method. The tests that commit added cover the methods it uncovered, and pass either way."
+
+[[regression]]
+id = "build-fails-for-in-game-only-plugin"
+bug = "./gradlew build failed for a plugin whose tests are all @HadronTests (Gradle 9 refuses a test task with no tests)."
+fix = "28b2237"
+paths = [
+    "gradle/hadron-test.gradle.kts",
+]
+unguarded = "A build setting: ./gradlew build is the check, and no test builds a plugin project."
+
+[[regression]]
+id = "teleport-suppression-too-wide"
+bug = "Teleport suppression covered every entity, a redirect to another world dropped passengers, and a random teleport's step back fired again."
+fix = "abd6628"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityMoves.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityTeleports.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/EntityMixin.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/LivingEntityMixin.java",
+]
+guards = [
+    { test = "TeleportTests.aVehicleRedirectedToAnotherWorldTakesItsPassengerAlong", tier = "in-game" },
+    { test = "TeleportTests.aTeleportStartedDuringAnothersWorldChangeIsAskedAbout", tier = "in-game" },
+    { test = "TeleportTests.anEndermansFailedRandomTeleportStepsBackWithoutAnotherEvent", tier = "in-game" },
+]
+note = "The five files as at abd6628^, plus a quietly(Entity, Runnable) overload that ignores the entity, for later callers."
+
+[[regression]]
+id = "knockback-blames-previous-hit"
+bug = "A second attacker's knockback within 40 ticks was blamed on the first attacker."
+fix = "2deaeb6"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityActors.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/LivingEntityMixin.java",
+]
+guards = [
+    { test = "DamageTests.aSecondAttackersKnockbackIsTheirsNotTheFirsts", tier = "in-game" },
+]
+note = "LivingEntityMixin's class comment keeps the later wording."
+
+[[regression]]
+id = "function-lines-skip-command-event"
+bug = "Datapack function lines never fired CommandExecuteEvent, so a listener couldn't refuse or rewrite them."
+fix = "782ba6d"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/ServerEvents.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/world/BuildContextsUnboundMixin.java",
+    "neoforge/src/main/resources/hadron.world.mixins.json",
+]
+guards = [
+    { test = "ServerApiTests.aFunctionsCommandsAreHeardAndCanBeRewrittenOrRefused", tier = "in-game" },
+]
+
+[[regression]]
+id = "packet-thread-kick-off-server-thread"
+bug = "PlayerKickEvent listeners ran on the network thread for bad keep-alives and rejected chat."
+fix = "90c3ee2"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/world/ServerCommonPacketListenerImplMixin.java",
+]
+guards = [
+    { test = "ConnectionTests.aKickFromThePacketThreadReachesListenersOnTheServerThread", tier = "in-game" },
+]
+
+[[regression]]
+id = "plugin-teardown-leaks"
+bug = "A failed enable left menus open, PluginDisableEvent saw the plugin as enabled, and the bus and trace kept dead plugins' classes."
+fix = "04877ae"
+paths = [
+    "common/src/main/java/dev/iredsc/hadron/common/EventBus.java",
+    "common/src/main/java/dev/iredsc/hadron/common/PluginHost.java",
+    "common/src/main/java/dev/iredsc/hadron/common/Trace.java",
+]
+guards = [
+    { test = "EventBusTest.aForgottenPluginsEventClassesAreNoLongerRemembered", tier = "fast" },
+    { test = "TraceTargetTest.aPluginEventTraceHearsTheReloadedVersionsClass", tier = "fast" },
+    { test = "HostLifecycleTests.aPluginWhoseEnableFailsLeavesNoMenuOfItsOpen", tier = "in-game" },
+    { test = "HostLifecycleTests.aDisabledPluginIsGoneWhenItsDisableIsAnnouncedAndItsEventsAreForgotten", tier = "in-game" },
+]
+note = "PluginHost keeps 5e68bb9's runBeforeDisableHooks; EventBus keeps forget(ClassLoader) as a no-op so EventBusTest compiles."
+
+[[regression]]
+id = "service-events-out-of-order"
+bug = "A concurrent or nested unregister could be announced before the registration it followed."
+fix = "781c81f"
+paths = [
+    "common/src/main/java/dev/iredsc/hadron/common/Services.java",
+]
+guards = [
+    { test = "ServicesTest.everyoneHearsChangesInTheOrderTheyHappened", tier = "fast" },
+]
+
+[[regression]]
+id = "node-declared-while-unloading"
+bug = "A plugin's task outliving unload could declare a permission node and keep its class loader alive forever."
+fix = "ef01bb9"
+paths = [
+    "api/src/main/java/dev/iredsc/hadron/api/Node.java",
+    "api/src/main/java/dev/iredsc/hadron/api/plugin/PluginContext.java",
+    "common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java",
+]
+guards = [
+    { test = "PluginNodesTest.aLoadedPluginDeclaresAndAnUnloadingOneCant", tier = "fast" },
+]
+
+[[regression]]
+id = "permissions-provider-throws"
+bug = "A throwing permissions provider threw out of every caller, aborting a reload batch partway."
+fix = "bc40c6e"
+paths = [
+    "api/src/main/java/dev/iredsc/hadron/api/Permissions.java",
+]
+guards = [
+    { test = "PermissionsTest.aThrowingProviderFallsBackToTheNodesDefault", tier = "fast" },
+    { test = "PermissionsTest.aThrowingProviderGivesNoRanks", tier = "fast" },
+]
+
+[[regression]]
+id = "plugin-name-is-hadron-file"
+bug = "A plugin name like '.loaded', '..' or 'disabled.txt' made its data folder one of Hadron's own files."
+fix = "18da631"
+paths = [
+    "api/src/main/java/dev/iredsc/hadron/api/plugin/PluginDescription.java",
+]
+guards = [
+    { test = "PluginDescriptionTest.aNameThatWouldBeOneOfHadronsFilesInPluginsIsRefused", tier = "fast" },
+]
+
+[[regression]]
+id = "settle-counts-chunk-loading"
+bug = "Settling counted chunk loading against its budget, failing a plain join on a strained machine."
+fix = "65c7f57"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWorld.java",
+]
+unguarded = "Shows only under machine load: no deterministic test makes chunk loading outlast the budget."
+
+[[regression]]
+id = "refused-golem-build-still-spawns"
+bug = "A golem or wither build ignored refused breaks, so a protected block still made the creature; a refused spawn kept the blocks cleared."
+fix = "b896a33"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CarvedPumpkinBlockMixin.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/WitherSkullBlockMixin.java",
+    "neoforge/src/main/resources/hadron.block.mixins.json",
+]
+guards = [
+    { test = "PatternBuildTests.refusingOneIronBlocksBreakBuildsNoGolemAndKeepsTheIron", tier = "in-game" },
+    { test = "PatternBuildTests.refusingTheGolemsSpawnPutsItsBlocksBack", tier = "in-game" },
+    { test = "PatternBuildTests.refusingTheWithersSpawnPutsItsBlocksBack", tier = "in-game" },
+]
+note = "hadron.block.mixins.json keeps every line but CarvedPumpkinBlockMixin and WitherSkullBlockMixin; BlockHooks keeps the fix's helpers, unused."
+
+[[regression]]
+id = "refused-command-replace-empties-chest"
+bug = "A refused /setblock, /fill or /clone still emptied the chest it would have replaced."
+fix = "b896a33"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CloneCommandsMixin.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/FillCommandMixin.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/SetBlockCommandMixin.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/StructureTemplateMixin.java",
+    "neoforge/src/main/resources/hadron.block.mixins.json",
+]
+guards = [
+    { test = "CommandReplaceTests.refusedSetblockKeepsTheChestsContents", tier = "in-game" },
+    { test = "CommandReplaceTests.refusedFillKeepsTheChestsContents", tier = "in-game" },
+    { test = "CommandReplaceTests.refusedCloneOntoAChestKeepsItsContents", tier = "in-game" },
+]
+note = "hadron.block.mixins.json loses only the four command and structure mixins; BlockHooks keeps the fix's helpers, unused."
+
+[[regression]]
+id = "refused-mob-bucket-keeps-water"
+bug = "A mob bucket whose mob was refused still poured its water, and from a dispenser the bucket was lost."
+fix = "b896a33"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/BucketItemMixin.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/MobBucketItemMixin.java",
+    "neoforge/src/main/resources/hadron.block.mixins.json",
+]
+guards = [
+    { test = "BucketTests.refusedCodFromABucketPoursNoWaterAndKeepsTheBucket", tier = "in-game" },
+    { test = "BucketTests.refusedCodFromADispenserPoursNoWaterAndKeepsTheBucketInside", tier = "in-game" },
+]
+note = "hadron.block.mixins.json loses only MobBucketItemMixin; EntitySpawnRefunds keeps the fix's helpers, unused."
+
+[[regression]]
+id = "drop-event-block-entity-gone"
+bug = "BlockDropItemEvent's before data threw in the handler, since a player's break removed the block entity first."
+fix = "84dded9"
+paths = [
+    "api/src/main/java/dev/iredsc/hadron/api/event/block/BlockDropItemEvent.java",
+]
+guards = [
+    { test = "DropTests.aMinedBlockEntitysDataBeforeIsReadableInTheDropHandler", tier = "in-game" },
+]
+
+[[regression]]
+id = "anvil-leaf-listeners-unasked"
+bug = "A plugin listening only for ItemRepairEvent or ItemEnchantEvent never heard or could refuse an anvil or grindstone take."
+fix = "80615a8"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java",
+]
+guards = [
+    { test = "AnvilRepairTests.aListenerForRepairsAloneHearsAnAnvilRepair", tier = "in-game" },
+    { test = "AnvilRepairTests.aRefusedRepairGivesNothingWhenOnlyRepairsAreHeard", tier = "in-game" },
+    { test = "AnvilRepairTests.aRefusedShiftClickRepairGivesNothingWhenOnlyRepairsAreHeard", tier = "in-game" },
+]
+
+[[regression]]
+id = "settle-gives-up-silently"
+bug = "Settling gave up silently after its budget or a silent network thread, so a negative assertion right after an action could pass early."
+fix = "c444c92"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWorld.java",
+]
+guards = [
+    { test = "SettleTests.anActionFailsWhenWorkKeepsArrivingWithoutATick", tier = "in-game" },
+    { test = "SettleTests.anActionFailsWhenANetworkThreadNeverAnswers", tier = "in-game" },
+]
+note = "Hand-made on top of 65c7f57: the join's chunk check, settle's budget throw (now `return`) and the fence's timeout throw are undone."
+
+[[regression]]
+id = "test-filter-case-drops-load-failure"
+bug = "A test class that failed to load was dropped, and the run went green, when a method pattern named it in another case."
+fix = "2f29932"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestFilter.java",
+]
+guards = [
+    { test = "TestFilterTest.aClassThatCouldNotLoadIsReportedWhenAMethodPatternNamesItInAnyCase", tier = "fast" },
+]
+
+[[regression]]
+id = "human-review-gate-runs-pr-copy"
+bug = "The human-review gate ran the PR's own copy of its script, so a PR could switch it off."
+fix = "9a63431"
+paths = [
+    ".github/human-review-paths.txt",
+    ".github/scripts/human_review.py",
+    ".github/workflows/human-review.yml",
+]
+unguarded = "CI configuration: only GitHub runs it, on pull_request_target."
+
+[[regression]]
+id = "test-client-moved-too-quickly-loop"
+bug = "A test client answered every teleport at once, so after a long teleport it and the server corrected each other forever between ticks."
+fix = "002722c"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestClient.java",
+]
+guards = [
+    { test = "SettleTests.aLongTeleportSettlesWhereThePlayerWent", tier = "in-game" },
+]
+
+[[regression]]
+id = "watch-server-staleness-by-timestamp"
+bug = "hadronRerun judged a stale watch server by timestamps, and a crashed watch server ended green."
+fix = "e5f139f"
+paths = [
+    "gradle/hadron-test.gradle.kts",
+    "gradle/hadron-test-server.gradle.kts",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWatch.java",
+]
+unguarded = "Build scripts and the watch server's lifecycle: no test runs hadronWatch."
+
+[[regression]]
+id = "cold-run-ignores-exit-code"
+bug = "A cold hadronTest trusted the report alone, so a server crashing while stopping after every test passed ended green."
+fix = "8741ff1"
+paths = [
+    "gradle/hadron-test-server.gradle.kts",
+]
+unguarded = "A build script: no test runs a cold hadronTest whose server crashes on stop."
+
+[[regression]]
+id = "selftest-jvm-test-task-runs"
+bug = "./gradlew build failed at :selftest:test, which found only @HadronTest classes it couldn't load."
+fix = "6567b25"
+paths = [
+    "selftest/build.gradle.kts",
+]
+unguarded = "A build setting: ./gradlew build is the check."
+
+# ---- Found by the per-family suites (docs/testing.md, "What Hadron's own tests cover") ----
+
+
+[[regression]]
+id = "craft-grid-stores-vanilla-result"
+bug = "PrepareItemCraftEvent's result was only shown: the grid stored and gave vanilla's."
+fix = "f421dde"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/item/CraftingMenuMixin.java",
+]
+guards = [
+    { test = "CraftingTests.preparedCraftResultIsWhatTheGridOffersAndGives", tier = "in-game" },
+]
+
+[[regression]]
+id = "crafter-ignores-plugin-result"
+bug = "A crafter whose result a plugin emptied still crafted and used up its ingredients."
+fix = "f421dde"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/item/CrafterBlockMixin.java",
+]
+guards = [
+    { test = "CraftingTests.forbiddenCrafterResultCraftsNothingAndKeepsTheIngredients", tier = "in-game" },
+]
+
+[[regression]]
+id = "refused-cursor-drop-falls"
+bug = "A refused drop thrown from the cursor with a full inventory dropped anyway."
+fix = "f421dde"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemEvents.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/item/AbstractContainerMenuMixin.java",
+]
+guards = [
+    { test = "ItemWorldTests.refusedDropFromTheCursorWithAFullInventoryStaysOnTheCursor", tier = "in-game" },
+]
+note = "ItemHooks keeps the fix's keepOnCursor and carried helpers, unused."
+
+[[regression]]
+id = "hopper-pickup-blames-item"
+bug = "A hopper taking an item that landed on it was blamed on the item, not the hopper."
+fix = "f421dde"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java",
+]
+guards = [
+    { test = "ItemWorldTests.refusedHopperPickupLeavesTheItemAndNamesTheHopper", tier = "in-game" },
+]
+note = "Only hopperPickup's hunk: the cursor helpers in the same file stay."
+
+[[regression]]
+id = "dimension-suggestions-never-asked"
+bug = "Clients never asked the server for dimension suggestions, since NeoForge sends the command tree another way."
+fix = "3f3c9bb"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/worlds/CommandHelperSuggestionsMixin.java",
+    "neoforge/src/main/resources/hadron.worlds.mixins.json",
+]
+guards = [
+    { test = "WorldsTests.dimensionArgumentsAskTheServerForSuggestions", tier = "in-game" },
+]
+
+[[regression]]
+id = "entity-use-live-stack"
+bug = "EntityUseEvent carried the live held stack, so after milking a cow a listener saw 0 air."
+fix = "131ef94"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java",
+]
+guards = [
+    { test = "InteractionTests.milkingACowIsThePlayersUse", tier = "in-game" },
+]
+note = "Only the copy in EntityUseEvent's construction."
+
+[[regression]]
+id = "velocity-event-never-fires"
+bug = "Nothing in core fired EntityVelocityEvent."
+fix = "5515df2"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/EntityVelocityMixin.java",
+    "neoforge/src/main/resources/hadron.entity.mixins.json",
+]
+guards = [
+    { test = "EntityStateTests.aConsoleLaunchIsAVelocityChangeByTheServer", tier = "in-game" },
+]
+note = "5515df2 is a merge; the patch drops only EntityVelocityMixin and its line in hadron.entity.mixins.json."
+
+[[regression]]
+id = "cancelled-tnt-lighting-sets-fire"
+bug = "A player's cancelled TNT lighting let flint and steel light a fire on top and lose durability."
+fix = "56c6364"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/TntBlockMixin.java",
+]
+guards = [
+    { test = "FireAndTntTests.cancelledTntLightingLeavesTheTntUnprimedAndTheFlintUnworn", tier = "in-game" },
+]
+
+[[regression]]
+id = "dispenser-tnt-leaves-both"
+bug = "A dispenser's cancelled TNT lighting left both the TNT block and the primed TNT."
+fix = "56c6364"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/BlockHooks.java",
+]
+guards = [
+    { test = "FireAndTntTests.cancelledDispenserTntLightingPrimesNothingAndWearsNothing", tier = "in-game" },
+]
+note = "Only dispense's flint-and-steel branch in BlockHooks."
+
+[[regression]]
+id = "sticky-piston-pull-lists-nothing"
+bug = "Every BlockPistonRetractEvent listed no moves: the resolver still saw the piston head."
+fix = "5515df2"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/BlockEvents.java",
+]
+guards = [
+    { test = "PistonTests.aStickyPistonPullIsOneRetractEvent", tier = "in-game" },
+]
+note = "Hand-made: BlockEvents stops hiding the head (no pistonHiddenHead set); the fix first landed in 56c6364 and was reworked in 5515df2."
+
+[[regression]]
+id = "cancelled-place-keeps-lost-durability"
+bug = "A cancelled placement kept the durability its item lost, since NeoForge's before and after reads shared one live component map."
+fix = "5515df2"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java",
+    "neoforge/src/main/resources/hadron.block.mixins.json",
+]
+guards = [
+    { test = "BreakPlaceTests.cancelledStripKeepsTheLogAndTheAxesDurability", tier = "in-game" },
+    { test = "FireAndTntTests.cancelledIgniteLeavesNoFireAndTheFlintUnworn", tier = "in-game" },
+]
+note = "5515df2 is a merge; the patch drops only CommonHooksPlaceMixin and its line in hadron.block.mixins.json."

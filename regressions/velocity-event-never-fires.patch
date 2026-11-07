@@ -1,0 +1,35 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/EntityVelocityMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/EntityVelocityMixin.java
+deleted file mode 100644
+index 79e3737..0000000
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/EntityVelocityMixin.java
++++ /dev/null
+@@ -1,17 +0,0 @@
+-package dev.iredsc.hadron.neoforge.mixin.entity;
+-
+-import dev.iredsc.hadron.neoforge.EntityVelocities;
+-import net.minecraft.world.entity.Entity;
+-import net.minecraft.world.phys.Vec3;
+-import org.spongepowered.asm.mixin.Mixin;
+-import org.spongepowered.asm.mixin.injection.At;
+-import org.spongepowered.asm.mixin.injection.ModifyVariable;
+-
+-/** EntityVelocityEvent; rewrites the argument rather than wrapping the call, so this hot path allocates nothing. */
+-@Mixin(Entity.class)
+-abstract class EntityVelocityMixin {
+-    @ModifyVariable(method = "setDeltaMovement(Lnet/minecraft/world/phys/Vec3;)V", at = @At("HEAD"), argsOnly = true)
+-    private Vec3 hadron$velocity(Vec3 next) {
+-        return EntityVelocities.velocity((Entity) (Object) this, next);
+-    }
+-}
+diff --git a/neoforge/src/main/resources/hadron.entity.mixins.json b/neoforge/src/main/resources/hadron.entity.mixins.json
+index f0cdf23..b171100 100644
+--- a/neoforge/src/main/resources/hadron.entity.mixins.json
++++ b/neoforge/src/main/resources/hadron.entity.mixins.json
+@@ -9,7 +9,6 @@
+     "DeathMessageMixin",
+     "EntityMixin",
+     "EntityTypeMixin",
+-    "EntityVelocityMixin",
+     "FishingHookMixin",
+     "HangingEntityItemMixin",
+     "LivingEntityMixin",

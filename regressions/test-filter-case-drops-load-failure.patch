@@ -1,0 +1,32 @@
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestFilter.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestFilter.java
+index 2c34a81..8564788 100644
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestFilter.java
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestFilter.java
+@@ -47,7 +47,7 @@ record TestFilter(List<String> patterns, List<Pattern> compiled) {
+ 
+     /**
+      * Whether a test class that couldn't load may hold tests this filter asks for, so its failure is reported: true
+-     * unless no pattern could name it or one of its methods. Ignores case, as {@link #matches} does.
++     * unless no pattern could name it or one of its methods.
+      */
+     boolean mightMatchClass(String fullName) {
+         if (all()) return true;
+@@ -55,17 +55,11 @@ record TestFilter(List<String> patterns, List<Pattern> compiled) {
+         for (int i = 0; i < patterns.size(); i++) {
+             String p = patterns.get(i);
+             if (compiled.get(i).matcher(simple).matches() || compiled.get(i).matcher(fullName).matches()) return true;
+-            if (p.contains("*") || namesMethodOf(p, simple) || namesMethodOf(p, fullName)) return true;
++            if (p.contains("*") || p.startsWith(simple + ".") || p.startsWith(fullName + ".")) return true;
+         }
+         return false;
+     }
+ 
+-    /** Whether {@code pattern} is {@code type.something}, in any case. */
+-    private static boolean namesMethodOf(String pattern, String type) {
+-        return pattern.length() > type.length() + 1 && pattern.charAt(type.length()) == '.'
+-                && pattern.regionMatches(true, 0, type, 0, type.length());
+-    }
+-
+     private static Pattern glob(String pattern) {
+         StringBuilder regex = new StringBuilder();
+         String[] pieces = pattern.split("\\*", -1);
