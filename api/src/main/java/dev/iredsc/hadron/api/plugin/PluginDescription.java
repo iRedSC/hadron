@@ -183,9 +183,29 @@ public final class PluginDescription {
         return trimmed.isEmpty() ? "MyPlugin" : trimmed;
     }
 
+    /** A line of plugin.yml with the key written right, for messages that refuse it. */
+    private static String example(String key) {
+        return switch (key) {
+            case "name" -> "name: MyPlugin";
+            case "version" -> "version: \"1.0\"";
+            case "main" -> "main: com.example.myplugin.MyPlugin (the full name of its class extending JavaPlugin)";
+            case "description" -> "description: What the plugin does";
+            case "author" -> "author: YourName";
+            case "website" -> "website: https://example.com";
+            case "loader" -> "loader: neoforge";
+            case "depend", "softdepend" -> key + ": [OtherPlugin]";
+            case "mod-depend" -> "mod-depend: [modid]";
+            case "authors" -> "authors: [YourName]";
+            case "aliases" -> "aliases: [shortname]";
+            default -> key + ": value";
+        };
+    }
+
     private static String required(Map<?, ?> yaml, String key) {
         String value = optional(yaml, key, null);
-        if (value == null || value.isEmpty()) throw new PluginException("plugin.yml needs '" + key + "'");
+        if (value == null || value.isEmpty()) {
+            throw new PluginException("plugin.yml needs '" + key + "', such as " + example(key));
+        }
         return value;
     }
 
@@ -199,7 +219,7 @@ public final class PluginDescription {
                     + "version you mean between the quotes");
         }
         if (value instanceof Map || value instanceof List) {
-            throw new PluginException("plugin.yml '" + key + "' must be a single value");
+            throw new PluginException("plugin.yml '" + key + "' must be a single value, such as " + example(key));
         }
         return value.toString();
     }
@@ -211,7 +231,7 @@ public final class PluginDescription {
         if (value instanceof List) {
             for (Object o : (List<?>) value) out.add(String.valueOf(o));
         } else if (value instanceof Map) {
-            throw new PluginException("plugin.yml '" + key + "' must be a list");
+            throw new PluginException("plugin.yml '" + key + "' must be a list, such as " + example(key));
         } else {
             out.add(value.toString());
         }

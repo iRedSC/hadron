@@ -297,6 +297,9 @@ val startCommand = project.path + ":hadronWatch"
 val hadronModules = listOf("api", "common", "test-api", "neoforge")
 val loadedHadron = rootProject.files(hadronModules.flatMap { listOf("$it/build/classes/java/main", "$it/build/resources/main") })
 val hadronBuiltBy = hadronModules.map { ":$it:classes" }
+// The test harness, a mod of its own beside Hadron's (neoforge's harness source set): the server loads it too.
+val loadedHarness = rootProject.files("neoforge/build/classes/java/harness", "neoforge/build/resources/harness")
+val harnessBuiltBy = listOf(":neoforge:harnessClasses")
 // The build files that shape the server, hashed as Gradle read them to configure this build.
 val hadronConfigFiles = listOf("gradle.properties", "settings.gradle.kts", "build.gradle.kts",
     "gradle/hadron-test-server.gradle.kts") + hadronModules.map { "$it/build.gradle.kts" }
@@ -321,8 +324,8 @@ val hadronWatchStage = tasks.register<HadronWatchTask>("hadronWatchStage") {
 }
 
 hadronWatchStage.configure {
-    dependsOn(hadronBuiltBy)
-    hadronLoaded.from(loadedHadron)
+    dependsOn(hadronBuiltBy, harnessBuiltBy)
+    hadronLoaded.from(loadedHadron, loadedHarness)
     hadronConfig.set(hadronConfigHashes)
     buildRoot.set(rootProject.projectDir.path)
 }
@@ -348,8 +351,8 @@ tasks.register<HadronWatchTask>("hadronRerun") {
     watchDir.set(watchRoot)
     suiteJar.set(suiteName)
     waitForReport.set(true)
-    dependsOn(hadronBuiltBy)
-    hadronLoaded.from(loadedHadron)
+    dependsOn(hadronBuiltBy, harnessBuiltBy)
+    hadronLoaded.from(loadedHadron, loadedHarness)
     hadronConfig.set(hadronConfigHashes)
     buildRoot.set(rootProject.projectDir.path)
     watchCommand.set(startCommand)

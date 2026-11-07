@@ -31,6 +31,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -609,18 +610,18 @@ public final class PluginHost implements PluginManager {
             left.remove(next);
             order.add(next);
         }
-        for (Entry e : left) {
-            fail(e, "depends on itself through " + left.size() + " plugins: " + names(left), null);
-        }
+        for (Entry e : left) fail(e, unstartable(e, left), null);
         for (Entry e : order) load(e);
         return order;
     }
 
-    private static String names(Collection<Entry> entries) {
-        List<String> out = new ArrayList<String>();
-        for (Entry e : entries) out.add(e.name);
-        return String.join(", ", out);
+    /** Why a plugin left over by dependency ordering can't start: it is in a cycle, or waits on one. */
+    private static String unstartable(Entry e, List<Entry> left) {
+        Map<String, List<String>> waiting = new LinkedHashMap<>();
+        for (Entry o : left) waiting.put(o.name, o.description.getDepend());
+        return DependencyCycles.reason(e.name, waiting);
     }
+
 
     /** The first of a plugin's two steps: its own loader, its main class constructed, {@code onLoad} called. */
     private void load(Entry e) {
@@ -670,6 +671,7 @@ public final class PluginHost implements PluginManager {
                 services.unregisterAll(plugin);
             }
         });
+        String step = "loading";
         try {
             if (visibleToMods(d.getMain())) {
                 throw new PluginException(d.getMain() + " is also in a jar in mods/, which would run instead. Remove "
@@ -679,15 +681,19 @@ public final class PluginHost implements PluginManager {
             try {
                 main = loader.loadClass(d.getMain());
             } catch (ClassNotFoundException ex) {
-                throw new PluginException("plugin.yml's main class " + d.getMain() + " isn't in the jar");
+                throw new PluginException("plugin.yml's main class " + d.getMain() + " isn't in the jar. main: must "
+                        + "be the class's full name, package included, such as main: com.example.myplugin.MyPlugin, "
+                        + "and that class must be built into this jar");
             }
             if (!JavaPlugin.class.isAssignableFrom(main)) {
-                throw new PluginException(d.getMain() + " doesn't extend JavaPlugin");
+                throw new PluginException(d.getMain() + " doesn't extend JavaPlugin. Declare it as public class "
+                        + main.getSimpleName() + " extends " + JavaPlugin.class.getName());
             }
             if (main.getClassLoader() != loader) {
                 throw new PluginException("plugin.yml's main class " + d.getMain() + " must be in its own jar, not a dependency");
             }
-            final JavaPlugin plugin = (JavaPlugin) main.getConstructor().newInstance();
+            final JavaPlugin plugin = (JavaPlugin) construct(main);
+            step = "declaring its permissions and commands";
             for (PluginDescription.PermissionSpec p : d.getPermissions()) {
                 Node.Lifecycle.declare(p.node, p.fallback, p.description, loader);
             }
@@ -695,6 +701,7 @@ public final class PluginHost implements PluginManager {
                 loader.commands().put(c.name, new PluginCommand(plugin, c));
                 if (c.permission != null) Node.Lifecycle.declareImplicit(c.permission, "Use /" + c.name, loader);
             }
+            step = "onLoad";
             loading = loader;
             try {
                 plugin.onLoad();
@@ -702,7 +709,41 @@ public final class PluginHost implements PluginManager {
                 loading = null;
             }
         } catch (Throwable t) {
-            abandon(e, loaded, t);
+            abandon(e, loaded, t, step);
+        }
+    }
+
+    /**
+     * Makes the plugin's main class with its public no-argument constructor, the one way Hadron can. A constructor
+     * that throws comes out as {@link ConstructorThrew}, so the message can say it was the constructor.
+     */
+    private static Object construct(Class<?> main) {
+        java.lang.reflect.Constructor<?> constructor;
+        try {
+            constructor = main.getConstructor();
+        } catch (NoSuchMethodException ex) {
+            throw new PluginException(main.getName() + " needs a public constructor that takes no arguments, which "
+                    + "Hadron creates the plugin with. Add public " + main.getSimpleName() + "() {}, and move "
+                    + "any setup into onLoad or onEnable");
+        }
+        if (java.lang.reflect.Modifier.isAbstract(main.getModifiers())) {
+            throw new PluginException(main.getName() + " is abstract, so Hadron can't create it. Make the class "
+                    + "plugin.yml's main names a concrete one");
+        }
+        try {
+            return constructor.newInstance();
+        } catch (InvocationTargetException ex) {
+            throw new ConstructorThrew(ex.getCause() != null ? ex.getCause() : ex);
+        } catch (IllegalAccessException | InstantiationException ex) {
+            throw new PluginException(main.getName() + " can't be created (" + ex.getMessage() + "). Make it a public, "
+                    + "top-level class with a public constructor that takes no arguments");
+        }
+    }
+
+    /** The plugin's own constructor threw {@link #getCause()}. */
+    private static final class ConstructorThrew extends RuntimeException {
+        ConstructorThrew(Throwable cause) {
+            super(cause);
         }
     }
 
@@ -711,7 +752,7 @@ public final class PluginHost implements PluginManager {
         State.Loaded loaded = (State.Loaded) e.state;
         String missing = missingDependency(e);
         if (missing != null) {
-            abandon(e, loaded, new PluginException(missing));
+            abandon(e, loaded, new PluginException(missing), "starting");
             return;
         }
         if (loaded.loader.hasUnloadedDependencies()) {
@@ -724,9 +765,12 @@ public final class PluginHost implements PluginManager {
         State.Enabled running = new State.Enabled(loaded);
         e.state = running;
         long start = System.nanoTime();
+        String step = "enabling";
         try {
             loader.enable();
+            step = "onEnable";
             loader.plugin().onEnable();
+            step = "registering its commands";
             for (PluginCommand c : loader.commands().values()) {
                 running.undo.push(commands.register(c, loader.logger()));
             }
@@ -734,7 +778,7 @@ public final class PluginHost implements PluginManager {
             post(new PluginEnableEvent(loader.plugin()));
             LOG.info("Enabled " + e.description.getFullName() + " in " + (System.nanoTime() - start) / 1000000 + " ms");
         } catch (Throwable t) {
-            abandon(e, running, t);
+            abandon(e, running, t, step);
         }
     }
 
@@ -755,18 +799,44 @@ public final class PluginHost implements PluginManager {
         }
         for (String need : e.description.getDepend()) {
             Entry n = entries.get(need);
-            if (n == null) return "needs " + need + ", which isn't in plugins/";
+            if (n == null) {
+                return "needs " + need + ", which isn't in plugins/: put " + need + "'s jar in plugins/, or, if it "
+                        + "can run without it, move " + need + " from depend: to softdepend: in its plugin.yml";
+            }
             if (!(n.state instanceof State.Running)) return "needs " + n.name + ", which " + describeState(n.state);
         }
         return null;
     }
 
-    /** Undoes a plugin that failed partway through loading or enabling. */
-    private void abandon(Entry e, State.Running running, Throwable t) {
-        Throwable cause = t instanceof InvocationTargetException && t.getCause() != null ? t.getCause() : t;
-        String why = cause instanceof PluginException ? cause.getMessage() : "threw " + cause;
+    /**
+     * Undoes a plugin that failed partway through loading or enabling, during {@code step} ("its constructor",
+     * "onLoad", "onEnable"...). A refusal says its own fix; anything the plugin threw is named with the step and the
+     * plugin's own line it came from, its stack going to the log.
+     */
+    private void abandon(Entry e, State.Running running, Throwable t, String step) {
+        Throwable cause = t;
+        if (cause instanceof ConstructorThrew) {
+            step = "its constructor";
+            cause = cause.getCause();
+        }
+        if (cause instanceof InvocationTargetException && cause.getCause() != null) cause = cause.getCause();
+        String why = cause instanceof PluginException ? cause.getMessage()
+                : step + " threw " + cause + pluginFrame(cause, running.loader) + ". Fix that there; the stack trace "
+                        + "is in the server log";
         teardown(e, running, new State.Failed(why), false);
         report(e, why, cause);
+    }
+
+    /** " at File.java:line", the first frame in the plugin's own code, or "" when none of the trace is its. */
+    static String pluginFrame(Throwable t, ClassLoader loader) {
+        String name = loader.getName();
+        for (StackTraceElement frame : t.getStackTrace()) {
+            if (name != null && name.equals(frame.getClassLoaderName())) {
+                return " at " + frame.getClassName() + "." + frame.getMethodName() + "(" + frame.getFileName() + ":"
+                        + frame.getLineNumber() + ")";
+            }
+        }
+        return "";
     }
 
     /**
@@ -814,7 +884,8 @@ public final class PluginHost implements PluginManager {
             int stillRunning = scheduler.awaitAsync(plugin, remainingGraceMillis(deadline));
             if (stillRunning > 0) {
                 LOG.warn(e.name + " still had " + stillRunning + " background task(s) running after "
-                        + ASYNC_GRACE_MILLIS / 1000 + "s; " + (callOnDisable ? "disabling" : "stopping") + " it anyway");
+                        + ASYNC_GRACE_MILLIS / 1000 + "s; " + (callOnDisable ? "disabling" : "stopping") + " it anyway. "
+                        + "A background task that loops should return once isEnabled() is false");
             }
             runBeforeDisableHooks(plugin, deadline);
             if (callOnDisable && running instanceof State.Enabled) {

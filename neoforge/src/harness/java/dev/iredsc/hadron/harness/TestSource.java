@@ -1,4 +1,4 @@
-package dev.iredsc.hadron.neoforge;
+package dev.iredsc.hadron.harness;
 
 import java.io.IOException;
 import java.io.InputStream;

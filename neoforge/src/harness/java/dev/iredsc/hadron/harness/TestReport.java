@@ -1,4 +1,4 @@
-package dev.iredsc.hadron.neoforge;
+package dev.iredsc.hadron.harness;
 
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;

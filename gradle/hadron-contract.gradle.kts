@@ -218,6 +218,10 @@ object ContractDocs {
         once("rootProject.files(hadronModules.flatMap { listOf(\"\$it/build/classes/java/main\", \"\$it/build/resources/main\") })",
                 "rootProject.files(\"libs\")")
         once("val hadronBuiltBy = hadronModules.map { \":\$it:classes\" }", "val hadronBuiltBy = emptyList<String>()")
+        // The harness is the bundle's libs/hadron-test.jar, already counted with libs/.
+        once("rootProject.files(\"neoforge/build/classes/java/harness\", \"neoforge/build/resources/harness\")",
+                "rootProject.files()")
+        once("val harnessBuiltBy = listOf(\":neoforge:harnessClasses\")", "val harnessBuiltBy = emptyList<String>()")
         once("\"gradle/hadron-test-server.gradle.kts\") + hadronModules.map { \"\$it/build.gradle.kts\" }",
                 "\"gradle/hadron-test-server.gradle.kts\", \"server/build.gradle.kts\")")
         once("\"neoforge/build/hadron-test\"", "\"server/build/hadron-test\"")
@@ -260,7 +264,7 @@ val contractDocs = tasks.register("contractDocs") {
     description = "Writes the spec docs with implementation detail stripped."
     val docs = file("docs")
     val api = file("api/src/main/java")
-    val impl = files("common/src/main/java", "neoforge/src/main/java")
+    val impl = files("common/src/main/java", "neoforge/src/main/java", "neoforge/src/harness/java")
     val rules = file("gradle/hadron-contract.gradle.kts")
     val out = parts.get().dir("contract/docs").asFile
     val forbiddenFile = forbidden.get().asFile
@@ -297,6 +301,7 @@ fun repack(name: String, from: String, fileName: String) = tasks.register<Zip>(n
 val apiJar = repack("contractApiJar", ":api:jar", "hadron-api.jar")
 val testApiJar = repack("contractTestApiJar", ":test-api:jar", "hadron-test-api.jar")
 val modJar = repack("contractModJar", ":neoforge:jar", "hadron.jar")
+val harnessJar = repack("contractHarnessJar", ":neoforge:harnessJar", "hadron-test.jar")
 
 val testRunner = tasks.register("contractTestRunner") {
     description = "Rewires Hadron's test runner script for the bundle's test project."
@@ -336,7 +341,7 @@ val contractAssemble = tasks.register<Sync>("contractAssemble") {
         from("gradle/hadron-coverage.gradle.kts") { into("gradle") }
         from("gradle/hadron-test-server.gradle.kts") { into("gradle") }
         from(testRunner) { into("gradle") }
-        from(files(apiJar, testApiJar, modJar)) { into("libs") }
+        from(files(apiJar, testApiJar, modJar, harnessJar)) { into("libs") }
     }
     inputs.properties(readmeTokens)
 }
