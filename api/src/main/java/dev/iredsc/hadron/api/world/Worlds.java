@@ -29,6 +29,8 @@ public final class Worlds {
      *
      * @throws IllegalArgumentException if the key is the overworld or a mod's or datapack's dimension, the type or a
      *     generator id isn't on this server, or the world exists with a different type, generator or seed.
+     * @throws IllegalStateException if the world couldn't be saved or finish loading (then nothing is left of it), or
+     *     a deleted world of this id still has a folder that couldn't be removed.
      */
     public static ServerLevel create(WorldCreator creator) {
         return backend().create(creator);
@@ -78,9 +80,13 @@ public final class Worlds {
 
     /**
      * Unloads a created world without saving if it is loaded, then deletes its folder and forgets it. Cannot be
-     * undone.
+     * undone. A loaded world's folder goes at the end of the tick. Until its folder is gone, even across a crash or
+     * restart, the id can't be created again, so a new world never opens over the old one's chunks; Hadron retries
+     * the removal on every start and on {@link #create} or {@code delete} of that id.
      *
      * @throws IllegalArgumentException if Hadron didn't create it.
+     * @throws IllegalStateException if a mod or datapack now has a dimension with this id (its folder is kept), or if
+     *     the folder of an unloaded world couldn't be removed (the message names it, to remove by hand).
      */
     public static void delete(ResourceLocation key) {
         backend().delete(key);

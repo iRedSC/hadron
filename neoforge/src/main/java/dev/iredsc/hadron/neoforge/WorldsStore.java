@@ -17,6 +17,8 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.core.BlockPos;
@@ -29,7 +31,11 @@ import org.slf4j.Logger;
 /**
  * Every created world's definition, in {@code <world>/hadron/worlds.json}: plain ids and numbers, so the file reads
  * the same on every Minecraft version. Written whenever a world is created, loaded, unloaded, deleted or moves its
- * spawn.
+ * spawn. Every change is written before it counts: if the file can't be written, the change throws and nothing in
+ * memory changes either, so what runs is never something a restart would forget.
+ *
+ * <p>A deleted world stays listed under {@code deleting} until its folder is gone, so a crash or a folder that can't
+ * be removed never leaves an untracked folder that a new world of the same id would open with another seed.
  */
 final class WorldsStore {
     private static final Logger LOG = LogUtils.getLogger();
@@ -55,13 +61,19 @@ final class WorldsStore {
     }
 
     private final Path file;
-    private final Map<ResourceLocation, Definition> worlds = new LinkedHashMap<>();
+    private Map<ResourceLocation, Definition> worlds = new LinkedHashMap<>();
+    /** Deleted worlds whose folder isn't removed yet. */
+    private Set<ResourceLocation> deleting = new LinkedHashSet<>();
     /** Entries this version couldn't read (a removed mod's block, a hand edit), written back untouched. */
     private final List<JsonElement> unreadable = new ArrayList<>();
 
     WorldsStore(Path file) {
         this.file = file;
         read();
+    }
+
+    Path file() {
+        return file;
     }
 
     Definition get(ResourceLocation key) {
@@ -72,22 +84,52 @@ final class WorldsStore {
         return List.copyOf(worlds.values());
     }
 
-    void put(Definition definition) {
-        worlds.put(definition.key(), definition);
-        write();
+    boolean isDeleting(ResourceLocation key) {
+        return deleting.contains(key);
     }
 
-    void remove(ResourceLocation key) {
-        worlds.remove(key);
-        write();
+    Collection<ResourceLocation> deleting() {
+        return List.copyOf(deleting);
+    }
+
+    /** Saves the definition. @throws IllegalStateException if it couldn't be written; then nothing changed. */
+    void put(Definition definition) {
+        Map<ResourceLocation, Definition> next = new LinkedHashMap<>(worlds);
+        next.put(definition.key(), definition);
+        commit(next, deleting);
+    }
+
+    /** Forgets the world, remembering that its folder is still to remove. @throws IllegalStateException as put. */
+    void markDeleting(ResourceLocation key) {
+        Map<ResourceLocation, Definition> next = new LinkedHashMap<>(worlds);
+        next.remove(key);
+        Set<ResourceLocation> gone = new LinkedHashSet<>(deleting);
+        gone.add(key);
+        commit(next, gone);
+    }
+
+    /** The deleted world's folder is gone. @throws IllegalStateException as put. */
+    void deleted(ResourceLocation key) {
+        if (!deleting.contains(key)) return;
+        Set<ResourceLocation> gone = new LinkedHashSet<>(deleting);
+        gone.remove(key);
+        commit(worlds, gone);
+    }
+
+    private void commit(Map<ResourceLocation, Definition> nextWorlds, Set<ResourceLocation> nextDeleting) {
+        write(nextWorlds, nextDeleting);
+        worlds = nextWorlds;
+        deleting = nextDeleting;
     }
 
     private void read() {
         if (!Files.exists(file)) return;
         JsonArray list;
+        JsonArray gone;
         try {
-            list = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject()
-                    .getAsJsonArray("worlds");
+            JsonObject root = JsonParser.parseString(Files.readString(file, StandardCharsets.UTF_8)).getAsJsonObject();
+            list = root.getAsJsonArray("worlds");
+            gone = root.has("deleting") ? root.getAsJsonArray("deleting") : new JsonArray();
         } catch (Exception e) {
             Path aside = file.resolveSibling(file.getFileName() + ".unreadable");
             LOG.error("Hadron couldn't read {} ({}); moved it to {} and starts with no created worlds. Fix the file "
@@ -98,6 +140,14 @@ final class WorldsStore {
                 LOG.error("Couldn't move it aside either", moveFailed);
             }
             return;
+        }
+        for (JsonElement element : gone) {
+            try {
+                deleting.add(ResourceLocation.parse(element.getAsString()));
+            } catch (RuntimeException e) {
+                LOG.error("Hadron skips a deleted world it can't read in {}: {} ({}); remove its folder by hand",
+                        file, element, e.getMessage());
+            }
         }
         for (JsonElement element : list) {
             try {
@@ -111,20 +161,24 @@ final class WorldsStore {
         }
     }
 
-    private void write() {
+    private void write(Map<ResourceLocation, Definition> nextWorlds, Set<ResourceLocation> nextDeleting) {
         JsonObject root = new JsonObject();
         root.addProperty("version", 1);
         JsonArray list = new JsonArray();
-        for (Definition d : worlds.values()) list.add(toJson(d));
+        for (Definition d : nextWorlds.values()) list.add(toJson(d));
         for (JsonElement e : unreadable) list.add(e);
         root.add("worlds", list);
+        JsonArray gone = new JsonArray();
+        for (ResourceLocation key : nextDeleting) gone.add(key.toString());
+        root.add("deleting", gone);
         try {
             Files.createDirectories(file.getParent());
             Path tmp = file.resolveSibling(file.getFileName() + ".tmp");
             Files.writeString(tmp, GSON.toJson(root), StandardCharsets.UTF_8);
             Files.move(tmp, file, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
         } catch (IOException e) {
-            LOG.error("Hadron couldn't save created worlds to {}; they won't come back after a restart", file, e);
+            throw new IllegalStateException("Hadron couldn't save created worlds to " + file + " (" + e + "), so "
+                    + "nothing was changed. Make that folder writable and free some disk space, then try again", e);
         }
     }
 
