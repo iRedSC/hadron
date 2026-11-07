@@ -333,6 +333,7 @@ paths = [
 guards = [
     { test = "SettleTests.anActionFailsWhenWorkKeepsArrivingWithoutATick", tier = "in-game" },
     { test = "SettleTests.anActionFailsWhenANetworkThreadNeverAnswers", tier = "in-game" },
+    { test = "SettleTests.anActionFailsWhenChunkPacketsKeepArriving", tier = "in-game" },
 ]
 note = "Hand-made on top of 65c7f57: the join's chunk check, settle's budget throw (now `return`) and the fence's timeout throw are undone."
 
