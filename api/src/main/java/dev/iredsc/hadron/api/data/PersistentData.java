@@ -25,6 +25,10 @@ import net.minecraft.world.level.chunk.LevelChunk;
  * <p><b>Threads.</b> Entities, block entities, block positions, chunks and levels are server-thread only, and using
  * their containers from another thread throws. Item stacks may be used on any thread, but like the stack itself,
  * from one thread at a time.
+ *
+ * <p><b>Unloaded worlds.</b> A container keeps the {@code ServerLevel} it was made from. Once that world is unloaded
+ * (with {@code Worlds.unload}), writing through it throws, since that copy is never saved again, even after the world
+ * is loaded once more as a new {@code ServerLevel}: get the container again from the loaded one.
  */
 public final class PersistentData {
     private static volatile Port.Store store = new Port.Missing();

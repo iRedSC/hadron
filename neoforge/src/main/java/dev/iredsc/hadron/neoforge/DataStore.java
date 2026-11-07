@@ -40,6 +40,7 @@ final class DataStore implements PersistentData.Port.Store {
     @Override
     public void move(ServerLevel level, BlockPos from, BlockPos to) {
         serverThread(level, "blocks");
+        loaded(level, "PersistentData.move(level, from, to)");
         if (from.equals(to)) return;
         CompoundTag tag = DataBlocks.take(level.getChunkAt(from), from);
         LevelChunk target = level.getChunkAt(to);
@@ -47,6 +48,19 @@ final class DataStore implements PersistentData.Port.Store {
         // If the block isn't at `to` yet, its arrival must not clear what was just moved there.
         if (tag != null && !tag.isEmpty() && level.getBlockState(to).getBlock() != level.getBlockState(from).getBlock()) {
             DataBlocks.expectArrival(target, to);
+        }
+    }
+
+    /**
+     * Before a write: a level that was unloaded is never saved again, even after the same world is loaded again as a
+     * new ServerLevel, so writing to it would be lost without a word.
+     */
+    private static void loaded(Level level, String getAgain) {
+        ServerLevel server = (ServerLevel) level;
+        if (server.getServer().getLevel(server.dimension()) != server) {
+            throw new IllegalStateException("World " + server.dimension().location() + " was unloaded since this "
+                    + "container was made, so data written to it would never be saved. Get the loaded world with "
+                    + "Worlds.get(id) and its container again: " + getAgain);
         }
     }
 
@@ -72,6 +86,7 @@ final class DataStore implements PersistentData.Port.Store {
         @Override
         public void write(Consumer<CompoundTag> edit) {
             serverThread(entity.level(), "entities");
+            loaded(entity.level(), "PersistentData.of(level.getEntity(uuid))");
             Entity.RemovalReason removed = entity.getRemovalReason();
             if (removed != null && !removed.shouldDestroy()) {
                 throw new IllegalStateException(entity + " was unloaded or changed dimension, so data written to "
@@ -101,6 +116,7 @@ final class DataStore implements PersistentData.Port.Store {
         @Override
         public void write(Consumer<CompoundTag> edit) {
             check();
+            if (blockEntity.getLevel() != null) loaded(blockEntity.getLevel(), "PersistentData.of(level.getBlockEntity(pos))");
             if (blockEntity.isRemoved()) {
                 throw new IllegalStateException("The block entity at " + blockEntity.getBlockPos().toShortString()
                         + " was removed, so data written to it would be lost; get it again with "
@@ -126,6 +142,7 @@ final class DataStore implements PersistentData.Port.Store {
         @Override
         public void write(Consumer<CompoundTag> edit) {
             serverThread(level, "blocks");
+            loaded(level, "PersistentData.of(level, pos)");
             DataBlocks.edit(level.getChunkAt(pos), pos, edit);
         }
     }
@@ -140,6 +157,7 @@ final class DataStore implements PersistentData.Port.Store {
         @Override
         public void write(Consumer<CompoundTag> edit) {
             serverThread(chunk.getLevel(), "chunks");
+            loaded(chunk.getLevel(), "PersistentData.of(level.getChunk(x, z))");
             ServerLevel level = (ServerLevel) chunk.getLevel();
             if (level.getChunkSource().getChunkNow(chunk.getPos().x, chunk.getPos().z) != chunk) {
                 throw new IllegalStateException("Chunk " + chunk.getPos() + " was unloaded, so data written to this "
@@ -166,6 +184,7 @@ final class DataStore implements PersistentData.Port.Store {
         @Override
         public void write(Consumer<CompoundTag> edit) {
             serverThread(level, "worlds");
+            loaded(level, "PersistentData.of(level)");
             CompoundTag tag = level.getData(DataPort.DATA.get());
             try {
                 edit.accept(tag);
