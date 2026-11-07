@@ -1,4 +1,4 @@
-package dev.iredsc.hadron.neoforge;
+package dev.iredsc.hadron.harness;
 
 /** A test spent all the ticks its {@code @HadronTest(timeout)} allows. Thrown from the tick that would pass it. */
 final class TestTimeout extends AssertionError {

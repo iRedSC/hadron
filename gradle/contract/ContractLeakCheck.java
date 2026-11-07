@@ -55,7 +55,7 @@ public final class ContractLeakCheck {
      * The only binary files the bundle's test project may hold, relative to it: Hadron's jars, which are its real
      * implementation by design, and Gradle's wrapper. Anything else that isn't text fails the check.
      */
-    static final Set<String> SHIPPED_BINARIES = Set.of("libs/hadron.jar", "libs/hadron-api.jar",
+    static final Set<String> SHIPPED_BINARIES = Set.of("libs/hadron.jar", "libs/hadron-test.jar", "libs/hadron-api.jar",
             "libs/hadron-test-api.jar", "gradle/wrapper/gradle-wrapper.jar");
 
     final List<String> problems = new ArrayList<>();

@@ -1,3 +1,5 @@
+import java.util.zip.ZipFile
+
 // The NeoForge port: the mod that runs common's host and fires api's events from NeoForge's. One jar for server
 // owners, holding api and common too.
 plugins {
@@ -12,6 +14,11 @@ java.toolchain.languageVersion = JavaLanguageVersion.of(21)
 
 repositories { mavenCentral() }
 
+// The in-game test harness (TestRunner, TestClient, TestWorld...) and test-api are a second mod, hadron_test, built
+// from this source set. main can't see it, the release jar is main's, and only the test runs load it, so no test code
+// can reach a server owner. releaseJarCheck (part of check) opens the built jar to make sure.
+val harness: SourceSet = sourceSets.create("harness")
+
 neoForge {
     version = providers.gradleProperty("neo_version").get()
 
@@ -20,10 +27,24 @@ neoForge {
         minecraftVersion = providers.gradleProperty("parchment_minecraft_version").get()
     }
 
+    // Mods first: the runs below say which of them each loads.
+    mods {
+        register("hadron") {
+            sourceSet(project(":api").sourceSets.main.get())
+            sourceSet(project(":common").sourceSets.main.get())
+            sourceSet(sourceSets.main.get())
+        }
+        register("hadron_test") {
+            sourceSet(project(":test-api").sourceSets.main.get())
+            sourceSet(harness)
+        }
+    }
+
     runs {
         register("server") {
             server()
             programArgument("--nogui")
+            loadedMods.add(mods.named("hadron"))
         }
         // Test mode: a fresh server in build/hadron-test/run that runs the staged suites' @HadronTests and stops.
         // Plugins don't start it directly; their hadronTest task stages a suite and depends on this.
@@ -33,6 +54,8 @@ neoForge {
             gameDirectory = layout.buildDirectory.dir("hadron-test/run")
             systemProperty("hadron.test.report", layout.buildDirectory.file("hadron-test/report.txt").get().asFile.absolutePath)
             disableIdeRun()
+            loadedMods.addAll(mods.named("hadron").zip(mods.named("hadron_test")) { a, b -> listOf(a, b) })
+            sourceSet.set(harness)
         }
         // Watch mode: the same server, but it stays up and reruns a suite each time a build stages it in
         // build/hadron-watch/inbox. Plugins start it with hadronWatch and rerun with hadronRerun.
@@ -42,22 +65,19 @@ neoForge {
             gameDirectory = layout.buildDirectory.dir("hadron-watch/run")
             systemProperty("hadron.test.watch", layout.buildDirectory.dir("hadron-watch").get().asFile.absolutePath)
             disableIdeRun()
-        }
-    }
-
-    mods {
-        register("hadron") {
-            sourceSet(project(":api").sourceSets.main.get())
-            sourceSet(project(":common").sourceSets.main.get())
-            sourceSet(project(":test-api").sourceSets.main.get())
-            sourceSet(sourceSets.main.get())
+            loadedMods.addAll(mods.named("hadron").zip(mods.named("hadron_test")) { a, b -> listOf(a, b) })
+            sourceSet.set(harness)
         }
     }
 }
 
+neoForge.addModdingDependenciesTo(harness)
+
 dependencies {
     implementation(project(":common"))
-    implementation(project(":test-api"))
+    "harnessImplementation"(sourceSets.main.get().output)
+    "harnessImplementation"(project(":common"))
+    "harnessImplementation"(project(":test-api"))
     // plugin.yml and plugins' config.yml. Minecraft doesn't ship a YAML parser, so it rides inside Hadron's jar.
     // One version everywhere: the same one api compiles against and dev runs use.
     jarJar("org.yaml:snakeyaml") { version { strictly("[2.2,3)"); prefer("2.2") } }
@@ -70,6 +90,7 @@ dependencies {
 dependencies {
     testImplementation(platform("org.junit:junit-bom:5.13.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
+    testImplementation(harness.output)
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
 }
 
@@ -82,6 +103,13 @@ tasks.test {
 tasks.jar {
     from(project(":api").sourceSets.main.get().output)
     from(project(":common").sourceSets.main.get().output)
+}
+
+// The harness mod as a jar, for test servers that install Hadron from jars rather than sources (contract bundles).
+val harnessJar = tasks.register<Jar>("harnessJar") {
+    description = "Builds the hadron_test mod: the in-game test harness and test-api. Never for a real server."
+    archiveBaseName = "hadron-test"
+    from(harness.output)
     from(project(":test-api").sourceSets.main.get().output)
 }
 
@@ -98,6 +126,51 @@ val generateModMetadata = tasks.register<ProcessResources>("generateModMetadata"
 }
 sourceSets.main.get().resources.srcDir(generateModMetadata)
 neoForge.ideSyncTask(generateModMetadata)
+
+val generateHarnessMetadata = tasks.register<ProcessResources>("generateHarnessMetadata") {
+    val props = mapOf("hadron_version" to providers.gradleProperty("hadron_version").get())
+    inputs.properties(props)
+    expand(props)
+    from("src/harness/templates")
+    into(layout.buildDirectory.dir("generated/sources/harnessMetadata"))
+}
+harness.resources.srcDir(generateHarnessMetadata)
+neoForge.ideSyncTask(generateHarnessMetadata)
+
+// The release jar holds no test code: no harness or test-api class, nothing of a test plugin's, and none of their
+// resources. The harness's own source set makes that structural; this reads the built jar so a stray from() can't
+// undo it unnoticed. Forbidden are every file the harness and test-api build, plus the test packages by name.
+val releaseJarCheck = tasks.register("releaseJarCheck") {
+    group = "verification"
+    description = "Fails if Hadron's mod jar holds a test harness, test-api or test plugin file, naming each one."
+    val jar = tasks.jar.flatMap { it.archiveFile }
+    val testOutputs = files(harness.output, project(":test-api").sourceSets.main.get().output)
+    inputs.file(jar)
+    inputs.files(testOutputs)
+    val prefixes = listOf("dev/iredsc/hadron/harness/", "dev/iredsc/hadron/test/", "dev/iredsc/hadron/selftest/",
+            "dev/iredsc/hadron/examples/", "META-INF/hadron-tests.txt")
+    doLast {
+        val forbidden = testOutputs.files.filter { it.isDirectory }.flatMap { root ->
+            root.walkTopDown().filter { it.isFile }.map { it.relativeTo(root).invariantSeparatorsPath }.toList()
+        }.toSet()
+        val file = jar.get().asFile
+        val offending = ZipFile(file).use { zip ->
+            val names = zip.entries().asSequence().map { it.name }.filter { !it.endsWith("/") }.toList()
+            // Both mods have a neoforge.mods.toml, so that one is told apart by what it declares.
+            val toml = zip.getEntry("META-INF/neoforge.mods.toml")?.let { e -> zip.getInputStream(e).use { it.readBytes().decodeToString() } }
+            val harnessToml = if (toml != null && Regex("modId\\s*=\\s*\"hadron_test\"").containsMatchIn(toml))
+                listOf("META-INF/neoforge.mods.toml (declares the hadron_test mod)") else emptyList()
+            names.filter { name -> name != "META-INF/neoforge.mods.toml" }
+                .filter { name -> name in forbidden || prefixes.any { name.startsWith(it) } }.sorted() + harnessToml
+        }
+        if (offending.isNotEmpty()) {
+            throw GradleException("Hadron's release jar $file holds test code a server owner must never get:\n  "
+                    + offending.joinToString("\n  ") + "\nTest code belongs in neoforge/src/harness (the hadron_test "
+                    + "mod) or test-api, which tasks.jar must not include: remove the from(...) that brings it in.")
+        }
+    }
+}
+tasks.named("check") { dependsOn(releaseJarCheck) }
 
 // A fresh clone's dev server starts without questions: the EULA accepted, a flat world, offline mode, and RCON so an
 // agent can run console commands (scripts/rcon.py). Files already there are left alone.

@@ -13,6 +13,8 @@
 // Optional parameters, set before applying:
 //     extra["hadronTestServer.mod"]   = the Hadron mod jar to install in mods/ (a bundle's libs/hadron.jar); unset when
 //                                       the project is Hadron itself
+//     extra["hadronTestServer.harness"] = the test harness mod jar to install beside it (libs/hadron-test.jar); set
+//                                       exactly when hadronTestServer.mod is
 //     extra["hadronTestServer.stage"] = tasks the runs must come after: (test task name) -> list of task paths
 
 // The test server starts from nothing every run: no world, no plugins but the staged suites, nothing listening on the
@@ -36,14 +38,17 @@ object HadronTestServer {
         max-players=100
         """.trimIndent() + "\n"
 
-    fun prepare(run: File, mod: File?) {
+    fun prepare(run: File, mod: File?, harness: File?) {
         run.resolve("plugins").mkdirs()
-        if (mod != null) {
-            if (!mod.isFile) throw GradleException("Hadron's mod jar is missing: $mod. This folder came from Hadron's "
+        if ((mod == null) != (harness == null)) throw GradleException("hadronTestServer.mod and hadronTestServer.harness "
+                + "go together: a test server installed from jars needs Hadron's mod and its test harness mod.")
+        for ((jar, name) in listOf(mod to "hadron.jar", harness to "hadron-test.jar")) {
+            if (jar == null) continue
+            if (!jar.isFile) throw GradleException("Hadron's $name is missing: $jar. This folder came from Hadron's "
                     + "contractBundle task; copy the whole bundle, libs/ included.")
             val mods = run.resolve("mods")
             mods.mkdirs()
-            mod.copyTo(mods.resolve("hadron.jar"), overwrite = true)
+            jar.copyTo(mods.resolve(name), overwrite = true)
         }
         run.resolve("eula.txt").writeText("eula=true\n")
         run.resolve("server.properties").writeText(PROPERTIES)
@@ -70,6 +75,7 @@ object HadronTestServer {
 val hadronTestDir = layout.buildDirectory.dir("hadron-test")
 val hadronWatchDir = layout.buildDirectory.dir("hadron-watch")
 val hadronMod: File? = (findProperty("hadronTestServer.mod") as File?)
+val hadronHarness: File? = (findProperty("hadronTestServer.harness") as File?)
 @Suppress("UNCHECKED_CAST")
 val hadronStage = findProperty("hadronTestServer.stage") as ((String) -> List<Any>)?
 
@@ -79,8 +85,10 @@ tasks.named<JavaExec>("runHadronTest") {
     isIgnoreExitValue = true
     hadronStage?.let { stage -> mustRunAfter(provider { stage("hadronTestStage") }) }
     if (hadronMod != null) inputs.file(hadronMod)
+    if (hadronHarness != null) inputs.file(hadronHarness)
     val root = hadronTestDir.get().asFile
     val mod = hadronMod
+    val harness = hadronHarness
     doFirst {
         HadronTestServer.requireRun(this as JavaExec, "hadron.test.report", root.resolve("report.txt"))
         val run = root.resolve("run")
@@ -94,7 +102,7 @@ tasks.named<JavaExec>("runHadronTest") {
             f.copyTo(plugins.resolve(f.name), overwrite = true)
             f.delete()
         }
-        HadronTestServer.prepare(run, mod)
+        HadronTestServer.prepare(run, mod, harness)
     }
     // The server exits 0 only when every test passed. A failing run's report already says why, so hadronTest reports
     // it; but a nonzero exit after a passing report means the server broke after the tests (a crash while stopping,
@@ -117,8 +125,10 @@ tasks.named<JavaExec>("runHadronWatch") {
     isIgnoreExitValue = true
     hadronStage?.let { stage -> mustRunAfter(provider { stage("hadronWatchStage") }) }
     if (hadronMod != null) inputs.file(hadronMod)
+    if (hadronHarness != null) inputs.file(hadronHarness)
     val root = hadronWatchDir.get().asFile
     val mod = hadronMod
+    val harness = hadronHarness
     doFirst {
         HadronTestServer.requireRun(this as JavaExec, "hadron.test.watch", root)
         val state = root.resolve("watch.properties")
@@ -135,7 +145,7 @@ tasks.named<JavaExec>("runHadronWatch") {
         }
         // The record of the Hadron this server loads, which hadronWatch wrote after building it; reruns compare it.
         root.resolve("hadron.fingerprint.pending").renameTo(root.resolve("hadron.fingerprint"))
-        HadronTestServer.prepare(root.resolve("run"), mod)
+        HadronTestServer.prepare(root.resolve("run"), mod, harness)
     }
     // It exits 0 only when hadronWatchStop asked it to stop, so anything else (a crash, a hung test, a test that
     // stopped the server) fails the build rather than ending it green.

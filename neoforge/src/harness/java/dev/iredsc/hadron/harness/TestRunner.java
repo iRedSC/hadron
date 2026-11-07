@@ -1,7 +1,8 @@
-package dev.iredsc.hadron.neoforge;
+package dev.iredsc.hadron.harness;
 
 import dev.iredsc.hadron.api.Hadron;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
+import dev.iredsc.hadron.neoforge.Hooks;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import java.io.File;
@@ -68,7 +69,7 @@ final class TestRunner {
     }
 
     /**
-     * From the mod's constructor; does nothing unless the server was started in test or watch mode. In either, it also
+     * From {@link HarnessMod}'s constructor; does nothing unless the server was started in test or watch mode. In either, it also
      * registers {@link TestMod}'s channel, so a normal server never has it.
      */
     static void register(IEventBus modBus) {

@@ -1,0 +1,21 @@
+modLoader="javafml"
+loaderVersion="[1,)"
+license="MIT"
+
+[[mods]]
+modId="hadron_test"
+version="${hadron_version}"
+displayName="Hadron test harness"
+description='''
+Runs plugins' @HadronTests on a headless server. Only Hadron's test server loads it; never install it on a real one.
+'''
+
+[[dependencies.hadron_test]]
+    modId="hadron"
+    type="required"
+    versionRange="[${hadron_version}]"
+    ordering="AFTER"
+    side="BOTH"
+
+[[mixins]]
+    config="hadron_test.mixins.json"
