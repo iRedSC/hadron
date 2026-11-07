@@ -81,4 +81,20 @@ public final class SettleTests {
         t.assertTrue(failure.getMessage() != null && failure.getMessage().contains("network thread"),
                 "the failure should say a network thread didn't answer, but was: " + failure.getMessage());
     }
+
+    @HadronTest
+    void aLongTeleportSettlesWhereThePlayerWent(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        net.minecraft.server.level.ServerPlayer player = alice.player();
+        double x = player.getX() + 40, y = player.getY(), z = player.getZ();
+        // Farther than the server lets a client report moving in one tick, and acted on before the next tick: the
+        // client's answer is checked against where alice started the tick, refused, and she is teleported back. A
+        // client that answered each correction at once, between ticks, would loop with the server forever.
+        player.teleportTo(player.serverLevel(), x, y, z, player.getYRot(), player.getXRot());
+        alice.chat("arrived");
+        t.assertChat(alice, "arrived");
+        t.tick(2);
+        t.assertTrue(player.distanceToSqr(x, y, z) < 1, "alice should be where she was teleported, but is at "
+                + player.position());
+    }
 }
