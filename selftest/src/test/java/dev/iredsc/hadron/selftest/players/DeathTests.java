@@ -9,6 +9,7 @@ import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.player.PlayerDeathEvent;
 import dev.iredsc.hadron.api.event.player.PlayerRespawnEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -47,6 +48,7 @@ public final class DeathTests {
     }
 
     @HadronTest
+    @Covers(PlayerDeathEvent.class)
     void aChangedDeathLineIsWhatOthersSee(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -67,6 +69,7 @@ public final class DeathTests {
     }
 
     @HadronTest
+    @Covers(PlayerDeathEvent.class)
     void deathDropsAreTheListenersChoiceAndKeptItemsComeBack(TestContext t) {
         TestPlayer bob = t.player("bob");
         bob.give(new ItemStack(Items.DIRT, 3));
@@ -97,6 +100,7 @@ public final class DeathTests {
     }
 
     @HadronTest
+    @Covers(PlayerRespawnEvent.class)
     void aChangedRespawnPointIsWhereTheyRespawn(TestContext t) {
         TestPlayer bob = t.player("bob");
         Vec3 there = center(t.pos(4, 0, -3));

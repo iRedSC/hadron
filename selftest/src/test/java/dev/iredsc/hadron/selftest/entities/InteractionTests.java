@@ -16,6 +16,7 @@ import dev.iredsc.hadron.api.event.entity.EntityTameEvent;
 import dev.iredsc.hadron.api.event.entity.EntityUseEvent;
 import dev.iredsc.hadron.api.event.entity.ExperiencePickupEvent;
 import dev.iredsc.hadron.api.event.entity.HangingBreakEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -40,6 +41,7 @@ import net.minecraft.world.level.block.Blocks;
 /** Right-clicking, riding, taming, breeding, picking up experience, and breaking an item frame. */
 public final class InteractionTests {
     @HadronTest
+    @Covers(EntityUseEvent.class)
     void milkingACowIsThePlayersUse(TestContext t) {
         TestPlayer alice = t.player("alice");
         Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 0));
@@ -64,6 +66,7 @@ public final class InteractionTests {
     }
 
     @HadronTest
+    @Covers(EntityUseEvent.class)
     void aCancelledUseLeavesTheBucketEmpty(TestContext t) {
         TestPlayer alice = t.player("alice");
         Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 0));
@@ -84,6 +87,7 @@ public final class InteractionTests {
     }
 
     @HadronTest
+    @Covers(EntityMountEvent.class)
     void boardingABoatIsThePlayersMount(TestContext t) {
         TestPlayer alice = t.player("alice");
         Boat boat = spawn(t, EntityType.BOAT, t.pos(2, 0, 0));
@@ -105,6 +109,7 @@ public final class InteractionTests {
     }
 
     @HadronTest
+    @Covers(EntityMountEvent.class)
     void aCancelledMountLeavesThePlayerOnFoot(TestContext t) {
         TestPlayer alice = t.player("alice");
         Boat boat = spawn(t, EntityType.BOAT, t.pos(2, 0, 0));
@@ -130,6 +135,7 @@ public final class InteractionTests {
     }
 
     @HadronTest
+    @Covers(EntityDismountEvent.class)
     void sneakingOutOfABoatIsThePlayersDismount(TestContext t) {
         TestPlayer alice = t.player("alice");
         Boat boat = spawn(t, EntityType.BOAT, t.pos(2, 0, 0));
@@ -153,6 +159,7 @@ public final class InteractionTests {
     }
 
     @HadronTest
+    @Covers(EntityDismountEvent.class)
     void aCancelledDismountKeepsThePlayerRiding(TestContext t) {
         TestPlayer alice = t.player("alice");
         Boat boat = spawn(t, EntityType.BOAT, t.pos(2, 0, 0));
@@ -180,6 +187,7 @@ public final class InteractionTests {
     }
 
     @HadronTest
+    @Covers(EntityTameEvent.class)
     void tamingAWolfIsThePlayersAndTheyOwnIt(TestContext t) {
         TestPlayer alice = t.player("alice");
         Wolf wolf = spawn(t, EntityType.WOLF, t.pos(2, 0, 0));
@@ -201,6 +209,7 @@ public final class InteractionTests {
     }
 
     @HadronTest
+    @Covers(EntityTameEvent.class)
     void aCancelledTameLeavesTheWolfWild(TestContext t) {
         TestPlayer alice = t.player("alice");
         Wolf wolf = spawn(t, EntityType.WOLF, t.pos(2, 0, 0));
@@ -237,6 +246,7 @@ public final class InteractionTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(EntityBreedEvent.class)
     void breedingCowsIsTheFeedersAndMakesACalf(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<EntityBreedEvent> events = new ArrayList<>();
@@ -257,6 +267,7 @@ public final class InteractionTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(EntityBreedEvent.class)
     void aCancelledBreedMakesNoCalf(TestContext t) {
         TestPlayer alice = t.player("alice");
         int[] asked = {0};
@@ -274,6 +285,7 @@ public final class InteractionTests {
     }
 
     @HadronTest
+    @Covers(ExperiencePickupEvent.class)
     void pickingUpExperienceIsThePlayers(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<ExperiencePickupEvent> events = new ArrayList<>();
@@ -293,6 +305,7 @@ public final class InteractionTests {
     }
 
     @HadronTest
+    @Covers(ExperiencePickupEvent.class)
     void aCancelledPickupLeavesTheOrbAndGivesNothing(TestContext t) {
         TestPlayer alice = t.player("alice");
         int[] asked = {0};
@@ -324,6 +337,7 @@ public final class InteractionTests {
     }
 
     @HadronTest
+    @Covers(HangingBreakEvent.class)
     void punchingAnItemFrameIsThePlayersBreak(TestContext t) {
         TestPlayer alice = t.player("alice");
         ItemFrame frame = hangFrame(t);
@@ -342,6 +356,7 @@ public final class InteractionTests {
     }
 
     @HadronTest
+    @Covers(HangingBreakEvent.class)
     void aCancelledHangingBreakKeepsTheFrameAndDropsNothing(TestContext t) {
         TestPlayer alice = t.player("alice");
         ItemFrame frame = hangFrame(t);

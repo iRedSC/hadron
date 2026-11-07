@@ -121,7 +121,7 @@ Beside every `report.txt` is a `report.json` with the same results for tools; `h
 - **After a respawn, `TestPlayer.player()` still returns the old, dead player.**
 - **Console commands run in the overworld**: use `server().createCommandSourceStack().withLevel(t.level())` to run one in the test's world.
 - **Weather, time and the random tick speed are shared with the overworld**, so a test that changes them puts them back.
-- **Not covered by Hadron's own tests yet:** fishing bites and catches (they need open water and a random wait), `PlayerModPacketEvent`, mobs throwing, picking up or equipping items, hopper minecarts, `ChunkUnloadEvent`, and a portal lit by fire (test worlds aren't the overworld or the nether).
+- **Not covered by Hadron's own tests yet:** fishing bites and catches (they need open water and a random wait), `PlayerModPacketEvent`, mobs throwing, picking up or equipping items, hopper minecarts, and a portal lit by fire (test worlds aren't the overworld or the nether).
 - The run is wired into `examples/hello` and `selftest` with `apply(from = ...)`; other projects get it from the Gradle plugin.
 
 ## What Hadron's own tests cover
@@ -135,3 +135,40 @@ Beside every `report.txt` is a `report.json` with the same results for tools; `h
 - **attribution lasts:** an arrow's hit is still its shooter's after flight, a logout and a reload.
 
 Writing them found 11 Hadron bugs, all fixed: crafting results and the crafter ignoring a plugin's result, a cancelled cursor drop falling anyway, a hopper's pickup blamed on the item, dimension suggestions never asking the server, a live stack handed to `EntityUseEvent`, `EntityVelocityEvent` never firing, a cancelled TNT lighting setting fire anyway, a dispenser leaving both TNT and primed TNT, sticky pistons' pulls reported as nothing, and cancelled placements costing the tool its durability.
+
+## Coverage: the build checks every claim has a test
+
+A test says what it proves with `@Covers` (in `test-api`), on the test method, once per thing:
+
+```java
+@HadronTest
+@Covers(BlockBreakEvent.class)                               // an event the test fires
+@Covers(value = Economy.class, method = "transfer")          // an API method it calls; every overload of the name
+void cancellingABreakKeepsTheBlock(TestContext t) { ... }
+```
+
+`coverageCheck` (part of `check`; `./gradlew :selftest:coverageCheck`) reads class files only, `api`'s and the compiled tests' (`selftest`, and `api`'s and `common`'s JUnit tests when there are any), so it needs no server and finishes in well under a second of work. It fails the build listing everything uncovered, each line saying the fix. The script is `gradle/hadron-coverage.gradle.kts`.
+
+**What must be covered:**
+
+- **Every concrete event:** each public, non-abstract class in `api` that extends `Event`, core and bridge events alike. A test covers it by firing it the way core does (a player, machine, command or nature causing it) and checking a listener receives it, or, for an event only bridges fire, the way a bridge must: its actor pushed, fired through `callEvent` before the change, the change made only if no listener cancelled ([bridge-hooks.md](bridge-hooks.md)). A listener for a parent class hearing it counts only where the test names the leaf.
+- **Every public API method:** each public method (and protected, on classes that aren't final) declared by a type in `api` outside `dev.iredsc.hadron.api.event` that code outside can reach: the type and every class around it public. A test covers it by calling it and checking what it did. An override is the method it overrides: covering `MemorySection.getString` and covering `ConfigurationSection.getString` are the same claim.
+
+**What isn't counted, and why:**
+
+- **Constructors:** an instance method can't be tested without one, and the checks a constructor makes are tested where it refuses input.
+- **What the compiler writes:** `equals`, `hashCode`, `toString`, record accessors, an enum's `values` and `valueOf`, bridge and synthetic methods. Nothing of Hadron's runs in them.
+- **The non-event types in the event packages** (`Cancellable`, `BlockChange`, `Resource`, the holders, `EventHandler`): they are the events' vocabulary, and the event tests read them.
+- **Annotation types.**
+- **The port's and the host's wiring:** types named `Port`, `Lifecycle`, `Backend`, plus `NetBackend`, `Actors.Memory` and `PluginContext`, and what they nest. Their Javadoc says plugins never use them; the loader port installs them before any plugin runs, so every test runs through them.
+
+There is no list of exceptions, and none should be added for something that simply lacks a test: write the test.
+
+**Nothing can look covered that isn't.** The check fails on a `@Covers` that is on a method that isn't a test (`@HadronTest`, or JUnit's `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory`, `@TestTemplate`) or is on a `@Disabled` one; that names a type outside `api`'s public types; that names an abstract event (it lists the concrete ones to name instead); that names a type that isn't an event without a method; or that names a method the type and its API supertypes don't have (it lists the ones they do).
+
+**Economy providers** are covered through Hadron's own JSON provider: a test registering an `EconomyProvider` of its own would switch the store for the rest of the run, since once a plugin has provided accounts Hadron refuses to fall back to its file.
+
+**Not covered yet, so `check` fails on them until they are:**
+
+- `PlayerModPacketEvent`: the test client is unmodded, so it negotiates no mod channels and has no mod payload to send ([above](#what-it-cant-do-yet)).
+- `ServerLoadEvent`: it fires once, as the server finishes starting, before any test can register a listener. Covering it needs the self-test plugin, or the harness, to record it at startup.

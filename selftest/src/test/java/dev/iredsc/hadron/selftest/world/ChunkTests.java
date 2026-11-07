@@ -7,6 +7,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.world.ChunkForceLoadEvent;
 import dev.iredsc.hadron.api.event.world.ChunkForceUnloadEvent;
 import dev.iredsc.hadron.api.event.world.ChunkLoadEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import java.util.ArrayList;
@@ -26,6 +27,7 @@ public final class ChunkTests {
     }
 
     @HadronTest
+    @Covers(ChunkForceLoadEvent.class)
     void forceloadIsOneForceLoadByTheServer(TestContext t) {
         BlockPos at = far(t);
         ChunkPos chunk = new ChunkPos(at);
@@ -45,6 +47,7 @@ public final class ChunkTests {
     }
 
     @HadronTest
+    @Covers(ChunkForceLoadEvent.class)
     void cancelledForceloadForcesNothing(TestContext t) {
         BlockPos at = far(t);
         t.registerEvents(new Listener() {
@@ -59,6 +62,7 @@ public final class ChunkTests {
     }
 
     @HadronTest
+    @Covers(ChunkForceUnloadEvent.class)
     void forceloadRemoveIsAForceUnloadByTheServer(TestContext t) {
         BlockPos at = far(t);
         Console.run(t, forceload("add", at));
@@ -78,6 +82,7 @@ public final class ChunkTests {
     // ChunkUnloadEvent isn't tested: the harness runs each tick with no time to spare, and vanilla finishes unloading
     // chunks only in a tick's spare time, so no chunk ever unloads in a test.
     @HadronTest
+    @Covers(ChunkLoadEvent.class)
     void aForcedChunkLoadsAsNew(TestContext t) {
         BlockPos at = far(t);
         ChunkPos chunk = new ChunkPos(at);

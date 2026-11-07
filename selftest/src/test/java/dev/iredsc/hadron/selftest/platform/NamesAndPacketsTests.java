@@ -1,8 +1,11 @@
 package dev.iredsc.hadron.selftest.platform;
 
 import dev.iredsc.hadron.api.net.DisplayNames;
+import dev.iredsc.hadron.api.net.PacketEvent;
+import dev.iredsc.hadron.api.net.PacketHandler;
 import dev.iredsc.hadron.api.net.PacketRegistration;
 import dev.iredsc.hadron.api.net.Packets;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -13,7 +16,6 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
-
 /** Nicknames as other players' clients receive them, and plugins' packet listeners. */
 public final class NamesAndPacketsTests {
     /** Every name the viewer's client was given for that player in tab list entries that add them. */
@@ -27,6 +29,7 @@ public final class NamesAndPacketsTests {
     }
 
     @HadronTest
+    @Covers(value = DisplayNames.class, method = "setDisplayName")
     void aDisplayNameIsTheNameInChat(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -42,6 +45,7 @@ public final class NamesAndPacketsTests {
     }
 
     @HadronTest
+    @Covers(value = DisplayNames.class, method = "setPlayerListName")
     void aPlayerListNameReachesOtherClientsTabLists(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -61,6 +65,7 @@ public final class NamesAndPacketsTests {
     }
 
     @HadronTest
+    @Covers(value = DisplayNames.class, method = "setNameTag")
     void aNameTagRenamesTheProfileOtherViewersReceive(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -80,6 +85,10 @@ public final class NamesAndPacketsTests {
     }
 
     @HadronTest
+    @Covers(value = Packets.class, method = "onSend")
+    @Covers(value = PacketHandler.class, method = "handle")
+    @Covers(value = PacketEvent.class, method = "getPacket")
+    @Covers(value = PacketEvent.class, method = "setCancelled")
     void aCancelledOutgoingPacketNeverArrives(TestContext t) {
         TestPlayer bob = t.player("bob");
         PacketRegistration reg = Packets.onSend(t.plugin(), ClientboundSystemChatPacket.class, e -> {
@@ -97,6 +106,10 @@ public final class NamesAndPacketsTests {
     }
 
     @HadronTest
+    @Covers(value = Packets.class, method = "onSend")
+    @Covers(value = PacketHandler.class, method = "handle")
+    @Covers(value = PacketEvent.class, method = "getPacket")
+    @Covers(value = PacketEvent.class, method = "setPacket")
     void aReplacedOutgoingPacketArrivesInstead(TestContext t) {
         TestPlayer bob = t.player("bob");
         PacketRegistration reg = Packets.onSend(t.plugin(), ClientboundSystemChatPacket.class, e -> {
@@ -115,6 +128,11 @@ public final class NamesAndPacketsTests {
     }
 
     @HadronTest
+    @Covers(value = Packets.class, method = "onReceive")
+    @Covers(value = PacketHandler.class, method = "handle")
+    @Covers(value = PacketEvent.class, method = "getPacket")
+    @Covers(value = PacketEvent.class, method = "getPlayer")
+    @Covers(value = PacketEvent.class, method = "isOutgoing")
     void anIncomingListenerSeesWhatTheClientSent(TestContext t) {
         TestPlayer bob = t.player("bob");
         List<Integer> slots = new CopyOnWriteArrayList<>();
@@ -133,6 +151,9 @@ public final class NamesAndPacketsTests {
     }
 
     @HadronTest
+    @Covers(value = Packets.class, method = "onSend")
+    @Covers(value = PacketEvent.class, method = "setCancelled")
+    @Covers(value = PacketRegistration.class, method = "unregister")
     void anUnregisteredPacketListenerStopsActing(TestContext t) {
         TestPlayer bob = t.player("bob");
         PacketRegistration reg = Packets.onSend(t.plugin(), ClientboundSystemChatPacket.class,

@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.selftest.platform;
 
 import dev.iredsc.hadron.api.net.Visibility;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -10,7 +11,6 @@ import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Pig;
-
 /** Hiding entities and players from two real clients: spawning, tab list, /list, sounds and interactions. */
 public final class VisibilityTests {
     private static Pig pig(TestContext t, BlockPos pos) {
@@ -29,6 +29,9 @@ public final class VisibilityTests {
     }
 
     @HadronTest
+    @Covers(value = Visibility.class, method = "hideEntity")
+    @Covers(value = Visibility.class, method = "canSee")
+    @Covers(value = Visibility.class, method = "showEntity")
     void aHiddenEntityIsNeverSentToThatViewerOnly(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -46,6 +49,8 @@ public final class VisibilityTests {
     }
 
     @HadronTest
+    @Covers(value = Visibility.class, method = "hideFromAll")
+    @Covers(value = Visibility.class, method = "isHiddenFromAll")
     void hideFromAllAlsoHidesFromPlayersWhoJoinLater(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -62,6 +67,7 @@ public final class VisibilityTests {
     }
 
     @HadronTest
+    @Covers(value = Visibility.class, method = "hideFromAll")
     void listLeavesOutPlayersHiddenFromTheViewer(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -75,6 +81,7 @@ public final class VisibilityTests {
     }
 
     @HadronTest
+    @Covers(value = Visibility.class, method = "hidePlayer")
     void aHiddenPlayersHurtSoundIsNotSent(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -94,6 +101,8 @@ public final class VisibilityTests {
     }
 
     @HadronTest
+    @Covers(value = Visibility.class, method = "hideEntity")
+    @Covers(value = Visibility.class, method = "showEntity")
     void attacksOnAHiddenEntityAreIgnored(TestContext t) {
         TestPlayer bob = t.player("bob");
         Pig pig = pig(t, t.pos(1, 0, 0));

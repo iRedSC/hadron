@@ -7,6 +7,7 @@ import static dev.iredsc.hadron.selftest.blocks.Fixtures.itemsAround;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockDropItemEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -28,6 +29,7 @@ public final class DropTests {
     }
 
     @HadronTest
+    @Covers(BlockDropItemEvent.class)
     void aPlayersBreakDropsOnceByThatPlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos stone = stone(t, alice);
@@ -50,6 +52,7 @@ public final class DropTests {
     }
 
     @HadronTest
+    @Covers(BlockDropItemEvent.class)
     void cancelledDropsDropNothingButTheBlockStillBreaks(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos stone = stone(t, alice);
@@ -68,6 +71,7 @@ public final class DropTests {
     }
 
     @HadronTest
+    @Covers(BlockDropItemEvent.class)
     void changedDropsAndExperienceAreWhatDrops(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos stone = stone(t, alice);

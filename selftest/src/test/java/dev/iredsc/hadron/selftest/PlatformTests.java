@@ -7,16 +7,18 @@ import dev.iredsc.hadron.api.data.PersistentDataType;
 import dev.iredsc.hadron.api.economy.Economy;
 import dev.iredsc.hadron.api.economy.EconomyResult;
 import dev.iredsc.hadron.api.net.Visibility;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.math.BigDecimal;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.block.Blocks;
-
 /** Hadron's platform APIs between real players: visibility, persistent data, the economy. */
 public final class PlatformTests {
     @HadronTest
+    @Covers(value = Visibility.class, method = "hidePlayer")
+    @Covers(value = Visibility.class, method = "showPlayer")
     void hiddenPlayersAreNeverSentAndShowingSendsThem(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -42,6 +44,9 @@ public final class PlatformTests {
     }
 
     @HadronTest
+    @Covers(value = PersistentData.class, method = "of")
+    @Covers(value = PersistentDataContainer.class, method = "set")
+    @Covers(value = PersistentDataContainer.class, method = "has")
     void aBlocksMarkIsGoneOnceItsBroken(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos pos = t.pos(1, 0, 0);
@@ -57,6 +62,10 @@ public final class PlatformTests {
     }
 
     @HadronTest
+    @Covers(value = Economy.class, method = "get")
+    @Covers(value = Economy.class, method = "deposit")
+    @Covers(value = Economy.class, method = "transfer")
+    @Covers(value = Economy.class, method = "getBalance")
     void moneyMovesBetweenTwoPlayers(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");

@@ -11,10 +11,12 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
 import dev.iredsc.hadron.api.event.item.ItemCraftEvent;
 import dev.iredsc.hadron.api.event.item.ItemEnchantEvent;
+import dev.iredsc.hadron.api.event.item.ItemRepairEvent;
 import dev.iredsc.hadron.api.event.item.ItemSmeltEvent;
 import dev.iredsc.hadron.api.event.item.PrepareAnvilEvent;
 import dev.iredsc.hadron.api.event.item.PrepareItemCraftEvent;
 import dev.iredsc.hadron.api.event.item.TradeEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -62,6 +64,7 @@ public final class CraftingTests {
     }
 
     @HadronTest
+    @Covers(ItemCraftEvent.class)
     void cancelledCraftLeavesTheIngredientsAndMakesNothing(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<ItemCraftEvent> heard = new ArrayList<>();
@@ -86,6 +89,7 @@ public final class CraftingTests {
     }
 
     @HadronTest
+    @Covers(ItemCraftEvent.class)
     void shiftClickCraftStopsWhereCancelledAndMakesExactlyThatMany(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<ItemCraftEvent> heard = new ArrayList<>();
@@ -105,6 +109,7 @@ public final class CraftingTests {
     }
 
     @HadronTest
+    @Covers(PrepareItemCraftEvent.class)
     void preparedCraftResultIsWhatTheGridOffersAndGives(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<PrepareItemCraftEvent> heard = new ArrayList<>();
@@ -131,6 +136,7 @@ public final class CraftingTests {
     }
 
     @HadronTest
+    @Covers(PrepareItemCraftEvent.class)
     void preparedCraftSetEmptyForbidsTheRecipe(TestContext t) {
         TestPlayer alice = t.player("alice");
         t.registerEvents(new Listener() {
@@ -149,6 +155,7 @@ public final class CraftingTests {
     }
 
     @HadronTest
+    @Covers(PrepareItemCraftEvent.class)
     void forbiddenCrafterResultCraftsNothingAndKeepsTheIngredients(TestContext t) {
         Support.watch(t);
         BlockPos crafter = t.pos(2, 0, 3);
@@ -199,6 +206,7 @@ public final class CraftingTests {
     }
 
     @HadronTest
+    @Covers(PrepareAnvilEvent.class)
     void preparedAnvilResultAndCostAreWhatThePlayerGetsAndPays(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<PrepareAnvilEvent> heard = new ArrayList<>();
@@ -223,6 +231,7 @@ public final class CraftingTests {
     }
 
     @HadronTest
+    @Covers(PrepareAnvilEvent.class)
     void cancelledPrepareAnvilOffersNothing(TestContext t) {
         TestPlayer alice = t.player("alice");
         t.registerEvents(new Listener() {
@@ -240,6 +249,7 @@ public final class CraftingTests {
     }
 
     @HadronTest
+    @Covers(ItemRepairEvent.class)
     void cancelledAnvilRepairSpendsNothingAndKeepsBothInputs(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<ItemChangeEvent> heard = new ArrayList<>();
@@ -263,6 +273,7 @@ public final class CraftingTests {
     }
 
     @HadronTest
+    @Covers(ItemEnchantEvent.class)
     void cancelledEnchantSpendsNoLapisNorLevels(TestContext t) {
         // The harness has no enchant-button packet yet; this calls what the server's packet handler calls for it.
         TestPlayer alice = t.player("alice");
@@ -300,6 +311,7 @@ public final class CraftingTests {
     }
 
     @HadronTest(timeout = 800)
+    @Covers(ItemSmeltEvent.class)
     void cancelledSmeltLeavesTheOreAndNamesTheFurnace(TestContext t) {
         Support.watch(t);
         BlockPos furnace = t.pos(2, 0, 0);
@@ -325,6 +337,7 @@ public final class CraftingTests {
     }
 
     @HadronTest
+    @Covers(TradeEvent.class)
     void cancelledTradeKeepsTheEmeraldsAndGivesNothing(TestContext t) {
         TestPlayer alice = t.player("alice");
         Villager villager = EntityType.VILLAGER.create(t.level());
