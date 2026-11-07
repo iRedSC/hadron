@@ -1,10 +1,12 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.server.ServiceRegisterEvent;
 import dev.iredsc.hadron.api.event.server.ServiceUnregisterEvent;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.ServicePriority;
 import dev.iredsc.hadron.api.plugin.ServicesManager;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
@@ -13,9 +15,19 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+/**
+ * Registered providers, and the register and unregister events that announce them. Each change queues its events
+ * under the registry lock, in the order the changes happen; they are delivered outside it, so a listener can look
+ * services up, or change them, without deadlocking or being heard out of order. One thread delivers at a time: a
+ * change made while another thread (or a listener) is delivering is announced by that delivery, after what came first.
+ */
 final class Services implements ServicesManager {
     private final PluginHost host;
     private final Map<Class<?>, List<Registration>> byService = new HashMap<Class<?>, List<Registration>>();
+    /** Events waiting to be delivered, oldest first. Guarded by this. */
+    private final ArrayDeque<Event> outbox = new ArrayDeque<Event>();
+    /** Whether some thread is delivering the outbox. Guarded by this. */
+    private boolean delivering;
 
     Services(PluginHost host) {
         this.host = host;
@@ -36,8 +48,7 @@ final class Services implements ServicesManager {
     @Override
     public <T> void register(Class<T> service, T provider, JavaPlugin plugin, ServicePriority priority) {
         add(service, provider, plugin, priority);
-        // Outside the lock, so a listener that looks services up can't deadlock against another thread.
-        host.post(new ServiceRegisterEvent(service, provider, plugin));
+        deliver();
     }
 
     private synchronized <T> void add(Class<T> service, T provider, JavaPlugin plugin, ServicePriority priority) {
@@ -49,6 +60,7 @@ final class Services implements ServicesManager {
         List<Registration> list = byService.get(service);
         if (list == null) byService.put(service, list = new ArrayList<Registration>());
         list.add(new Registration(provider, plugin, priority));
+        outbox.add(new ServiceRegisterEvent(service, provider, plugin));
         // Stable sort: among equal priorities the first registered stays first.
         Collections.sort(list, new Comparator<Registration>() {
             @Override
@@ -60,22 +72,47 @@ final class Services implements ServicesManager {
 
     @Override
     public void unregister(Object provider) {
-        announce(removeWhere(provider, null));
+        removeWhere(provider, null);
+        deliver();
     }
 
     @Override
     public void unregisterAll(JavaPlugin plugin) {
-        announce(removeWhere(null, plugin));
+        removeWhere(null, plugin);
+        deliver();
     }
 
-    /** Outside the lock, so a listener that looks services up can't deadlock against another thread. */
-    private void announce(List<ServiceUnregisterEvent> removed) {
-        for (ServiceUnregisterEvent event : removed) host.post(event);
+    /** Posts queued events in order, outside the lock, unless a delivery already running will reach them. */
+    private void deliver() {
+        synchronized (this) {
+            if (delivering) return;
+            delivering = true;
+        }
+        boolean drained = false;
+        try {
+            while (true) {
+                Event next;
+                synchronized (this) {
+                    next = outbox.poll();
+                    if (next == null) {
+                        delivering = false;
+                        drained = true;
+                        return;
+                    }
+                }
+                host.post(next);
+            }
+        } finally {
+            if (!drained) {
+                synchronized (this) {
+                    delivering = false;
+                }
+            }
+        }
     }
 
     /** Also drops emptied services, whose interface may be a plugin's class that would keep its old loader alive. */
-    private synchronized List<ServiceUnregisterEvent> removeWhere(Object provider, JavaPlugin plugin) {
-        List<ServiceUnregisterEvent> removed = new ArrayList<ServiceUnregisterEvent>();
+    private synchronized void removeWhere(Object provider, JavaPlugin plugin) {
         for (Iterator<Map.Entry<Class<?>, List<Registration>>> lists = byService.entrySet().iterator(); lists.hasNext(); ) {
             Map.Entry<Class<?>, List<Registration>> entry = lists.next();
             List<Registration> list = entry.getValue();
@@ -83,12 +120,11 @@ final class Services implements ServicesManager {
                 Registration r = it.next();
                 if (r.provider == provider || r.plugin == plugin) {
                     it.remove();
-                    removed.add(new ServiceUnregisterEvent(entry.getKey(), r.provider, r.plugin));
+                    outbox.add(new ServiceUnregisterEvent(entry.getKey(), r.provider, r.plugin));
                 }
             }
             if (list.isEmpty()) lists.remove();
         }
-        return removed;
     }
 
     @Override
