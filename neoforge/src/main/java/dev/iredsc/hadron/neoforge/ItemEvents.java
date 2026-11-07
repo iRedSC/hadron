@@ -52,7 +52,13 @@ final class ItemEvents {
         if (!hadron.isCancelled()) return;
         player.getInventory().add(stack); // takes what fits out of stack
         // A drop from a menu's cursor goes back on the cursor, which is where it came from; with a full inventory
-        // that's the only place it fits.
+        // that's the only place it fits. Thrown out of the window, the stack is still the cursor's own, which the
+        // click empties right after this; ItemHooks keeps it for that.
+        if (!stack.isEmpty() && ItemHooks.keepOnCursor(player.containerMenu, stack)) {
+            event.setCanceled(true);
+            ItemHooks.resync(player);
+            return;
+        }
         if (!stack.isEmpty() && player.containerMenu.getCarried().isEmpty()) {
             player.containerMenu.setCarried(stack.copy());
             stack.setCount(0);

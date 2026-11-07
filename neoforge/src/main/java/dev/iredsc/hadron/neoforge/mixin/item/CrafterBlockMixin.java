@@ -26,9 +26,11 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(CrafterBlock.class)
 abstract class CrafterBlockMixin {
-    /** The result, just assembled, before the crafter checks whether it is empty. */
-    @ModifyVariable(method = "dispenseFrom", ordinal = 0, at = @At(value = "INVOKE", ordinal = 0,
-            target = "Lnet/minecraft/world/item/ItemStack;isEmpty()Z"))
+    /**
+     * The result, just assembled, at its first read: the crafter's empty check. Injecting at the isEmpty call itself
+     * would run after the original was loaded for it, so an emptied result would still pass the check and be crafted.
+     */
+    @ModifyVariable(method = "dispenseFrom", ordinal = 0, at = @At(value = "LOAD", ordinal = 0))
     private ItemStack hadron$prepare(ItemStack result, BlockState state, ServerLevel level, BlockPos pos) {
         if (!(level.getBlockEntity(pos) instanceof CrafterBlockEntity crafter)) return result;
         RecipeHolder<CraftingRecipe> recipe = CrafterBlock.getPotentialResults(level, crafter.asCraftInput())

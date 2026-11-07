@@ -24,8 +24,9 @@ import org.spongepowered.asm.mixin.injection.ModifyVariable;
  */
 @Mixin(CraftingMenu.class)
 abstract class CraftingMenuMixin {
-    @ModifyVariable(method = "slotChangedCraftingGrid", ordinal = 0, at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/inventory/ResultContainer;setItem(ILnet/minecraft/world/item/ItemStack;)V"))
+    // At the result's first read, which is setItem's argument: an injection at the setItem call itself runs after
+    // its arguments are loaded, so vanilla's result would be stored while the swapped one was only shown and sent.
+    @ModifyVariable(method = "slotChangedCraftingGrid", ordinal = 0, at = @At(value = "LOAD", ordinal = 0))
     private static ItemStack hadron$prepare(ItemStack result, AbstractContainerMenu menu, Level level, Player player,
             CraftingContainer craftSlots, ResultContainer resultSlots, RecipeHolder<CraftingRecipe> recipe) {
         if (!(player instanceof ServerPlayer viewer) || !(level instanceof ServerLevel server)) return result;
