@@ -202,6 +202,45 @@ def locate(guard: Guard) -> tuple[str, str]:
     return (IN_GAME_PROJECT if tier == "in-game" else FAST_PROJECTS[module]), fqcn
 
 
+def lock_holders(lock) -> set[int]:
+    """The processes holding a flock on this file, from /proc/locks (Linux; empty elsewhere)."""
+    st = os.fstat(lock.fileno())
+    want = f"{os.major(st.st_dev):02x}:{os.minor(st.st_dev):02x}:{st.st_ino}"
+    try:
+        lines = Path("/proc/locks").read_text().splitlines()
+    except OSError:
+        return set()
+    return {int(f[4]) for f in (line.split() for line in lines) if len(f) > 5 and f[1] == "FLOCK" and f[5] == want}
+
+
+def ancestors() -> set[int]:
+    out, pid = set(), os.getppid()
+    while pid > 1:
+        out.add(pid)
+        try:
+            pid = int(Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[1])
+        except (OSError, ValueError, IndexError):
+            break
+    return out
+
+
+def take_shared_lock(lock) -> None:
+    """Takes the shared Gradle lock, refusing at once if a process this replay runs under already holds it: that
+    is `flock <lock> ... regressionReplay`, which would wait for itself forever."""
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        return
+    except BlockingIOError:
+        pass
+    holders = lock_holders(lock)
+    if holders & ancestors():
+        raise SystemExit(f"regression replay: this replay was started under `flock {LOCK}`, which holds the lock it "
+                         "needs, so it would wait forever. Run it without the flock wrapper: it takes the lock itself, "
+                         "so other builds still queue behind it.")
+    print(f"Waiting for {LOCK}, held by process {', '.join(map(str, sorted(holders))) or 'unknown'} ...", flush=True)
+    fcntl.flock(lock, fcntl.LOCK_EX)
+
+
 def gradle(args: list[str], log: Path) -> int:
     """Runs Gradle in the throwaway tree under the shared lock. No timeout: the release job has its own, which ends
     every process, and Ctrl-C reaches Gradle, which cancels its build."""
@@ -210,7 +249,7 @@ def gradle(args: list[str], log: Path) -> int:
     # The shared lock is taken here rather than by wrapping Gradle in flock(1): flock dies on Ctrl-C while its child
     # runs on, so waiting on it wouldn't wait for the build. Both take the same flock(2) lock, so other runs still queue.
     with log.open("w") as out, open(LOCK, "a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        take_shared_lock(lock)
         out.write("$ " + " ".join(cmd) + "\n")
         out.flush()
         proc = subprocess.Popen(cmd, cwd=TREE, stdout=out, stderr=subprocess.STDOUT)
