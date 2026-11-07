@@ -1,0 +1,40 @@
+# Who sits on the council and what passes. Read by the council skill (.claude/skills/council/SKILL.md) to start its
+# delegates and by the gate (.github/scripts/council_gate.py) to check the PR's "Council review" table, so the two
+# can't disagree. Two providers (Claude and Codex), a large and a small model from each.
+#
+# Two roles:
+# - "deep": reviews the change in full and scores it out of 10. Its last round must score at least min_score.
+# - "questions": a small model told to ask dumb questions about why the code was done this way. It doesn't score; it
+#   records "<asked> asked, <open> open", and passes when no question is left open (each answered in the PR, or the
+#   code changed so the question no longer applies).
+
+# Every deep reviewer's score in the last round must be at least this, out of 10.
+min_score = 8
+
+[[member]]
+name = "GPT-6.1 Sol"
+role = "deep"
+provider = "codex"
+model = "gpt-6.1-sol"
+effort = "high"
+
+[[member]]
+name = "Claude Opus 5.5"
+role = "deep"
+provider = "claudeAgent"
+model = "claude-opus-5-5"
+effort = "medium"
+
+[[member]]
+name = "Claude Haiku 5.5"
+role = "questions"
+provider = "claudeAgent"
+model = "claude-haiku-5-5"
+effort = "medium"
+
+[[member]]
+name = "GPT-6.1 Terra"
+role = "questions"
+provider = "codex"
+model = "gpt-6.1-terra"
+effort = "high"

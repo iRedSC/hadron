@@ -56,3 +56,7 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **Blind test**: a test written from the contract bundle alone. Its author never edits an assertion to match what they observed.
 - **Triage**: a sighted agent's sorting of a blind test's failure into a Hadron bug, a test bug or a contract gap.
 - **Mutation testing**: breaking Hadron on purpose to count how many breaks the tests catch.
+
+## Review
+
+- **Council**: the review a PR touching `.github/council-paths.txt` needs to merge, in place of a person. Deep reviewers (large models) score it out of 10; question askers (small models) ask dumb questions about why the code was done that way, each answered in the PR or the code. Members and the passing score are in `.github/council.toml`; the `Council` check reads the table in the PR description, which names the commit it reviewed.
