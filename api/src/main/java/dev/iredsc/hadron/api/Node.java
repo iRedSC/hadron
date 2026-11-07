@@ -68,6 +68,13 @@ public final class Node {
             throw new IllegalArgumentException("Permission node '" + id + "' must look like plugin.thing, lowercase");
         }
         String root = id.substring(0, id.indexOf('.'));
+        // Checked under the lock release takes, and a plugin is never alive again once it starts unloading, so a
+        // declaration either lands before release removes it or is refused: a stray task can't put one back after.
+        if (owner instanceof dev.iredsc.hadron.api.plugin.PluginContext plugin && !plugin.alive()) {
+            throw new IllegalStateException(plugin.description().getName() + " declared permission node " + id
+                    + " after it began unloading, from code still running once it was disabled. Declare nodes as "
+                    + "static constants, and stop background work in onDisable");
+        }
         if (owner instanceof dev.iredsc.hadron.api.plugin.PluginContext plugin && RESERVED_ROOTS.contains(root)) {
             throw new dev.iredsc.hadron.api.plugin.PluginException("it declares permission node " + id
                     + ", but '" + root + ".' is reserved for nodes Hadron makes itself. Start it with the plugin's "

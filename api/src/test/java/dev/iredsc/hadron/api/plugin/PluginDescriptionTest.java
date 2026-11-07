@@ -96,6 +96,27 @@ class PluginDescriptionTest {
         assertTrue(refusal(yaml).contains("may only use letters, digits"));
     }
 
+    /** The name is the plugin's data folder in plugins/, so it can't be one of Hadron's own files there or escape it. */
+    @Covers(value = PluginDescription.class, method = "parse")
+    @ParameterizedTest
+    @ValueSource(strings = {".", "..", ".loaded", ".hidden", "-dash", "_under", "disabled.txt", "DISABLED.TXT",
+            "Homes.jar", "homes.JAR"})
+    void aNameThatWouldBeOneOfHadronsFilesInPluginsIsRefused(String name) {
+        Map<String, Object> yaml = minimal();
+        yaml.put("name", name);
+        String message = refusal(yaml);
+        assertTrue(message.contains("plugin.yml name '" + name + "'") && message.contains("such as"), message);
+    }
+
+    @Covers(value = PluginDescription.class, method = "parse")
+    @ParameterizedTest
+    @ValueSource(strings = {"Homes", "my-plugin", "my_plugin", "Homes.Extra", "9lives", "a"})
+    void anOrdinaryNameIsKept(String name) {
+        Map<String, Object> yaml = minimal();
+        yaml.put("name", name);
+        assertEquals(name, PluginDescription.parse(yaml).getName());
+    }
+
     @Covers(value = PluginDescription.class, method = "getVersion")
     @Test
     void anUnquotedVersionIsRefusedSinceYamlWouldHaveChangedIt() {

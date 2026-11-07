@@ -333,7 +333,7 @@ public final class ItemHooks {
         boolean clicks = Hooks.listens(InventoryClickEvent.class);
         boolean crafts = Hooks.listens(ItemCraftEvent.class);
         boolean trades = Hooks.listens(TradeEvent.class);
-        boolean changes = Hooks.listens(ItemChangeEvent.class);
+        boolean changes = listensToResultChanges();
         if (!clicks && !crafts && !trades && !changes) return false;
         Actor actor = actor(player);
         Slot slot = slotId >= 0 && menu.isValidSlotIndex(slotId) ? menu.getSlot(slotId) : null;
@@ -359,7 +359,7 @@ public final class ItemHooks {
         if (slotId < 0 || !menu.isValidSlotIndex(slotId)) return false;
         boolean crafts = Hooks.listens(ItemCraftEvent.class);
         boolean trades = Hooks.listens(TradeEvent.class);
-        boolean changes = Hooks.listens(ItemChangeEvent.class);
+        boolean changes = listensToResultChanges();
         if (!crafts && !trades && !changes) return false;
         Slot slot = menu.getSlot(slotId);
         if (!slot.hasItem() || !slot.mayPickup(player)) return false;
@@ -430,6 +430,16 @@ public final class ItemHooks {
                 recipe, actor)).isCancelled();
     }
 
+    /**
+     * Whether anyone hears an event {@link #change} can fire. {@link Hooks#listens} answers for one class and its
+     * listeners' parents, never its subclasses, so a plugin listening only for {@link ItemRepairEvent} doesn't make
+     * {@code ItemChangeEvent} heard: each leaf is asked.
+     */
+    private static boolean listensToResultChanges() {
+        return Hooks.listens(ItemChangeEvent.class) || Hooks.listens(ItemEnchantEvent.class)
+                || Hooks.listens(ItemRepairEvent.class);
+    }
+
     /** Taking an anvil or grindstone result: the most specific change it makes. */
     private static boolean change(ServerLevel level, InventoryHolder holder, ItemStack before, ItemStack after,
             int cost, Actor actor) {
@@ -442,7 +452,7 @@ public final class ItemHooks {
         } else {
             event = new ItemChangeEvent(level, holder, before, after, actor);
         }
-        return Hooks.post(event).isCancelled();
+        return Hooks.listens(event.getClass()) && Hooks.post(event).isCancelled();
     }
 
     /** Whether this click really takes the item in a result slot, as vanilla's doClick would. */

@@ -11,9 +11,14 @@ import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
+import dev.iredsc.hadron.api.world.WorldCreator;
+import dev.iredsc.hadron.api.world.WorldGenerator;
+import dev.iredsc.hadron.api.world.Worlds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.item.ItemStack;
@@ -167,6 +172,39 @@ public final class DataTests {
             String message = e.getMessage();
             t.assertTrue(message.contains(key(t).toString()) && message.contains("Read it with the type it was set "
                     + "with"), "the message should name the key and the fix, but was: " + message);
+        }
+    }
+
+    @HadronTest
+    @Covers(value = PersistentData.class, method = "of")
+    @Covers(value = PersistentDataContainer.class, method = "set")
+    void dataKeptFromAWorldThatWasUnloadedRefusesWritesThatWouldBeLost(TestContext t) {
+        ResourceLocation id = ResourceLocation.fromNamespaceAndPath("selftest", "data_reload");
+        BlockPos pos = new BlockPos(1, 64, 1);
+        try {
+            ServerLevel first = Worlds.create(new WorldCreator(id).generator(WorldGenerator.voidWorld())
+                    .spawn(new BlockPos(0, 64, 0)));
+            PersistentDataContainer world = PersistentData.of(first);
+            PersistentDataContainer block = PersistentData.of(first, pos);
+            Worlds.unload(first, true);
+            t.tick(2);
+            ServerLevel second = Worlds.load(id);
+            for (PersistentDataContainer stale : new PersistentDataContainer[] {world, block}) {
+                try {
+                    stale.set(key(t), PersistentDataType.STRING, "lost");
+                    t.fail("writing through a container from the unloaded copy of the world should be refused, "
+                            + "since that copy is never saved again");
+                } catch (IllegalStateException expected) {
+                    t.assertTrue(expected.getMessage().contains("PersistentData.of("), "the error should say how "
+                            + "to get the loaded world's container, but was: " + expected.getMessage());
+                }
+            }
+            PersistentData.of(second).set(key(t), PersistentDataType.STRING, "kept");
+            t.assertEquals("kept", PersistentData.of(second).get(key(t), PersistentDataType.STRING),
+                    "the loaded world's own container should still work");
+        } finally {
+            if (Worlds.isCreated(id)) Worlds.delete(id);
+            t.tick(2);
         }
     }
 }

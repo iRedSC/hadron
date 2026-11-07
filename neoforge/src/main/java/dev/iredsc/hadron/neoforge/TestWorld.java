@@ -46,7 +46,12 @@ final class TestWorld implements TestContext {
     private static final int FLOOR_RADIUS = 8;
     private static final int JOIN_TICKS = 200;
     /** Rounds of passing packets back and forth before settling gives up on traffic stopping. */
+    /** Rounds of packets or server tasks settling lets through before it fails the test. */
     private static final int SETTLE_ROUNDS = 100;
+    /** Rounds that only load chunks, after which settling stops waiting for them. */
+    private static final int CHUNK_ROUNDS = 1_000;
+    /** How long settling waits for a connection's network thread before it fails the test. */
+    private static final int FENCE_SECONDS = 10;
 
     private final MinecraftServer server;
     private final JavaPlugin plugin;
@@ -214,6 +219,12 @@ final class TestWorld implements TestContext {
         for (int i = 0; i < JOIN_TICKS && joined.connection.chunkSender.isPending(joined.chunkPosition().toLong()); i++) {
             tick(1);
         }
+        if (joined.connection.chunkSender.isPending(joined.chunkPosition().toLong())) {
+            throw new AssertionError(name + "'s own chunk still hadn't been sent " + JOIN_TICKS + " ticks after they "
+                    + "joined, so the entities around them can't have been sent either, and a test of what they see "
+                    + "would read too early. Something holds back chunk sending: a listener cancelling chunk "
+                    + "packets, or a very slow chunk load. Last packets: " + lastPackets(client));
+        }
         client.reportPosition();
         settle();
         return client;
@@ -277,12 +288,21 @@ final class TestWorld implements TestContext {
      * so this passes the turn back and forth until neither side has anything left.
      */
     void settle() {
-        for (int round = 0; round < SETTLE_ROUNDS; round++) {
+        int busy = 0;
+        for (int round = 0; ; round++) {
             long before = activity();
             for (TestClient c : players.values()) c.connection().tick();
             fence();
+            // The server runs its own queue (packets, tasks) before any chunk loading, so a task that ran while that
+            // queue held one was the queue's. Chunk loading finishes by itself and is no effect of the test's.
             int ran = 0;
-            while (ran < 100_000 && server.pollTask()) ran++;
+            int queued = 0;
+            while (ran < 100_000) {
+                boolean fromQueue = server.getPendingTasksCount() > 0;
+                if (!server.pollTask()) break;
+                ran++;
+                if (fromQueue) queued++;
+            }
             fence();
             for (TestClient c : players.values()) {
                 Throwable failure = c.failure();
@@ -291,7 +311,22 @@ final class TestWorld implements TestContext {
                     throw new IllegalStateException(failure.getMessage(), failure.getCause());
                 }
             }
-            if (ran == 0 && activity() == before) return;
+            boolean moved = activity() != before;
+            if (ran == 0 && !moved) return;
+            if (!moved && queued == 0) {
+                // Only chunk loading, as between two real ticks: let it run, but it never holds the test up for long.
+                if (round >= CHUNK_ROUNDS) return;
+                continue;
+            }
+            if (++busy >= SETTLE_ROUNDS) {
+                // Returning now would let the next line (assertNoChat, assertNotSent) pass before what's pending
+                // arrives.
+                throw new IllegalStateException("Packets or server tasks were still arriving after " + SETTLE_ROUNDS
+                        + " rounds of letting them through without a tick, so the harness can't tell when this "
+                        + "action's effects have all arrived. Something keeps making work without the server ticking: "
+                        + "a task that re-queues itself, or a listener that answers every packet with another. Make it "
+                        + "wait for the next tick (a scheduled task), or stop it before the test acts.");
+            }
         }
     }
 
@@ -305,7 +340,12 @@ final class TestWorld implements TestContext {
         for (TestClient c : players.values()) if (c.connection().channel() != null) channels.add(c.connection().channel());
         for (int pass = 0; pass < 2; pass++) {
             for (Channel channel : channels) {
-                channel.eventLoop().submit(() -> {}).awaitUninterruptibly(10, TimeUnit.SECONDS);
+                if (!channel.eventLoop().submit(() -> {}).awaitUninterruptibly(FENCE_SECONDS, TimeUnit.SECONDS)) {
+                    throw new IllegalStateException("A connection's network thread didn't answer within "
+                            + FENCE_SECONDS + " s, so packets it carries may still be on their way and this action's "
+                            + "effects can't be known to have arrived. Something blocks it: a listener or task "
+                            + "sleeping or waiting on a network thread. Do that work on the server thread instead.");
+                }
             }
         }
     }

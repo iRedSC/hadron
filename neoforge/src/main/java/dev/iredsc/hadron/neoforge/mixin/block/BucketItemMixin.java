@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
 import dev.iredsc.hadron.neoforge.BlockHooks;
+import dev.iredsc.hadron.neoforge.EntitySpawnRefunds;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.player.Player;
@@ -27,6 +28,7 @@ public abstract class BucketItemMixin {
         if (BlockHooks.cancelBucketEmpty((BucketItem) (Object) this, player, level, pos, hit, container)) {
             return false;
         }
+        EntitySpawnRefunds.pouring((BucketItem) (Object) this, level, pos);
         BlockHooks.suppressAt(level, pos);
         try {
             return original.call(player, level, pos, hit, container);

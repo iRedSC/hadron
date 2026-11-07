@@ -26,6 +26,9 @@ public interface PluginContext {
 
     boolean enabled();
 
+    /** Loaded or enabled, and not yet unloading. Once false it never turns true again. */
+    boolean alive();
+
     /** A command from plugin.yml; null for a name it doesn't declare. */
     PluginCommand command(String name);
 

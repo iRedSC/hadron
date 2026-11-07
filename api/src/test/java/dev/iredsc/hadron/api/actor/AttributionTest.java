@@ -88,6 +88,9 @@ class AttributionTest {
         assertEquals(Attribution.none(), cleared);
         assertEquals(Attribution.none().hashCode(), cleared.hashCode());
     }
+    @Covers(value = Attribution.class, method = "equals")
+    @Covers(value = Attribution.class, method = "hashCode")
+    @Covers(value = Attribution.class, method = "toString")
     @Test
     void equalityComparesAllThreeParts() {
         Attribution a = Attribution.of(OWNER).withController(DRIVER).withAuthority(ADMIN);
@@ -97,7 +100,8 @@ class AttributionTest {
         assertNotEquals(a, a.withAuthority(null));
         assertNotEquals(a, a.withController(null));
         assertNotEquals(a, a.withResponsible(ADMIN));
-        assertTrue(a.toString().contains(OWNER.toString()));
+        assertEquals("Attribution[responsible=" + OWNER + ", controller=" + DRIVER + ", authority=" + ADMIN + "]",
+                a.toString(), "every part, named, for logs");
         assertNotEquals(a.hashCode(), a.withAuthority(null).hashCode(), "different attributions spread across buckets");
     }
 

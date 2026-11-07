@@ -170,6 +170,16 @@ final class TestClient implements TestPlayer {
     private float clientYRot, clientXRot;
     /** Ticks since this client last sent its position; a vanilla client reminds the server every 20. */
     private int sincePosition;
+    /**
+     * Whether this client has answered a teleport with its position since the server last ticked. The server checks
+     * a reported move against where the player was at the start of the tick, so a second answer in the same gap
+     * (to the server's own "moved too quickly" correction) would be refused again, forever, since settling never
+     * ticks. A real client's answer arrives after a tick has reset that, so the second waits for the next tick.
+     */
+    private volatile boolean answeredTeleport;
+    /** The position report held back for the next tick, or null. */
+    private final java.util.concurrent.atomic.AtomicReference<ServerboundMovePlayerPacket.PosRot> heldReport =
+            new java.util.concurrent.atomic.AtomicReference<>();
 
     private final Listener login = new Listener(ConnectionProtocol.LOGIN);
     private final Listener configuration = new Listener(ConnectionProtocol.CONFIGURATION);
@@ -237,6 +247,12 @@ final class TestClient implements TestPlayer {
      * the position reminder every 20 ticks; a test player has no physics, so it reports where the server has it.
      */
     void clientTick() {
+        answeredTeleport = false;
+        ServerboundMovePlayerPacket.PosRot held = heldReport.getAndSet(null);
+        if (held != null) {
+            sincePosition = 0;
+            connection.send(held);
+        }
         ServerPlayer p = player;
         if (p == null || !isConnected() || ++sincePosition < 20) return;
         sincePosition = 0;
@@ -766,7 +782,14 @@ final class TestClient implements TestPlayer {
                 clientYRot = yRot;
                 clientXRot = xRot;
                 connection.send(new ServerboundAcceptTeleportationPacket(p.getId()));
-                connection.send(new ServerboundMovePlayerPacket.PosRot(x, y, z, yRot, xRot, false));
+                ServerboundMovePlayerPacket.PosRot report = new ServerboundMovePlayerPacket.PosRot(x, y, z, yRot, xRot,
+                        false);
+                if (answeredTeleport) {
+                    heldReport.set(report);
+                } else {
+                    answeredTeleport = true;
+                    connection.send(report);
+                }
             }
             case ClientboundChunkBatchFinishedPacket p -> connection.send(new ServerboundChunkBatchReceivedPacket(64f));
             default -> {}

@@ -140,4 +140,31 @@ public final class ConnectionTests {
         t.assertTrue(alice.isConnected(), "alice should still be connected, but left: " + alice.disconnectReason());
         t.assertTrue(t.server().getPlayerList().getPlayer(alice.uuid()) != null, "alice should still be in the list");
     }
+
+    /**
+     * Vanilla rejects some packets on the connection's own thread (a bad keep-alive, illegal chat characters, a chat
+     * out of order). The kick they cause still reaches listeners on the server thread, so a listener may touch the
+     * world, and both a cancel and a pass-through hold.
+     */
+    @HadronTest
+    @Covers(PlayerKickEvent.class)
+    void aKickFromThePacketThreadReachesListenersOnTheServerThread(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        java.util.List<String> heard = new java.util.ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(PlayerKickEvent e) {
+                heard.add(e.getPlayer().getGameProfile().getName() + (t.server().isSameThread() ? "" : " off-thread"));
+                if (e.getPlayer() == alice.player()) e.setCancelled(true);
+            }
+        });
+        alice.chat("hello §c");
+        bob.chat("hello §c");
+        t.tick(2);
+        t.assertEquals(java.util.List.of("alice", "bob"), heard, "each kick should reach the listener once, on "
+                + "the server thread");
+        t.assertTrue(alice.isConnected(), "alice's kick was cancelled, but she left: " + alice.disconnectReason());
+        t.assertFalse(bob.isConnected(), "bob's kick wasn't cancelled, so he should have left");
+    }
 }

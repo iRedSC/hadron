@@ -259,4 +259,23 @@ class ServicesTest {
             Economy.Lifecycle.install(before);
         }
     }
+
+    @Covers(value = ServicesManager.class, method = "register")
+    @Covers(value = ServicesManager.class, method = "unregister")
+    @Test
+    void everyoneHearsChangesInTheOrderTheyHappened() throws Exception {
+        Named provider = new Named("a");
+        // Registered after the setUp listener, so it hears each event first and undoes the registration at once.
+        events(host).subscribe(new Listener() {
+            @EventHandler(priority = dev.iredsc.hadron.api.event.EventPriority.LOWEST)
+            void on(ServiceRegisterEvent e) {
+                services.unregister(e.getProvider());
+            }
+        }, "Test", org.slf4j.LoggerFactory.getLogger("test"));
+        services.register(Greeter.class, provider, alpha, ServicePriority.Normal);
+        assertEquals(List.of("register Greeter Named[name=a] by Alpha", "unregister Greeter Named[name=a] by Alpha"),
+                announced, "a listener that unregisters while hearing the registration mustn't make others hear the "
+                        + "unregistration first");
+        assertFalse(services.isProvidedFor(Greeter.class));
+    }
 }

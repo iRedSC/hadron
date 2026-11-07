@@ -30,6 +30,7 @@ final class NetPort implements NetBackend {
         // Lowest, so the name a plugin asked for is the one shown, whatever mods add earlier.
         NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST, NetNames::nameFormat);
         NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST, NetNames::tabListNameFormat);
+        PluginHost.beforePluginDisable(NetPackets::awaitRunning);
         PluginHost.onPluginDisable(plugin -> {
             NetPackets.remove(plugin);
             NetVisibility.remove(plugin);

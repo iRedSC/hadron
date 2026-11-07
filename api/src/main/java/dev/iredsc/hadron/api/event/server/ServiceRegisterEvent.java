@@ -5,6 +5,9 @@ import dev.iredsc.hadron.api.plugin.JavaPlugin;
 /**
  * A provider was registered for a service, such as an economy or permissions provider. Not
  * cancellable; check {@code getServicesManager().load(service)} for the provider now in use.
+ * Service events arrive in the order the changes happened, but not always on the thread that made them: a change made
+ * while another thread is announcing earlier ones is announced by that thread, so {@code register} can return before
+ * its own event has been heard.
  */
 public class ServiceRegisterEvent extends ServerEvent {
     private final Class<?> service;

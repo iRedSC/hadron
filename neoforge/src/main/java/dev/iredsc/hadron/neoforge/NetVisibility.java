@@ -11,7 +11,16 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.network.protocol.Packet;
+import io.netty.buffer.Unpooled;
+import net.minecraft.core.registries.Registries;
+import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.RegistryFriendlyByteBuf;
+import net.minecraft.network.codec.ByteBufCodecs;
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundBlockDestructionPacket;
+import net.minecraft.network.protocol.game.ClientboundDamageEventPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityLinkPacket;
+import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket;
@@ -20,6 +29,7 @@ import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.projectile.Projectile;
 
 /**
  * Who can't see what, per plugin, by UUID. Written on the server thread, read from any thread (the send hook runs on
@@ -321,10 +331,21 @@ public final class NetVisibility {
         }
     }
 
-    /** Removes hidden players' tab entries, and drops packets naming a hidden entity outside its own tracking. */
+    /**
+     * Removes hidden players' tab entries, drops packets naming a hidden entity outside its own tracking, and takes a
+     * hidden entity out of the packets of entities the viewer does see: riders, leash holders, damage sources and
+     * projectile owners.
+     */
     static Packet<?> filter(ServerPlayer viewer, Packet<?> packet) {
         if (!active) return packet;
         if (packet instanceof ClientboundPlayerInfoUpdatePacket info) return info(viewer, info);
+        if (packet instanceof ClientboundSetPassengersPacket
+                || packet instanceof ClientboundSetEntityLinkPacket
+                || packet instanceof ClientboundDamageEventPacket
+                || packet instanceof ClientboundAddEntityPacket) {
+            // Entity ids resolve only on the server thread, where vanilla sends these.
+            return viewer.server.isSameThread() ? secondary(viewer, packet) : packet;
+        }
         int id;
         if (packet instanceof ClientboundBlockDestructionPacket p) id = p.getId();
         else if (packet instanceof ClientboundTakeItemEntityPacket p) id = p.getPlayerId();
@@ -337,6 +358,79 @@ public final class NetVisibility {
         if (!viewer.server.isSameThread()) return packet;
         Entity e = viewer.serverLevel().getEntity(id);
         return e != null && !canSee(viewer, e) ? null : packet;
+    }
+
+    /** Whether the viewer must not learn of the entity with this id: it exists in their world and is hidden. */
+    private static boolean hiddenId(ServerPlayer viewer, int id) {
+        Entity e = viewer.serverLevel().getEntity(id);
+        return e != null && e != viewer && !canSee(viewer, e);
+    }
+
+    private static Packet<?> secondary(ServerPlayer viewer, Packet<?> packet) {
+        switch (packet) {
+            case ClientboundSetPassengersPacket p -> {
+                int[] riders = p.getPassengers();
+                int kept = 0;
+                for (int rider : riders) if (!hiddenId(viewer, rider)) kept++;
+                if (kept == riders.length) return packet;
+                int[] visible = new int[kept];
+                int i = 0;
+                for (int rider : riders) if (!hiddenId(viewer, rider)) visible[i++] = rider;
+                FriendlyByteBuf buf = new FriendlyByteBuf(Unpooled.buffer());
+                try {
+                    buf.writeVarInt(p.getVehicle());
+                    buf.writeVarIntArray(visible);
+                    return ClientboundSetPassengersPacket.STREAM_CODEC.decode(buf);
+                } finally {
+                    buf.release();
+                }
+            }
+            case ClientboundSetEntityLinkPacket p -> {
+                if (p.getDestId() == 0 || !hiddenId(viewer, p.getDestId())) return packet;
+                Entity leashed = viewer.serverLevel().getEntity(p.getSourceId());
+                // Shown as not leashed: the client never learns who holds it.
+                return leashed == null ? null : new ClientboundSetEntityLinkPacket(leashed, null);
+            }
+            case ClientboundDamageEventPacket p -> {
+                boolean cause = p.sourceCauseId() >= 0 && hiddenId(viewer, p.sourceCauseId());
+                boolean direct = p.sourceDirectId() >= 0 && hiddenId(viewer, p.sourceDirectId());
+                if (!cause && !direct) return packet;
+                return new ClientboundDamageEventPacket(p.entityId(), p.sourceType(), cause ? -1 : p.sourceCauseId(),
+                        direct ? -1 : p.sourceDirectId(), p.sourcePosition());
+            }
+            case ClientboundAddEntityPacket p -> {
+                if (p.getData() == 0 || !(viewer.serverLevel().getEntity(p.getId()) instanceof Projectile shot)) {
+                    return packet;
+                }
+                Entity owner = shot.getOwner();
+                if (owner == null || owner.getId() != p.getData() || !hiddenId(viewer, owner.getId())) return packet;
+                return withoutOwner(viewer, p);
+            }
+            default -> {
+                return packet;
+            }
+        }
+    }
+
+    /** The same spawn with no owner id (vanilla's 0), copied field by field in the packet's own wire order. */
+    private static ClientboundAddEntityPacket withoutOwner(ServerPlayer viewer, ClientboundAddEntityPacket packet) {
+        RegistryFriendlyByteBuf in = new RegistryFriendlyByteBuf(Unpooled.buffer(), viewer.registryAccess());
+        RegistryFriendlyByteBuf out = new RegistryFriendlyByteBuf(Unpooled.buffer(), viewer.registryAccess());
+        try {
+            ClientboundAddEntityPacket.STREAM_CODEC.encode(in, packet);
+            out.writeVarInt(in.readVarInt());
+            out.writeUUID(in.readUUID());
+            ByteBufCodecs.registry(Registries.ENTITY_TYPE).encode(out, ByteBufCodecs.registry(Registries.ENTITY_TYPE)
+                    .decode(in));
+            out.writeBytes(in, 3 * Double.BYTES + 3);
+            in.readVarInt();
+            out.writeVarInt(0);
+            out.writeBytes(in, in.readableBytes());
+            return ClientboundAddEntityPacket.STREAM_CODEC.decode(out);
+        } finally {
+            in.release();
+            out.release();
+        }
     }
 
     private static Packet<?> info(ServerPlayer viewer, ClientboundPlayerInfoUpdatePacket packet) {

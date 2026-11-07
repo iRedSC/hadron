@@ -70,11 +70,20 @@ public final class EntityActors {
         return fromStack(victim, Actor.Nature.INSTANCE);
     }
 
+    /** A living entity's hit in progress: the damage source while {@code hurt} runs, otherwise null. */
+    public interface Hurting {
+        DamageSource hadron$hurting();
+    }
+
     /**
-     * Who hurt a living entity this tick, for effects that follow a hit (knockback). {@code hurtTime} equals
-     * {@code hurtDuration} only in the tick the hit landed, so an older hit is never blamed.
+     * Who hurt a living entity, for effects that follow a hit (knockback). Inside the hit, its own source: Minecraft
+     * updates the remembered last damage only after the knockback, so that would still be the previous hit's. After
+     * the hit (an attacker's own knockback), the remembered damage, if it landed this tick: {@code hurtTime} equals
+     * {@code hurtDuration} only then, so an older hit is never blamed.
      */
     public static Actor lastHit(LivingEntity entity) {
+        DamageSource current = ((Hurting) entity).hadron$hurting();
+        if (current != null) return damage(current, entity);
         DamageSource last = entity.getLastDamageSource();
         boolean thisTick = entity.hurtTime > 0 && entity.hurtTime == entity.hurtDuration;
         return last != null && thisTick ? damage(last, entity) : fromStack(entity, Actor.Nature.INSTANCE);

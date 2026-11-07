@@ -96,6 +96,18 @@ tasks.named<JavaExec>("runHadronTest") {
         }
         HadronTestServer.prepare(run, mod)
     }
+    // The server exits 0 only when every test passed. A failing run's report already says why, so hadronTest reports
+    // it; but a nonzero exit after a passing report means the server broke after the tests (a crash while stopping,
+    // a mod failing at shutdown), and trusting the report alone would end that green.
+    doLast {
+        val code = (this as JavaExec).executionResult.get().exitValue
+        val report = root.resolve("report.txt")
+        val passed = report.isFile && report.readLines().lastOrNull { it.startsWith("RESULT:") }?.trim() == "RESULT: PASSED"
+        if (code != 0 && passed) {
+            throw GradleException("The test server reported every test passed, then exited with code $code, so "
+                    + "something broke after the tests ran. Its log says what: " + root.resolve("run/logs/latest.log"))
+        }
+    }
 }
 
 // The watching test server starts as fresh as the one-off one, keeping only the inbox, where hadronWatch has just
@@ -117,9 +129,23 @@ tasks.named<JavaExec>("runHadronWatch") {
                         + "hadronRerun, or stop it with hadronWatchStop first.")
             }
         }
-        for (name in listOf("run", "done", "reports", "report.txt", "report.json", "watch.properties", "stop")) {
+        for (name in listOf("run", "done", "reports", "report.txt", "report.json", "watch.properties", "stop",
+                "last-run.properties", "hadron.fingerprint")) {
             root.resolve(name).deleteRecursively()
         }
+        // The record of the Hadron this server loads, which hadronWatch wrote after building it; reruns compare it.
+        root.resolve("hadron.fingerprint.pending").renameTo(root.resolve("hadron.fingerprint"))
         HadronTestServer.prepare(root.resolve("run"), mod)
+    }
+    // It exits 0 only when hadronWatchStop asked it to stop, so anything else (a crash, a hung test, a test that
+    // stopped the server) fails the build rather than ending it green.
+    doLast {
+        val code = (this as JavaExec).executionResult.get().exitValue
+        if (code != 0) {
+            val why = if (code == 3) "a test hung, so the watchdog ended it"
+                else "it crashed or was stopped by something other than hadronWatchStop"
+            throw GradleException("The watching test server exited with code $code: $why. Its log says more: "
+                    + root.resolve("run/logs/latest.log") + ". Start hadronWatch again.")
+        }
     }
 }

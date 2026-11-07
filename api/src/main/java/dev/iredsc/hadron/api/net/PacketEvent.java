@@ -20,6 +20,8 @@ public interface PacketEvent<T extends Packet<?>> extends Cancellable {
      * a different kind of packet, cancel this one and send yours with {@code player.connection.send}.
      *
      * @throws IllegalStateException in a MONITOR handler, which may only look
+     * @throws IllegalArgumentException for a packet of another class (a {@code PosRot} for a {@code Pos}), since the
+     *     handlers still to run were chosen for, and cast to, this packet's class
      */
     void setPacket(T packet);
 

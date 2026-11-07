@@ -13,6 +13,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 class NamespacedKeyTest {
     @Covers(value = NamespacedKey.class, method = "asString")
+    @Covers(value = NamespacedKey.class, method = "toString")
     @Test
     void aValidKeyKeepsBothParts() {
         NamespacedKey key = new NamespacedKey("my-plugin.x_1", "homes/last.pos-2");
@@ -93,6 +94,8 @@ class NamespacedKeyTest {
         assertNull(NamespacedKey.parse("Bad", "key"));
         assertEquals(new NamespacedKey("ok", "key"), NamespacedKey.parse("ok", "key"));
     }
+    @Covers(value = NamespacedKey.class, method = "equals")
+    @Covers(value = NamespacedKey.class, method = "hashCode")
     @Test
     void equalKeysAreEqualAndHashAlike() {
         assertEquals(new NamespacedKey("a", "b"), new NamespacedKey("a", "b"));
@@ -100,5 +103,6 @@ class NamespacedKeyTest {
         assertNotEquals(new NamespacedKey("a", "b"), new NamespacedKey("b", "a"));
         assertNotEquals(new NamespacedKey("a", "bc"), new NamespacedKey("ab", "c"));
         assertNotEquals(new NamespacedKey("a", "b").hashCode(), new NamespacedKey("a", "c").hashCode());
+        assertNotEquals(new NamespacedKey("a", "b"), "a:b", "a key never equals its text");
     }
 }

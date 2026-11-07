@@ -3,23 +3,29 @@ package dev.iredsc.hadron.neoforge;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.List;
 import java.util.Set;
 import java.util.function.Supplier;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.level.portal.DimensionTransition;
 import net.minecraft.world.phys.Vec3;
 
 /**
  * One {@link EntityTeleportEvent} per teleport, however many of Minecraft's teleport methods it passes through. The
  * outermost teleport method asks; anything nested inside it (a player's cross-dimension teleport calling
- * {@code changeDimension}, passengers following their vehicle) is part of that one teleport. Server thread only:
- * every entry point checks for a {@link ServerLevel} first.
+ * {@code changeDimension}, passengers following their vehicle) is part of that one teleport. Only the travelling
+ * entities are covered: anything else a listener teleports meanwhile is a teleport of its own and is asked about.
+ * Server thread only: every entry point checks for a {@link ServerLevel} first.
  */
 public final class EntityTeleports {
-    /** The entity whose teleport is in progress, or null. */
-    private static Entity active;
-    /** Above zero while the port moves something itself (putting back a cancelled move). */
-    private static int quiet;
+    /** Entities in a teleport already asked about, or being moved by the port itself, with their passengers. */
+    private static final Set<Entity> travelling = Collections.newSetFromMap(new IdentityHashMap<>());
     /** A cause NeoForge told us about for this entity in this tick, and whether it was already asked. */
     private static Entity marked;
     private static int markedTick;
@@ -30,9 +36,13 @@ public final class EntityTeleports {
 
     private EntityTeleports() {}
 
-    /** Whether a teleport is under way, so a dismount it causes can't be refused. */
-    static boolean inProgress() {
-        return active != null || quiet > 0;
+    /** Whether either is in a teleport under way, so a dismount it causes can't be refused. */
+    static boolean inProgress(Entity rider, Entity vehicle) {
+        return travelling.contains(rider) || travelling.contains(vehicle);
+    }
+
+    private static boolean suppressed(Entity entity) {
+        return travelling.contains(entity);
     }
 
     /**
@@ -77,7 +87,7 @@ public final class EntityTeleports {
             float xRot) {
         Destination requested = new Destination(toLevel != null ? toLevel
                 : entity.level() instanceof ServerLevel own ? own : null, x, y, z, yRot, xRot);
-        if (!(entity.level() instanceof ServerLevel from) || active != null || quiet > 0) return requested;
+        if (!(entity.level() instanceof ServerLevel from) || suppressed(entity)) return requested;
         boolean isMarked = marked == entity && markedTick == entity.tickCount;
         TeleportCause cause = isMarked ? markedCause : TeleportCause.UNKNOWN;
         boolean asked = isMarked && markedAsked;
@@ -101,12 +111,49 @@ public final class EntityTeleports {
     }
 
     /**
-     * Sends an entity where a listener redirected it, through the one teleport method that takes a level, position
-     * and facing. Runs as part of the teleport already asked about, so it doesn't ask again.
+     * Sends an entity where a listener redirected it. Runs as part of the teleport already asked about, so it doesn't
+     * ask again. Within a level, or for a player, through the teleport method that takes a level, position and facing;
+     * any other entity crosses levels through {@code changeDimension}, since that teleport method leaves its
+     * passengers behind.
      */
     public static boolean redirect(Entity entity, Destination to) {
+        if (to.crossesLevel(entity) && !(entity instanceof ServerPlayer)) {
+            return during(entity, () -> {
+                Entity arrived = entity.changeDimension(new DimensionTransition(to.level(), to.position(),
+                        entity.getDeltaMovement(), to.yRot(), to.xRot(), DimensionTransition.DO_NOTHING));
+                if (arrived == null) return false;
+                arrived.setXRot(to.xRot()); // changeDimension keeps the old pitch
+                arrived.setYHeadRot(to.yRot());
+                return true;
+            });
+        }
         return during(entity, () -> entity.teleportTo(to.level(), to.x(), to.y(), to.z(), Set.of(), to.yRot(),
                 to.xRot()));
+    }
+
+    /** {@code LivingEntity.randomTeleport} with the coordinates it searches from; true when it found room. */
+    @FunctionalInterface
+    public interface RandomTeleport {
+        boolean attempt(double x, double y, double z);
+    }
+
+    /**
+     * A random teleport (an enderman, chorus fruit) is one attempt: it moves to the spot, and steps back if it doesn't
+     * fit there. Asked about once; the step back is part of the attempt and never asked about, so a listener refusing
+     * other teleports can't strand the entity where it doesn't fit.
+     */
+    public static boolean randomTeleport(LivingEntity entity, double x, double y, double z, RandomTeleport original) {
+        Destination to = ask(entity, null, x, y, z, entity.getYRot(), entity.getXRot());
+        if (to == null) return false;
+        if (to.crossesLevel(entity)) return redirect(entity, to);
+        boolean turned = to.yRot() != entity.getYRot() || to.xRot() != entity.getXRot();
+        return during(entity, () -> {
+            boolean moved = original.attempt(to.x(), to.y(), to.z());
+            if (moved && turned && entity.level() instanceof ServerLevel level) {
+                entity.teleportTo(level, entity.getX(), entity.getY(), entity.getZ(), Set.of(), to.yRot(), to.xRot());
+            }
+            return moved;
+        });
     }
 
     /** Who sends it: the entity itself when it walked into a portal or threw a pearl, otherwise the stack. */
@@ -119,25 +166,36 @@ public final class EntityTeleports {
 
     /** Runs an approved teleport, so the methods it calls don't ask again, then resets the move check. */
     public static <T> T during(Entity entity, Supplier<T> teleport) {
-        if (!(entity.level() instanceof ServerLevel) || active != null || quiet > 0) return teleport.get();
-        active = entity;
+        if (!(entity.level() instanceof ServerLevel) || suppressed(entity)) return teleport.get();
+        List<Entity> covered = cover(entity);
         try {
             return teleport.get();
         } finally {
-            active = null;
+            covered.forEach(travelling::remove);
             EntityMoves.retrack(entity);
         }
     }
 
-    /** Moves something without firing teleport events: the port putting back what a listener refused. */
-    static void quietly(Runnable move) {
-        quiet++;
+    /** Marks an entity and its passengers as travelling; returns those it added, to take off again after. */
+    private static List<Entity> cover(Entity entity) {
+        List<Entity> added = new ArrayList<>();
+        if (travelling.add(entity)) added.add(entity);
+        for (Entity passenger : entity.getIndirectPassengers()) {
+            if (travelling.add(passenger)) added.add(passenger);
+        }
+        return added;
+    }
+
+    /** Moves an entity without firing teleport events: the port putting back what a listener refused. */
+    static void quietly(Entity entity, Runnable move) {
+        List<Entity> covered = cover(entity);
         try {
             move.run();
         } finally {
-            quiet--;
+            covered.forEach(travelling::remove);
         }
     }
+
 
     /** Marks the next teleport of this entity, this tick, as a portal's. */
     public static void portal(Entity entity) {

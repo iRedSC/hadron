@@ -51,6 +51,12 @@ public final class ContractLeakCheck {
     static final Set<String> BOXED = Set.of("Byte", "Short", "Integer", "Long", "Float", "Double", "Character");
     /** English uses of a word that is also an implementation class name; reviewed, exact phrases only. */
     static final List<String> ENGLISH = List.of("Platform APIs");
+    /**
+     * The only binary files the bundle's test project may hold, relative to it: Hadron's jars, which are its real
+     * implementation by design, and Gradle's wrapper. Anything else that isn't text fails the check.
+     */
+    static final Set<String> SHIPPED_BINARIES = Set.of("libs/hadron.jar", "libs/hadron-api.jar",
+            "libs/hadron-test-api.jar", "gradle/wrapper/gradle-wrapper.jar");
 
     final List<String> problems = new ArrayList<>();
     String file;
@@ -67,10 +73,24 @@ public final class ContractLeakCheck {
                 .map(l -> l.split("\t", 2)).toList();
         ContractLeakCheck check = new ContractLeakCheck();
         check.run(root, implNames, forbidden);
-        // What else the blind agent reads (the README, the example tests): no implementation names there either.
+        // Everything else in the bundle (the README, the test project and its build files): no implementation names.
         for (int i = 3; i < args.length; i++) {
-            try (Stream<Path> walk = Files.walk(Path.of(args[i]))) {
-                for (Path p : walk.filter(Files::isRegularFile).sorted().toList()) check.scan(p.toString(), Files.readString(p));
+            Path base = Path.of(args[i]);
+            try (Stream<Path> walk = Files.walk(base)) {
+                for (Path p : walk.filter(Files::isRegularFile).sorted().toList()) {
+                    String rel = (Files.isDirectory(base) ? base.relativize(p) : p.getFileName()).toString()
+                            .replace('\\', '/');
+                    if (SHIPPED_BINARIES.contains(rel)) continue;
+                    String text;
+                    try {
+                        text = Files.readString(p);
+                    } catch (java.nio.charset.MalformedInputException e) {
+                        check.problems.add(p + ": isn't UTF-8 text, so it can't be checked for leaks. Leave it out of "
+                                + "the bundle, or, if it is reviewed, add it to SHIPPED_BINARIES in ContractLeakCheck.");
+                        continue;
+                    }
+                    check.scan(p.toString(), text);
+                }
             }
         }
         if (!check.problems.isEmpty()) {

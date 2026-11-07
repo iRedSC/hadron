@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.PacketFlow;
 import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
@@ -38,6 +39,8 @@ final class NetPackets {
         final PacketHandler<?> body;
         final long order;
         final Side side;
+        /** False once unregistered: a dispatch that took its snapshot earlier skips it. */
+        volatile boolean active = true;
 
         Handler(JavaPlugin plugin, Class<?> type, EventPriority priority, PacketHandler<?> body, long order, Side side) {
             this.plugin = plugin;
@@ -51,6 +54,7 @@ final class NetPackets {
         @Override
         public void unregister() {
             synchronized (LOCK) {
+                active = false;
                 side.all.remove(this);
                 side.changed();
             }
@@ -121,6 +125,7 @@ final class NetPackets {
                 throw new IllegalStateException(plugin.getName() + " can't register packet handlers while it isn't "
                         + "enabled; register them in onEnable");
             }
+            RUNNING.computeIfAbsent(plugin, p -> new int[1]);
             Handler h = new Handler(plugin, type, priority, body, registered++, side);
             side.all.add(h);
             side.changed();
@@ -128,11 +133,50 @@ final class NetPackets {
         }
     }
 
+    /** Each plugin's handler calls in progress, so disabling can wait for them; a count is its own monitor. */
+    private static final ConcurrentHashMap<JavaPlugin, int[]> RUNNING = new ConcurrentHashMap<>();
+    /** The plugin whose handler this thread is inside, so a handler that disables its own plugin doesn't wait on itself. */
+    private static final ThreadLocal<JavaPlugin> INSIDE = new ThreadLocal<>();
+
+    /**
+     * Before-disable hook: waits up to {@code millis} for the plugin's handler calls already running, typically on a
+     * network thread, so none overlaps its onDisable. New calls are skipped already, since the plugin no longer counts
+     * as enabled.
+     */
+    static void awaitRunning(JavaPlugin plugin, long millis) {
+        int[] count = RUNNING.get(plugin);
+        if (count == null) return;
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(millis);
+        synchronized (count) {
+            int own = INSIDE.get() == plugin ? 1 : 0;
+            while (count[0] > own) {
+                long left = TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime());
+                if (left <= 0) {
+                    plugin.getLogger().warn(count[0] - own + " packet handler call(s) still running after the disable "
+                            + "grace period; disabling anyway");
+                    return;
+                }
+                try {
+                    count.wait(left);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
+            }
+        }
+    }
+
     /** Disable hook: drops every handler the plugin registered, so none of its classes stay reachable. */
     static void remove(JavaPlugin plugin) {
         synchronized (LOCK) {
+            RUNNING.remove(plugin);
             for (Side side : new Side[] {OUT, IN}) {
-                if (side.all.removeIf(h -> h.plugin == plugin)) side.changed();
+                boolean changed = side.all.removeIf(h -> {
+                    if (h.plugin != plugin) return false;
+                    h.active = false;
+                    return true;
+                });
+                if (changed) side.changed();
             }
         }
     }
@@ -207,14 +251,31 @@ final class NetPackets {
     private static Packet<?> run(Handler[] handlers, ServerPlayer player, Packet<?> packet, boolean outgoing) {
         Event event = new Event(player, packet, outgoing);
         for (Handler h : handlers) {
-            event.current = h;
+            // A dispatch may hold a snapshot from before an unregister or a disable. The plugin stops counting as
+            // enabled before its onDisable runs, so no handler runs against what onDisable closed.
+            // Counted before the enabled check, so a disable that sees no call running can't miss one starting.
+            // Made at registration and dropped at disable, so a stale snapshot never brings a disabled plugin back.
+            int[] count = RUNNING.get(h.plugin);
+            if (count == null) continue;
+            synchronized (count) {
+                count[0]++;
+            }
+            JavaPlugin outer = INSIDE.get();
             try {
+                if (!h.active || !h.plugin.isEnabled()) continue;
+                event.current = h;
+                INSIDE.set(h.plugin);
                 @SuppressWarnings("unchecked")
                 PacketHandler<Packet<?>> body = (PacketHandler<Packet<?>>) h.body;
                 body.handle(event);
             } catch (Throwable t) {
                 h.plugin.getLogger().error("A packet handler for " + packet.getClass().getSimpleName()
                         + (outgoing ? " sent to " : " from ") + player.getGameProfile().getName() + " threw", t);
+            } finally {
+                INSIDE.set(outer);
+                synchronized (count) {
+                    if (--count[0] == 0) count.notifyAll();
+                }
             }
         }
         return event.cancelled ? null : event.packet;
@@ -257,6 +318,15 @@ final class NetPackets {
             }
             if (!outgoing && replacement instanceof ClientboundBundlePacket) {
                 throw new IllegalArgumentException("A received packet can't be replaced with a bundle");
+            }
+            // The handlers still to run were chosen for this packet's class, and each casts to it.
+            if (replacement.getClass() != packet.getClass()) {
+                throw new IllegalArgumentException("setPacket needs another " + packet.getClass().getSimpleName()
+                        + ", not a " + replacement.getClass().getSimpleName() + ": later handlers expect the kind "
+                        + "they registered for. To " + (outgoing ? "send" : "handle") + " a different kind of packet, "
+                        + "cancel this one with setCancelled(true) and " + (outgoing
+                                ? "send yours with player.connection.send"
+                                : "have the server handle yours from runOnServerThread with yours.handle(player.connection)"));
             }
             packet = replacement;
         }
