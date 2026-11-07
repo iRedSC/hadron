@@ -51,6 +51,8 @@ final class TaskScheduler implements Scheduler {
         final long period;
         long due;
         volatile boolean cancelled;
+        /** Times its body threw, so a repeating task that always throws is logged a few times, then counted. */
+        private final AtomicInteger failures = new AtomicInteger();
 
         TaskImpl(int id, JavaPlugin owner, Runnable body, boolean isAsync, long due, long period) {
             this.id = id;
@@ -94,7 +96,15 @@ final class TaskScheduler implements Scheduler {
                 if (cancelled || !host.isActive(owner)) return;
                 body.run();
             } catch (Throwable t) {
-                owner.getLogger().error("Task #" + id + " threw", t);
+                // As for a listener: a plugin's bug costs that task its run, not the server its log. A timer that
+                // throws every tick would otherwise write a stack trace twenty times a second.
+                int n = failures.incrementAndGet();
+                if (n <= 5) {
+                    owner.getLogger().error("Task #" + id + " threw" + (period > 0 && n == 5 ? "; it runs again on its "
+                            + "timer, and from now on only every 1000th failure is logged" : ""), t);
+                } else if (n % 1000 == 0) {
+                    owner.getLogger().error("Task #" + id + " has thrown " + n + " times; latest failure", t);
+                }
             } finally {
                 if (period == 0) finished(this);
                 if (isAsync) ended(owner);

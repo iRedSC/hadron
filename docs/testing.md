@@ -148,6 +148,8 @@ Beside every `report.txt` is a `report.json` with the same results for tools; `h
 - **one effect is one event** where firing twice is a risk;
 - **attribution lasts:** an arrow's hit is still its shooter's after flight, a logout and a reload.
 
+The `hostile` package drops broken plugin jars beside a healthy plugin (a bad or incomplete plugin.yml, a main class that is missing, isn't a plugin or can't be created, a throw in each lifecycle step, a listener, command or task that throws, a background task that never returns, a jar replaced while its task runs, a missing or circular dependency) and checks that the server and the healthy plugin keep working and that the owner's message says what went wrong and how to fix it.
+
 Writing them found 11 Hadron bugs, all fixed: crafting results and the crafter ignoring a plugin's result, a cancelled cursor drop falling anyway, a hopper's pickup blamed on the item, dimension suggestions never asking the server, a live stack handed to `EntityUseEvent`, `EntityVelocityEvent` never firing, a cancelled TNT lighting setting fire anyway, a dispenser leaving both TNT and primed TNT, sticky pistons' pulls reported as nothing, and cancelled placements costing the tool its durability.
 
 ## Coverage: the build checks every claim has a test
