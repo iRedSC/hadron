@@ -38,6 +38,26 @@ object HadronTestServer {
         max-players=100
         """.trimIndent() + "\n"
 
+    /** How many failed runs' evidence is kept. */
+    const val KEEP_FAILURES = 10
+
+    /**
+     * Copies a failed run's report (text and JSON) and server log to failures/<time> in [root], where the next run
+     * can't overwrite them: a failure that won't happen again on demand keeps its evidence. Returns that folder.
+     */
+    fun keep(root: File): File {
+        val failures = root.resolve("failures")
+        val stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS"))
+        val dir = failures.resolve(stamp)
+        dir.mkdirs()
+        for (f in listOf(root.resolve("report.txt"), root.resolve("report.json"), root.resolve("run/logs/latest.log"))) {
+            if (f.isFile) f.copyTo(dir.resolve(f.name), overwrite = true)
+        }
+        failures.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }?.dropLast(KEEP_FAILURES)
+            ?.forEach { it.deleteRecursively() }
+        return dir
+    }
+
     fun prepare(run: File, mod: File?, harness: File?) {
         run.resolve("plugins").mkdirs()
         if ((mod == null) != (harness == null)) throw GradleException("hadronTestServer.mod and hadronTestServer.harness "
@@ -109,11 +129,14 @@ tasks.named<JavaExec>("runHadronTest") {
     // a mod failing at shutdown), and trusting the report alone would end that green.
     doLast {
         val code = (this as JavaExec).executionResult.get().exitValue
+        // The server exits 0 only when every test passed, so any other exit is a failed run: keep its evidence.
+        val kept = if (code != 0) HadronTestServer.keep(root) else null
         val report = root.resolve("report.txt")
         val passed = report.isFile && report.readLines().lastOrNull { it.startsWith("RESULT:") }?.trim() == "RESULT: PASSED"
         if (code != 0 && passed) {
             throw GradleException("The test server reported every test passed, then exited with code $code, so "
-                    + "something broke after the tests ran. Its log says what: " + root.resolve("run/logs/latest.log"))
+                    + "something broke after the tests ran. Its log says what: " + root.resolve("run/logs/latest.log")
+                    + " (kept in $kept)")
         }
     }
 }
