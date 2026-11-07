@@ -1,0 +1,5 @@
+name: ContractTests
+version: ${version}
+minecraft: ${minecraft}
+main: contract.tests.ContractTestsPlugin
+description: Blind tests of Hadron's contract; holds nothing but them.
