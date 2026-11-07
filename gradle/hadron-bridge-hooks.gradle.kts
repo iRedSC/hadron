@@ -2,6 +2,7 @@
 // bridgeHooksCheck (part of check) fails when the committed file differs. It also holds @FiredBy to the code: an
 // event marked core = NONE fails if core allocates it or a subclass, and one marked FULL or PARTIAL fails if core
 // never does. And docs/events.md's catalog must say "bridge" in the chokepoint column for exactly the NONE events.
+// bridgeHooksFixtureCheck runs these checks on small compiled examples (src/bridgeHooksFixture) that must fail.
 // Reads class files only, like coverageCheck (gradle/hadron-coverage.gradle.kts), so it runs in milliseconds.
 //
 // Applied from neoforge/build.gradle.kts, the one project that sees api, common and the port.
@@ -390,4 +391,58 @@ val bridgeHooksCheck = tasks.register("bridgeHooksCheck") {
     }
 }
 
-tasks.named("check") { dependsOn(bridgeHooksCheck) }
+// ---- The checker's own test ---------------------------------------------------------------------------------------
+
+// src/bridgeHooksFixture: a tiny api (fixture/api) and core (fixture/core), each example named for what it must do.
+val compileBridgeHooksFixture = tasks.register<JavaCompile>("compileBridgeHooksFixture") {
+    dependsOn(":api:classes")
+    source(file("src/bridgeHooksFixture/java"))
+    classpath = bridgeHooksApi
+    destinationDirectory.set(layout.buildDirectory.dir("bridge-hooks-fixture/classes"))
+    options.release.set(21)
+}
+
+val bridgeHooksFixtureCheck = tasks.register("bridgeHooksFixtureCheck") {
+    group = "verification"
+    description = "Runs the @FiredBy checks on src/bridgeHooksFixture and fails unless each gives its expected problems."
+    val classes = compileBridgeHooksFixture.flatMap { it.destinationDirectory }
+    inputs.files(classes)
+    val marker = layout.buildDirectory.file("bridge-hooks-fixture/ok.txt")
+    outputs.file(marker)
+    doLast {
+        val failures = mutableListOf<String>()
+        // Each wanted text must match exactly one problem, and every problem must be wanted.
+        fun expect(case: String, got: List<String>, want: List<String>) {
+            if (want.all { w -> got.count { w in it } == 1 } && got.all { g -> want.any { it in g } }) return
+            failures += "$case: wanted ${want.ifEmpty { listOf("no problems") }}, got ${got.ifEmpty { listOf("none") }}"
+        }
+        val dir = classes.get().asFile
+        val (events, problems) = HadronBridgeHooks.facts(HadronBridgeHooks.readClasses(listOf(dir.resolve("fixture/api"))),
+                HadronBridgeHooks.readClasses(listOf(dir.resolve("fixture/core"))))
+        expect("events", problems, listOf("Outer.BareEvent has no @FiredBy", "FactoryEvent in api allocates FactoryEvent",
+                "two events are named SameEvent"))
+
+        val rows = listOf("| `Outer.InnerEvent`, `FactoryEvent` | `Fire` |", "| `ParentEvent` | `CoreChildEvent` |",
+                "| `RefEvent` | `RefEvent::new` |", "| `SuperOnlyEvent`, `SameEvent` | Bridge (a mod) |")
+        fun catalog(column: String, vararg rows: String) = "| Event | $column |\n|---|---|\n" + rows.joinToString("\n")
+        expect("catalog", HadronBridgeHooks.catalogProblems(catalog("Core chokepoint", *rows.toTypedArray()), events), listOf())
+        expect("renamed column", HadronBridgeHooks.catalogProblems(catalog("Chokepoint", *rows.toTypedArray()), events),
+                events.map { "lists ${it.name} outside" }.distinct())
+        expect("wrong cells", HadronBridgeHooks.catalogProblems(catalog("Core chokepoint", rows[0], rows[3],
+                "| `ParentEvent` | BRIDGE |", "| `RefEvent` | |"), events),
+                listOf("ParentEvent is @FiredBy(core = FULL)", "RefEvent has an empty Core chokepoint cell"))
+
+        val tables = HadronBridgeHooks.tables(events)
+        val doc = tables.keys.joinToString("\n") { HadronBridgeHooks.begin(it) + "\n" + HadronBridgeHooks.end(it) }
+        fun render(doc: String) = listOfNotNull(runCatching { HadronBridgeHooks.render(doc, tables) }.exceptionOrNull()?.message)
+        expect("markers", render(doc), listOf())
+        expect("missing marker", render(doc.replace(HadronBridgeHooks.end("core-partial"), "")), listOf("lost its generated core-partial"))
+        expect("duplicated marker", render(doc + "\n" + doc), listOf("more than one generated bridge-only"))
+
+        if (failures.isNotEmpty()) throw GradleException("The @FiredBy checks no longer catch what " +
+                "src/bridgeHooksFixture shows: fix gradle/hadron-bridge-hooks.gradle.kts\n" + failures.joinToString("\n") { "  $it" })
+        marker.get().asFile.apply { parentFile.mkdirs(); writeText("the @FiredBy checks catch every fixture case\n") }
+    }
+}
+
+tasks.named("check") { dependsOn(bridgeHooksCheck, bridgeHooksFixtureCheck) }
