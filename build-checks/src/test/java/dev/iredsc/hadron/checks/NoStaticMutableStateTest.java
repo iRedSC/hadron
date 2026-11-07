@@ -110,6 +110,72 @@ class NoStaticMutableStateTest {
     }
 
     @Test
+    void acceptsAPluginsPersistentDataTypeConstants() {
+        // PersistentDataType comes from a class file here, as the api jar does for a plugin.
+        helper.addSourceLines("com/example/MyPlugin.java",
+                "package com.example;",
+                "import dev.iredsc.hadron.api.data.PersistentDataType;",
+                "class MyPlugin {",
+                "  enum Rank { MEMBER, ADMIN }",
+                "  static final PersistentDataType<String, Rank> RANK =",
+                "      PersistentDataType.adapt(PersistentDataType.STRING, Rank.class, Rank::valueOf, Rank::name);",
+                "  static final PersistentDataType<String, String> TEXT = PersistentDataType.STRING;",
+                "  static final class Counting implements PersistentDataType<String, String> { int calls; }",
+                "  // BUG: Diagnostic contains: holds a Counting",
+                "  static final PersistentDataType<String, String> COUNTING = new Counting();",
+                "}")
+                .doTest();
+    }
+
+    @Test
+    void refusesEnumConstantsThatHoldState() {
+        helper.addSourceLines("com/example/MyPlugin.java",
+                "package com.example;",
+                "import java.util.*;",
+                "class MyPlugin {",
+                "  enum State {",
+                "    // BUG: Diagnostic contains: holds a State",
+                "    INSTANCE;",
+                "    int joins;",
+                "  }",
+                "  enum Scores {",
+                "    // BUG: Diagnostic contains: holds a Scores",
+                "    ALL;",
+                "    final Map<UUID, Integer> byPlayer = new HashMap<>();",
+                "  }",
+                "  enum Odd {",
+                "    // BUG: Diagnostic contains: holds a Odd",
+                "    ONE { int calls; };",
+                "  }",
+                "  enum Mode { ON, OFF }",
+                "  // BUG: Diagnostic contains: holds a State",
+                "  static final State CURRENT = State.INSTANCE;",
+                "}")
+                .doTest();
+    }
+
+    @Test
+    void acceptsEnumsWhoseFieldsAreFinalAndImmutable() {
+        helper.addSourceLines("com/example/MyPlugin.java",
+                "package com.example;",
+                "import java.util.concurrent.TimeUnit;",
+                "class MyPlugin {",
+                "  enum Rank {",
+                "    MEMBER(\"m\", 1), ADMIN(\"a\", 9);",
+                "    final String tag; final int level;",
+                "    Rank(String tag, int level) { this.tag = tag; this.level = level; }",
+                "  }",
+                "  enum Dir { N, S; Dir opposite() { return this == N ? S : N; } }",
+                "  enum Shaped { ROUND { @Override int corners() { return 0; } }; int corners() { return 4; } }",
+                "  static final Rank DEFAULT = Rank.MEMBER;",
+                "  static final TimeUnit UNIT = TimeUnit.SECONDS;",
+                "  record Grant(Rank rank, String why) {}",
+                "  static final Grant START = new Grant(Rank.MEMBER, \"joined\");",
+                "}")
+                .doTest();
+    }
+
+    @Test
     void hadronsOwnCodeMayExemptAFieldWithAReason() {
         hadron.addSourceLines("dev/iredsc/hadron/neoforge/Hooks.java",
                 "package dev.iredsc.hadron.neoforge;",

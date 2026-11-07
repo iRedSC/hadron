@@ -126,6 +126,10 @@ public final class DataApiTests {
 
     enum Rank { MEMBER, ADMIN }
 
+    /** PersistentDataType's Javadoc example, word for word: a plugin's own type kept as a constant compiles. */
+    static final PersistentDataType<String, Rank> RANK =
+            PersistentDataType.adapt(PersistentDataType.STRING, Rank.class, Rank::valueOf, Rank::name);
+
     /** A plugin's own type, as Bukkit plugins write them: a rank stored as its name. */
     static final class RankType implements PersistentDataType<String, Rank> {
         int toCalls;
@@ -204,8 +208,7 @@ public final class DataApiTests {
         t.assertTrue(rank.toCalls == 1 && rank.fromCalls == 1, "set and get should go through the type's "
                 + "toPrimitive and fromPrimitive once each, but called them " + rank.toCalls + " and " + rank.fromCalls);
         t.assertEquals("ADMIN", data.get(key(t, "rank"), PersistentDataType.STRING), "what it is stored as");
-        PersistentDataType<String, Rank> adapted = PersistentDataType.adapt(PersistentDataType.STRING, Rank.class,
-                Rank::valueOf, Rank::name);
+        PersistentDataType<String, Rank> adapted = RANK;
         t.assertTrue(adapted.getPrimitiveType() == String.class && adapted.getComplexType() == Rank.class,
                 "an adapted type's classes");
         t.assertEquals(Rank.ADMIN, data.get(key(t, "rank"), adapted), "the same value read with an adapted type");

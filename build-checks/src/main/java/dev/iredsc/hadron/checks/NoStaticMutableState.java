@@ -35,6 +35,10 @@ import javax.tools.JavaFileObject;
  * immutable (a collection, an array, a ThreadLocal, an object with a field that can change). A plugin's classes are reloaded with a new class loader, so static state either outlives the
  * reload (keeping the old class loader alive) or silently starts empty, and the plugin looks fine until a later
  * reload.
+ *
+ * <p>It catches the common mistakes, not every way to hide state. Known limits: a mutable object inside an
+ * unmodifiable collection ({@code List.of(new AtomicInteger())}), an inner-class instance that holds a mutable outer
+ * object, and a plugin's own PersistentDataType returned through a method typed as the interface.
  */
 @AutoService(BugChecker.class)
 @BugPattern(
@@ -75,6 +79,8 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
             // Minecraft's block position; its mutable form is BlockPos.MutableBlockPos, a different class.
             "net.minecraft.core.BlockPos");
 
+    private static final String PERSISTENT_DATA_TYPE = "dev.iredsc.hadron.api.data.PersistentDataType";
+
     /** Types whose fields look immutable but whose value is kept elsewhere, per thread or per class. */
     private static final List<String> THREAD_LOCAL = List.of("java.lang.ThreadLocal", "java.lang.ClassValue");
 
@@ -93,7 +99,10 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
     @Override
     public Description matchVariable(VariableTree tree, VisitorState state) {
         VarSymbol sym = ASTHelpers.getSymbol(tree);
-        if (sym == null || sym.getKind() != ElementKind.FIELD || !sym.isStatic()) return Description.NO_MATCH;
+        if (sym == null || !sym.isStatic()
+                || (sym.getKind() != ElementKind.FIELD && sym.getKind() != ElementKind.ENUM_CONSTANT)) {
+            return Description.NO_MATCH;
+        }
         // Mixin @Shadow fields are Minecraft's, declared again only so the mixin can name them.
         if (ASTHelpers.hasAnnotation(sym, "org.spongepowered.asm.mixin.Shadow", state)) return Description.NO_MATCH;
 
@@ -119,13 +128,12 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
                 + "it only shows several reloads later. Keep it in a field of the plugin instance (or an object the "
                 + "plugin owns), or in PersistentData if it must survive restarts. A constant is fine as static "
                 + "final with an immutable value: List.of(...), Set.of(...), Map.of(...), a String, a primitive, an "
-                + "enum, or a record or final class whose fields are all final and immutable too." + (exemptions ? " In Hadron's own code, if it must be static, annotate it "
+                + "enum, a PersistentDataType, or a record, enum or final class whose fields are all final and immutable too." + (exemptions ? " In Hadron's own code, if it must be static, annotate it "
                 + "@StaticState(reason = \"...\") saying what clears it." : ""));
     }
 
     /** Why the field holds state, or null when it doesn't. */
     private String problem(VarSymbol sym, ExpressionTree init, VisitorState state) {
-        if ((sym.flags() & Flags.ENUM) != 0) return null;
         if ((sym.flags() & Flags.FINAL) == 0) return "isn't final, so it can be reassigned";
         Type type = sym.type;
         if (type instanceof Type.ArrayType) {
@@ -141,8 +149,7 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
         // Another static final field's value, compiled from source with this check, so checked where it's declared.
         if (init != null && ASTHelpers.getSymbol(init) instanceof VarSymbol other && other.isStatic()
                 && (other.flags() & Flags.FINAL) != 0 && other.getKind() == ElementKind.FIELD
-                && other.enclClass().classfile != null
-                && other.enclClass().classfile.getKind() == JavaFileObject.Kind.SOURCE) {
+                && fromSource(other.enclClass())) {
             return null;
         }
         // The value's own type, when the initializer says more than the field's declared type: new Foo(...) holds
@@ -171,7 +178,7 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
     }
 
     /**
-     * Primitives, {@link #IMMUTABLE}, enums, records of known immutable components, and classes whose every
+     * Primitives, {@link #IMMUTABLE}, the api's persistent data types, library enums, records of known immutable components, and classes whose every
      * instance field (theirs and their superclasses') is final and itself known immutable, as far down as it goes.
      * The class must be final unless {@code exact}, when {@code new} made exactly it. A type variable or an interface
      * could be anything, so it isn't. In Hadron's own code, a class annotated {@code @StaticState(reason = ...)}
@@ -183,7 +190,14 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
         Symbol.TypeSymbol tsym = state.getTypes().erasure(type).tsym;
         if (IMMUTABLE.contains(tsym.getQualifiedName().toString())) return true;
         if (!(tsym instanceof Symbol.ClassSymbol cls)) return false;
-        if ((cls.flags() & Flags.ENUM) != 0) return true;
+        // The api's persistent data types are conversions with no state of their own; a plugin's own class that
+        // implements one is checked below like any other.
+        if (cls.isInterface() && isSubtype(type, PERSISTENT_DATA_TYPE, state)) return true;
+        if ((cls.flags() & Flags.ENUM) != 0) {
+            // A library's enum isn't reloaded with the plugin; one compiled here is checked like any class, whose
+            // constants are created once and implicitly final.
+            return !fromSource(cls) || fieldsImmutable(cls, state, depth);
+        }
         Attribute.Compound vouched = exemption(cls);
         if (vouched != null && exemptions && !reason(vouched).isBlank()) return true;
         if (cls.isRecord()) {
@@ -198,13 +212,27 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
                 && !knownImmutable(superclass, true, state, depth + 1)) {
             return false;
         }
+        return fieldsImmutable(cls, state, depth);
+    }
+
+    /** Whether every instance field of the class is final and known immutable; its own type counts as checked. */
+    private boolean fieldsImmutable(Symbol.ClassSymbol cls, VisitorState state, int depth) {
         for (Symbol member : cls.getEnclosedElements()) {
             if (!(member instanceof VarSymbol field) || field.isStatic()) continue;
-            if ((field.flags() & Flags.FINAL) == 0 || !knownImmutable(field.type, false, state, depth + 1)) {
-                return false;
-            }
+            if ((field.flags() & Flags.FINAL) == 0) return false;
+            if (field.type.tsym != cls && !knownImmutable(field.type, false, state, depth + 1)) return false;
         }
         return true;
+    }
+
+    private static boolean isSubtype(Type type, String name, VisitorState state) {
+        Type other = state.getTypeFromString(name);
+        return other != null && ASTHelpers.isSubtype(type, other, state);
+    }
+
+    /** Compiled from source in this build, so checked here, as opposed to read from a library's class file. */
+    private static boolean fromSource(Symbol.ClassSymbol cls) {
+        return cls.classfile != null && cls.classfile.getKind() == JavaFileObject.Kind.SOURCE;
     }
 
     /** new T[0] or {}: an array with no elements has nothing to change. */
