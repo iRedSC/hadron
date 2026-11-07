@@ -5,7 +5,8 @@ For each entry in regressions/regressions.toml it applies regressions/<id>.patch
 throwaway git worktree at your HEAD, runs only that entry's guard tests, and expects every one of them to fail.
 Your own working tree is never touched: the patch only ever lands in build/regression-replay/tree.
 
-    python3 scripts/regression_replay.py                 # every entry (or ./gradlew regressionReplay)
+    python3 scripts/regression_replay.py                 # every entry
+    python3 scripts/regression_replay.py --shard 2/6     # one of six equal shares, as each CI job runs
     python3 scripts/regression_replay.py --only ID ...   # some entries
     python3 scripts/regression_replay.py list            # entries and their guards, nothing run
     python3 scripts/regression_replay.py refresh ID      # rewrite a STALE entry's patch against HEAD
@@ -226,7 +227,7 @@ def ancestors() -> set[int]:
 
 def take_shared_lock(lock) -> None:
     """Takes the shared Gradle lock, refusing at once if a process this replay runs under already holds it: that
-    is `flock <lock> ... regressionReplay`, which would wait for itself forever."""
+    is `flock <lock> python3 scripts/regression_replay.py`, which would wait for itself forever."""
     try:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         return
@@ -443,6 +444,9 @@ def replay(entries: list[Entry], base: str) -> list[Result]:
 
 
 def print_report(results: list[Result], base: str, seconds: float) -> None:
+    if not results:
+        print("\nNo entries to replay here (an --only or --shard choice left none).\nRESULT: PASSED")
+        return
     width = max(len(r.entry.id) for r in results)
     print(f"\nRegression replay at {base[:10]}")
     for r in results:
@@ -483,8 +487,21 @@ def pick(entries: list[Entry], ids: list[str]) -> list[Entry]:
     return [known[i] for i in ids]
 
 
+def shard(entries: list[Entry], spec: str | None) -> list[Entry]:
+    """This machine's share of the entries for `--shard I/N`. In-game entries (the slow ones) and fast ones are dealt
+    out separately in manifest order, so every shard gets about the same number of each."""
+    if not spec:
+        return entries
+    m = re.fullmatch(r"(\d+)/(\d+)", spec)
+    if not m or not 1 <= int(m.group(1)) <= int(m.group(2)):
+        raise ManifestError(f"--shard takes I/N with 1 <= I <= N, such as 2/6; got {spec!r}")
+    i, n = int(m.group(1)) - 1, int(m.group(2))
+    slow, quick = [e for e in entries if e.in_game], [e for e in entries if not e.in_game]
+    return slow[i::n] + quick[i::n]
+
+
 def cmd_run(args: argparse.Namespace) -> int:
-    entries = pick(load_manifest(), args.only)
+    entries = shard(pick(load_manifest(), args.only), args.shard)
     base = head()
     if git("status", "--porcelain", "--untracked-files=no").stdout.strip():
         print(f"Note: replaying your last commit {base[:10]}; uncommitted changes aren't part of it.", flush=True)
@@ -555,6 +572,7 @@ def interrupted(*_: object) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--only", action="append", default=[], metavar="ID", help="replay only this entry (repeat)")
+    parser.add_argument("--shard", metavar="I/N", help="replay only the I-th of N equal shares, for parallel CI jobs")
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("list", help="print every entry and its guards")
     refresh = sub.add_parser("refresh", help="rewrite an entry's patch so it applies to HEAD")

@@ -42,10 +42,16 @@ jobs:
   # Every fixed bug stays fixed: each fix in regressions/regressions.toml is undone in a throwaway worktree and its
   # guard tests must fail (docs/testing.md, "Regression replay"). Each in-game entry boots a server, so this is slow
   # and runs for releases only, after the plain checks pass.
+  # Six machines replay a sixth each, in parallel: each in-game entry boots its own server, so one machine takes
+  # about 12 minutes.
   regressions:
     needs: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 240
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -58,12 +64,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-read-only: true
-      - run: ./gradlew regressionReplay
+      - run: python3 scripts/regression_replay.py --shard ${{ matrix.shard }}/6
       - name: Keep the replay's report and logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: regression-replay
+          name: regression-replay-${{ matrix.shard }}
           path: |
             build/regression-replay/report.json
             build/regression-replay/logs/
