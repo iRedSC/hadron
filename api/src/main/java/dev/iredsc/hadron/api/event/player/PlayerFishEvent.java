@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
 import java.util.List;
 import java.util.Objects;
@@ -10,6 +11,8 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.item.ItemStack;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * A player fishing, at each step: casting, a fish biting, a fish getting away, and reeling in. Fired for vanilla's
@@ -29,6 +32,9 @@ import net.minecraft.world.item.ItemStack;
  * <p>On {@link State#CAUGHT_FISH}, {@link #getItems()} is the catch, editable, and {@link #setExpToDrop} the
  * experience it gives.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "any rod whose bobber is a `FishingHook`",
+        bridges = "fishing that doesn't use a `FishingHook` (a mod's own bobber entity), at each step it has")
 public class PlayerFishEvent extends EntityEvent implements Cancellable {
     /** The step of fishing this is. Bukkit's names. */
     public enum State {

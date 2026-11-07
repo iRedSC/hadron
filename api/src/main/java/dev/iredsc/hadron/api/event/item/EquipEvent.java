@@ -2,12 +2,15 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * Something is about to be worn: armour, an elytra, a mob's picked-up gear, or a mod's extra slot (Curios,
@@ -27,6 +30,9 @@ import net.minecraft.world.item.ItemStack;
  * {@code PlayerSwapHandItemsEvent}), and mods' own equip paths, which their bridges fire this for. To see every change
  * after it happens, whatever made it, listen to {@link EquipmentChangeEvent}.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "right-click equip, armour-slot clicks, dispensers, mobs picking up gear",
+        bridges = "the mod's equip paths and extra slots (Curios, Accessories), with the slot name")
 public class EquipEvent extends ItemEvent implements Cancellable {
     private final LivingEntity entity;
     private final EquipmentSlot slot;

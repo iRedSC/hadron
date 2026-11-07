@@ -2,11 +2,14 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * An item is about to be used in the air: eating or drinking starts, a bow is drawn, a pearl or snowball is thrown, a
@@ -18,6 +21,7 @@ import net.minecraft.world.item.ItemStack;
  * (skeletons drawing bows, wandering traders drinking). Witches drink with their own code and are not seen. Using an
  * item on a block or an entity is the block's or entity's use event, not this.
  */
+@FiredBy(core = FULL)
 public class ItemUseEvent extends ItemEvent implements Cancellable {
     private final LivingEntity user;
     private final InteractionHand hand;

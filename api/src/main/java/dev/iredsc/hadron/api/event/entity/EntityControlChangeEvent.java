@@ -2,9 +2,12 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.world.entity.Entity;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 
 /**
  * Who controls an entity is about to change without anyone mounting it: a mob charmed or enthralled, a drone linked
@@ -15,6 +18,10 @@ import net.minecraft.world.entity.Entity;
  * the old and new controller as player UUIDs (empty for nobody), and then records the new controller with
  * {@code Actors.remember(entity, attribution.withController(...))} so later actions carry it.
  */
+@FiredBy(core = NONE,
+        bridges = "changes who controls an entity without mounting (charm, thrall, drone link, guard assignment); "
+                + "expiry is after-only",
+        fillIn = "old and new controller")
 public class EntityControlChangeEvent extends EntityEvent implements Cancellable {
     private final UUID oldController;
     private final UUID newController;

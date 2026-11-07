@@ -2,14 +2,18 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * Two item entities on the ground are about to merge into one. Fired only when they really will merge (same item,
  * room in the stack). Cancel it and both stay as they are. The actor is nature.
  */
+@FiredBy(core = FULL)
 public class ItemMergeEvent extends ItemEvent implements Cancellable {
     private final ItemEntity entity;
     private final ItemEntity target;

@@ -1,13 +1,17 @@
 package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A player is about to lie down in a bed, having passed vanilla's checks (night, no monsters near). Cancel to keep
  * them up. The bed has already become their spawn point by then, as it does in vanilla when they try to sleep by day.
  */
+@FiredBy(core = FULL)
 public class PlayerBedEnterEvent extends PlayerEvent implements Cancellable {
     private final BlockPos bed;
     private boolean cancelled;

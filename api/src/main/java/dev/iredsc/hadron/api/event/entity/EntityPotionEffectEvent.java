@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.core.Holder;
@@ -9,11 +10,14 @@ import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.LivingEntity;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /**
  * A registered effect (vanilla's or a mod's) is about to be added to, changed on, or removed from a living entity: a
  * potion, a beacon, a spell, milk. Cancel it and the entity keeps the effects it had. An effect running out is
  * {@link EntityPotionEffectExpireEvent}, which can't be cancelled.
  */
+@FiredBy(core = FULL)
 public class EntityPotionEffectEvent extends EntityEvent implements Cancellable {
     /** What is happening to the effect. */
     public enum Action {

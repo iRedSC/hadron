@@ -53,7 +53,7 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 
 ## Catalog
 
-**Core** means fired at a vanilla chokepoint, so mods that go through vanilla are covered with no bridge. **Bridge** means only a bridge can fire it. All are cancellable unless marked *(after)*.
+**Core** means fired at a vanilla chokepoint, so mods that go through vanilla are covered with no bridge. **Bridge** means only a bridge can fire it. Where core's coverage stops and what bridges fire is in [bridge-hooks.md](bridge-hooks.md), generated from the code. All are cancellable unless marked *(after)*.
 
 ### Blocks: `BlockEvent`
 
@@ -158,9 +158,9 @@ An inventory is identified by what holds it (a block, an entity, a player, an it
 | `InventoryClickEvent` | what a player asked for inside an open menu | `AbstractContainerMenu.clicked` |
 | `InventoryChangeEvent` | the authoritative change to an inventory's slots, whatever caused it; before and after | `Container.setItem`, `Inventory.add`, `Slot.set`, bridges for item handlers |
 | ├ `InventoryMoveItemEvent` | items move between two inventories: hoppers, pipes, export buses, a seagull taking food from a hand | `HopperBlockEntity`, item handler transfers |
-| ├ `InventoryGenerateEvent` | items appear with no source: a quest reward, an ore laser, a creative source | |
-| ├ `InventoryDestroyEvent` | items vanish with no destination: a void upgrade, a trash can, a matter condenser | |
-| └ `InventorySortEvent` | contents rearranged in place (Quark sorting) | |
+| ├ `InventoryGenerateEvent` | items appear with no source: a quest reward, an ore laser, a creative source | bridge |
+| ├ `InventoryDestroyEvent` | items vanish with no destination: a void upgrade, a trash can, a matter condenser | bridge |
+| └ `InventorySortEvent` | contents rearranged in place (Quark sorting) | bridge |
 
 ### Resources: `ResourceEvent`
 
@@ -168,9 +168,9 @@ Everything measured in amounts that isn't an item stack: energy, fluids in tanks
 
 | Event | What | Core chokepoint |
 |---|---|---|
-| `ResourceChangeEvent` | a holder's amount changes; old and new | core for currencies (every economy call); bridges for everything else |
-| ├ `ResourceProduceEvent` | created: a generator, a reactor's waste, a quest's currency reward | bridge |
-| ├ `ResourceConsumeEvent` | destroyed: a machine spending power, a spell's mana, a vein depleted | bridge |
+| `ResourceChangeEvent` | a holder's amount changes; old and new | core for currencies, through the produce and consume leaves; bridges for everything else |
+| ├ `ResourceProduceEvent` | created: a generator, a reactor's waste, a quest's currency reward | core for currency deposits; bridges for everything else |
+| ├ `ResourceConsumeEvent` | destroyed: a machine spending power, a spell's mana, a vein depleted | core for currency withdrawals; bridges for everything else |
 | └ `ResourceConvertEvent` | one resource into another in one step: fuel to heat to steam | bridge |
 | `ResourceTransferEvent` | an amount moves between holders: a cable, a pipe, a wireless charger reaching a player in another dimension, a payment | core for currency transfers; bridges for energy, fluids and mods' resources |
 

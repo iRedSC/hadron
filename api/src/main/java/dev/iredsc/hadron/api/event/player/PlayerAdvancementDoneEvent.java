@@ -1,9 +1,13 @@
 package dev.iredsc.hadron.api.event.player;
 
+import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.advancements.AdvancementHolder;
 import net.minecraft.server.level.ServerPlayer;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /** A player has completed an advancement. After the fact: not cancellable. */
+@FiredBy(core = FULL)
 public class PlayerAdvancementDoneEvent extends PlayerEvent {
     private final AdvancementHolder advancement;
 

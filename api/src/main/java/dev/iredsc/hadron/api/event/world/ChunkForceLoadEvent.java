@@ -2,14 +2,18 @@ package dev.iredsc.hadron.api.event.world;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.ChunkPos;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * An actor is about to keep a chunk loaded with nobody near it: {@code /forceload}, a chunk loader, an anchor, a
  * claim. Cancel it and the chunk isn't forced (the loader's request fails, and nothing is saved). Short-lived
  * tickets (portals, teleports) don't fire this.
  */
+@FiredBy(core = FULL)
 public class ChunkForceLoadEvent extends WorldEvent implements Cancellable {
     private final ChunkPos chunkPos;
     private final boolean ticking;

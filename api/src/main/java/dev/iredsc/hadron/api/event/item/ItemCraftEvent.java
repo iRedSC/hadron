@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import java.util.List;
 import java.util.Objects;
@@ -9,6 +10,8 @@ import java.util.Optional;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeHolder;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * An actor is about to turn inputs into outputs: a player taking a crafting, smithing, stonecutter, loom or
@@ -19,6 +22,9 @@ import net.minecraft.world.item.crafting.RecipeHolder;
  * shift-click fires once for each craft it takes, so cancelling stops the batch where it is. Bridges fire it for their
  * mod's crafting, with every input, output and cost.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "every vanilla workstation and the crafter",
+        bridges = "the mod's crafting, with every input, output and cost")
 public class ItemCraftEvent extends ItemEvent implements Cancellable {
     private final InventoryHolder holder;
     private final List<ItemStack> inputs;

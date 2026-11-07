@@ -1,15 +1,19 @@
 package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.ai.attributes.Attributes;
 import net.minecraft.world.phys.Vec3;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A living entity is about to be knocked back by a hit or a blast. The actor is whoever dealt the hit. Cancel it and
  * the entity isn't moved; the damage, if any, still lands. {@link #setStrength} scales the push, and
  * {@link #getNewVelocity()} always reflects the current strength.
  */
+@FiredBy(core = FULL)
 public class EntityKnockbackEvent extends EntityVelocityEvent {
     private final double ratioX;
     private final double ratioZ;

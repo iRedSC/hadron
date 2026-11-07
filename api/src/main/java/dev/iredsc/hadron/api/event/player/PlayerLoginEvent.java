@@ -1,16 +1,20 @@
 package dev.iredsc.hadron.api.event.player;
 
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.net.SocketAddress;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /**
  * A player has passed the server's own checks (whitelist, bans, a full server) and is about to join. They are not in
  * the world yet: read who they are, then {@link #disallow} to turn them away with a message.
  * {@link PlayerJoinEvent} follows if they're let in.
  */
+@FiredBy(core = FULL)
 public class PlayerLoginEvent extends PlayerEvent {
     private final SocketAddress address;
     private Component kickMessage;

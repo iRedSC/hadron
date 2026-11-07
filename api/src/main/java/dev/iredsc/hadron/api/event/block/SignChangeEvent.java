@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.block;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -9,10 +10,13 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /**
  * A player is about to set a sign's text. Change lines with {@link #setLine}; cancel it and the sign keeps its old
  * text, on the player's screen too.
  */
+@FiredBy(core = FULL)
 public class SignChangeEvent extends BlockEvent implements Cancellable {
     private final List<String> lines;
     private final boolean front;

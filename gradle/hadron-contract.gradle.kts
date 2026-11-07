@@ -43,10 +43,16 @@ object ContractDocs {
         "platform.md" to Rules(),
         "bridge-hooks.md" to Rules(
             replace = listOf(
-                // A note to Hadron's maintainers, not contract.
-                "Keep it current: whenever an event's Javadoc says bridges fire it, or core's coverage of an event " +
-                    "changes, update the tables here in the same change.\n\n" to "",
-            ),
+                // Notes to Hadron's maintainers about generating the tables (gradle/hadron-bridge-hooks.gradle.kts),
+                // not contract.
+                "The tables below are generated from the `@FiredBy` on each event class, which the build checks " +
+                    "against what core actually fires. To change a row, edit that annotation and run " +
+                    "`./gradlew bridgeHooks`.\n\n" to "",
+            ) + listOf("bridge-only", "core-partial").flatMap { block ->
+                listOf("<!-- generated: $block, from @FiredBy on each event class. Edit those and run ./gradlew " +
+                        "bridgeHooks; edits here are overwritten. -->\n" to "",
+                        "<!-- end generated: $block -->\n" to "")
+            },
         ),
         "testing.md" to Rules(
             // The harness's internals, Hadron's own suite, and how bundles are made: not what a test author needs.

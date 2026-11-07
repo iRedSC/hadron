@@ -2,12 +2,15 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.trading.Merchant;
 import net.minecraft.world.item.trading.MerchantOffer;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * An actor is about to make an exchange with a trader: a player taking a villager's or wandering trader's offer, or a
@@ -17,6 +20,7 @@ import net.minecraft.world.item.trading.MerchantOffer;
  * <p>Core fires it for every merchant menu, vanilla's and mods' that use it. Bridges fire it for their mod's own
  * trading.
  */
+@FiredBy(core = PARTIAL, coreSees = "every merchant menu", bridges = "the mod's own trading")
 public class TradeEvent extends ItemEvent implements Cancellable {
     private final InventoryHolder trader;
     private final Merchant merchant;

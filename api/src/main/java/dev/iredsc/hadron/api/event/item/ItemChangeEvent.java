@@ -2,22 +2,30 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * An existing stack is about to change in place, from {@link #getBefore()} to {@link #getAfter()}: ammo spent, a
  * reagent used, a tool charged, durability lost, an enchantment added, a renamed item. Cancel it and the stack stays as
  * it was, and nothing the change would have cost (levels, materials) is spent.
  *
- * <p><b>Core fires the leaves, plus this for anvil results.</b> Core doesn't fire it for every count or component
- * write, since most of those are on copies and simulations. It fires {@link ItemDamageEvent}, {@link ItemRepairEvent}
- * and {@link ItemEnchantEvent} at their chokepoints, and this event itself when a player takes an anvil result that
- * only renames or otherwise changes the item. Bridges fire it for their mod's enclosing action (a gun spending ammo, a
- * wand spending a reagent), once per action rather than per write. Listen here to hear all of them.
+ * <p><b>Core fires the leaves, plus this for anvil and grindstone results.</b> Core doesn't fire it for every count or
+ * component write, since most of those are on copies and simulations. It fires {@link ItemDamageEvent}, {@link
+ * ItemRepairEvent} and {@link ItemEnchantEvent} at their chokepoints, and this event itself when a player takes an
+ * anvil or grindstone result that only renames or otherwise changes the item. Bridges fire it for their mod's enclosing
+ * action (a gun spending ammo, a wand spending a reagent), once per action rather than per write. Listen here to hear
+ * all of them.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "anvil and grindstone results",
+        bridges = "the enclosing action that changes a stack in place (a gun spending ammo, a wand spending a "
+                + "reagent), once per action")
 public class ItemChangeEvent extends ItemEvent implements Cancellable {
     private final InventoryHolder holder;
     private final ItemStack before;

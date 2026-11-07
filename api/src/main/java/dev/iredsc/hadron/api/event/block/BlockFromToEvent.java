@@ -1,11 +1,14 @@
 package dev.iredsc.hadron.api.event.block;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A fluid is about to flow from one block into the next. Cancel it and it doesn't flow there.
@@ -13,6 +16,7 @@ import net.minecraft.world.level.block.state.BlockState;
  * <p>Unlike Bukkit, {@link #getPos()} is the space being flowed into, the one that changes, so a protection plugin
  * checking {@code getPos()} protects the right block; {@link #getFromPos()} is where the fluid comes from.
  */
+@FiredBy(core = FULL)
 public class BlockFromToEvent extends BlockChangeEvent {
     private final BlockPos from;
     private final Direction face;

@@ -2,14 +2,18 @@ package dev.iredsc.hadron.api.event.world;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * The weather players see is about to change: the natural cycle ({@link Actor.Nature}), sleeping through a storm, a
  * command, a ritual or a weather machine. Fires only when what players see changes. Cancel it and the weather stays
  * as it was; the natural cycle then waits for its next turn.
  */
+@FiredBy(core = FULL)
 public class WeatherChangeEvent extends WorldEvent implements Cancellable {
     /** What players see. */
     public enum Weather {
