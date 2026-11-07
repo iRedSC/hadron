@@ -4,6 +4,7 @@
   "package": "dev.iredsc.hadron.neoforge.mixin.worlds",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "CommandHelperSuggestionsMixin",
     "CommandsSuggestionsMixin",
     "MinecraftServerAccessor",
     "PersistentEntitySectionManagerDiscardMixin",
