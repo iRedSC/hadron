@@ -6,13 +6,24 @@ A rule that a build check could enforce doesn't belong here. Write the check ins
 
 ## How to review
 
-- **Start the summary with a count**: "2 findings" or "No findings". Then one line per finding, worst first.
-- **Every finding cites a file and line** and says what goes wrong, with evidence from the code, never a guess from a name.
-- **No nits.** Style, naming taste and tidy-ups are not findings. An agent author fixes every comment, so each nit costs a full round.
+- **Start the summary with a count**: "4 findings". Then one line per finding, highest priority first.
+- **Every finding has a priority** (below), cites a file and line, and says what goes wrong, with evidence from the code, never a guess from a name.
 - **Mark pre-existing problems as such.** A bug the PR didn't introduce is "pre-existing", so it doesn't read as the author's fault.
 - **Name the class, not the instance.** When a mistake can recur, say so ("every listener that keeps the live stack"), so one round fixes all of them.
-- **At most 3 rounds.** After the third, stop reviewing and ask whether the approach is wrong. From the second round on, review only what changed since the last one, and never raise a finding again that was already answered.
 - **Skip** generated files, `build/`, and test reports.
+
+### Priority
+
+Give each finding the highest level whose test it meets. A council round, and the final review, pass once nothing
+is more serious than `stop_at` in `.github/council.toml`.
+
+| Priority | Test | Examples |
+|---|---|---|
+| **P0** | Loses data, breaks security, or lets an unreviewed change merge | a saved format that loses data, a packet that crashes the server, a gate bypass |
+| **P1** | Breaks a promise in the docs or API, or passes while wrong | a cancel that leaves residue, a check that never fails |
+| **P2** | Correct, but likely to mislead a reader into a bug | a missing test for a promise, an error message without the fix, a slower hot path |
+| **P3** | Correct and safe, but unclear | a bad name, logic in the wrong place, a stale comment |
+| **P4** | Taste | style, wording |
 
 What counts as a failure depends on where the change is:
 

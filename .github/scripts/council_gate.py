@@ -1,26 +1,17 @@
-"""Fails when a PR changes a path in .github/council-paths.txt without a passing council review of its head commit.
+"""Fails when a PR changes a path in .github/council-paths.txt without a final review of its head.
 
-A passing review is a "## Council review" section in the PR description, as the council skill writes it:
+The record is one line in the PR description, written by the final-review skill (.claude/skills/final-review):
 
-    ## Council review
+    Final review: GPT-6.1 Sol (final), <the PR's full head SHA>, 2 found, top P4
 
-    Reviewed commit: <the PR's head SHA>
-    Rounds: 2
-
-    | Delegate | Round 1 | Round 2 |
-    | --- | --- | --- |
-    | GPT-6.1 Sol | 7/10 | 9/10 |
-    | Claude Haiku 5.5 | 6 asked, 2 open | 6 asked, 0 open |
-    ...
-
-Every member in .github/council.toml needs a row. In its last round a deep reviewer must score at least min_score, and
-a question asker must have no question left open. The review counts only for the commit it names, so a push after it
-needs a fresh round.
+It passes when there is exactly one such line, by the "final" member of .github/council.toml, naming the head, and
+its most serious finding is no worse than stop_at (P0 is the most serious). Whether a change also needed the full
+council (.claude/skills/council) is the author's judgement, recorded in the PR; the gate doesn't check it.
 
 Reads BASE and HEAD (commit SHAs) and PR_BODY from the environment. CI runs main's copy of this script, the path list
-and the member list against the PR's diff, so a PR can't change what checks it.
-Run locally with: BASE=origin/main HEAD=$(git rev-parse HEAD) PR_BODY="$(gh pr view --json body -q .body)" \\
-    python3 .github/scripts/council_gate.py
+and the member list against the PR, so a PR can't change what checks it. Run locally with:
+    BASE=$(git merge-base origin/main HEAD) HEAD=$(git rev-parse HEAD) PR_BODY="$(gh pr view --json body -q .body)" \\
+        python3 .github/scripts/council_gate.py
 """
 
 import os
@@ -32,6 +23,14 @@ from pathlib import Path
 
 PATHS_FILE = Path(".github/council-paths.txt")
 COUNCIL_FILE = Path(".github/council.toml")
+ROLES = ("questions", "council", "explain", "final")
+# Each provider's one option, as delegate_task names it, and the values it takes.
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
+PROVIDER_OPTIONS = {"claudeAgent": {"effort": EFFORTS}, "codex": {"reasoningEffort": EFFORTS}}
+
+
+def git(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["git", *args], capture_output=True, text=True)
 
 
 def glob_to_regex(glob: str) -> re.Pattern[str]:
@@ -56,98 +55,107 @@ def patterns() -> list[tuple[str, re.Pattern[str]]]:
     return [(line, glob_to_regex(line)) for line in lines if line and not line.startswith("#")]
 
 
-def changed_files(base: str, head: str) -> list[str]:
-    # --no-renames lists a moved file under both its old and new path, so moving a file out of a protected folder
-    # still counts as touching it.
-    result = subprocess.run(
-        ["git", "diff", "--no-renames", "--name-only", "-z", f"{base}...{head}"],
-        capture_output=True, text=True, check=True,
-    )
-    return [name for name in result.stdout.split("\0") if name]
+def needs_review(changed: list[str], tracked: list[str], rules: list[tuple[str, re.Pattern[str]]]) \
+        -> tuple[list[str], list[tuple[str, str]]]:
+    """The globs that match no tracked file (and so protect nothing), and each changed file a glob protects."""
+    dead = [glob for glob, rx in rules if not any(rx.match(name) for name in tracked)]
+    hits = [(name, glob) for name in changed for glob, rx in rules if rx.match(name)]
+    return dead, hits
 
 
-ROLES = ("deep", "questions")
+def whole(value: object, low: int, high: int) -> bool:
+    # bool is an int in Python, so `true` would otherwise pass as 1.
+    return isinstance(value, int) and not isinstance(value, bool) and low <= value <= high
 
 
-def council() -> tuple[int, list[tuple[str, str]]]:
-    config = tomllib.loads(COUNCIL_FILE.read_text())
-    return int(config["min_score"]), [(m["name"], m["role"]) for m in config["member"]]
-
-
-def review_problems(body: str, head: str, min_score: int, members: list[tuple[str, str]]) -> list[str]:
-    """Why the PR description's council review doesn't pass for this head commit; empty when it does."""
-    section = re.search(r"^## Council review\s*$(.*?)(?=^## |\Z)", body, re.M | re.S)
-    if not section:
-        return ["The PR description has no \"## Council review\" section."]
-    text = section.group(1)
+def config_problems(config: dict) -> list[str]:
+    """Why .github/council.toml can't run a council; empty when it can."""
     problems = []
-    commit = re.search(r"^Reviewed commit:\s*`?([0-9a-f]{7,40})`?\s*$", text, re.M)
-    if not commit:
-        problems.append("The council review has no \"Reviewed commit: <sha>\" line naming the commit it reviewed.")
-    elif not head.startswith(commit.group(1)) or len(commit.group(1)) < 12:
-        problems.append(f"The council reviewed {commit.group(1)}, but the PR's head is {head[:12]}: commits pushed "
-                        "after the review need a fresh round (and at least 12 characters of the SHA).")
-    rows = {}
-    for line in text.splitlines():
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) >= 2 and cells[0] and cells[0] != "Delegate" and not set(cells[0]) <= set("-: "):
-            rows[cells[0]] = cells[1:]
-    for name, role in members:
-        if name not in rows:
-            problems.append(f"No row for council member \"{name}\" (names must match {COUNCIL_FILE}).")
-            continue
-        last = rows[name][-1] if rows[name] else ""
-        if role == "deep":
-            score = re.fullmatch(r"(\d+(?:\.\d+)?)\s*/\s*10", last)
-            if not score:
-                problems.append(f"{name}'s last round is \"{last}\", not a score out of 10.")
-            elif float(score.group(1)) < min_score:
-                problems.append(f"{name} scored {last} in the last round; each deep reviewer needs at least "
-                                f"{min_score}/10.")
-        else:
-            asked = re.fullmatch(r"(\d+)\s+asked,\s*(\d+)\s+open", last)
-            if not asked:
-                problems.append(f"{name}'s last round is \"{last}\", not \"<n> asked, <n> open\".")
-            elif int(asked.group(2)) > 0:
-                problems.append(f"{name} still has {asked.group(2)} open question(s); answer each in the PR or change "
-                                "the code so it no longer applies, then rerun the round.")
+    for key, low, high in (("min_findings", 1, 20), ("max_rounds", 1, 10)):
+        if not whole(config.get(key), low, high):
+            problems.append(f"{COUNCIL_FILE} needs {key} = <a whole number from {low} to {high}>.")
+    if config.get("stop_at") not in ("P0", "P1", "P2", "P3", "P4"):
+        problems.append(f"{COUNCIL_FILE} needs stop_at = one of \"P0\" to \"P4\".")
+    members = config.get("member", [])
+    if not isinstance(members, list) or not all(isinstance(m, dict) for m in members):
+        return problems + [f"{COUNCIL_FILE} lists members as [[member]] tables, one per member."]
+    for m in members:
+        name = m.get("name", "<no name>")
+        if not isinstance(m.get("name"), str) or not m["name"].strip():
+            problems.append(f"{COUNCIL_FILE}: every member needs a name; one has {m.get('name')!r}.")
+        if m.get("role") not in ROLES:
+            problems.append(f"{COUNCIL_FILE}: {name} has role {m.get('role')!r}; roles are {', '.join(ROLES)}.")
+        allowed = PROVIDER_OPTIONS.get(m.get("provider"), {})
+        options = sorted(set(m) - {"name", "role", "provider", "model"})
+        if not allowed or not m.get("model"):
+            problems.append(f"{COUNCIL_FILE}: {name} needs a model and a provider from {', '.join(PROVIDER_OPTIONS)}.")
+        elif len(options) != 1 or options[0] not in allowed or m[options[0]] not in allowed[options[0]]:
+            option = next(iter(allowed))
+            problems.append(f"{COUNCIL_FILE}: {name} takes exactly one option, {option} = one of "
+                            f"{', '.join(allowed[option])}.")
+    names = [m.get("name") for m in members]
+    if len(set(names)) != len(names):
+        problems.append(f"{COUNCIL_FILE}: two members share a name, so the record can't tell them apart.")
+    for role in ROLES:
+        count = sum(m.get("role") == role for m in members)
+        if count == 0 or (role == "final" and count > 1):
+            problems.append(f"{COUNCIL_FILE} needs {'exactly one' if role == 'final' else 'at least one'} "
+                            f"\"{role}\" member.")
     return problems
+
+
+FINAL = re.compile(r"^Final review:[ \t]*(.+?),[ \t]*([0-9a-f]{40}),[ \t]*(\d+) found, top P([0-4])[ \t]*$", re.M)
+
+
+def review_problems(body: str, head: str, config: dict) -> list[str]:
+    """Why the PR description's final review doesn't pass for this head commit; empty when it does."""
+    final = next(m["name"] for m in config["member"] if m["role"] == "final")
+    stop = int(config["stop_at"][1])
+    expected = (f"\"Final review: {final}, {head}, <n> found, top P<k>\", by .claude/skills/final-review/SKILL.md, "
+                f"with nothing more serious than {config['stop_at']}")
+    lines = FINAL.findall(body)
+    if len(lines) != 1:
+        # Two lines could leave a stale pass beside a failing one, so only one may stand.
+        return [f"The PR description needs exactly one final review line ({len(lines)} found): {expected}."]
+    name, sha, _, top = lines[0]
+    if name != final or sha != head or int(top) < stop:
+        return [f"The final review line must read {expected}; it reads \"{name}, {sha}, top P{top}\"."]
+    return []
 
 
 def main() -> int:
     base, head = os.environ["BASE"], os.environ["HEAD"]
+    config = tomllib.loads(COUNCIL_FILE.read_text())
+    problems = config_problems(config)
+    if problems:
+        print("\n".join(problems))
+        return 1
     rules = patterns()
-    min_score, members = council()
-    roles = [role for _, role in members]
-    if any(role not in ROLES for role in roles) or "deep" not in roles or "questions" not in roles:
-        print(f"{COUNCIL_FILE} needs at least one \"deep\" and one \"questions\" member, and no other roles.")
-        return 1
-    # Globs are checked against the PR's tree, so a PR that renames a protected file away also kills its glob here.
-    tracked = subprocess.run(
-        ["git", "ls-tree", "-r", "--name-only", "-z", head], capture_output=True, text=True, check=True
-    ).stdout.split("\0")
-    dead = [glob for glob, rx in rules if not any(rx.match(name) for name in tracked)]
+    # --no-renames lists a moved file under both paths, so moving a file out of a protected folder still counts.
+    changed, tracked = (git("diff", "--no-renames", "--name-only", "-z", f"{base}...{head}"),
+                        git("ls-tree", "-r", "--name-only", "-z", head))
+    for result in (changed, tracked):
+        if result.returncode != 0:
+            # Never "no review needed" because git couldn't say what changed.
+            print(f"{' '.join(result.args)} failed: {result.stderr.strip()}")
+            return 1
+    dead, hits = needs_review([c for c in changed.stdout.split("\0") if c], tracked.stdout.split("\0"), rules)
     if dead:
-        print(f"{PATHS_FILE} has globs that match no file, so they protect nothing. Fix or delete them:")
-        for glob in dead:
-            print(f"  {glob}")
+        print(f"In this PR's tree, {PATHS_FILE} has globs that match no file, so they protect nothing: "
+              f"{', '.join(dead)}. If the PR removes those files on purpose, take their globs out of {PATHS_FILE} "
+              "in a PR of its own first.")
         return 1
-    hits = [(name, glob) for name in changed_files(base, head) for glob, rx in rules if rx.match(name)]
     if not hits:
-        print("No path here needs a council review.")
+        print("No path here needs a review.")
         return 0
-    print("This PR changes paths that need a council review:")
+    print("This PR changes paths that need a final review:")
     for name, glob in hits:
         print(f"  {name}  (matches {glob})")
-    problems = review_problems(os.environ.get("PR_BODY") or "", head, min_score, members)
+    problems = review_problems(os.environ.get("PR_BODY") or "", head, config)
     if not problems:
-        print(f"Passed: every deep reviewer scored at least {min_score}/10 and no question is open, on {head[:12]}.")
+        print(f"Passed: the final review found nothing more serious than {config['stop_at']} on {head[:12]}.")
         return 0
-    print()
-    for problem in problems:
-        print(f"  {problem}")
-    print("\nTo merge: run a council on this PR (say \"council\"; .claude/skills/council/SKILL.md), fix what it finds, "
-          f"and let it write its table into the description with \"Reviewed commit: {head}\".")
+    print("\n".join(f"  {p}" for p in problems))
     return 1
 
 

@@ -59,4 +59,5 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 
 ## Review
 
-- **Council**: the review a PR touching `.github/council-paths.txt` needs to merge, in place of a person. Deep reviewers (large models) score it out of 10; question askers (small models) ask dumb questions about why the code was done that way, each answered in the PR or the code. Members and the passing score are in `.github/council.toml`; the `Council` check reads the table in the PR description, which names the commit it reviewed.
+- **Final review**: the review every PR touching `.github/council-paths.txt` needs to merge: a large model reviews the head, in as many passes as it takes, until it finds nothing more serious than `stop_at` (`.github/council.toml`). The `Council` check reads its one line in the PR description.
+- **Council**: the fuller review for sizable changes whose effect is hard to measure, run by the author's judgement before the final review: one pass of dumb questions, council rounds of prioritised findings (P0 to P4, in coding-standards.md) until a round finds nothing more serious than `stop_at` or `max_rounds` pass (then the owner decides), and one pass of explanations from a history-free snapshot.
