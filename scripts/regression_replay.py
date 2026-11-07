@@ -205,24 +205,34 @@ def locate(guard: Guard) -> tuple[str, str]:
 TIMED_OUT = -1
 
 
+def group_alive(pgid: int) -> bool:
+    try:
+        os.killpg(pgid, 0)
+        return True
+    except ProcessLookupError:
+        return False
+
+
 def stop(proc: subprocess.Popen) -> None:
-    """Ends the build and everything it started (flock, the Gradle client, a test server), so nothing still reads
-    the tree once the replay resets it."""
-    for sig, wait in ((signal.SIGTERM, 30), (signal.SIGKILL, 30)):
-        try:
-            os.killpg(proc.pid, sig)
-        except ProcessLookupError:
-            return
-        try:
-            proc.wait(timeout=wait)
-            return
-        except subprocess.TimeoutExpired:
-            continue
+    """Ends the build and everything it started (flock, Gradle, a test server), so nothing still reads the tree once
+    the replay resets it. Waits for the whole process group, not only flock, and kills what outlives the request."""
+    for sig in (signal.SIGTERM, signal.SIGKILL):
+        if not group_alive(proc.pid):
+            break
+        os.killpg(proc.pid, sig)
+        deadline = time.monotonic() + 30
+        while group_alive(proc.pid) and time.monotonic() < deadline:
+            time.sleep(0.2)
+    try:
+        proc.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        pass
 
 
 def gradle(args: list[str], log: Path) -> int:
     log.parent.mkdir(parents=True, exist_ok=True)
-    cmd = ["flock", LOCK, "./gradlew", "--console=plain", *args]
+    # --no-daemon keeps the whole build in this process group, so stop() can end it; a daemon would outlive it.
+    cmd = ["flock", LOCK, "./gradlew", "--console=plain", "--no-daemon", *args]
     with log.open("w") as out:
         out.write("$ " + " ".join(cmd) + "\n")
         out.flush()
@@ -373,7 +383,10 @@ def replay(entries: list[Entry], base: str) -> list[Result]:
     base_run = run_guards(every, "baseline")
     bad_at_base: dict[str, str] = {}
     for g in every:
-        if g.test not in base_run.failed:
+        if base_run.trouble:
+            # A baseline the replay can't trust proves nothing, so no entry can be called guarded against it.
+            bad_at_base[g.test] = f"the baseline run can't be trusted ({base_run.trouble})"
+        elif g.test not in base_run.failed:
             bad_at_base[g.test] = f"didn't run at baseline ({base_run.trouble or 'no result'})"
         elif base_run.failed[g.test]:
             bad_at_base[g.test] = "fails even with the fix in place"
