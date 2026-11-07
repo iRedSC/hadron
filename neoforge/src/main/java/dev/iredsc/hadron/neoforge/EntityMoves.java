@@ -61,7 +61,7 @@ public final class EntityMoves {
             player.connection.teleport(from.x, from.y, from.z, player.getYRot(), player.getXRot());
             return;
         }
-        EntityTeleports.quietly(() -> entity.teleportTo(from.x, from.y, from.z));
+        EntityTeleports.quietly(entity, () -> entity.teleportTo(from.x, from.y, from.z));
         entity.setDeltaMovement(Vec3.ZERO);
         // The driver's client moves the vehicle itself; tell it where the vehicle really is.
         if (driver instanceof ServerPlayer player) player.connection.send(new ClientboundMoveVehiclePacket(entity));

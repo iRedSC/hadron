@@ -77,6 +77,34 @@ public final class DamageTests {
         t.assertEquals(0, alice.player().getMainHandItem().getDamageValue(), "the sword's damage");
     }
 
+    /**
+     * Minecraft remembers a victim's last damage for 40 ticks and updates it only after the knockback, so a second
+     * attacker's hit soon after the first must not be blamed on the first.
+     */
+    @HadronTest
+    @Covers(EntityKnockbackEvent.class)
+    void aSecondAttackersKnockbackIsTheirsNotTheFirsts(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        List<EntityKnockbackEvent> events = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityKnockbackEvent e) {
+                if (e.getEntity() == pig) events.add(e);
+            }
+        });
+        t.tick(10);
+        alice.attack(pig);
+        t.tick(15); // past the pig's invulnerability, well within the 40 ticks its last damage is remembered
+        pig.moveTo(t.pos(2, 0, 0).getX() + 0.5, t.pos(2, 0, 0).getY(), t.pos(2, 0, 0).getZ() + 0.5);
+        pig.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        bob.attack(pig);
+        t.assertEquals(2, events.size(), "the number of EntityKnockbackEvents for two hits");
+        assertPlayer(t, events.get(0).getActor(), alice, "Alice's hit's knockback");
+        assertPlayer(t, events.get(1).getActor(), bob, "Bob's hit's knockback");
+    }
+
     @HadronTest
     @Covers(EntityKnockbackEvent.class)
     void aHitsKnockbackIsTheAttackersAndPushesTheVictim(TestContext t) {

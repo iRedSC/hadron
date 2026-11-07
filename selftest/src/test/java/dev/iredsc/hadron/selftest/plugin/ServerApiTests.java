@@ -145,6 +145,54 @@ public final class ServerApiTests {
         t.assertNoChat(bob, "original");
     }
 
+    /** A datapack function's lines are commands too: each is heard once, and a refusal or rewrite holds there. */
+    @HadronTest
+    @Covers(CommandExecuteEvent.class)
+    void aFunctionsCommandsAreHeardAndCanBeRewrittenOrRefused(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        List<String> heard = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(CommandExecuteEvent e) {
+                heard.add(e.getCommand());
+                if (e.getCommand().contains("diamond")) e.setCancelled(true);
+                if (e.getCommand().contains("dirt")) e.setCommand("give alice minecraft:emerald 1");
+            }
+        });
+        CommandSourceStack source = t.server().createCommandSourceStack().withSuppressedOutput();
+        var function = net.minecraft.commands.functions.CommandFunction.fromLines(
+                net.minecraft.resources.ResourceLocation.fromNamespaceAndPath("selftest", "gifts"),
+                t.server().getCommands().getDispatcher(), source,
+                List.of("give alice minecraft:diamond 1", "give alice minecraft:dirt 1", "give alice minecraft:stick 1"));
+        t.server().getFunctions().execute(function, source);
+        t.tick();
+        t.assertEquals(List.of("give alice minecraft:diamond 1", "give alice minecraft:dirt 1",
+                "give alice minecraft:stick 1"), heard, "the CommandExecuteEvents for the function's three lines");
+        t.assertInventory(alice, net.minecraft.world.item.Items.DIAMOND, 0);
+        t.assertInventory(alice, net.minecraft.world.item.Items.DIRT, 0);
+        t.assertInventory(alice, net.minecraft.world.item.Items.EMERALD, 1);
+        t.assertInventory(alice, net.minecraft.world.item.Items.STICK, 1);
+    }
+
+    /** A typed command is one event, however it then runs. */
+    @HadronTest
+    @Covers(CommandExecuteEvent.class)
+    void aTypedCommandIsHeardOnce(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        List<String> heard = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(CommandExecuteEvent e) {
+                heard.add(e.getCommand());
+            }
+        });
+        t.server().getCommands().performPrefixedCommand(t.server().createCommandSourceStack().withSuppressedOutput(),
+                "execute as alice run give alice minecraft:stick 1");
+        t.tick();
+        t.assertEquals(List.of("execute as alice run give alice minecraft:stick 1"), heard, "the CommandExecuteEvents");
+        t.assertInventory(alice, net.minecraft.world.item.Items.STICK, 1);
+    }
+
     @HadronTest
     @Covers(value = PluginManager.class, method = "registerCommand")
     void aRegisteredBrigadierCommandRuns(TestContext t) {
