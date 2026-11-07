@@ -89,4 +89,26 @@ public final class DropTests {
         t.assertEquals(3, itemsAround(t, alice, Items.DIAMOND, stone), "the diamonds dropped");
         t.assertEquals(7, experienceAround(t, alice, stone), "the experience dropped");
     }
+
+    @HadronTest
+    @Covers(BlockDropItemEvent.class)
+    void aMinedBlockEntitysDataBeforeIsReadableInTheDropHandler(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos chest = t.pos(1, 0, 0);
+        t.setBlock(chest, Blocks.CHEST);
+        alice.hold(new ItemStack(Items.IRON_AXE));
+        List<String> read = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockDropItemEvent e) {
+                try {
+                    read.add(e.getBlocks().get(0).getBeforeData().map(tag -> tag.getString("id")).orElse("none"));
+                } catch (RuntimeException ex) {
+                    read.add("threw " + ex.getMessage());
+                }
+            }
+        });
+        alice.breakBlock(chest);
+        t.assertEquals(List.of("minecraft:chest"), read, "the broken chest's data before, read inside the handler");
+    }
 }

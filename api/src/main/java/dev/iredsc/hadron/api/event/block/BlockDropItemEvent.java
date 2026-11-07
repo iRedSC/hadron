@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
@@ -49,10 +50,14 @@ public class BlockDropItemEvent extends BlockEvent implements Cancellable {
         this.experience = Math.max(0, experience);
     }
 
-    /** The break, from the block and block entity that were there to what is there now. */
+    /**
+     * The break, from the block and block entity that were there to what is there now. The data before is copied
+     * now: by the time drops roll, a player's break has already removed the block entity, so reading it later throws.
+     */
     private static BlockChange broken(ServerLevel level, BlockPos pos, BlockState state, BlockEntity blockEntity) {
         BlockState now = level.getBlockState(pos);
-        return BlockChange.live(level, pos, state, now, blockEntity,
+        CompoundTag before = blockEntity != null ? blockEntity.saveWithFullMetadata(level.registryAccess()) : null;
+        return BlockChange.withData(level, pos, state, now, before,
                 now.hasBlockEntity() ? level.getBlockEntity(pos) : null);
     }
 
