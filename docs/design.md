@@ -102,5 +102,5 @@ Hadron ships lightweight plugins server owners expect: essentials-style commands
 4. The actor stack and the events in [events.md](events.md) at their chokepoints, with a benchmark for the chokepoint cost; then the coverage report ([bridges.md](bridges.md)).
 5. Gradle plugin and project template, with the build checks.
 6. The skill, written against what exists, then tested by asking fresh agents for real plugins and fixing whatever they trip on.
-7. Headless test runner.
+7. ~~Headless test runner~~: done ([testing.md](testing.md)). `hadronTest` for `examples/hello` and `selftest`; moves into the Gradle plugin with step 5.
 8. Bundled plugins; pilot bridges (Mekanism, AE2, Superb Warfare); the client companion.

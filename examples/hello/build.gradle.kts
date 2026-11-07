@@ -12,8 +12,13 @@ neoForge {
     neoFormVersion = providers.gradleProperty("neoform_version").get()
 }
 
+// Tests (src/test/java) see Minecraft, the plugin, Hadron's api and test-api; the plugin's own code never sees test-api.
+neoForge.addModdingDependenciesTo(sourceSets.test.get())
+
 dependencies {
     compileOnly(project(":api"))
+    testCompileOnly(project(":api"))
+    testCompileOnly(project(":test-api"))
 }
 
 tasks.processResources {
@@ -28,3 +33,6 @@ tasks.register<Copy>("deploy") {
     into(rootProject.layout.projectDirectory.dir("neoforge/run/plugins"))
     rename { "Hello.jar" }
 }
+
+// ./gradlew :examples:hello:hadronTest runs src/test/java's @HadronTests in a headless server.
+apply(from = rootProject.file("gradle/hadron-test.gradle.kts"))
