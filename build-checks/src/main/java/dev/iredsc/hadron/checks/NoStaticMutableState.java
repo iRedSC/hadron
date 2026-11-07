@@ -129,7 +129,7 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
         String typeName = state.getTypes().erasure(type).tsym.getQualifiedName().toString();
         boolean jdk = typeName.startsWith("java.util.") && (state.getTypes().erasure(type).tsym.flags() & Flags.INTERFACE) == 0;
         // A `new` of a java.util class counts; an anonymous subclass (with a body) is the plugin's own class.
-        boolean visible = jdk || mutableFactory(init) || (init instanceof NewClassTree created
+        boolean visible = jdk || mutableFactory(init, state) || (init instanceof NewClassTree created
                 && created.getClassBody() == null && ASTHelpers.getType(created.getIdentifier()) != null
                 && state.getTypes().erasure(ASTHelpers.getType(created.getIdentifier())).tsym.getQualifiedName()
                         .toString().startsWith("java.util."));
@@ -222,25 +222,34 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
         return cls.classfile != null && cls.classfile.getKind() == JavaFileObject.Kind.SOURCE;
     }
 
-    /** new T[0] or {}: an array with no elements has nothing to change. */
+    /** new T[0] or {}: an array with no elements has nothing to change. Another static final field's array is
+     * checked where that field is declared. */
     private static boolean emptyArray(ExpressionTree init) {
+        if (init != null && ASTHelpers.getSymbol(init) instanceof VarSymbol other && other.isStatic() && (other.flags() & Flags.FINAL) != 0) {
+            return true;
+        }
         if (!(init instanceof NewArrayTree array)) return false;
         if (array.getInitializers() != null) return array.getInitializers().isEmpty();
         // The outer length decides: new String[0][1] and new String[ZERO] have no element to change.
-        return !array.getDimensions().isEmpty()
-                && Integer.valueOf(0).equals(ASTHelpers.constValue(array.getDimensions().get(0), Integer.class));
+        return !array.getDimensions().isEmpty() && ASTHelpers.constValue(array.getDimensions().get(0)) instanceof Object size
+                && (size instanceof Number n ? n.intValue() == 0 : size instanceof Character c && c == 0);
     }
 
-    /** The JDK's factories that hand back a changeable collection behind an interface type. */
-    private static boolean mutableFactory(ExpressionTree init) {
+    /** The JDK's factories that hand back a changeable collection behind an interface type. A wrapper around an
+     * unmodifiable collection, or an empty Arrays.asList(), has nothing to change, so it isn't one. */
+    private static boolean mutableFactory(ExpressionTree init, VisitorState state) {
         if (!(init instanceof MethodInvocationTree call) || !(ASTHelpers.getSymbol(call) instanceof MethodSymbol m)) {
             return false;
         }
         String owner = m.owner.getQualifiedName().toString();
         String name = m.getSimpleName().toString();
-        return (owner.equals("java.util.Arrays") && name.equals("asList"))
-                || (owner.equals("java.util.Collections") && (name.startsWith("synchronized")
-                        || name.startsWith("checked") || name.equals("newSetFromMap")));
+        if (owner.equals("java.util.Arrays") && name.equals("asList")) return !call.getArguments().isEmpty();
+        if (!owner.equals("java.util.Collections")) return false;
+        if (name.equals("newSetFromMap")) return true;
+        if (!name.startsWith("synchronized") && !name.startsWith("checked")) return false;
+        ExpressionTree wrapped = ASTHelpers.stripParentheses(call.getArguments().get(0));
+        Type wrappedType = ASTHelpers.getType(wrapped);
+        return wrappedType == null || !unmodifiable(wrappedType, wrapped, state);
     }
 
     private Description describe(VariableTree tree, String message) {
