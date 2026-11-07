@@ -41,6 +41,10 @@ The owner never has to work out which bridges are missing. At startup, and on `/
 
 The list of official bridges ships in Hadron's jar and is updated each release. It also records mods verified to need no bridge, because everything they do goes through vanilla chokepoints and core attributes them correctly; those are reported as covered.
 
+### Checking a mod live with trace
+
+The report says what should be covered; `/hadron trace` shows what is. An op runs `/hadron trace block by machine near 16` beside a mod's quarry (or `trace entity`, `trace all`, a single event such as `BlockBreakEvent`, filters `by <player|kind>`, `in <world>`, `near <blocks>`), and each event prints as it fires: event, actor, operation, where, and the outcome after every plugin ran, such as `BlockBreakEvent · Machine quarry for alice · op#812 · overworld 10 64 -3 · cancelled by Regions`. Silence while the machine works is an interception gap; `Unknown` or `no owner` is an attribution gap. Output goes to whoever ran it, at most 10 lines a second with the rest counted, and stops after 5 minutes, at `/hadron trace off`, or when the op leaves; from the console or RCON, `/hadron trace` replays the latest lines. Needs `hadron.trace` (ops by default).
+
 ## What core covers with no bridge
 
 | Concern | Core, for every mod | A bridge adds |
