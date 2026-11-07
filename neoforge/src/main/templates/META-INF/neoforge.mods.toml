@@ -35,3 +35,12 @@ Bukkit-shaped plugins for NeoForge servers: jars in plugins/ that reload while t
 
 [[mixins]]
     config="hadron.world.mixins.json"
+
+[[mixins]]
+    config="hadron.data.mixins.json"
+
+[[mixins]]
+    config="hadron.net.mixins.json"
+
+[[mixins]]
+    config="hadron.worlds.mixins.json"

@@ -1,0 +1,23 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "dev.iredsc.hadron.neoforge.mixin.net",
+  "compatibilityLevel": "JAVA_21",
+  "mixins": [
+    "ChunkMapAccessor",
+    "CommandSourceStackMixin",
+    "ConnectionMixin",
+    "EntitySoundMixin",
+    "ListPlayersCommandMixin",
+    "PacketSendMixin",
+    "PlayerInfoUpdatePacketAccessor",
+    "PlayerSoundMixin",
+    "ServerGamePacketListenerImplMixin",
+    "SetPlayerTeamPacketAccessor",
+    "TrackedEntityAccessor",
+    "TrackedEntityMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

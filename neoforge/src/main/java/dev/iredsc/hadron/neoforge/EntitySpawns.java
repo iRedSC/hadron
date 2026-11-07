@@ -20,6 +20,7 @@ import net.minecraft.world.entity.OwnableEntity;
 import net.minecraft.world.entity.TraceableEntity;
 import net.minecraft.world.entity.decoration.HangingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.entity.projectile.Projectile;
 
 /**
@@ -47,6 +48,7 @@ public final class EntitySpawns {
             state.hadron$setConverted(false);
             return true;
         }
+        if (entity instanceof FishingHook hook && EntityFishing.cancelCast(hook)) return refuseHook(hook);
         Class<? extends Event> type = entity instanceof Projectile ? ProjectileLaunchEvent.class
                 : entity instanceof HangingEntity ? HangingPlaceEvent.class : EntitySpawnEvent.class;
         if (!Hooks.listens(type)) return true;
@@ -60,7 +62,17 @@ public final class EntitySpawns {
         attempts++;
         boolean cancelled = Hooks.post(event).isCancelled();
         if (cancelled) refused++;
+        if (cancelled && entity instanceof FishingHook hook) return refuseHook(hook);
         return !cancelled;
+    }
+
+    /**
+     * A bobber made itself its player's line when built; refused, it must let go, or the next click would reel in a
+     * bobber that was never in the world.
+     */
+    private static boolean refuseHook(FishingHook hook) {
+        hook.discard();
+        return false;
     }
 
     /** Spawns asked about and refused so far on the server thread; {@link EntitySpawnRefunds} compares them. */

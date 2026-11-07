@@ -15,6 +15,8 @@
     "CampfireBlockEntityMixin",
     "CompoundContainerAccessor",
     "CrafterBlockMixin",
+    "CrafterMenuMixin",
+    "CraftingMenuMixin",
     "DefaultDispenseItemBehaviorMixin",
     "DropperBlockMixin",
     "ElytraItemMixin",
@@ -29,6 +31,7 @@
     "MobEquipMixin",
     "MobMixin",
     "ResultSlotAccessor",
+    "ResultSlotMixin",
     "ServerGamePacketListenerImplMixin",
     "ServerPlayerMixin",
     "VanillaInventoryCodeHooksMixin"

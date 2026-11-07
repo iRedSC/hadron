@@ -15,6 +15,7 @@ Every bridge does these, whatever its mod does. Without them, core still fires i
 | Projectiles, summons, turrets, drones | `Actors.remember(entity, …)` when created, with the shooter or summoner as responsible. |
 | Vehicles, remote control, charm | Set `controller` on the attribution while someone drives, operates or controls it; fire `EntityControlChangeEvent` when that changes. |
 | Work that runs later | Remember or carry the actor into queued work (a gadget's multi-tick build, a ritual's later ticks), and push it when the work runs. |
+| Blocks moved by contraptions or frames | `PersistentData.move(level, from, to)` for each block, before it leaves `from`, so plugins' data on it travels. For a block out of the world for longer than a tick, `copyTo` its data into `PersistentData.newContainer()` and back. Pistons need nothing. |
 | Multi-part actions | `Operation.begin(actor)` before the action's first change, so its events group and its opening event can be cancelled while nothing has happened. |
 
 ## The rule for firing
@@ -36,8 +37,8 @@ Core never fires these; with no bridge, plugins hear nothing for them.
 | `BlockDamageEvent` | puts lasting partial damage on a block short of breaking it | damage before and after |
 | `StructureMoveEvent` | assembles, moves, rotates or disassembles a contraption, ship or spatial transfer | source to target mapping, swept space, old and new transforms |
 | `EntityControlChangeEvent`, `EntityControlExpireEvent` | changes who controls an entity without mounting (charm, thrall, drone link, guard assignment); expiry is after-only | old and new controller |
-| `ResourceChangeEvent` and its produce, consume and convert leaves | changes an amount of energy, fluid in a tank, chemical, mana, heat, radiation, a vein's reserve, skill points or money | resource id and unit, holder, old and new amount |
-| `ResourceTransferEvent` | moves an amount between holders (cables, pipes, wireless chargers, payments) | both holders, amount actually accepted |
+| `ResourceChangeEvent` and its produce, consume and convert leaves (core fires them for currencies; bridges for the rest) | changes an amount of energy, fluid in a tank, chemical, mana, heat, radiation, a vein's reserve, skill points or money | resource id and unit, holder, old and new amount |
+| `ResourceTransferEvent` (core fires it for currencies) | moves an amount between holders (cables, pipes, wireless chargers, payments) | both holders, amount actually accepted |
 | `TickAccelerateEvent` | speeds up blocks or entities in an area | accelerator, area, rate; once per change, never per extra tick |
 | `AccessControlChangeEvent` | changes a claim, team, party, alliance or trust list | what changed, who changed it |
 | `DataRevealEvent` | is about to send block, entity or inventory data to a player who didn't open it (Jade, WTHIT, map radar) | the data, with removable fields |
@@ -57,6 +58,9 @@ Core fires these for vanilla's paths; the bridge covers its mod's.
 | `EquipmentChangeEvent` | every vanilla slot, after the fact | the mod's extra slots |
 | `ItemChangeEvent` | anvil and grindstone results | the enclosing action that changes a stack in place (a gun spending ammo, a wand spending a reagent), once per action |
 | `ItemCraftEvent` | every vanilla workstation and the crafter | the mod's crafting, with every input, output and cost |
+| `PrepareItemCraftEvent` | the 2x2 grid, crafting tables, the crafter, and mods' menus built on vanilla's crafting grid | the mod's own crafting grids, when they work out a result; honour the result a listener sets |
+| `BlockDropItemEvent` | every drop through `Block.dropResources` (player mining, `destroyBlock`, blocks losing support) | drops the mod spawns itself when it breaks or harvests a block, before spawning them; honour the edited list and experience |
+| `PlayerFishEvent` | any rod whose bobber is a `FishingHook` | fishing that doesn't use a `FishingHook` (a mod's own bobber entity), at each step it has |
 | `ItemSmeltEvent` | furnaces, campfires, brewing stands | the mod's machines, including items processed in the world or on belts |
 | `ItemEnchantEvent`, `ItemRepairEvent` | enchanting table, anvil, grindstone, Mending | the mod's enchanting and repairs |
 | `TradeEvent` | every merchant menu | the mod's own trading |
