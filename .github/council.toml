@@ -1,36 +1,18 @@
-# Who sits on the council and what passes. Read by the council skill (.claude/skills/council/SKILL.md) to start its
-# delegates and by the gate (.github/scripts/council_gate.py) to check the PR's "Council review" table, so the two
-# can't disagree. Two providers (Claude and Codex): from each, a large model reviews deeply, a small one asks
-# questions and a small one at low effort explains.
+# Who reviews a hard-to-undo change, and when it's done. Read by the three skills (.claude/skills/questions,
+# council, explain) to start their delegates, and by the gate (.github/scripts/council_gate.py) to check the record.
 #
-# Three roles:
-# - "deep": reviews the change in full and scores it out of 10. Its last round must score at least min_score.
-# - "questions": a small model told to ask dumb questions about why the code was done this way. It doesn't score; it
-#   records "<asked> asked, <open> open", and passes when no question is left open, each settled in the skill's
-#   order (make it impossible to ask, rename, a checked comment, and a PR answer only for history or a choice).
-# - "explain": a small model, given only a snapshot of the code, that explains what changed and how it works. The author marks
-#   each place the explanation is wrong; it records "<misread> misread, <open> open", and passes when none is open:
-#   a misreading the code caused is fixed in the code, one from the model's own limits is answered in the PR.
-#
-# Each member's one option goes to delegate_task as given: `effort` for Claude models, `reasoningEffort` for Codex
-# models, `thinking` for a Claude model whose only option is thinking on or off. The gate refuses any other key.
+# Order: one pass of questions, then council rounds, then one explain pass and cleanup, then a final review only when
+# the cleanup changed more than `cleanup_lines` lines of code.
 
-# Every deep reviewer's score in the last round must be at least this, out of 10.
+# A council round must have each member find at least this many issues.
+min_findings = 3
+# The council stops after the first round in which no member finds anything above this priority, or after max_rounds.
+stop_at = "P3"
+max_rounds = 5
+# Code lines (not .md) changed after the council's last round, above which the final reviewer must review the head.
+cleanup_lines = 40
+# The final reviewer's passing score, out of 10.
 min_score = 8
-
-[[member]]
-name = "GPT-6.1 Sol"
-role = "deep"
-provider = "codex"
-model = "gpt-6.1-sol"
-reasoningEffort = "high"
-
-[[member]]
-name = "Claude Opus 5.5"
-role = "deep"
-provider = "claudeAgent"
-model = "claude-opus-5-5"
-effort = "medium"
 
 [[member]]
 name = "Claude Haiku 5.5"
@@ -47,7 +29,20 @@ model = "gpt-6.1-terra"
 reasoningEffort = "high"
 
 [[member]]
-# The same model as the question asker, at low effort and with a different brief, so its name says which seat it is.
+name = "GPT-6.1 Sol"
+role = "council"
+provider = "codex"
+model = "gpt-6.1-sol"
+reasoningEffort = "high"
+
+[[member]]
+name = "Claude Opus 5.5"
+role = "council"
+provider = "claudeAgent"
+model = "claude-opus-5-5"
+effort = "medium"
+
+[[member]]
 name = "Claude Haiku 5.5 (explainer)"
 role = "explain"
 provider = "claudeAgent"
@@ -60,3 +55,10 @@ role = "explain"
 provider = "codex"
 model = "gpt-6-luna"
 reasoningEffort = "low"
+
+[[member]]
+name = "GPT-6.1 Sol (final)"
+role = "final"
+provider = "codex"
+model = "gpt-6.1-sol"
+reasoningEffort = "high"
