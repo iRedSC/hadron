@@ -1,8 +1,8 @@
 diff --git a/gradle/hadron-test-server.gradle.kts b/gradle/hadron-test-server.gradle.kts
-index d9be0da..62707e0 100644
+index 921a73f..2b6cdeb 100644
 --- a/gradle/hadron-test-server.gradle.kts
 +++ b/gradle/hadron-test-server.gradle.kts
-@@ -129,23 +129,9 @@ tasks.named<JavaExec>("runHadronWatch") {
+@@ -139,23 +139,9 @@ tasks.named<JavaExec>("runHadronWatch") {
                          + "hadronRerun, or stop it with hadronWatchStop first.")
              }
          }
@@ -13,7 +13,7 @@ index d9be0da..62707e0 100644
          }
 -        // The record of the Hadron this server loads, which hadronWatch wrote after building it; reruns compare it.
 -        root.resolve("hadron.fingerprint.pending").renameTo(root.resolve("hadron.fingerprint"))
-         HadronTestServer.prepare(root.resolve("run"), mod)
+         HadronTestServer.prepare(root.resolve("run"), mod, harness)
      }
 -    // It exits 0 only when hadronWatchStop asked it to stop, so anything else (a crash, a hung test, a test that
 -    // stopped the server) fails the build rather than ending it green.
@@ -28,7 +28,7 @@ index d9be0da..62707e0 100644
 -    }
  }
 diff --git a/gradle/hadron-test.gradle.kts b/gradle/hadron-test.gradle.kts
-index b0c4939..600b528 100644
+index 417e25d..459137a 100644
 --- a/gradle/hadron-test.gradle.kts
 +++ b/gradle/hadron-test.gradle.kts
 @@ -57,17 +57,9 @@ abstract class HadronWatchTask : HadronTestTask() {
@@ -118,7 +118,7 @@ index b0c4939..600b528 100644
          /** When the watching server started, or null if none is running. */
          fun serverStarted(dir: File): Long? {
              val file = dir.resolve("watch.properties")
-@@ -293,17 +248,7 @@ hadronTest.configure {
+@@ -293,20 +248,8 @@ hadronTest.configure {
  }
  
  val startCommand = project.path + ":hadronWatch"
@@ -126,6 +126,9 @@ index b0c4939..600b528 100644
 -val hadronModules = listOf("api", "common", "test-api", "neoforge")
 -val loadedHadron = rootProject.files(hadronModules.flatMap { listOf("$it/build/classes/java/main", "$it/build/resources/main") })
 -val hadronBuiltBy = hadronModules.map { ":$it:classes" }
+-// The test harness, a mod of its own beside Hadron's (neoforge's harness source set): the server loads it too.
+-val loadedHarness = rootProject.files("neoforge/build/classes/java/harness", "neoforge/build/resources/harness")
+-val harnessBuiltBy = listOf(":neoforge:harnessClasses")
 -// The build files that shape the server, hashed as Gradle read them to configure this build.
 -val hadronConfigFiles = listOf("gradle.properties", "settings.gradle.kts", "build.gradle.kts",
 -    "gradle/hadron-test-server.gradle.kts") + hadronModules.map { "$it/build.gradle.kts" }
@@ -133,17 +136,18 @@ index b0c4939..600b528 100644
 -    rootProject.file(path).let { if (it.isFile) HadronWatchTask.sha(it) else "missing" }
 -}
 -val firstRun = watchRoot.file("last-run.properties").asFile
-+val hadronSourceDirs = rootProject.files(listOf("api", "common", "test-api", "neoforge").map { "$it/src/main" })
++val hadronSourceDirs = rootProject.files(listOf("api", "common", "test-api", "neoforge").map { "$it/src/main" }
++    + "neoforge/src/harness")
  
  val hadronWatch = tasks.register<HadronTestTask>("hadronWatch") {
      group = "verification"
-@@ -320,26 +265,7 @@ val hadronWatchStage = tasks.register<HadronWatchTask>("hadronWatchStage") {
+@@ -323,26 +266,7 @@ val hadronWatchStage = tasks.register<HadronWatchTask>("hadronWatchStage") {
      watchCommand.set(startCommand)
  }
  
 -hadronWatchStage.configure {
--    dependsOn(hadronBuiltBy)
--    hadronLoaded.from(loadedHadron)
+-    dependsOn(hadronBuiltBy, harnessBuiltBy)
+-    hadronLoaded.from(loadedHadron, loadedHarness)
 -    hadronConfig.set(hadronConfigHashes)
 -    buildRoot.set(rootProject.projectDir.path)
 -}
@@ -165,22 +169,22 @@ index b0c4939..600b528 100644
  
  tasks.register<HadronWatchTask>("hadronRerun") {
      group = "verification"
-@@ -348,10 +274,7 @@ tasks.register<HadronWatchTask>("hadronRerun") {
+@@ -351,10 +275,7 @@ tasks.register<HadronWatchTask>("hadronRerun") {
      watchDir.set(watchRoot)
      suiteJar.set(suiteName)
      waitForReport.set(true)
--    dependsOn(hadronBuiltBy)
--    hadronLoaded.from(loadedHadron)
+-    dependsOn(hadronBuiltBy, harnessBuiltBy)
+-    hadronLoaded.from(loadedHadron, loadedHarness)
 -    hadronConfig.set(hadronConfigHashes)
 -    buildRoot.set(rootProject.projectDir.path)
 +    hadronSources.from(hadronSourceDirs)
      watchCommand.set(startCommand)
  }
  
-diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWatch.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWatch.java
-index 5f0a3f7..b5663e9 100644
---- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWatch.java
-+++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWatch.java
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWatch.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWatch.java
+index 59c0654..88179dc 100644
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWatch.java
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWatch.java
 @@ -51,8 +51,7 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
   *   <li>{@code reports/NNNN/report.txt} and {@code .json}, one pair per rerun, the last {@value #KEEP_REPORTS} kept;
   *       {@code report.txt} and {@code report.json} in {@code <dir>} are the latest.</li>

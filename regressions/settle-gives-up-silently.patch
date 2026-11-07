@@ -1,7 +1,7 @@
-diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWorld.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWorld.java
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWorld.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWorld.java
 index 81c7ce1..a417772 100644
---- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWorld.java
-+++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWorld.java
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWorld.java
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWorld.java
 @@ -219,12 +219,6 @@ final class TestWorld implements TestContext {
          for (int i = 0; i < JOIN_TICKS && joined.connection.chunkSender.isPending(joined.chunkPosition().toLong()); i++) {
              tick(1);

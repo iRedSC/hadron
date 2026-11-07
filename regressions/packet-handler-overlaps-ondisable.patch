@@ -1,16 +1,16 @@
 diff --git a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-index 644791c..5f75307 100644
+index 5ce626b..b048bc8 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-@@ -816,7 +816,6 @@ public final class PluginHost implements PluginManager {
-                 LOG.warn(e.name + " still had " + stillRunning + " background task(s) running after "
-                         + ASYNC_GRACE_MILLIS / 1000 + "s; " + (callOnDisable ? "disabling" : "stopping") + " it anyway");
+@@ -921,7 +921,6 @@ public final class PluginHost implements PluginManager {
+                         + ASYNC_GRACE_MILLIS / 1000 + "s; " + (callOnDisable ? "disabling" : "stopping") + " it anyway. "
+                         + "A background task that loops should return once isEnabled() is false");
              }
 -            runBeforeDisableHooks(plugin, deadline);
              if (callOnDisable && running instanceof State.Enabled) {
                  try {
                      plugin.onDisable();
-@@ -1098,28 +1097,6 @@ public final class PluginHost implements PluginManager {
+@@ -1203,28 +1202,6 @@ public final class PluginHost implements PluginManager {
      private static final java.util.List<java.util.function.Consumer<JavaPlugin>> DISABLE_HOOKS =
              new java.util.concurrent.CopyOnWriteArrayList<>();
  

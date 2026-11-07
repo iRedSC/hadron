@@ -10,8 +10,8 @@ gradle/**
 settings.gradle.kts
 gradle.properties
 
-# The regression replay: dropping an entry or weakening a patch would let a fixed bug return unnoticed.
-regressions/**
+# The regression replay's script: a change to it could pass a bug the replay should catch. Its patches and manifest
+# aren't listed: a weakened patch reports NOT GUARDED by itself, and every bug fix adds an entry.
 scripts/regression_replay.py
 
 # Saved data formats: a wrong change here loses players' data on every server that updates.

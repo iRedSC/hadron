@@ -1,7 +1,7 @@
-diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestFilter.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestFilter.java
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestFilter.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestFilter.java
 index 2c34a81..8564788 100644
---- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestFilter.java
-+++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestFilter.java
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestFilter.java
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestFilter.java
 @@ -47,7 +47,7 @@ record TestFilter(List<String> patterns, List<Pattern> compiled) {
  
      /**

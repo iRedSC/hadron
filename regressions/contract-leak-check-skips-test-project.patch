@@ -1,5 +1,5 @@
 diff --git a/gradle/contract/ContractLeakCheck.java b/gradle/contract/ContractLeakCheck.java
-index 50656a3..230100f 100644
+index 005003b..230100f 100644
 --- a/gradle/contract/ContractLeakCheck.java
 +++ b/gradle/contract/ContractLeakCheck.java
 @@ -51,12 +51,6 @@ public final class ContractLeakCheck {
@@ -10,7 +10,7 @@ index 50656a3..230100f 100644
 -     * The only binary files the bundle's test project may hold, relative to it: Hadron's jars, which are its real
 -     * implementation by design, and Gradle's wrapper. Anything else that isn't text fails the check.
 -     */
--    static final Set<String> SHIPPED_BINARIES = Set.of("libs/hadron.jar", "libs/hadron-api.jar",
+-    static final Set<String> SHIPPED_BINARIES = Set.of("libs/hadron.jar", "libs/hadron-test.jar", "libs/hadron-api.jar",
 -            "libs/hadron-test-api.jar", "gradle/wrapper/gradle-wrapper.jar");
  
      final List<String> problems = new ArrayList<>();
@@ -44,10 +44,10 @@ index 50656a3..230100f 100644
          }
          if (!check.problems.isEmpty()) {
 diff --git a/gradle/hadron-contract.gradle.kts b/gradle/hadron-contract.gradle.kts
-index 2a562fa..dcfc3fe 100644
+index 7257c9c..212d59d 100644
 --- a/gradle/hadron-contract.gradle.kts
 +++ b/gradle/hadron-contract.gradle.kts
-@@ -270,6 +270,24 @@ val contractDocs = tasks.register("contractDocs") {
+@@ -284,6 +284,24 @@ val contractDocs = tasks.register("contractDocs") {
      }
  }
  
@@ -72,7 +72,7 @@ index 2a562fa..dcfc3fe 100644
  // Hadron's jars as the bundle ships them: repacked without timestamps, so the same sources make the same bytes.
  fun repack(name: String, from: String, fileName: String) = tasks.register<Zip>(name) {
      dependsOn(from)
-@@ -303,14 +321,11 @@ val readmeTokens = mapOf(
+@@ -318,14 +336,11 @@ val readmeTokens = mapOf(
      "MINECRAFT_VERSION" to providers.gradleProperty("minecraft_version").get(),
  )
  
@@ -92,8 +92,8 @@ index 2a562fa..dcfc3fe 100644
      from("gradle/contract/README.md") {
          filter<org.apache.tools.ant.filters.ReplaceTokens>("tokens" to readmeTokens)
      }
-@@ -326,31 +341,6 @@ val contractAssemble = tasks.register<Sync>("contractAssemble") {
-         from(files(apiJar, testApiJar, modJar)) { into("libs") }
+@@ -341,31 +356,6 @@ val contractAssemble = tasks.register<Sync>("contractAssemble") {
+         from(files(apiJar, testApiJar, modJar, harnessJar)) { into("libs") }
      }
      inputs.properties(readmeTokens)
 -}

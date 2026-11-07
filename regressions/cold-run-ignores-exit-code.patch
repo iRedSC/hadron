@@ -1,10 +1,10 @@
 diff --git a/gradle/hadron-test-server.gradle.kts b/gradle/hadron-test-server.gradle.kts
-index d9be0da..96d5d39 100644
+index 921a73f..c0c7622 100644
 --- a/gradle/hadron-test-server.gradle.kts
 +++ b/gradle/hadron-test-server.gradle.kts
-@@ -96,18 +96,6 @@ tasks.named<JavaExec>("runHadronTest") {
+@@ -104,18 +104,6 @@ tasks.named<JavaExec>("runHadronTest") {
          }
-         HadronTestServer.prepare(run, mod)
+         HadronTestServer.prepare(run, mod, harness)
      }
 -    // The server exits 0 only when every test passed. A failing run's report already says why, so hadronTest reports
 -    // it; but a nonzero exit after a passing report means the server broke after the tests (a crash while stopping,
