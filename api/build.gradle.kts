@@ -21,6 +21,9 @@ neoForge {
 dependencies {
     // Plugins' config.yml. Minecraft doesn't ship a YAML parser, so it rides inside Hadron's jar.
     api("org.yaml:snakeyaml:2.2")
+    // @Nullable on the API, so plugins' compilers and agents see which values can be missing. Compile-time only:
+    // Java ignores an annotation whose class isn't there at runtime, so it doesn't ship.
+    api("org.jspecify:jspecify:1.0.0")
 }
 
 // Fast tests: JUnit on the JVM, no server. ./gradlew :api:test. A class that needs Minecraft's registries carries
@@ -93,3 +96,11 @@ val pitestSurvivors = tasks.register("pitestSurvivors") {
     }
 }
 tasks.named("pitest") { finalizedBy(pitestSurvivors) }
+
+// Compile-time checks (gradle/hadron-checks.gradle.kts): Error Prone's errors, NullAway, and Hadron's own checks.
+dependencies { compileOnly(project(":build-checks")) }
+extra["hadronChecks.nullAway"] = listOf("main")
+extra["hadronChecks.exemptions"] = true
+extra["hadronChecks.staticState"] = listOf("main")
+extra["hadronChecks.determinism"] = listOf<String>()
+apply(from = rootProject.file("gradle/hadron-checks.gradle.kts"))

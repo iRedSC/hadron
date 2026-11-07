@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.harness;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.Hadron;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.neoforge.Hooks;
@@ -53,11 +55,12 @@ final class TestRunner {
     static final String FILTER_SUFFIX = ".tests";
     static final Logger LOG = LoggerFactory.getLogger("Hadron tests");
 
+    @StaticState(reason = "a test server's result for its process exit; one test run per JVM")
     private static volatile int exitCode = 1;
 
     private final MinecraftServer server;
     final Watchdog watchdog;
-    private SocketAddress address;
+    private @Nullable SocketAddress address;
     /** Counts every test world this server made, so a warm server's reruns never reuse a world's name. */
     private int worlds;
     /** The plugin name of every suite this server has seen, so each suite's turn can switch the others off. */
@@ -155,7 +158,7 @@ final class TestRunner {
     }
 
     /** The plugin name in a jar's plugin.yml, or null if it has none. */
-    static String pluginName(File file) {
+    static @Nullable String pluginName(File file) {
         try (JarFile jar = new JarFile(file)) {
             var yml = jar.getEntry("plugin.yml");
             if (yml == null) return null;
@@ -283,7 +286,8 @@ final class TestRunner {
             result = result(c, source, TestReport.Status.PASS, null, null, null, world.ticksSpent(),
                     System.currentTimeMillis() - start);
         } catch (InvocationTargetException e) {
-            result = failure(c, source, e.getCause(), world.ticksSpent(), System.currentTimeMillis() - start);
+            Throwable thrown = e.getCause() != null ? e.getCause() : e;
+            result = failure(c, source, thrown, world.ticksSpent(), System.currentTimeMillis() - start);
         } catch (Throwable t) {
             result = failure(c, source, t, world.ticksSpent(), System.currentTimeMillis() - start);
         }
@@ -303,20 +307,20 @@ final class TestRunner {
         return result;
     }
 
-    private static TestReport.Result result(Case c, String source, TestReport.Status status, String location,
-                                            String message, String detail, int ticks, long millis) {
+    private static TestReport.Result result(Case c, @Nullable String source, TestReport.Status status, @Nullable String location,
+                                            @Nullable String message, @Nullable String detail, int ticks, long millis) {
         return new TestReport.Result(c.id(), c.type().getName(), c.method().getName(), status, source, location,
                 message, detail, ticks, millis);
     }
 
     /** A passed test turned into a failure by what came after it (cleanup, health). */
-    private static TestReport.Result again(TestReport.Result r, String message) {
+    private static TestReport.Result again(TestReport.Result r, @Nullable String message) {
         return new TestReport.Result(r.id(), r.className(), r.method(), TestReport.Status.FAIL, r.source(), null,
                 message, null, r.ticks(), r.millis());
     }
 
     /** A test method the runner can't call, with the fix; null if it's fine. */
-    private static String misuse(Case c) {
+    private static @Nullable String misuse(Case c) {
         Method m = c.method();
         String shown = c.type().getSimpleName() + "." + m.getName() + "(" + Arrays.stream(m.getParameterTypes())
                 .map(Class::getSimpleName).collect(Collectors.joining(", ")) + ")";
@@ -341,9 +345,7 @@ final class TestRunner {
                 return c.type().getSimpleName() + " is an inner class, which can't be made on its own; declare it "
                         + "static class " + c.type().getSimpleName();
             }
-            try {
-                c.type().getDeclaredConstructor();
-            } catch (NoSuchMethodException e) {
+            if (java.util.Arrays.stream(c.type().getDeclaredConstructors()).noneMatch(k -> k.getParameterCount() == 0)) {
                 return c.type().getSimpleName() + " has @HadronTest methods but no constructor without arguments, "
                         + "so the runner can't make one; remove its constructors' parameters or add "
                         + c.type().getSimpleName() + "() {}";
@@ -352,14 +354,14 @@ final class TestRunner {
         return null;
     }
 
-    private String unhealthy(TestWorld world) {
+    private @Nullable String unhealthy(TestWorld world) {
         if (!server.isRunning()) return "the server stopped";
         List<String> online = new ArrayList<>();
         for (var p : world.players()) if (server.getPlayerList().getPlayer(p.uuid()) != null) online.add(p.name());
         return online.isEmpty() ? null : String.join(", ", online) + " still online after the test";
     }
 
-    private static TestReport.Result failure(Case c, String source, Throwable t, int ticks, long millis) {
+    private static TestReport.Result failure(Case c, @Nullable String source, Throwable t, int ticks, long millis) {
         String location = location(c.type(), t);
         if (t instanceof AssertionError) {
             String message = t.getMessage() != null ? t.getMessage() : "An assertion failed without a message.";
@@ -370,7 +372,7 @@ final class TestRunner {
     }
 
     /** The test's own line nearest the failure: {@code ShopTests.java:12}. */
-    private static String location(Class<?> type, Throwable t) {
+    private static @Nullable String location(Class<?> type, @Nullable Throwable t) {
         if (type == null) return null;
         String name = type.getName();
         for (Throwable cause = t; cause != null; cause = cause.getCause()) {
@@ -415,13 +417,13 @@ final class TestRunner {
         }
 
         private final OnHang onHang;
-        private volatile TestReport report;
-        private volatile TestReport.Suite suite;
-        private volatile String className, method, current, source;
+        private volatile @Nullable TestReport report;
+        private volatile TestReport.@Nullable Suite suite;
+        private volatile @Nullable String className, method, current, source;
         private volatile long deadline;
         private volatile long started;
         private volatile boolean running = true;
-        private Thread serverThread;
+        private @Nullable Thread serverThread;
 
         Watchdog(OnHang onHang) {
             this.onHang = onHang;
@@ -443,8 +445,8 @@ final class TestRunner {
          * A generous wall-clock limit: the machine may be slow, so it's far above what the ticks should take. A null
          * suite means a step outside any test (a warm server reloading a plugin), reported as a problem of the run.
          */
-        void watch(TestReport report, TestReport.Suite suite, String className, String method, String test,
-                   String source, int ticks) {
+        void watch(TestReport report, TestReport.@Nullable Suite suite, @Nullable String className, @Nullable String method, String test,
+                   @Nullable String source, int ticks) {
             this.report = report;
             this.suite = suite;
             this.className = className;
@@ -468,13 +470,15 @@ final class TestRunner {
                 }
                 String test = current;
                 if (test == null || System.nanoTime() < deadline) continue;
+                Thread thread = serverThread;
+                TestReport hung = report;
+                if (thread == null || hung == null) continue;
                 StringBuilder where = new StringBuilder();
                 int n = 0;
-                for (StackTraceElement e : serverThread.getStackTrace()) {
+                for (StackTraceElement e : thread.getStackTrace()) {
                     if (n++ >= 30) break;
                     where.append("  at ").append(e).append('\n');
                 }
-                TestReport hung = report;
                 if (suite == null) {
                     hung.problem(test + " never finished, so the server was ended. The server thread was at:\n" + where);
                 } else {

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.config;
 
+import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -11,7 +12,7 @@ import java.util.Set;
 /** A {@link ConfigurationSection} held in memory, in insertion order. */
 public class MemorySection implements ConfigurationSection {
     private final Map<String, Object> map = new LinkedHashMap<String, Object>();
-    private final MemorySection parent;
+    private final @Nullable MemorySection parent;
     private final String path;
     private final String name;
 
@@ -29,7 +30,7 @@ public class MemorySection implements ConfigurationSection {
     }
 
     /** The defaults for this section's place in the tree, from the root's defaults; null for none. */
-    protected ConfigurationSection defaults() {
+    protected @Nullable ConfigurationSection defaults() {
         if (parent == null) return null;
         ConfigurationSection parentDefaults = parent.defaults();
         return parentDefaults == null ? null : parentDefaults.getConfigurationSection(name);
@@ -81,17 +82,17 @@ public class MemorySection implements ConfigurationSection {
     }
 
     @Override
-    public ConfigurationSection getParent() {
+    public @Nullable ConfigurationSection getParent() {
         return parent;
     }
 
     @Override
-    public Object get(String path) {
+    public @Nullable Object get(String path) {
         return get(path, null);
     }
 
     @Override
-    public Object get(String path, Object def) {
+    public @Nullable Object get(String path, @Nullable Object def) {
         Object local = getLocal(path);
         if (local != null) return local;
         ConfigurationSection defaults = defaults();
@@ -99,7 +100,7 @@ public class MemorySection implements ConfigurationSection {
         return fallback != null ? fallback : def;
     }
 
-    private Object getLocal(String path) {
+    private @Nullable Object getLocal(String path) {
         MemorySection section = this;
         String[] parts = path.split("\\.", -1);
         for (int i = 0; i < parts.length - 1; i++) {
@@ -111,7 +112,7 @@ public class MemorySection implements ConfigurationSection {
     }
 
     @Override
-    public void set(String path, Object value) {
+    public void set(String path, @Nullable Object value) {
         MemorySection section = this;
         String[] parts = path.split("\\.", -1);
         for (int i = 0; i < parts.length - 1; i++) {
@@ -138,11 +139,12 @@ public class MemorySection implements ConfigurationSection {
     @Override
     public ConfigurationSection createSection(String path) {
         set(path, Collections.emptyMap());
-        return getConfigurationSection(path);
+        if (getLocal(path) instanceof ConfigurationSection section) return section;
+        throw new IllegalStateException("createSection(\"" + path + "\") made no section; this is a Hadron bug");
     }
 
     @Override
-    public ConfigurationSection getConfigurationSection(String path) {
+    public @Nullable ConfigurationSection getConfigurationSection(String path) {
         Object local = getLocal(path);
         if (local instanceof ConfigurationSection) return (ConfigurationSection) local;
         if (local != null) return null;
@@ -184,7 +186,7 @@ public class MemorySection implements ConfigurationSection {
     };
 
     /** The local value if it fits, else the defaults' if that fits, else null: a wrong type counts as missing. */
-    private Object typed(String path, Kind kind) {
+    private @Nullable Object typed(String path, Kind kind) {
         Object local = getLocal(path);
         if (local != null && kind.fits(local)) return local;
         ConfigurationSection defaults = defaults();
@@ -193,12 +195,12 @@ public class MemorySection implements ConfigurationSection {
     }
 
     @Override
-    public String getString(String path) {
+    public @Nullable String getString(String path) {
         return getString(path, null);
     }
 
     @Override
-    public String getString(String path, String def) {
+    public @Nullable String getString(String path, @Nullable String def) {
         Object v = typed(path, TEXT);
         return v == null ? def : v.toString();
     }
@@ -268,12 +270,12 @@ public class MemorySection implements ConfigurationSection {
     }
 
     @Override
-    public List<?> getList(String path) {
+    public @Nullable List<?> getList(String path) {
         return getList(path, null);
     }
 
     @Override
-    public List<?> getList(String path, List<?> def) {
+    public @Nullable List<?> getList(String path, @Nullable List<?> def) {
         Object v = typed(path, LIST);
         return v != null ? (List<?>) v : def;
     }

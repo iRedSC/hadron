@@ -88,3 +88,12 @@ val pitestSurvivors = tasks.register("pitestSurvivors") {
     }
 }
 tasks.named("pitest") { finalizedBy(pitestSurvivors) }
+
+// Compile-time checks (gradle/hadron-checks.gradle.kts): Error Prone's errors, NullAway, and Hadron's own checks.
+dependencies { compileOnly(project(":build-checks")) }
+extra["hadronChecks.nullAway"] = listOf("main")
+extra["hadronChecks.exemptions"] = true
+extra["hadronChecks.staticState"] = listOf("main")
+// common is the host whose promises tests rely on, so it never times a decision by the wall clock.
+extra["hadronChecks.determinism"] = listOf("main")
+apply(from = rootProject.file("gradle/hadron-checks.gradle.kts"))

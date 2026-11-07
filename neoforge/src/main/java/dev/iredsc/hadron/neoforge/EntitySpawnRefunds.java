@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.event.entity.HangingPlaceEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileLaunchEvent;
@@ -62,7 +64,8 @@ public final class EntitySpawnRefunds {
     }
 
     /** What was where a mob bucket is pouring, until its mob is released. Server thread only. */
-    private static BlockSnapshot poured;
+    @StaticState(reason = "handed from a bucket's pour to its mob's release in the same server-thread call, which clears it")
+    private static @Nullable BlockSnapshot poured;
 
     /**
      * A bucket is about to pour at {@code pos}. For a mob bucket, what is there is kept, so that if its mob is then

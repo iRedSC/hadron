@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.selftest.harness;
 
+import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -49,6 +50,16 @@ public final class SettleTests {
                 "the failure should say what keeps work arriving, but was: " + failure.getMessage());
     }
 
+    /** Run on a network thread: holds it past the 10 s the harness waits for one. */
+    @Nondeterministic(reason = "stands in for a network thread that never answers, which the harness bounds by wall time")
+    private static void hangPastTheHarnessWait() {
+        try {
+            Thread.sleep(10_500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     @HadronTest
     void anActionFailsWhenANetworkThreadNeverAnswers(TestContext t) throws ReflectiveOperationException {
         TestPlayer alice = t.player("alice");
@@ -62,13 +73,7 @@ public final class SettleTests {
         }
         t.assertTrue(!channels.isEmpty(), "alice's connection should have a channel");
         // Longer than the harness waits for a network thread.
-        channels.get(0).eventLoop().execute(() -> {
-            try {
-                Thread.sleep(10_500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
+        channels.get(0).eventLoop().execute(SettleTests::hangPastTheHarnessWait);
         RuntimeException failure = null;
         try {
             alice.chat("hello");

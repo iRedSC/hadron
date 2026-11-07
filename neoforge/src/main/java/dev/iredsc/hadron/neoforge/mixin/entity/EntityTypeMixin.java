@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.entity;
 
+import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.iredsc.hadron.api.actor.Actors;
@@ -37,7 +38,7 @@ abstract class EntityTypeMixin<T extends Entity> {
     @WrapMethod(method = "spawn(Lnet/minecraft/server/level/ServerLevel;Ljava/util/function/Consumer;"
             + "Lnet/minecraft/core/BlockPos;Lnet/minecraft/world/entity/MobSpawnType;ZZ)"
             + "Lnet/minecraft/world/entity/Entity;")
-    private T hadron$spawn(ServerLevel level, Consumer<T> configure, BlockPos pos, MobSpawnType type,
+    private @Nullable T hadron$spawn(ServerLevel level, Consumer<T> configure, BlockPos pos, MobSpawnType type,
             boolean offsetY, boolean offsetYMore, Operation<T> original) {
         T entity = original.call(level, configure, pos, type, offsetY, offsetYMore);
         return entity != null && !entity.isAddedToLevel() ? null : entity;

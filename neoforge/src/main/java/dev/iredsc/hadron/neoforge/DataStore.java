@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.data.PersistentData;
 import java.util.function.Consumer;
 import net.minecraft.core.BlockPos;
@@ -134,7 +135,7 @@ final class DataStore implements PersistentData.Port.Store {
 
     private record BlockRoot(ServerLevel level, BlockPos pos) implements PersistentData.Port.Root {
         @Override
-        public CompoundTag read() {
+        public @Nullable CompoundTag read() {
             serverThread(level, "blocks");
             return DataBlocks.get(level.getChunkAt(pos), pos);
         }

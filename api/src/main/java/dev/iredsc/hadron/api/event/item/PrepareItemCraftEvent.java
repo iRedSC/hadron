@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.item;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -32,10 +33,10 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
         bridges = "the mod's own crafting grids, when they work out a result; honour the result a listener sets")
 public class PrepareItemCraftEvent extends ItemEvent {
     private final InventoryHolder holder;
-    private final AbstractContainerMenu menu;
-    private final ServerPlayer viewer;
+    private final @Nullable AbstractContainerMenu menu;
+    private final @Nullable ServerPlayer viewer;
     private final List<ItemStack> matrix;
-    private final RecipeHolder<?> recipe;
+    private final @Nullable RecipeHolder<?> recipe;
     private ItemStack result;
 
     /**
@@ -44,8 +45,8 @@ public class PrepareItemCraftEvent extends ItemEvent {
      * @param matrix the grid's slots, in order, empty ones included
      * @param recipe the recipe that matched, or null if none did
      */
-    public PrepareItemCraftEvent(ServerLevel level, InventoryHolder holder, AbstractContainerMenu menu,
-            ServerPlayer viewer, List<ItemStack> matrix, RecipeHolder<?> recipe, ItemStack result, Actor actor) {
+    public PrepareItemCraftEvent(ServerLevel level, InventoryHolder holder, @Nullable AbstractContainerMenu menu,
+            @Nullable ServerPlayer viewer, List<ItemStack> matrix, @Nullable RecipeHolder<?> recipe, ItemStack result, Actor actor) {
         super(level, Objects.requireNonNull(result, "result; use ItemStack.EMPTY").copy(), actor);
         this.holder = Objects.requireNonNull(holder, "holder");
         this.menu = menu;

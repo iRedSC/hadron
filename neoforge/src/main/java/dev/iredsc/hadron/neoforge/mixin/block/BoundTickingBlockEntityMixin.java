@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.block;
 
+import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.iredsc.hadron.api.actor.Actor;
@@ -22,7 +23,7 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(targets = "net.minecraft.world.level.chunk.LevelChunk$BoundTickingBlockEntity")
 public abstract class BoundTickingBlockEntityMixin {
     @Unique
-    private Actor.Machine hadron$machine;
+    private Actor.@Nullable Machine hadron$machine;
     /** 0 not checked yet, 1 vanilla, 2 modded. */
     @Unique
     private byte hadron$origin;

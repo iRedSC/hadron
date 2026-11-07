@@ -96,9 +96,11 @@ public final class EconomyTests {
     void joiningCreatesAnAccountThatOutlivesTheSession(TestContext t) {
         // A name no earlier test, or earlier rerun on a warm server, has used: accounts outlive tests, so only a
         // name proven to have none shows the account comes from joining.
-        String name = "new" + Long.toString(System.nanoTime() & 0xFF_FFFF_FFFFL, 36);
-        UUID id = UUIDUtil.createOfflinePlayerUUID(name);
         Economy economy = Economy.get();
+        int n = 0;
+        while (economy.hasAccount(UUIDUtil.createOfflinePlayerUUID("new" + n))) n++;
+        String name = "new" + n;
+        UUID id = UUIDUtil.createOfflinePlayerUUID(name);
         t.assertFalse(economy.hasAccount(id), name + " has never joined, so should have no account yet");
         TestPlayer newcomer = t.player(name);
         t.assertEquals(id, newcomer.uuid(), name + "'s UUID (offline mode's, from the name)");

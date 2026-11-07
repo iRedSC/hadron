@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.world;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import java.util.Objects;
@@ -17,10 +18,10 @@ import net.minecraft.world.phys.Vec3;
  */
 public abstract class WorldEvent extends ActionEvent {
     private final ServerLevel level;
-    private final BoundingBox area;
+    private final @Nullable BoundingBox area;
 
     /** {@code area} null means the whole level. */
-    protected WorldEvent(Actor actor, ServerLevel level, BoundingBox area) {
+    protected WorldEvent(Actor actor, ServerLevel level, @Nullable BoundingBox area) {
         super(actor);
         this.level = Objects.requireNonNull(level, "level");
         this.area = area;

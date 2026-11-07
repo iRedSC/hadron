@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.item;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -29,7 +30,7 @@ public class ItemCraftEvent extends ItemEvent implements Cancellable {
     private final InventoryHolder holder;
     private final List<ItemStack> inputs;
     private final List<ItemStack> outputs;
-    private final RecipeHolder<?> recipe;
+    private final @Nullable RecipeHolder<?> recipe;
     private boolean cancelled;
 
     /**
@@ -38,7 +39,7 @@ public class ItemCraftEvent extends ItemEvent implements Cancellable {
      * @param recipe the recipe, or null where there is none (a loom pattern, a cartography table)
      */
     public ItemCraftEvent(ServerLevel level, InventoryHolder holder, List<ItemStack> inputs, List<ItemStack> outputs,
-            RecipeHolder<?> recipe, Actor actor) {
+            @Nullable RecipeHolder<?> recipe, Actor actor) {
         super(level, first(outputs), actor);
         this.holder = Objects.requireNonNull(holder,
                 "holder; use InventoryHolder.Unknown.INSTANCE when nothing is known");

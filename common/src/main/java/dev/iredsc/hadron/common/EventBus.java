@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.checks.Nondeterministic;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.EventHandler;
@@ -46,7 +48,7 @@ final class EventBus {
         /** Admission and removal share this monitor; calls already in progress are tracked until they finish. */
         private boolean removed;
         private final Map<Thread, Integer> calls = new HashMap<>();
-        private EventBus bus;
+        private @Nullable EventBus bus;
 
         private Subscription(Listener listener, Class<?> type, EventHandler h, long order, MethodHandle handle,
                 String where, Logger log) {
@@ -69,9 +71,11 @@ final class EventBus {
                 if (removed) return;
                 removed = true;
             }
-            bus.remove(this);
+            EventBus owner = bus;
+            if (owner != null) owner.remove(this);
         }
 
+        @Nondeterministic(reason = "waits for handlers still running on other threads, up to the disable grace period")
         boolean awaitIdle(long deadline) {
             boolean interrupted = false;
             boolean idle;
@@ -111,7 +115,7 @@ final class EventBus {
                 }
             } finally {
                 synchronized (this) {
-                    int remaining = calls.get(thread) - 1;
+                    int remaining = calls.getOrDefault(thread, 1) - 1;
                     if (remaining == 0) calls.remove(thread);
                     else calls.put(thread, remaining);
                     notifyAll();
@@ -135,13 +139,13 @@ final class EventBus {
         boolean hears(Class<?> type);
 
         /** Before any handler runs. Whatever it returns comes back to {@link #after}; null skips this event. */
-        Object before(Event event);
+        @Nullable Object before(Event event);
 
         /**
          * After every handler. {@code canceller} names the last handler that cancelled the event ("plugin:
          * Class.method"), or is null if no handler did.
          */
-        void after(Event event, Object state, String canceller);
+        void after(Event event, Object state, @Nullable String canceller);
     }
 
     /** Every handler and observer that hears one concrete event class. */
@@ -283,14 +287,14 @@ final class EventBus {
             if (e.getKey().isAssignableFrom(type)) out.addAll(e.getValue());
         }
         List<Observer> watching = new ArrayList<>();
-        for (Observer o : observers) if (guard(() -> o.hears(type)) == Boolean.TRUE) watching.add(o);
+        for (Observer o : observers) if (Boolean.TRUE.equals(guard(() -> o.hears(type)))) watching.add(o);
         if (out.isEmpty() && watching.isEmpty()) return EMPTY;
         out.sort(ORDER);
         return new Baked(out.toArray(NONE), watching.isEmpty() ? NO_OBSERVERS : watching.toArray(NO_OBSERVERS));
     }
 
     /** An observer's bug never costs plugins their event. */
-    private static <T> T guard(java.util.function.Supplier<T> run) {
+    private static <T> @Nullable T guard(java.util.function.Supplier<T> run) {
         try {
             return run.get();
         } catch (RuntimeException e) {

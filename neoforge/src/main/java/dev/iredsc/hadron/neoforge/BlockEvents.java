@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
@@ -76,7 +77,7 @@ final class BlockEvents {
         if (!(event.getLevel() instanceof ServerLevel level) || !Hooks.listens(BlockBreakEvent.class)) return;
         BlockPos pos = event.getPos();
         BlockBreakEvent hadron = Hooks.post(new BlockBreakEvent(level, pos, event.getState(),
-                level.getFluidState(pos).createLegacyBlock(), BlockHooks.orUnknown(BlockHooks.actorFor(event.getPlayer()))));
+                level.getFluidState(pos).createLegacyBlock(), BlockHooks.orUnknown(BlockHooks.actorOrStack(event.getPlayer()))));
         if (hadron.isCancelled()) event.setCanceled(true);
     }
 
@@ -94,7 +95,7 @@ final class BlockEvents {
         if (event.getEntity() != null && !(event.getEntity() instanceof Player)) return;
         List<BlockSnapshot> snapshots = event instanceof BlockEvent.EntityMultiPlaceEvent multi
                 ? multi.getReplacedBlockSnapshots() : List.of(event.getBlockSnapshot());
-        Actor actor = BlockHooks.orUnknown(BlockHooks.actorFor(event.getEntity()));
+        Actor actor = BlockHooks.orUnknown(BlockHooks.actorOrStack(event.getEntity()));
 
         if (snapshots.size() > 1 && BlockHooks.allPlaces(level, snapshots)) {
             if (!Hooks.listens(BlockMultiPlaceEvent.class)) return;
@@ -180,14 +181,15 @@ final class BlockEvents {
             BlockEntity movedEntity = moved.hasBlockEntity() ? level.getBlockEntity(source) : null;
             if (states.containsKey(target)) {
                 states.get(target)[1] = moved;
-                entities.get(target)[1] = movedEntity;
+                java.util.Objects.requireNonNull(entities.get(target), "states and entities share keys")[1] = movedEntity;
             } else {
                 put(level, states, entities, target, moved, movedEntity);
             }
         }
         List<BlockChange> changes = new ArrayList<>(states.size());
         for (Map.Entry<BlockPos, BlockState[]> entry : states.entrySet()) {
-            BlockEntity[] be = entities.get(entry.getKey());
+            BlockEntity[] be = java.util.Objects.requireNonNull(entities.get(entry.getKey()),
+                    "states and entities share keys");
             changes.add(BlockChange.live(level, entry.getKey(), entry.getValue()[0], entry.getValue()[1], be[0], be[1]));
         }
         Actor actor = Actors.currentOr(Actor.Nature.INSTANCE);
@@ -198,7 +200,7 @@ final class BlockEvents {
     }
 
     private static void put(ServerLevel level, Map<BlockPos, BlockState[]> states, Map<BlockPos, BlockEntity[]> entities,
-            BlockPos pos, BlockState after, BlockEntity afterEntity) {
+            BlockPos pos, BlockState after, @Nullable BlockEntity afterEntity) {
         BlockState before = level.getBlockState(pos);
         states.put(pos, new BlockState[] {before, after});
         entities.put(pos, new BlockEntity[] {before.hasBlockEntity() ? level.getBlockEntity(pos) : null, afterEntity});

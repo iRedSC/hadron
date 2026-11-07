@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.plugin;
 
+import org.jspecify.annotations.Nullable;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import java.util.List;
 import net.minecraft.commands.CommandSourceStack;
@@ -34,7 +35,7 @@ public interface PluginManager {
     boolean callEvent(Event event);
 
     /** Case-insensitive. Null unless a plugin by that name is loaded (in onLoad or later) or enabled. */
-    JavaPlugin getPlugin(String name);
+    @Nullable JavaPlugin getPlugin(String name);
 
     /** Every enabled plugin, in the order they enabled. */
     List<JavaPlugin> getPlugins();

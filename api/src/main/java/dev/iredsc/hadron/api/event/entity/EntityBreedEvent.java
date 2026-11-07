@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -20,10 +21,10 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 public class EntityBreedEvent extends EntityEvent implements Cancellable {
     private final Mob mother;
     private final Mob father;
-    private final ServerPlayer breeder;
+    private final @Nullable ServerPlayer breeder;
     private boolean cancelled;
 
-    public EntityBreedEvent(AgeableMob child, Mob mother, Mob father, ServerPlayer breeder, Actor actor) {
+    public EntityBreedEvent(AgeableMob child, Mob mother, Mob father, @Nullable ServerPlayer breeder, Actor actor) {
         super(child, actor);
         this.mother = Objects.requireNonNull(mother, "mother");
         this.father = Objects.requireNonNull(father, "father");

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.harness;
 
+import dev.iredsc.hadron.checks.StaticState;
 import dev.iredsc.hadron.test.TestModPacket;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -16,6 +17,7 @@ import net.neoforged.neoforge.network.event.RegisterPayloadHandlersEvent;
  * <p>Optional, as NeoForge calls it, so unmodded test players still join; modded ones negotiate it with the rest.
  */
 final class TestMod {
+    @StaticState(reason = "the test mod's record of handled test packets, cleared at each test's start and end (forget)")
     private static final List<TestModPacket.Handled> HANDLED = new CopyOnWriteArrayList<>();
 
     private TestMod() {}

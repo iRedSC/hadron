@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.data;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 import java.util.function.Consumer;
 import net.minecraft.core.BlockPos;
@@ -31,6 +33,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
  * is loaded once more as a new {@code ServerLevel}: get the container again from the loaded one.
  */
 public final class PersistentData {
+    @StaticState(reason = "the port installs its store when the mod loads; Hadron itself is never reloaded")
     private static volatile Port.Store store = new Port.Missing();
 
     private PersistentData() {}
@@ -105,7 +108,7 @@ public final class PersistentData {
         private static final String KEY = "hadron";
 
         @Override
-        public CompoundTag read() {
+        public @Nullable CompoundTag read() {
             CustomData data = stack.get(DataComponents.CUSTOM_DATA);
             return data != null && data.getUnsafe().get(KEY) instanceof CompoundTag tag ? tag : null;
         }
@@ -136,7 +139,7 @@ public final class PersistentData {
         /** Where one holder's data lives: a compound of namespaces, each a compound of values by key. */
         public interface Root {
             /** The stored compound, or null when there is none. Callers never modify it. */
-            CompoundTag read();
+            @Nullable CompoundTag read();
 
             /** Applies the edit to the stored compound, creating it first if needed, then saves it (or drops it, if
              * left empty). Throws on the wrong thread, before editing anything. */

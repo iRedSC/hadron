@@ -1,8 +1,8 @@
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetVisibility.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetVisibility.java
-index 212e7c3..d83203a 100644
+index 4069ab0..11ce443 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetVisibility.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetVisibility.java
-@@ -11,16 +11,7 @@ import java.util.Set;
+@@ -13,16 +13,7 @@ import java.util.Set;
  import java.util.UUID;
  import java.util.concurrent.ConcurrentHashMap;
  import net.minecraft.network.protocol.Packet;
@@ -19,7 +19,7 @@ index 212e7c3..d83203a 100644
  import net.minecraft.network.protocol.game.ClientboundPlayerInfoRemovePacket;
  import net.minecraft.network.protocol.game.ClientboundPlayerInfoUpdatePacket;
  import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket;
-@@ -29,7 +20,6 @@ import net.minecraft.server.MinecraftServer;
+@@ -31,7 +22,6 @@ import net.minecraft.server.MinecraftServer;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.server.level.ServerPlayer;
  import net.minecraft.world.entity.Entity;
@@ -27,7 +27,7 @@ index 212e7c3..d83203a 100644
  
  /**
   * Who can't see what, per plugin, by UUID. Written on the server thread, read from any thread (the send hook runs on
-@@ -331,21 +321,10 @@ public final class NetVisibility {
+@@ -337,21 +327,10 @@ public final class NetVisibility {
          }
      }
  
@@ -37,7 +37,7 @@ index 212e7c3..d83203a 100644
 -     * projectile owners.
 -     */
 +    /** Removes hidden players' tab entries, and drops packets naming a hidden entity outside its own tracking. */
-     static Packet<?> filter(ServerPlayer viewer, Packet<?> packet) {
+     static @Nullable Packet<?> filter(ServerPlayer viewer, Packet<?> packet) {
          if (!active) return packet;
          if (packet instanceof ClientboundPlayerInfoUpdatePacket info) return info(viewer, info);
 -        if (packet instanceof ClientboundSetPassengersPacket
@@ -50,7 +50,7 @@ index 212e7c3..d83203a 100644
          int id;
          if (packet instanceof ClientboundBlockDestructionPacket p) id = p.getId();
          else if (packet instanceof ClientboundTakeItemEntityPacket p) id = p.getPlayerId();
-@@ -360,79 +339,6 @@ public final class NetVisibility {
+@@ -366,79 +345,6 @@ public final class NetVisibility {
          return e != null && !canSee(viewer, e) ? null : packet;
      }
  
@@ -60,7 +60,7 @@ index 212e7c3..d83203a 100644
 -        return e != null && e != viewer && !canSee(viewer, e);
 -    }
 -
--    private static Packet<?> secondary(ServerPlayer viewer, Packet<?> packet) {
+-    private static @Nullable Packet<?> secondary(ServerPlayer viewer, Packet<?> packet) {
 -        switch (packet) {
 -            case ClientboundSetPassengersPacket p -> {
 -                int[] riders = p.getPassengers();
@@ -127,6 +127,6 @@ index 212e7c3..d83203a 100644
 -        }
 -    }
 -
-     private static Packet<?> info(ServerPlayer viewer, ClientboundPlayerInfoUpdatePacket packet) {
+     private static @Nullable Packet<?> info(ServerPlayer viewer, ClientboundPlayerInfoUpdatePacket packet) {
          UUID v = viewer.getUUID();
          List<ClientboundPlayerInfoUpdatePacket.Entry> kept = null;

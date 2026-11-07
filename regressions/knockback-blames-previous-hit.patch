@@ -1,14 +1,14 @@
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityActors.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityActors.java
-index 00dfc2f..2ca6ca2 100644
+index eaf63fc..9f99e2a 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityActors.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityActors.java
-@@ -70,20 +70,11 @@ public final class EntityActors {
+@@ -76,20 +76,11 @@ public final class EntityActors {
          return fromStack(victim, Actor.Nature.INSTANCE);
      }
  
 -    /** A living entity's hit in progress: the damage source while {@code hurt} runs, otherwise null. */
 -    public interface Hurting {
--        DamageSource hadron$hurting();
+-        @Nullable DamageSource hadron$hurting();
 -    }
 -
      /**
@@ -26,18 +26,18 @@ index 00dfc2f..2ca6ca2 100644
          boolean thisTick = entity.hurtTime > 0 && entity.hurtTime == entity.hurtDuration;
          return last != null && thisTick ? damage(last, entity) : fromStack(entity, Actor.Nature.INSTANCE);
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/LivingEntityMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/LivingEntityMixin.java
-index 2b5760b..5de8a58 100644
+index e520fcc..ff8ad4d 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/LivingEntityMixin.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/LivingEntityMixin.java
-@@ -2,7 +2,6 @@ package dev.iredsc.hadron.neoforge.mixin.entity;
- 
+@@ -3,7 +3,6 @@ package dev.iredsc.hadron.neoforge.mixin.entity;
+ import org.jspecify.annotations.Nullable;
  import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
  import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 -import dev.iredsc.hadron.neoforge.EntityActors;
  import dev.iredsc.hadron.neoforge.EntityDeaths;
  import dev.iredsc.hadron.neoforge.EntitySpawnRefunds;
  import dev.iredsc.hadron.neoforge.EntityTeleports;
-@@ -11,7 +10,6 @@ import net.minecraft.world.damagesource.DamageSource;
+@@ -12,7 +11,6 @@ import net.minecraft.world.damagesource.DamageSource;
  import net.minecraft.world.entity.LivingEntity;
  import net.minecraft.world.entity.player.Player;
  import org.spongepowered.asm.mixin.Mixin;
@@ -45,15 +45,15 @@ index 2b5760b..5de8a58 100644
  import org.spongepowered.asm.mixin.injection.At;
  import org.spongepowered.asm.mixin.injection.Inject;
  import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-@@ -21,26 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+@@ -22,26 +20,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
   * trident whose every spawn was refused; remembers the hit in progress; and makes a random teleport one teleport.
   */
  @Mixin(LivingEntity.class)
 -abstract class LivingEntityMixin implements EntityActors.Hurting {
--    @Unique private DamageSource hadron$hurting;
+-    @Unique private @Nullable DamageSource hadron$hurting;
 -
 -    @Override
--    public DamageSource hadron$hurting() {
+-    public @Nullable DamageSource hadron$hurting() {
 -        return hadron$hurting;
 -    }
 -

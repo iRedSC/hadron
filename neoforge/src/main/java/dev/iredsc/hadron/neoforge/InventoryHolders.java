@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.neoforge.mixin.item.CompoundContainerAccessor;
 import java.lang.reflect.Field;
@@ -27,7 +28,7 @@ public final class InventoryHolders {
     private InventoryHolders() {}
 
     /** What holds a container. {@code viewer} lets a player's own ender chest be named; may be null. */
-    public static InventoryHolder of(Container container, Player viewer) {
+    public static InventoryHolder of(Container container, @Nullable Player viewer) {
         if (container instanceof BlockEntity be && be.getLevel() instanceof ServerLevel level) {
             return new InventoryHolder.Block(level, be.getBlockPos());
         }

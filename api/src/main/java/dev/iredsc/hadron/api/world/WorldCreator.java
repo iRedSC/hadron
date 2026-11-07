@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.world;
 
+import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.OptionalLong;
@@ -34,10 +35,10 @@ import net.minecraft.world.level.dimension.DimensionType;
  */
 public final class WorldCreator {
     private final ResourceLocation key;
-    private ResourceKey<DimensionType> type;
-    private WorldGenerator generator;
-    private Long seed;
-    private BlockPos spawn;
+    private @Nullable ResourceKey<DimensionType> type;
+    private @Nullable WorldGenerator generator;
+    private @Nullable Long seed;
+    private @Nullable BlockPos spawn;
     private boolean keepSpawnLoaded;
 
     /** A world whose dimension id is {@code key}; use your plugin's name as the namespace, e.g. {@code myplugin:mining}. */

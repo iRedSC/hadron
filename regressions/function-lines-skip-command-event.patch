@@ -1,8 +1,8 @@
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ServerEvents.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ServerEvents.java
-index b128304..257d30f 100644
+index c5f39df..cb73e98 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ServerEvents.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ServerEvents.java
-@@ -11,7 +11,7 @@ import net.neoforged.neoforge.event.CommandEvent;
+@@ -12,7 +12,7 @@ import net.neoforged.neoforge.event.CommandEvent;
  import net.neoforged.neoforge.event.server.ServerStartedEvent;
  
  /** Hadron's server events from NeoForge's. */
@@ -11,7 +11,7 @@ index b128304..257d30f 100644
      private ServerEvents() {}
  
      static void register() {
-@@ -23,33 +23,19 @@ public final class ServerEvents {
+@@ -24,33 +24,19 @@ public final class ServerEvents {
          Hooks.post(new ServerLoadEvent(event.getServer()));
      }
  
@@ -39,7 +39,7 @@ index b128304..257d30f 100644
 -    }
 -
 -    /** Fires {@link CommandExecuteEvent} for a command about to run: the command to run instead, or null to refuse. */
--    public static String ask(CommandSourceStack source, String command) {
+-    public static @Nullable String ask(CommandSourceStack source, String command) {
 -        if (!Hooks.listens(CommandExecuteEvent.class)) return command;
          Actor actor = Actors.current().orElseGet(() -> source.getEntity() != null
                  ? WorldActors.of(source.getEntity()) : Actor.Unknown.INSTANCE);
@@ -127,7 +127,7 @@ index fdcf37c..0000000
 -    }
 -}
 diff --git a/neoforge/src/main/resources/hadron.world.mixins.json b/neoforge/src/main/resources/hadron.world.mixins.json
-index 711bf5e..9c4fc37 100644
+index ab6abd7..f4935e6 100644
 --- a/neoforge/src/main/resources/hadron.world.mixins.json
 +++ b/neoforge/src/main/resources/hadron.world.mixins.json
 @@ -4,7 +4,6 @@

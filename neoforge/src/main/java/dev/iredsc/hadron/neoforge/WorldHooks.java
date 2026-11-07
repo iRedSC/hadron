@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.player.PlayerAbilitiesChangeEvent;
@@ -114,13 +115,13 @@ public final class WorldHooks {
     // ---- Players
 
     /** Null when the player may join, otherwise why not. */
-    public static Component loginDenied(ServerPlayer player, SocketAddress address) {
+    public static @Nullable Component loginDenied(ServerPlayer player, SocketAddress address) {
         if (!Hooks.listens(PlayerLoginEvent.class)) return null;
         return Hooks.post(new PlayerLoginEvent(player, address)).getKickMessage().orElse(null);
     }
 
     /** The reason to kick with, or null to keep the player connected. */
-    public static Component kick(ServerPlayer player, Component reason) {
+    public static @Nullable Component kick(ServerPlayer player, Component reason) {
         if (!Hooks.listens(PlayerKickEvent.class)) return reason;
         PlayerKickEvent event = Hooks.post(new PlayerKickEvent(player, reason));
         return event.isCancelled() ? null : event.getReason();
