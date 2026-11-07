@@ -64,7 +64,7 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 | `BlockChangeEvent` | a block's state or its block entity's data changes | `Level.setBlock`, chunk section writes |
 | ├ `BlockBreakEvent` | a block is removed by an actor | `destroyBlock`, player mining, `setBlock` to air with an actor |
 | ├ `BlockPlaceEvent` | a block or fluid source is placed by an actor | `BlockItem.place`, `setBlock` with an actor |
-| ├ `BlockMultiPlaceEvent` | several blocks at once (a door, a bed, a building gadget) | |
+| ├ `BlockMultiPlaceEvent` | several blocks at once (a door, a bed, a building gadget) | NeoForge's `EntityMultiPlaceEvent` |
 | ├ `BlockTransformEvent` | an actor changes a block into another (machine conversion, stripping a log, upgrading a chest in place) | `setBlock` with an actor |
 | ├ `BlockDataChangeEvent` | block entity data changes with the state unchanged: a spawner's mob, a drawer's lock, a terminal's binding, a name | bridge |
 | ├ `BlockBurnEvent`, `BlockIgniteEvent` | fire destroys or starts | `FireBlock` |
@@ -72,7 +72,7 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 | ├ `BlockSpreadEvent`, `BlockFormEvent`, `BlockFadeEvent`, `BlockGrowEvent`, `LeavesDecayEvent` | natural changes | the vanilla block's tick |
 | ├ `BlockFertilizeEvent` | bonemeal or a growth accelerator | `BoneMealItem` |
 | └ `StructureGrowEvent` | a tree or structure grows from one block | `TreeGrower` |
-| `BlockMoveEvent` | blocks relocate with their data and scheduled ticks; source to target mapping, and the space swept through | |
+| `BlockMoveEvent` | blocks relocate with their data and scheduled ticks; source to target mapping, and the space swept through | `PistonBaseBlock`, through its leaves |
 | ├ `BlockPistonExtendEvent`, `BlockPistonRetractEvent` | | `PistonBaseBlock` |
 | └ `StructureMoveEvent` | a contraption, ship or spatial transfer assembles, moves, rotates or disassembles; old and new transforms | bridge (Create, Valkyrien Skies, AE2 spatial IO) |
 | `BlockDropItemEvent` | a broken block's drops are about to appear; the item entities and experience are editable, and a cancel drops nothing | `Block.dropResources` (NeoForge's `BlockDropsEvent`), so player mining, `destroyBlock` and blocks losing their support |
@@ -107,7 +107,7 @@ Payload: the entity, its position, and what changed.
 | `EntityVelocityEvent` | an actor pushes, pulls or launches an entity; old and new velocity | `setDeltaMovement` while something other than the entity acts |
 | └ `EntityKnockbackEvent` | knockback from a hit or blast | `LivingEntity.knockback` |
 | `EntityMoveEvent` | an entity with an actor or controller (a player, a vehicle) crosses into another block | movement ticks, only when a listener's area is involved |
-| └ `PlayerMoveEvent` | | |
+| └ `PlayerMoveEvent` | | movement ticks |
 | `EntityTeleportEvent` | an entity moves other than by walking; cause, and everything travelling with it (passengers, pets, leashed mobs); the destination (world, position, facing) is editable | `teleportTo`, `changeDimension` |
 | `EntityTargetEvent` | a mob or turret picks a target | `setTarget` |
 | `EntityControlChangeEvent` | who controls an entity changes without mounting: charmed, enthralled, a drone linked to a monitor, a guard assigned; expiry is *(after)* | bridge |
@@ -191,29 +191,29 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 | `TickAccelerateEvent` | an actor speeds up blocks or entities in an area; one event per accelerator per change, never per extra tick | bridge (Torcherino, time bottles) |
 | `ChunkLoadEvent`, `ChunkUnloadEvent` *(after)* | | `ChunkMap` |
 | `ChunkForceLoadEvent` | an actor keeps chunks loaded: a chunk loader, an anchor, a claim | `ServerChunkCache` tickets, `setChunkForced` |
-| `ChunkForceUnloadEvent` *(after)* | that actor releases them, including on expiry | |
+| `ChunkForceUnloadEvent` *(after)* | that actor releases them, including on expiry | `ServerChunkCache` tickets, `setChunkForced` |
 | `PortalCreateEvent` | | `PortalShape` |
 | `WorldLoadEvent`, `WorldUnloadEvent`, `WorldSaveEvent` *(after)* | | `MinecraftServer` |
 
 ### Players: `PlayerEvent` (always a player)
 
-| Event | What |
-|---|---|
-| `PlayerLoginEvent` | before join; deny with a message |
-| `PlayerJoinEvent`, `PlayerQuitEvent`, `PlayerKickEvent` | the join and quit lines are editable and replace vanilla's |
-| `PlayerChatEvent` | |
-| `PlayerRespawnEvent` | respawn location editable |
-| `PlayerChangedWorldEvent` *(after)* | |
-| `PlayerAbilitiesChangeEvent` | flight allowed or revoked (Flugel Tiara, a flight ritual), fly and walk speed; revocation is *(after)* |
-| `PlayerFlightRevokeEvent` *(after)* | a player lost permission to fly; speeds changed at the same moment come with it |
-| `PlayerToggleSneakEvent`, `PlayerToggleSprintEvent`, `PlayerToggleFlightEvent` | |
-| `PlayerGameModeChangeEvent` | |
-| `PlayerExpChangeEvent`, `PlayerLevelChangeEvent` | vanilla experience only; mod skill points are resources |
-| `PlayerAdvancementDoneEvent` *(after)* | |
-| `PlayerSwapHandItemsEvent` | |
-| `PlayerBedEnterEvent`, `PlayerBedLeaveEvent` | |
-| `PlayerFishEvent` | each step of fishing with any rod whose bobber is a `FishingHook`: cast, bite, escape, reel-in; the catch and its experience editable. An `EntityEvent` about the bobber, so it carries the actor (the player or a fake player) |
-| `PlayerModPacketEvent` | a mod's network message from this player; payload id. The catch-all for keybind actions only the server sees |
+| Event | What | Core chokepoint |
+|---|---|---|
+| `PlayerLoginEvent` | before join; deny with a message | `ServerConfigurationPacketListenerImpl` |
+| `PlayerJoinEvent`, `PlayerQuitEvent`, `PlayerKickEvent` | the join and quit lines are editable and replace vanilla's | NeoForge's login and logout events, `ServerCommonPacketListenerImpl.disconnect` |
+| `PlayerChatEvent` | | NeoForge's `ServerChatEvent` |
+| `PlayerRespawnEvent` | respawn location editable | NeoForge's `PlayerRespawnPositionEvent` |
+| `PlayerChangedWorldEvent` *(after)* | | NeoForge's `PlayerChangedDimensionEvent` |
+| `PlayerAbilitiesChangeEvent` | flight allowed or revoked (Flugel Tiara, a flight ritual), fly and walk speed; revocation is *(after)* | `ServerPlayer.onUpdateAbilities` |
+| `PlayerFlightRevokeEvent` *(after)* | a player lost permission to fly; speeds changed at the same moment come with it | `ServerPlayer.onUpdateAbilities` |
+| `PlayerToggleSneakEvent`, `PlayerToggleSprintEvent`, `PlayerToggleFlightEvent` | | `handlePlayerCommand`, `handlePlayerAbilities` |
+| `PlayerGameModeChangeEvent` | | NeoForge's `PlayerChangeGameModeEvent` |
+| `PlayerExpChangeEvent`, `PlayerLevelChangeEvent` | vanilla experience only; mod skill points are resources | NeoForge's `PlayerXpEvent.XpChange`, the player's tick |
+| `PlayerAdvancementDoneEvent` *(after)* | | NeoForge's `AdvancementEarnEvent` |
+| `PlayerSwapHandItemsEvent` | | NeoForge's `LivingSwapItemsEvent.Hands` |
+| `PlayerBedEnterEvent`, `PlayerBedLeaveEvent` | | NeoForge's `CanPlayerSleepEvent`, `PlayerWakeUpEvent` |
+| `PlayerFishEvent` | each step of fishing with any rod whose bobber is a `FishingHook`: cast, bite, escape, reel-in; the catch and its experience editable. An `EntityEvent` about the bobber, so it carries the actor (the player or a fake player) | `catchingFish`, `retrieve`, bridges |
+| `PlayerModPacketEvent` | a mod's network message from this player; payload id. The catch-all for keybind actions only the server sees | NeoForge's `NetworkRegistry.handleModdedPayload` |
 
 ### Server: `ServerEvent`
 

@@ -282,7 +282,8 @@ val contractDocs = tasks.register("contractDocs") {
     }
 }
 
-// Hadron's jars as the bundle ships them: repacked without timestamps, so the same sources make the same bytes.
+// Hadron's jars as the bundle ships them: repacked without timestamps, so the same sources should make the same
+// bytes (not tested).
 fun repack(name: String, from: String, fileName: String) = tasks.register<Zip>(name) {
     dependsOn(from)
     from(zipTree(project(from.substringBeforeLast(':')).tasks.named<Jar>(from.substringAfterLast(':'))

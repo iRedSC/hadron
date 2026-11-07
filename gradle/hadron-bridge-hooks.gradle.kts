@@ -1,18 +1,19 @@
 // bridgeHooks / bridgeHooksCheck: docs/bridge-hooks.md's tables come from the @FiredBy on each event class, and
 // bridgeHooksCheck (part of check) fails when the committed file differs. It also holds @FiredBy to the code: an
-// event marked core = NONE fails if core constructs it or a subclass, and one marked FULL or PARTIAL fails if core
+// event marked core = NONE fails if core allocates it or a subclass, and one marked FULL or PARTIAL fails if core
 // never does. And docs/events.md's catalog must say "bridge" in the chokepoint column for exactly the NONE events.
 // Reads class files only, like coverageCheck (gradle/hadron-coverage.gradle.kts), so it runs in milliseconds.
 //
 // Applied from neoforge/build.gradle.kts, the one project that sees api, common and the port.
 
 import java.io.DataInputStream
+import java.nio.ByteBuffer
 
 object HadronBridgeHooks {
-    // ---- Reading class files: names, supertypes, @FiredBy, and which constructors each class calls ---------------------
+    // ---- Reading class files: names, supertypes, @FiredBy, and which classes each class allocates ---------------------
 
     class ClassInfo(val name: String, val access: Int, val superName: String?, val interfaces: List<String>,
-                    val firedBy: Map<String, String>?, val constructs: Set<String>)
+                    val firedBy: Map<String, String>?, val allocates: Set<String>)
 
     const val ACC_PUBLIC = 0x0001
     const val ACC_INTERFACE = 0x0200
@@ -28,38 +29,45 @@ object HadronBridgeHooks {
         val utf = arrayOfNulls<String>(count)
         val classRef = IntArray(count)
         val methodClass = IntArray(count)
-        val methodNat = IntArray(count)
-        val natName = IntArray(count)
+        val handleKind = IntArray(count)
+        val handleRef = IntArray(count)
         var i = 1
         while (i < count) {
             when (val tag = input.readUnsignedByte()) {
                 1 -> utf[i] = input.readUTF()
                 7 -> classRef[i] = input.readUnsignedShort()
                 8, 16, 19, 20 -> input.readUnsignedShort()
-                10 -> { methodClass[i] = input.readUnsignedShort(); methodNat[i] = input.readUnsignedShort() }
+                10 -> { methodClass[i] = input.readUnsignedShort(); input.readUnsignedShort() }
                 9, 11 -> input.readInt()
-                12 -> { natName[i] = input.readUnsignedShort(); input.readUnsignedShort() }
+                12 -> input.readInt()
                 18 -> input.readInt()
                 3, 4, 17 -> input.readInt()
                 5, 6 -> { input.readLong(); i++ }
-                15 -> { input.readUnsignedByte(); input.readUnsignedShort() }
+                15 -> { handleKind[i] = input.readUnsignedByte(); handleRef[i] = input.readUnsignedShort() }
                 else -> error("constant pool tag $tag")
             }
             i++
         }
         fun u(index: Int) = utf[index]!!
         fun cls(index: Int) = if (index == 0) null else u(classRef[index])
-        // A Methodref to <init> is a constructor call: `new X(...)`, `X::new`, or a subclass's super(...).
-        val constructs = (1 until count).filter { methodClass[it] != 0 && u(natName[methodNat[it]]) == "<init>" }
-                .mapNotNull { cls(methodClass[it]) }.toSet()
+        // A class allocates X where a method runs `new X` or it holds a handle to X's constructor (kind 8,
+        // REF_newInvokeSpecial, which is how `X::new` compiles). A subclass's super(...) is neither.
+        val allocates = (1 until count).filter { handleKind[it] == 8 }.mapNotNull { cls(methodClass[handleRef[it]]) }
+                .toMutableSet()
 
         val access = input.readUnsignedShort()
         val name = cls(input.readUnsignedShort())!!
         val superName = cls(input.readUnsignedShort())
         val interfaces = List(input.readUnsignedShort()) { cls(input.readUnsignedShort())!! }
         fun skipAttributes() = repeat(input.readUnsignedShort()) { input.readUnsignedShort(); input.skipBytes(input.readInt()) }
-        repeat(2) { // fields, then methods
-            repeat(input.readUnsignedShort()) { input.skipBytes(6); skipAttributes() }
+        repeat(input.readUnsignedShort()) { input.skipBytes(6); skipAttributes() } // fields
+        repeat(input.readUnsignedShort()) { // methods
+            input.skipBytes(6)
+            repeat(input.readUnsignedShort()) {
+                val attr = u(input.readUnsignedShort())
+                val body = ByteArray(input.readInt()).also { input.readFully(it) }
+                if (attr == "Code") newOperands(body.copyOfRange(8, 8 + ByteBuffer.wrap(body, 4, 4).int)).mapTo(allocates) { cls(it)!! }
+            }
         }
         // Element values: strings and enum constant names are kept, as that's all @FiredBy holds.
         fun value(): String? = when (val tag = input.readUnsignedByte().toChar()) {
@@ -86,7 +94,40 @@ object HadronBridgeHooks {
                 }
             } else input.skipBytes(length)
         }
-        return ClassInfo(name, access, superName, interfaces, firedBy, constructs)
+        return ClassInfo(name, access, superName, interfaces, firedBy, allocates)
+    }
+
+    /** Operand lengths of each opcode; -1 for the variable-length ones and those that don't exist. */
+    val OPERANDS = IntArray(256) { -1 }.also { n ->
+        fun set(range: IntRange, length: Int) = range.forEach { n[it] = length }
+        set(0x00..0xc3, 0)
+        set(0x10..0x10, 1); set(0x11..0x11, 2); set(0x12..0x12, 1); set(0x13..0x14, 2) // bipush, sipush, ldc*
+        set(0x15..0x19, 1); set(0x36..0x3a, 1); set(0x84..0x84, 2); set(0xa9..0xa9, 1) // locals, iinc, ret
+        set(0x99..0xa8, 2); set(0xb2..0xb8, 2); set(0xb9..0xba, 4); set(0xbb..0xbb, 2) // jumps, fields, invokes, new
+        set(0xbc..0xbc, 1); set(0xbd..0xbd, 2); set(0xc0..0xc1, 2); set(0xc5..0xc5, 3) // arrays, casts
+        set(0xc6..0xc7, 2); set(0xc8..0xc9, 4)
+        n[0xaa] = -1; n[0xab] = -1
+    }
+
+    /** The class operand of every `new` in a method's code, decoding each instruction so no operand reads as one. */
+    fun newOperands(code: ByteArray): List<Int> {
+        val buffer = ByteBuffer.wrap(code)
+        fun u2(at: Int) = buffer.getShort(at).toInt() and 0xFFFF
+        val out = mutableListOf<Int>()
+        var pc = 0
+        while (pc < code.size) {
+            val op = code[pc].toInt() and 0xFF
+            val pad = (pc + 4) and 3.inv() // switch operands start at the next multiple of 4
+            pc = when (op) {
+                0xbb -> { out += u2(pc + 1); pc + 3 }
+                0xaa -> pad + 12 + 4 * (buffer.getInt(pad + 8) - buffer.getInt(pad + 4) + 1) // tableswitch
+                0xab -> pad + 8 + 8 * buffer.getInt(pad + 4) // lookupswitch
+                0xc4 -> pc + if (code[pc + 1].toInt() and 0xFF == 0x84) 6 else 4 // wide
+                else -> pc + 1 + OPERANDS[op].also { check(it >= 0) { "opcode $op at $pc" } }
+            }
+        }
+        check(pc == code.size) { "code ran past its end" }
+        return out
     }
 
     fun readClasses(dirs: Iterable<File>): Map<String, ClassInfo> = dirs.filter { it.isDirectory }.flatMap { dir ->
@@ -105,40 +146,43 @@ object HadronBridgeHooks {
 
     /** The events and their @FiredBy, or the problems that stop the doc being generated. */
     fun facts(api: Map<String, ClassInfo>, core: Map<String, ClassInfo>): Pair<List<Event>, List<String>> {
+        val all = api + core
         fun supers(c: ClassInfo): Set<String> {
             val out = linkedSetOf<String>()
             val todo = ArrayDeque(listOfNotNull(c.superName) + c.interfaces)
             while (todo.isNotEmpty()) {
                 val s = todo.removeFirst()
-                if (out.add(s)) api[s]?.let { todo.addAll(listOfNotNull(it.superName) + it.interfaces) }
+                if (out.add(s)) all[s]?.let { todo.addAll(listOfNotNull(it.superName) + it.interfaces) }
             }
             return out
         }
+        fun isEvent(name: String) = api[name]?.let { EVENT_ROOT in supers(it) } == true
+        // An instance of X is also each of X's supertypes, so allocating X fires X's api events and their parents.
+        fun eventsOf(allocated: String) = (setOf(allocated) + (all[allocated]?.let(::supers) ?: emptySet())).filter(::isEvent)
         val events = api.values.filter {
             // Nested events count too (named Outer.Inner in the doc), so one can't ship unchecked by being nested.
             it.access and ACC_PUBLIC != 0 && it.access and (ACC_ABSTRACT or ACC_INTERFACE) == 0
                     && EVENT_ROOT in supers(it)
         }.sortedBy { simple(it.name) }
-        // Firing is read as construction: core code that builds an event (`new X(...)`, `X::new`, a subclass's
-        // super(...)) is taken to post it. Following each object to Hooks.post would need a data-flow analysis; an
-        // event core builds and never posts would be its own bug, and @Covers tests prove the posting in game.
-        // A parent counts when core fires a leaf. Only api's own event classes count: a subclass defined in common
-        // or neoforge doesn't make its api parent fired, so marking that parent FULL fails visibly.
-        val built = core.values.flatMap { it.constructs }.filter { it in api }.toSet()
-        val fired = built + built.flatMap { supers(api[it]!!) }
-        // The core classes that construct an event or one of its leaves, for the error message.
+        // Firing is read as allocation: core code that allocates an event (`new X(...)` or `X::new`) is taken to post
+        // it. Following each object to Hooks.post would need a data-flow analysis; an event core builds and never posts
+        // would be its own bug, and @Covers tests prove the posting in game. Allocating a leaf fires its parents, and
+        // so does allocating a subclass defined in common or neoforge, since its instance is the api event. A
+        // subclass's super(...) call allocates nothing, so it doesn't count.
+        val fired = core.values.flatMap { it.allocates }.flatMap(::eventsOf).toSet()
+        // The core classes that allocate an event or one of its subclasses, for the error message.
         val where = { e: String ->
-            core.values.filter { c -> c.constructs.any { it == e || api[it]?.let { a -> e in supers(a) } == true } }
-                    .map { simple(it.name) }.sorted().joinToString()
+            core.values.filter { c -> c.allocates.any { e in eventsOf(it) } }.map { simple(it.name) }.sorted().joinToString()
         }
 
         val problems = mutableListOf<String>()
-        // An api helper that built events would hide them from the check above, which only reads core; api builds none.
-        for (c in api.values) for (b in c.constructs) {
-            if (b != c.name && b in events.map { it.name } && api[b]?.let { EVENT_ROOT in supers(it) } == true &&
-                    c.superName != b) problems += "${simple(c.name)} in api constructs ${simple(b)}: events are " +
-                    "built by core (common or neoforge), so the @FiredBy check can see who fires them. Move it there."
-        }
+        // An api class that built events, a factory method included, would hide them from the check above, which only
+        // reads core; api builds none.
+        for (c in api.values) for (b in c.allocates.filter(::isEvent)) problems += "${simple(c.name)} in api " +
+                "allocates ${simple(b)}: events are built by core (common or neoforge), so the @FiredBy check can see " +
+                "who fires them. Move the `new ${simple(b)}(...)` there."
+        for ((n, same) in events.groupBy { simple(it.name) }) if (same.size > 1) problems += "two events are named $n " +
+                "(${same.joinToString { it.name.replace('/', '.') }}), and the docs name events by simple name: rename one."
         // A missing or empty class folder would otherwise check nothing and pass.
         if (events.isEmpty()) problems += "found no event classes in api's compiled classes, so nothing was checked: " +
                 "build :api first (the check depends on :api:classes), or fix the folders it reads."
@@ -180,7 +224,7 @@ object HadronBridgeHooks {
                 }
             }
             if (e.core != "NONE" && c.name !in fired) problems += "$n is marked core = ${e.core}, but nothing in common " +
-                    "or neoforge constructs it or a subclass: mark it core = NONE with bridges and fillIn, or fire it."
+                    "or neoforge allocates it or a subclass: mark it core = NONE with bridges and fillIn, or fire it."
             out += e
         }
         return out to problems
@@ -213,7 +257,7 @@ object HadronBridgeHooks {
             val start = text.indexOf(begin(block))
             val stop = text.indexOf(end(block))
             // A second copy would stay stale and still pass, since the check compares the file as rendered.
-            require(text.split(begin(block)).size == 2 && text.split(end(block)).size == 2) {
+            require(text.split(begin(block)).size <= 2 && text.split(end(block)).size <= 2) {
                 "docs/bridge-hooks.md has more than one generated $block marker: keep one\n  ${begin(block)}\n  " +
                         "${end(block)}\npair, then run ./gradlew bridgeHooks."
             }
@@ -227,9 +271,8 @@ object HadronBridgeHooks {
     }
 
     /**
-     * Every shipped event has a catalog row, and the catalog's chokepoint column says "bridge" for exactly the events
-     * core never fires. A bridge-only event must sit in a table with that column, so renaming the column fails on
-     * them rather than silently checking nothing. (The player and server tables have no chokepoint column by design.)
+     * Every shipped event has a catalog row in a table with a "Core chokepoint" column, so renaming the column fails
+     * rather than silently checking nothing, and that cell starts with "bridge" for exactly the events core never fires.
      */
     fun catalogProblems(eventsMd: String, events: List<Event>): List<String> {
         val byName = events.associateBy { it.name }
@@ -243,15 +286,17 @@ object HadronBridgeHooks {
             val cells = line.trim().removePrefix("|").removeSuffix("|").split("|").map { it.trim() }
             if (cells.firstOrNull() == "Event") { chokepoint = cells.indexOf("Core chokepoint"); inTable = true; continue }
             if (!inTable || cells[0].startsWith("---")) continue
-            val names = Regex("`(\\w+Event)`").findAll(cells[0]).map { it.groupValues[1] }.filter { it in byName }.toList()
+            val names = Regex("`([\\w.]+Event)`").findAll(cells[0]).map { it.groupValues[1] }.filter { it in byName }.toList()
             listed += names
             if (chokepoint < 0) continue
-            if (cells.size <= chokepoint) {
-                problems += "docs/events.md:${index + 1}: the row has no Core chokepoint cell: fill it in."
+            checked += names
+            if (names.isEmpty()) continue
+            if (cells.getOrNull(chokepoint).isNullOrEmpty()) {
+                problems += "docs/events.md:${index + 1}: ${names.joinToString()} has an empty Core chokepoint cell: " +
+                        "name the code core fires it from, or write \"bridge\" if only bridges fire it."
                 continue
             }
-            checked += names
-            val says = cells[chokepoint].startsWith("bridge")
+            val says = cells[chokepoint].lowercase().startsWith("bridge")
             for (name in names) {
                 val e = byName.getValue(name)
                 val bridgeOnly = e.core == "NONE"
@@ -264,11 +309,10 @@ object HadronBridgeHooks {
         for (e in events) {
             if (e.name !in listed) problems += "docs/events.md has no catalog row for ${e.name}: add one to its family's " +
                     "table (a row may name several events, each in backticks)."
-            else if (e.core == "NONE" && e.name !in checked) problems += "docs/events.md lists ${e.name}, which only " +
-                    "bridges fire, outside a table with a \"Core chokepoint\" column: put it in one, with a cell starting " +
-                    "\"bridge\" (or the column was renamed: name it \"Core chokepoint\" again)."
+            else if (e.name !in checked) problems += "docs/events.md lists ${e.name} outside a table with a " +
+                    "\"Core chokepoint\" column: put it in one (or the column was renamed: name it \"Core chokepoint\" again)."
         }
-        return problems
+        return problems.distinct() // two events sharing a name, already refused by facts(), would repeat each line
     }
 
     class Result(val expected: String, val problems: List<String>) {
