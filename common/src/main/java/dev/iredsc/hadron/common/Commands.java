@@ -181,7 +181,9 @@ final class Commands {
                 return 0;
             }
             return 1;
-        } catch (RuntimeException e) {
+        } catch (Throwable e) {
+            // Anything: an Error (an assert, a stack overflow, a class the plugin lost) escaping here would reach the
+            // packet handler, which only survives Exceptions, and take the server thread with it.
             log.error("/" + label + " " + line + " threw", e);
             sender.sendFailure(Component.literal("/" + label + " failed: " + e).withStyle(ChatFormatting.RED));
             return 0;
