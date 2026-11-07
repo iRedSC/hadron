@@ -26,5 +26,9 @@ public record TestModPacket(String text) implements CustomPacketPayload {
     }
 
     /** One message the test mod's handler ran for: who sent it, and what. */
-    public record Handled(ServerPlayer player, TestModPacket packet) {}
+    /**
+     * One packet the test mod handled: who sent it, what it said, and whether the mod's handler ran on the server
+     * thread. {@link TestModNetworkPacket}s are recorded here too, as a {@code TestModPacket} with the same text.
+     */
+    public record Handled(ServerPlayer player, TestModPacket packet, boolean onServerThread) {}
 }

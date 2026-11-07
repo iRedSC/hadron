@@ -138,7 +138,7 @@ Beside every `report.txt` is a `report.json` with the same results for tools; `h
 
 ## What Hadron's own tests cover
 
-`./gradlew :selftest:hadronTest` runs 245 tests, all passing, in `selftest/src/test/java`, by family: blocks and world (81), entities and players (91), items (31), inventories (5), platform APIs (29: persistent data, economy, visibility, display names and packets, worlds), and the first ten in `EventTests` and `PlatformTests`. For every shipped event that a test can drive, they check that:
+`./gradlew :selftest:hadronTest` runs every test in `selftest/src/test/java`, grouped in packages by event family and API (`blocks`, `world`, `entities`, `players`, `items`, `inventories`, `platform`, `trace`, and more). How many there are, and which passed, is in the run's `report.json` rather than here, where a hand-written count would go stale. For every shipped event that a test can drive, they check that:
 
 - **it fires with the right actor:** player, machine, entity, `Server` or nature;
 - **a cancel fully undoes:** nothing changed and nothing spent, no item lost or duplicated, no durability gone;

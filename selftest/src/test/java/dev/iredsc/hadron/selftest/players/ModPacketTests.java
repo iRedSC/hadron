@@ -6,6 +6,7 @@ import dev.iredsc.hadron.api.event.player.PlayerModPacketEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
+import dev.iredsc.hadron.test.TestModNetworkPacket;
 import dev.iredsc.hadron.test.TestModPacket;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -83,5 +84,46 @@ public final class ModPacketTests {
         t.assertEquals(2, seen.size(), "PlayerModPacketEvents for two mod packets");
         List<String> texts = t.modPacketsHandled().stream().map(h -> h.packet().text()).toList();
         t.assertEquals(List.of("one", "two"), texts, "what the mod handled, in order");
+    }
+
+    @HadronTest
+    @Covers(PlayerModPacketEvent.class)
+    void aNetworkThreadHandlerIsAskedFirstThenRunOnTheServerThread(TestContext t) {
+        TestPlayer alice = t.moddedPlayer("alice");
+        List<Seen> seen = watch(t, false);
+        alice.sendModPacket(new TestModNetworkPacket("net"));
+        t.tick(2);
+
+        t.assertEquals(1, seen.size(), "PlayerModPacketEvents for one network-thread mod packet");
+        t.assertTrue(seen.get(0).serverThread(), "the event should fire on the server thread");
+        t.assertEquals(0, seen.get(0).handledBefore(), "mod packets the mod had handled when the event fired");
+        List<TestModPacket.Handled> handled = t.modPacketsHandled();
+        t.assertEquals(1, handled.size(), "network-thread mod packets the mod handled after the event");
+        t.assertEquals("net", handled.get(0).packet().text(), "the text the mod received");
+        t.assertTrue(handled.get(0).onServerThread(), "while a plugin listens, a network-thread handler runs after "
+                + "the event, on the server thread");
+    }
+
+    @HadronTest
+    @Covers(PlayerModPacketEvent.class)
+    void aCancelledNetworkThreadModPacketNeverReachesTheMod(TestContext t) {
+        TestPlayer alice = t.moddedPlayer("alice");
+        List<Seen> seen = watch(t, true);
+        alice.sendModPacket(new TestModNetworkPacket("refused"));
+        t.tick(2);
+
+        t.assertEquals(1, seen.size(), "PlayerModPacketEvents for one network-thread mod packet");
+        t.assertEquals(List.of(), t.modPacketsHandled(), "network-thread mod packets the mod handled after a cancel");
+    }
+
+    @HadronTest
+    @Covers(PlayerModPacketEvent.class)
+    void withNoListenerANetworkThreadHandlerStaysOnTheNetworkThread(TestContext t) {
+        // Hadron moves a network-thread handler only while a plugin listens; otherwise the mod gets what it asked for.
+        TestPlayer alice = t.moddedPlayer("alice");
+        alice.sendModPacket(new TestModNetworkPacket("untouched"));
+        t.await("the mod to handle the packet", () -> !t.modPacketsHandled().isEmpty(), 20);
+        t.assertTrue(!t.modPacketsHandled().get(0).onServerThread(), "with no listener, the mod's network-thread "
+                + "handler should run on the network thread");
     }
 }
