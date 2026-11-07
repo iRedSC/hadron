@@ -113,6 +113,25 @@ public interface TestContext {
                 + "longer, raise the ticks given to await; if it should have happened, check what triggers it ran.");
     }
 
+    /**
+     * {@link #await(String, BooleanSupplier, int)} for work done on another thread: an async task, a chunk loading on
+     * the chunk workers, a network thread. Ticks alone run faster than that work, so between ticks this also gives
+     * other threads up to {@value #ASYNC_YIELD_MILLIS} ms, returning as soon as the condition holds. The limit is
+     * still {@code ticks}, so a test can't hang. When only ticks move the condition, use {@code await}: it spends no
+     * wall time.
+     *
+     * <pre>{@code
+     * scheduler.runTaskAsynchronously(t.plugin(), () -> done.set(true));
+     * t.awaitAsync("the async task to finish", done::get, 100);
+     * }</pre>
+     *
+     * @throws AssertionError if it still doesn't hold after {@code ticks} ticks
+     */
+    void awaitAsync(String what, BooleanSupplier condition, int ticks);
+
+    /** How long {@link #awaitAsync} gives other threads between two ticks, at most. */
+    int ASYNC_YIELD_MILLIS = 10;
+
     // ---- Setting up ----
 
     /** Sets a block, as {@code level.setBlock} with block updates. */

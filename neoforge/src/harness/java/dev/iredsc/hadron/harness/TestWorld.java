@@ -27,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
+import java.util.function.BooleanSupplier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.Connection;
 import net.minecraft.resources.ResourceLocation;
@@ -266,6 +268,30 @@ final class TestWorld implements TestContext {
     @Override
     public int ticksSpent() {
         return spent;
+    }
+
+    // The wall clock lives here, in the harness, so a plugin's test can wait on another thread without reading it.
+    @Override
+    public void awaitAsync(String what, BooleanSupplier condition, int ticks) {
+        for (int i = 0; i < ticks; i++) {
+            if (holdsWithin(condition, TimeUnit.MILLISECONDS.toNanos(ASYNC_YIELD_MILLIS))) return;
+            tick(1);
+        }
+        if (holdsWithin(condition, TimeUnit.MILLISECONDS.toNanos(ASYNC_YIELD_MILLIS))) return;
+        throw new AssertionError("Waited " + ticks + " ticks, with up to " + ASYNC_YIELD_MILLIS + " ms between each "
+                + "for other threads, for " + what + ", and it never happened. Check that the work was started (the "
+                + "task scheduled, the chunk forced) and that it didn't throw: an async task's exception is in the "
+                + "server log. If it needs longer, raise the ticks given to awaitAsync.");
+    }
+
+    /** Whether the condition holds now or within {@code nanos}, checked about every quarter millisecond. */
+    private static boolean holdsWithin(BooleanSupplier condition, long nanos) {
+        long until = System.nanoTime() + nanos;
+        while (true) {
+            if (condition.getAsBoolean()) return true;
+            if (System.nanoTime() - until >= 0) return false;
+            LockSupport.parkNanos(250_000);
+        }
     }
 
     // ---- For the harness ----

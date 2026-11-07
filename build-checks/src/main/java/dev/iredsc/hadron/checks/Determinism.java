@@ -77,7 +77,9 @@ public final class Determinism extends BugChecker implements MethodInvocationTre
             message = "Reading the wall clock makes a result depend on how fast the machine runs." + TICKS;
         } else if (SLEEP.matches(tree, state)) {
             message = "Sleeping waits a fixed wall time, so it passes on a fast machine and fails on a busy one."
-                    + TICKS + " To wait for another thread, wait on what it signals (a CompletableFuture, a latch).";
+                    + TICKS + " To wait for another thread (an async task, a chunk loading), in a test, "
+                    + "t.awaitAsync(\"what\", condition, ticks); elsewhere, wait on what it signals (a "
+                    + "CompletableFuture, a latch).";
         } else if (RANDOM.matches(tree, state)) {
             message = "Unseeded randomness can't be repeated when a test fails. Take a java.util.Random with a seed "
                     + "(new Random(seed)), or the level's own RandomSource, so the same seed gives the same result.";

@@ -94,7 +94,7 @@ public final class ChunkTests {
             }
         });
         Console.run(t, forceload("add", at));
-        Console.awaitSlowly(t, "the forced chunk to load", () -> !loads.isEmpty(), 300);
+        t.awaitAsync("the forced chunk to load", () -> !loads.isEmpty(), 300);
         t.assertEquals(1, loads.size(), "the number of ChunkLoadEvents for the forced chunk");
         t.assertTrue(loads.get(0).isNewChunk(), "a chunk never generated before should load as new");
         Console.run(t, forceload("remove", at));

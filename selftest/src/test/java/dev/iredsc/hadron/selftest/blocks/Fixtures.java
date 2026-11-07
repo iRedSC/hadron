@@ -1,6 +1,5 @@
 package dev.iredsc.hadron.selftest.blocks;
 
-import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -54,20 +53,7 @@ final class Fixtures {
      */
     static void awaitTicking(TestContext t, BlockPos pos) {
         t.level().setChunkForced(pos.getX() >> 4, pos.getZ() >> 4, true);
-        t.await("the test world's chunk to start ticking", () -> {
-            if (t.level().isPositionEntityTicking(pos)) return true;
-            pause();
-            return false;
-        }, 300);
-    }
-
-    @Nondeterministic(reason = "yields wall time to work on other threads (chunk workers, async tasks) between ticks, which run faster than it")
-    static void pause() {
-        try {
-            Thread.sleep(5);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        t.awaitAsync("the test world's chunk to start ticking", () -> t.level().isPositionEntityTicking(pos), 300);
     }
 
     /** A dispenser at {@code pos} facing {@code facing}, holding {@code stack} in its first slot. */

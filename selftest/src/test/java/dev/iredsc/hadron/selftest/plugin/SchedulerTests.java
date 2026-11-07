@@ -1,6 +1,5 @@
 package dev.iredsc.hadron.selftest.plugin;
 
-import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.api.plugin.Scheduler;
 import dev.iredsc.hadron.api.plugin.Server;
 import dev.iredsc.hadron.api.plugin.Task;
@@ -96,21 +95,9 @@ public final class SchedulerTests {
         AtomicInteger repeats = new AtomicInteger();
         Task timer = scheduler.runTaskTimerAsynchronously(t.plugin(), repeats::incrementAndGet, 1, 1);
         t.assertTrue(now.isAsync() && later.isAsync() && timer.isAsync(), "async tasks say they're async");
-        t.await("the async tasks to run", () -> {
-            sleep();
-            return ran.size() == 2 && repeats.get() >= 2;
-        }, 200);
+        t.awaitAsync("the async tasks to run", () -> ran.size() == 2 && repeats.get() >= 2, 200);
         timer.cancel();
         t.assertTrue(ran.contains("now primary=false"), "an async task runs off the server thread, but ran " + ran);
         t.assertTrue(ran.contains("later"), "the delayed async task should have run");
-    }
-
-    @Nondeterministic(reason = "yields wall time to work on other threads (chunk workers, async tasks) between ticks, which run faster than it")
-    private static void sleep() {
-        try {
-            Thread.sleep(5);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
     }
 }
