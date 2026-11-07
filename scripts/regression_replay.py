@@ -18,6 +18,7 @@ another in-game run on this machine. See docs/testing.md, "Regression replay".
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import re
@@ -201,17 +202,41 @@ def locate(guard: Guard) -> tuple[str, str]:
     return (IN_GAME_PROJECT if tier == "in-game" else FAST_PROJECTS[module]), fqcn
 
 
+TIMED_OUT = -1
+
+
+def stop(proc: subprocess.Popen) -> None:
+    """Ends the build and everything it started (flock, the Gradle client, a test server), so nothing still reads
+    the tree once the replay resets it."""
+    for sig, wait in ((signal.SIGTERM, 30), (signal.SIGKILL, 30)):
+        try:
+            os.killpg(proc.pid, sig)
+        except ProcessLookupError:
+            return
+        try:
+            proc.wait(timeout=wait)
+            return
+        except subprocess.TimeoutExpired:
+            continue
+
+
 def gradle(args: list[str], log: Path) -> int:
     log.parent.mkdir(parents=True, exist_ok=True)
     cmd = ["flock", LOCK, "./gradlew", "--console=plain", *args]
     with log.open("w") as out:
         out.write("$ " + " ".join(cmd) + "\n")
         out.flush()
+        # Its own process group, so a timeout or an interrupt can end the whole build, not only flock.
+        proc = subprocess.Popen(cmd, cwd=TREE, stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
         try:
-            return subprocess.run(cmd, cwd=TREE, stdout=out, stderr=subprocess.STDOUT, timeout=GRADLE_TIMEOUT).returncode
+            return proc.wait(timeout=GRADLE_TIMEOUT)
         except subprocess.TimeoutExpired:
+            stop(proc)
             out.write(f"\nreplay: Gradle ran past {GRADLE_TIMEOUT // 60} minutes and was stopped\n")
-            return -1
+            return TIMED_OUT
+        except BaseException:
+            stop(proc)
+            raise
 
 
 def compile_trouble(log: Path) -> str | None:
@@ -235,7 +260,9 @@ def run_fast(guards: list[Guard], label: str) -> GuardRun:
         args.append(f"{project}:test")
         for g, fqcn in items:
             args += ["--tests", f"{fqcn}.{g.method}"]
-    gradle(args, run.log)
+    if gradle(args, run.log) == TIMED_OUT:
+        run.trouble = f"Gradle timed out, so its results can't be trusted (see {run.log.relative_to(ROOT)})"
+        return run
     for project, items in by_project.items():
         results = TREE / project.strip(":").replace(":", "/") / "build" / "test-results" / "test"
         for g, fqcn in items:
@@ -246,8 +273,9 @@ def run_fast(guards: list[Guard], label: str) -> GuardRun:
             cases = [c for c in every if c.get("name", "").split("(")[0] == g.method]
             if not cases and sum(1 for other, _ in items if other.cls == g.cls) == 1:
                 # A parameterized test's cases are named by their arguments ("[1] .loaded"), not the method. The
-                # filter ran only this class's one guard, so every case in the class's file is that guard's.
-                cases = every
+                # filter ran only this class's one guard, so its invocations are that guard's. Only invocations count:
+                # a class that failed to load reports "initializationError", which is not the guard failing.
+                cases = [c for c in every if c.get("name", "").startswith("[")]
             if cases:
                 run.failed[g.test] = any(c.find("failure") is not None or c.find("error") is not None for c in cases)
     if len(run.failed) < len(guards):
@@ -264,7 +292,9 @@ def run_in_game(guards: list[Guard], label: str) -> GuardRun:
     args = [":selftest:hadronTest"]
     for g in guards:
         args += ["--tests", g.test]
-    gradle(args, run.log)
+    if gradle(args, run.log) == TIMED_OUT:
+        run.trouble = f"Gradle timed out, so its results can't be trusted (see {run.log.relative_to(ROOT)})"
+        return run
     # The next run overwrites the server's log, so keep this one's beside the Gradle log.
     server_log = TREE / "neoforge" / "build" / "hadron-test" / "run" / "logs" / "latest.log"
     if server_log.exists():
@@ -499,6 +529,16 @@ def main() -> int:
 
     # An interrupt or kill still runs the finally blocks that put the throwaway tree back.
     signal.signal(signal.SIGTERM, interrupted)
+    if args.command != "list":
+        # One replay at a time owns the throwaway tree: another would reset or patch it under this one's build.
+        WORK.mkdir(parents=True, exist_ok=True)
+        tree_lock = (WORK / "tree.lock").open("w")
+        try:
+            fcntl.flock(tree_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print(f"regression replay: another replay or refresh is using {TREE.relative_to(ROOT)}; wait for it to "
+                  "finish, then run this again.", file=sys.stderr)
+            return 3
     try:
         return {"list": cmd_list, "refresh": cmd_refresh, "save": cmd_save}.get(args.command, cmd_run)(args)
     except ManifestError as e:
