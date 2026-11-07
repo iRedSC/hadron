@@ -779,8 +779,11 @@ public final class PluginHost implements PluginManager {
 
     /** The plugin's own constructor threw {@link #getCause()}. */
     private static final class ConstructorThrew extends RuntimeException {
-        ConstructorThrew(Throwable cause) {
-            super(cause);
+        final Throwable thrown;
+
+        ConstructorThrew(Throwable thrown) {
+            super(thrown);
+            this.thrown = thrown;
         }
     }
 
@@ -852,11 +855,11 @@ public final class PluginHost implements PluginManager {
      */
     private void abandon(Entry e, State.Running running, Throwable t, String step) {
         Throwable cause = t;
-        if (cause instanceof ConstructorThrew) {
+        if (cause instanceof ConstructorThrew c) {
             step = "its constructor";
-            cause = cause.getCause();
+            cause = c.thrown;
         }
-        if (cause instanceof InvocationTargetException && cause.getCause() != null) cause = cause.getCause();
+        if (cause instanceof InvocationTargetException && cause.getCause() instanceof Throwable inner) cause = inner;
         String why = cause instanceof PluginException ? cause.getMessage()
                 : step + " threw " + cause + pluginFrame(cause, running.loader) + ". Fix that there; the stack trace "
                         + "is in the server log";
