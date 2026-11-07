@@ -285,6 +285,10 @@ object HadronBridgeHooks {
         val problems = mutableListOf<String>()
         val listed = mutableSetOf<String>()
         val checked = mutableSetOf<String>()
+        // The events the "Not shipped yet" list names: designed, in the catalog, not yet in api.
+        val notShipped = eventsMd.substringAfter("\n## Not shipped yet", "").substringBefore("\n## ").lines()
+                .filter { it.startsWith("- ") }.flatMap { l -> Regex("`([\\w.]+Event)`").findAll(l).map { it.groupValues[1] } }
+                .toSet()
         var chokepoint = -1
         var inTable = false
         for ((index, line) in eventsMd.lines().withIndex()) {
@@ -292,7 +296,18 @@ object HadronBridgeHooks {
             val cells = line.trim().removePrefix("|").removeSuffix("|").split("|").map { it.trim() }
             if (cells.firstOrNull() == "Event") { chokepoint = cells.indexOf("Core chokepoint"); inTable = true; continue }
             if (!inTable || cells[0].startsWith("---")) continue
-            val names = Regex("`([\\w.]+Event)`").findAll(cells[0]).map { it.groupValues[1] }.filter { it in byName }.toList()
+            val named = Regex("`([\\w.]+Event)`").findAll(cells[0]).map { it.groupValues[1] }.toList()
+            // A row promises a shipped event, unless its cell says "not shipped yet" and the list below names it.
+            val unshipped = cells.getOrNull(chokepoint)?.lowercase()?.startsWith("not shipped yet") == true
+            for (name in named.filter { it !in byName }) {
+                if (!unshipped || name !in notShipped) problems += "docs/events.md:${index + 1}: $name isn't an event " +
+                        "in api: fix the name, or, if it isn't built yet, say \"not shipped yet\" in its Core chokepoint " +
+                        "cell and list it under \"Not shipped yet\"."
+            }
+            for (name in named.filter { it in byName && unshipped }) problems += "docs/events.md:${index + 1}: $name " +
+                    "ships now: replace \"not shipped yet\" with where core fires it, and take it off that list."
+            if (unshipped) continue
+            val names = named.filter { it in byName }
             listed += names
             if (chokepoint < 0) continue
             checked += names
@@ -438,6 +453,11 @@ val bridgeHooksFixtureCheck = tasks.register("bridgeHooksFixtureCheck") {
                 "| `ParentEvent` | BRIDGE |", "| `RefEvent` | |", "| `SuperOnlyEvent` | `Fire` |"), events),
                 listOf("ParentEvent is @FiredBy(core = FULL)", "RefEvent has an empty Core chokepoint cell",
                         "SuperOnlyEvent is @FiredBy(core = NONE)"))
+        val notShipped = "\n## Not shipped yet\n\n- `PlannedEvent`: not built yet.\n"
+        expect("unknown names", HadronBridgeHooks.catalogProblems(catalog("Core chokepoint", *rows.toTypedArray(),
+                "| `NoSuchEvent` | `Fire` |", "| `PlannedEvent` | not shipped yet |", "| `UnlistedEvent` | not shipped yet |",
+                "| `RefEvent` | not shipped yet |") + notShipped, events),
+                listOf("NoSuchEvent isn't an event in api", "UnlistedEvent isn't an event in api", "RefEvent ships now"))
 
         val tables = HadronBridgeHooks.tables(events)
         val doc = tables.keys.joinToString("\n") { HadronBridgeHooks.begin(it) + "\n" + HadronBridgeHooks.end(it) }
