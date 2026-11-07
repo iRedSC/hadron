@@ -230,7 +230,9 @@ class ActorsTest {
         assertEquals(0, outer >>> 40);
         assertEquals(1, inner >>> 40);
         Actors.Port.exit(inner);
+        assertSame(CONSOLE, Actors.current().orElseThrow(), "exiting the inner handle leaves the outer on top");
         Actors.Port.exit(outer);
+        assertTrue(Actors.isEmpty());
     }
 
     @Covers(value = Actors.Port.class, method = "exit")

@@ -98,6 +98,7 @@ class AttributionTest {
         assertNotEquals(a, a.withController(null));
         assertNotEquals(a, a.withResponsible(ADMIN));
         assertTrue(a.toString().contains(OWNER.toString()));
+        assertNotEquals(a.hashCode(), a.withAuthority(null).hashCode(), "different attributions spread across buckets");
     }
 
     @Covers(value = Actor.class, method = "attribution")
@@ -109,5 +110,18 @@ class AttributionTest {
         assertTrue(Actor.Unknown.INSTANCE.attribution().isEmpty());
         assertEquals(Optional.empty(), Actor.Unknown.INSTANCE.actingFor());
         assertThrows(NullPointerException.class, () -> new Actor.Server(null));
+    }
+
+    /** An entity needs Minecraft's registries; only this class boots them. */
+    @org.junit.jupiter.api.Nested
+    @dev.iredsc.hadron.test.WithMinecraft
+    class WithAnEntity {
+        @Covers(value = Actor.class, method = "actingFor")
+        @Test
+        void anActorActsForWhoeverItsAttributionDoes() {
+            var marker = new net.minecraft.world.entity.Marker(net.minecraft.world.entity.EntityType.MARKER, null);
+            Actor drone = new Actor.EntityActor(marker, Attribution.of(OWNER).withController(DRIVER));
+            assertEquals(Optional.of(DRIVER), drone.actingFor());
+        }
     }
 }

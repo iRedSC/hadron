@@ -100,6 +100,13 @@ class WorldCreatorTest {
         assertThrows(NullPointerException.class, () -> c.generator(null));
     }
 
+    @Covers(value = WorldCreator.class, method = "generator")
+    @Test
+    void aSetGeneratorIsKept() {
+        WorldGenerator flat = WorldGenerator.voidWorld();
+        assertEquals(Optional.of(flat), new WorldCreator(id("a:b")).generator(flat).generator());
+    }
+
     @Covers(value = WorldCreator.class, method = "spawn")
     @Test
     void aMutableSpawnIsCopiedSoLaterChangesDontMoveIt() {

@@ -55,6 +55,18 @@ class PluginDescriptionTest {
         assertEquals("Homes v1.0", d.getFullName());
     }
 
+    @Covers(value = PluginDescription.class, method = "getDescription")
+    @Covers(value = PluginDescription.class, method = "getWebsite")
+    @Test
+    void descriptionAndWebsiteAreKept() {
+        Map<String, Object> yaml = minimal();
+        yaml.put("description", "Sets homes");
+        yaml.put("website", "https://example.com");
+        PluginDescription d = PluginDescription.parse(yaml);
+        assertEquals("Sets homes", d.getDescription());
+        assertEquals("https://example.com", d.getWebsite());
+    }
+
     @Covers(value = PluginDescription.class, method = "parse")
     @ParameterizedTest
     @ValueSource(strings = {"name", "version", "main"})

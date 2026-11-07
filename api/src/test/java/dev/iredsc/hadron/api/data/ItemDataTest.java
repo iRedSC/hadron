@@ -171,6 +171,55 @@ class ItemDataTest {
         assertThrows(IllegalArgumentException.class, () -> data.get(KEY, PersistentDataType.LIST.integers()));
     }
 
+    @Covers(value = PersistentDataContainer.class, method = "get")
+    @Test
+    void aStoredListNamesItsElementsOrSaysItIsEmpty() {
+        PersistentDataContainer data = data();
+        data.set(KEY, PersistentDataType.LIST.strings(), List.of("a"));
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
+                () -> data.get(KEY, PersistentDataType.INTEGER));
+        assertTrue(e.getMessage().contains("stored as LIST of STRING,"), e.getMessage());
+        data.set(KEY, PersistentDataType.LIST.strings(), List.of());
+        e = assertThrows(IllegalArgumentException.class, () -> data.get(KEY, PersistentDataType.INTEGER));
+        assertTrue(e.getMessage().contains("stored as an empty LIST,"), e.getMessage());
+    }
+
+    @Covers(value = PersistentDataContainer.class, method = "has")
+    @Test
+    void containerArraysFitOnlyListsOfContainers() {
+        PersistentDataContainer data = data();
+        data.set(KEY, PersistentDataType.LIST.strings(), List.of("a"));
+        assertFalse(data.has(KEY, PersistentDataType.TAG_CONTAINER_ARRAY));
+        data.set(KEY, PersistentDataType.LIST.strings(), List.of());
+        assertTrue(data.has(KEY, PersistentDataType.TAG_CONTAINER_ARRAY), "an empty list is an empty array of any kind");
+    }
+
+    @Covers(value = PersistentDataContainer.class, method = "has")
+    @Test
+    void adaptedAndBukkitStyleTypesFitOnlyTheirOwnPrimitive() {
+        PersistentDataType<Long, Instant> instant = PersistentDataType.adapt(PersistentDataType.LONG, Instant.class,
+                Instant::ofEpochMilli, Instant::toEpochMilli);
+        PersistentDataContainer data = data();
+        data.set(KEY, PersistentDataType.INTEGER, 1);
+        assertFalse(data.has(KEY, instant), "an INTEGER isn't the LONG an Instant is stored as");
+        assertFalse(data.has(KEY, BUKKIT_STYLE), "an INTEGER isn't the STRING this type is stored as");
+        IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> data.get(KEY, instant));
+        assertTrue(e.getMessage().contains("read as Instant (stored as LONG)."), e.getMessage());
+        e = assertThrows(IllegalArgumentException.class, () -> data.get(KEY, BUKKIT_STYLE));
+        assertTrue(e.getMessage().contains("read as Tagged (stored as String)."), e.getMessage());
+    }
+
+    @Covers(value = PersistentDataContainer.class, method = "isEmpty")
+    @Test
+    void aContainerHoldingAValueIsNotEmpty() {
+        PersistentDataContainer data = data();
+        data.set(KEY, PersistentDataType.INTEGER, 1);
+        assertFalse(data.isEmpty());
+        PersistentDataContainer built = PersistentData.newContainer();
+        built.set(KEY, PersistentDataType.INTEGER, 1);
+        assertFalse(built.isEmpty());
+    }
+
     @Covers(value = PersistentDataType.class, method = "adapt")
     @Test
     void anAdaptedTypeStoresAsItsBase() {
@@ -329,6 +378,17 @@ class ItemDataTest {
         b.set(KEY, PersistentDataType.INTEGER, 1);
         assertEquals(a, b);
         assertEquals(a.hashCode(), b.hashCode());
+        b.set(KEY, PersistentDataType.INTEGER, 2);
+        assertNotEquals(a.hashCode(), b.hashCode(), "different data spreads across hash buckets");
+    }
+
+    @Test
+    void anUntouchedStackAndANewContainerAreEqualEitherWayRound() {
+        PersistentDataContainer untouched = data();
+        PersistentDataContainer built = PersistentData.newContainer();
+        assertEquals(untouched, built);
+        assertEquals(built, untouched);
+        assertEquals(untouched.hashCode(), built.hashCode());
     }
 
     @Covers(value = PersistentData.class, method = "of")
