@@ -75,7 +75,14 @@ final class NetNames {
         check(plugin, player, tag, "set name tags");
         if (tag != null) validate(tag);
         String real = player.getGameProfile().getName();
-        if (!put(TAGS, plugin, player.getUUID(), tag)) return;
+        Owned<String> before = TAGS.get(player.getUUID());
+        if (Objects.equals(before == null ? null : before.value(), tag)) {
+            put(TAGS, plugin, player.getUUID(), tag);
+            return;
+        }
+        // Under the name other clients know now, before the mapping changes what team packets say.
+        leaveTeamOnOtherClients(player);
+        put(TAGS, plugin, player.getUUID(), tag);
         if (tag == null) {
             TAG_BY_NAME.remove(real);
             REAL_NAME.remove(player.getUUID());
@@ -130,6 +137,12 @@ final class NetNames {
             ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(id);
             if (p != null) p.refreshTabListName();
         }
+        List<UUID> owned = new ArrayList<UUID>();
+        for (Map.Entry<UUID, Owned<String>> e : TAGS.entrySet()) if (e.getValue().plugin() == plugin) owned.add(e.getKey());
+        for (UUID id : owned) {
+            ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(id);
+            if (p != null) leaveTeamOnOtherClients(p);
+        }
         List<UUID> tagged = drop(TAGS, plugin);
         if (tagged.isEmpty()) return;
         for (UUID id : tagged) REAL_NAME.remove(id);
@@ -155,19 +168,38 @@ final class NetNames {
         return out;
     }
 
+    /**
+     * Takes the player out of their team on every other client, under the name that client knows them by. Sent before
+     * a tag changes, so the old name doesn't stay a member there; {@link #resendProfile} adds the new one.
+     */
+    private static void leaveTeamOnOtherClients(ServerPlayer target) {
+        PlayerTeam team = target.getTeam();
+        if (team == null) return;
+        Packet<?> leave = ClientboundSetPlayerTeamPacket.createPlayerPacket(team, target.getScoreboardName(),
+                ClientboundSetPlayerTeamPacket.Action.REMOVE);
+        for (ServerPlayer viewer : new ArrayList<>(target.server.getPlayerList().getPlayers())) {
+            if (viewer != target) viewer.connection.send(leave);
+        }
+    }
+
     /** A client reads a player's profile name only when it spawns them, so each viewer gets the player afresh. */
     private static void resendProfile(ServerPlayer target) {
         PlayerTeam team = target.getTeam();
         for (ServerPlayer viewer : new ArrayList<>(target.server.getPlayerList().getPlayers())) {
-            if (viewer == target || !NetVisibility.canSee(viewer, target)) continue;
-            NetPort.untrack(viewer, target);
-            viewer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(target.getUUID())));
-            viewer.connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(target)));
+            if (viewer == target) continue;
+            boolean sees = NetVisibility.canSee(viewer, target);
+            if (sees) {
+                NetPort.untrack(viewer, target);
+                viewer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(target.getUUID())));
+                viewer.connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(target)));
+            }
+            // Team packets reach every client, seen or not, as vanilla sends them; leaveTeamOnOtherClients took
+            // the old name out.
             if (team != null) {
                 viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(team,
                         target.getScoreboardName(), ClientboundSetPlayerTeamPacket.Action.ADD));
             }
-            NetPort.retrack(viewer, target);
+            if (sees) NetPort.retrack(viewer, target);
         }
     }
 

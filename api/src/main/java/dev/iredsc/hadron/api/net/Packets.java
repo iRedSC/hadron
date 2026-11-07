@@ -35,7 +35,8 @@ import net.minecraft.network.protocol.game.ServerGamePacketListener;
  * <p>A packet a handler sends goes through every handler too, its own included: don't send the kind of packet a
  * handler handles from that handler.
  *
- * <p>Everything registered is removed when the plugin disables. A packet class nobody listens to costs nothing.
+ * <p>Everything registered is removed when the plugin disables, and no handler is called once its {@code onDisable}
+ * has begun (a call already under way on a network thread may still finish). A packet class nobody listens to costs nothing.
  */
 public final class Packets {
     private Packets() {}

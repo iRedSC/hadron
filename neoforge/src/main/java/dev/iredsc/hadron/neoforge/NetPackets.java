@@ -38,6 +38,8 @@ final class NetPackets {
         final PacketHandler<?> body;
         final long order;
         final Side side;
+        /** False once unregistered: a dispatch that took its snapshot earlier skips it. */
+        volatile boolean active = true;
 
         Handler(JavaPlugin plugin, Class<?> type, EventPriority priority, PacketHandler<?> body, long order, Side side) {
             this.plugin = plugin;
@@ -51,6 +53,7 @@ final class NetPackets {
         @Override
         public void unregister() {
             synchronized (LOCK) {
+                active = false;
                 side.all.remove(this);
                 side.changed();
             }
@@ -132,7 +135,12 @@ final class NetPackets {
     static void remove(JavaPlugin plugin) {
         synchronized (LOCK) {
             for (Side side : new Side[] {OUT, IN}) {
-                if (side.all.removeIf(h -> h.plugin == plugin)) side.changed();
+                boolean changed = side.all.removeIf(h -> {
+                    if (h.plugin != plugin) return false;
+                    h.active = false;
+                    return true;
+                });
+                if (changed) side.changed();
             }
         }
     }
@@ -207,6 +215,9 @@ final class NetPackets {
     private static Packet<?> run(Handler[] handlers, ServerPlayer player, Packet<?> packet, boolean outgoing) {
         Event event = new Event(player, packet, outgoing);
         for (Handler h : handlers) {
+            // A dispatch may hold a snapshot from before an unregister or a disable. The plugin stops counting as
+            // enabled before its onDisable runs, so no handler runs against what onDisable closed.
+            if (!h.active || !h.plugin.isEnabled()) continue;
             event.current = h;
             try {
                 @SuppressWarnings("unchecked")
@@ -257,6 +268,15 @@ final class NetPackets {
             }
             if (!outgoing && replacement instanceof ClientboundBundlePacket) {
                 throw new IllegalArgumentException("A received packet can't be replaced with a bundle");
+            }
+            // The handlers still to run were chosen for this packet's class, and each casts to it.
+            if (replacement.getClass() != packet.getClass()) {
+                throw new IllegalArgumentException("setPacket needs another " + packet.getClass().getSimpleName()
+                        + ", not a " + replacement.getClass().getSimpleName() + ": later handlers expect the kind "
+                        + "they registered for. To " + (outgoing ? "send" : "handle") + " a different kind of packet, "
+                        + "cancel this one with setCancelled(true) and " + (outgoing
+                                ? "send yours with player.connection.send"
+                                : "have the server handle yours from runOnServerThread with yours.handle(player.connection)"));
             }
             packet = replacement;
         }
