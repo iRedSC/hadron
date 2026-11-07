@@ -234,7 +234,8 @@ def take_shared_lock(lock) -> None:
     except BlockingIOError:
         pass
     holders = lock_holders(lock)
-    if holders & ancestors():
+    # This process too: `flock --no-fork` makes the replay itself the holder.
+    if holders & (ancestors() | {os.getpid()}):
         raise SystemExit(f"regression replay: this replay was started under `flock {LOCK}`, which holds the lock it "
                          "needs, so it would wait forever. Run it without the flock wrapper: it takes the lock itself, "
                          "so other builds still queue behind it.")
