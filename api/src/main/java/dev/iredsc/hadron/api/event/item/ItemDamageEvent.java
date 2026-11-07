@@ -1,11 +1,14 @@
 package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A tool, weapon or armour piece is about to lose durability, after Unbreaking has had its say. Replaces Bukkit's
@@ -13,6 +16,7 @@ import net.minecraft.world.item.ItemStack;
  * set the damage to 0, and the item loses nothing and doesn't break. Creative players' items never take damage, so
  * fire nothing.
  */
+@FiredBy(core = FULL)
 public class ItemDamageEvent extends ItemChangeEvent {
     private final LivingEntity entity;
     private int damage;

@@ -2,15 +2,21 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.Entity;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * A restriction outside the effect registry is about to be put on or taken off an entity. Core fires it for a mob's
  * AI being turned off or on ({@link #NO_AI}); bridges fire it for their mods' stuns, freezes, holds and interrupted
  * casts, with their own status ids. Cancel it and the entity's status stays as it was.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "a mob's AI turned off or on",
+        bridges = "the mod's stuns, freezes, holds and interrupted casts, with its own status ids")
 public class EntityStatusChangeEvent extends EntityEvent implements Cancellable {
     /** A mob's AI is turned off ({@code Mob.setNoAi}). */
     public static final ResourceLocation NO_AI = ResourceLocation.fromNamespaceAndPath("hadron", "no_ai");

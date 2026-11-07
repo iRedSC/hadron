@@ -2,9 +2,12 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * An actor is about to push, pull or launch an entity. Cancel it and the entity's velocity is left alone.
@@ -14,6 +17,10 @@ import net.minecraft.world.phys.Vec3;
  * never fire it. Knockback from a hit is {@link EntityKnockbackEvent} instead, fired once. Pushes a mod makes with
  * nothing on the stack are fired by that mod's bridge.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "any velocity set while something other than the entity acts (commands, explosions, entities, "
+                + "machines, mods with an actor pushed); knockback as `EntityKnockbackEvent`",
+        bridges = "pushes the mod makes with nothing on the stack: push the actor instead, and core fires it")
 public class EntityVelocityEvent extends EntityEvent implements Cancellable {
     private final Vec3 oldVelocity;
     private Vec3 newVelocity;

@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.entity.EntityDeathEvent;
 import java.util.List;
 import java.util.Objects;
@@ -8,6 +9,8 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.item.ItemStack;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A player is dying and what happens to their items is being decided. Not cancellable. Every item they carried,
@@ -24,6 +27,7 @@ import net.minecraft.world.item.ItemStack;
  * <p>{@link #getDeathMessage()} is the line about to be shown on the death screen and broadcast (to the teams the
  * scoreboard says); change it with {@link #setDeathMessage}, or set null for none. It replaces vanilla's line.
  */
+@FiredBy(core = FULL)
 public class PlayerDeathEvent extends EntityDeathEvent {
     private final List<ItemStack> kept;
     private Component deathMessage;

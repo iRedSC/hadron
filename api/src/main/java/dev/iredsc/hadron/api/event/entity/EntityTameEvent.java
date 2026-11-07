@@ -2,14 +2,18 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.world.entity.animal.Animal;
 import net.minecraft.world.entity.player.Player;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * An animal is about to be tamed: a wolf, a cat, a parrot, a horse. Cancel it and it stays wild; the taming item is
  * still used, as a failed attempt's would be.
  */
+@FiredBy(core = FULL)
 public class EntityTameEvent extends EntityEvent implements Cancellable {
     private final Player owner;
     private boolean cancelled;

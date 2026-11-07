@@ -1,9 +1,12 @@
 package dev.iredsc.hadron.api.event.inventory;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.world.item.ItemStack;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * Items are about to move from one inventory to another: a hopper pushing or pulling, a dropper inserting, a pipe, an
@@ -17,6 +20,9 @@ import net.minecraft.world.item.ItemStack;
  * <p>{@link #getHolder()} is the source. {@link #getChanges()} has the source's slot (before and after) and the items
  * arriving at the destination ({@link Change#ANY_SLOT} when the destination picks the slot).
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "hoppers, hopper minecarts and droppers, into and out of vanilla containers and mods' item handlers",
+        bridges = "the mod's pipes and networks")
 public class InventoryMoveItemEvent extends InventoryChangeEvent {
     private final InventoryHolder source;
     private final InventoryHolder destination;

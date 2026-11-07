@@ -2,13 +2,17 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.world.entity.Entity;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * An entity is about to stop riding another. {@link #getEntity()} is the rider. Cancel it and the rider stays on,
  * unless the dismount is {@link #isForced() forced}: then it happens anyway.
  */
+@FiredBy(core = FULL)
 public class EntityDismountEvent extends EntityEvent implements Cancellable {
     private final Entity dismounted;
     private final boolean forced;

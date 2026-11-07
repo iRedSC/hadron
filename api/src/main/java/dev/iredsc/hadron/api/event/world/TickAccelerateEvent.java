@@ -2,9 +2,12 @@ package dev.iredsc.hadron.api.event.world;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 
 /**
  * An actor is about to speed up blocks or entities in an area: a Torcherino, a time bottle, an accelerator. Fires once
@@ -14,6 +17,9 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
  * <p><b>Bridge event.</b> Vanilla has no acceleration, so Hadron core never fires this; the bridge for a mod that
  * accelerates fires it before the change and drops the change if cancelled, filling in the area and the new speed.
  */
+@FiredBy(core = NONE,
+        bridges = "speeds up blocks or entities in an area",
+        fillIn = "accelerator, area, rate; once per change, never per extra tick")
 public class TickAccelerateEvent extends WorldEvent implements Cancellable {
     private final double multiplier;
     private boolean cancelled;

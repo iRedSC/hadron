@@ -13,4 +13,4 @@ Hadron's real users are agents writing plugins for people who don't code. When a
 - Name it what an agent would guess, which usually means Bukkit's name when the meaning matches.
 - Prefer a build-time check over documentation. A mistake the build refuses can't ship.
 - Write every error message so the reader knows the fix without opening the source.
-- When an event's core coverage changes, or its Javadoc says bridges fire it, update [docs/bridge-hooks.md](docs/bridge-hooks.md) in the same change.
+- When what fires an event changes, update its `@FiredBy` and run `./gradlew bridgeHooks`, which rewrites [docs/bridge-hooks.md](docs/bridge-hooks.md).

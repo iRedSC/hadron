@@ -1,10 +1,13 @@
 package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Optional;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A tool, weapon or armour piece ran out of durability and is breaking. <i>(after)</i>: it can't be stopped here; to
@@ -13,6 +16,7 @@ import net.minecraft.world.item.ItemStack;
  *
  * <p>Not an {@link ItemChangeEvent}, since those can be cancelled; the damage event that caused it is one.
  */
+@FiredBy(core = FULL)
 public class ItemBreakEvent extends ItemEvent {
     private final LivingEntity entity;
 

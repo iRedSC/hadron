@@ -2,12 +2,16 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.world.entity.Entity;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * An entity's air supply is about to change: running out underwater, refilling at the surface, a mod's breathing
  * gear. Cancel it and the air stays where it was. Fires every tick an entity is underwater, so keep listeners light.
  */
+@FiredBy(core = FULL)
 public class EntityAirChangeEvent extends EntityEvent implements Cancellable {
     private final int oldAmount;
     private int amount;

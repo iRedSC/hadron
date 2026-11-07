@@ -2,10 +2,13 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * Something is about to finish eating or drinking an item: food, a potion, milk, honey. Replaces Bukkit's
@@ -16,6 +19,7 @@ import net.minecraft.world.item.ItemStack;
  * berries, a wandering trader drinking). Witches and pandas eat with their own code and are not seen.
  * {@link #getItem()} is the live stack; don't change it.
  */
+@FiredBy(core = FULL)
 public class ItemConsumeEvent extends ItemEvent implements Cancellable {
     private final LivingEntity consumer;
     private boolean cancelled;

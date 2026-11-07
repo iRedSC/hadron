@@ -2,11 +2,14 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * An entity is about to move other than by walking: a command, an ender pearl, chorus fruit, an enderman, a portal,
@@ -19,6 +22,7 @@ import net.minecraft.world.phys.Vec3;
  * ground below the new spot, and stay put if there is none, as they do in vanilla; sent to another world, they go to
  * exactly the position given.
  */
+@FiredBy(core = FULL)
 public class EntityTeleportEvent extends EntityEvent implements Cancellable {
     /** What sent it. */
     public enum TeleportCause {

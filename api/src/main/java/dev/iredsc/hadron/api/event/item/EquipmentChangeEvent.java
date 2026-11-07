@@ -1,12 +1,15 @@
 package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * What a living entity wears or holds changed: armour, either hand, or a mod's extra slot (Curios, Accessories).
@@ -18,6 +21,7 @@ import net.minecraft.world.item.ItemStack;
  * <p>Core fires it for armour and hands; bridges fire it for their mod's extra slots, with {@link #getSlot()} empty and
  * {@link #getSlotName()} naming the slot.
  */
+@FiredBy(core = PARTIAL, coreSees = "every vanilla slot, after the fact", bridges = "the mod's extra slots")
 public class EquipmentChangeEvent extends ItemEvent {
     private final LivingEntity entity;
     private final EquipmentSlot slot;

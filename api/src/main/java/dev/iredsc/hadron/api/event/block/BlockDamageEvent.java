@@ -2,10 +2,13 @@ package dev.iredsc.hadron.api.event.block;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 
 /**
  * A block is about to take lasting damage short of breaking: a cannonball cracking a wall. Damage is a fraction from
@@ -16,6 +19,9 @@ import net.minecraft.world.level.block.state.BlockState;
  * damage, and records nothing if it is cancelled. When the damage breaks the block, it fires
  * {@link BlockBreakEvent} instead.
  */
+@FiredBy(core = NONE,
+        bridges = "puts lasting partial damage on a block short of breaking it",
+        fillIn = "damage before and after")
 public class BlockDamageEvent extends BlockEvent implements Cancellable {
     private final float oldDamage;
     private final float newDamage;

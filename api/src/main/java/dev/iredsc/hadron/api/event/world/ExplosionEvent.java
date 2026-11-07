@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.world;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
@@ -9,6 +10,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Explosion;
 import net.minecraft.world.phys.Vec3;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * An explosion has worked out what it hits and is about to destroy and damage it. Remove positions from
@@ -18,6 +21,9 @@ import net.minecraft.world.phys.Vec3;
  * <p>The block changes it then makes are fired as block events inside the same {@link #getOperation() operation}, so
  * a logger can group them under this explosion.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "`Level.explode` and `Explosion`",
+        bridges = "explosions the mod computes without vanilla's `Explosion`")
 public class ExplosionEvent extends WorldEvent implements Cancellable {
     private final Explosion explosion;
     private final List<BlockPos> blocks;

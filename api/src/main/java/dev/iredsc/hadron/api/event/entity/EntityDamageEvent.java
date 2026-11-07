@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.world.damagesource.DamageSource;
@@ -9,11 +10,14 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /**
  * A living entity is about to be hurt. The actor is who hurt it: the attacker, the arrow (which remembers its
  * shooter), the machine or the mob; {@link Actor.Nature} for falls, drowning, lava and the like. Cancel it and no
  * damage, knockback or weapon wear happens. {@link #setDamage} changes the amount before armour and other reductions.
  */
+@FiredBy(core = FULL)
 public class EntityDamageEvent extends EntityEvent implements Cancellable {
     private final DamageSource source;
     private float damage;

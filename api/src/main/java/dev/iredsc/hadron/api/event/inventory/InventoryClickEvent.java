@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.inventory;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.server.level.ServerPlayer;
@@ -9,6 +10,8 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * What a player asked for inside an open menu: a click, shift-click, number-key swap, drop, or drag step. Fired before
@@ -20,6 +23,7 @@ import net.minecraft.world.item.ItemStack;
  * {@link #getHolder()} is what holds the clicked slot's inventory, or the menu's own holder for a click outside any
  * slot.
  */
+@FiredBy(core = FULL)
 public class InventoryClickEvent extends InventoryEvent implements Cancellable {
     /** {@link #getRawSlot()} for a click outside the menu's window, which drops the cursor's item. */
     public static final int OUTSIDE = AbstractContainerMenu.SLOT_CLICKED_OUTSIDE;

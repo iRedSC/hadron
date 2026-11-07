@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.server;
 
 import com.mojang.authlib.GameProfile;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.SocketAddress;
@@ -10,6 +11,8 @@ import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.network.chat.Component;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /**
  * Someone's server list is asking about this server, and the answer is about to be sent: the MOTD, the player counts
  * and the few names shown when hovering over them. Change any of them to change what that client sees. Fired for
@@ -17,6 +20,7 @@ import net.minecraft.network.chat.Component;
  *
  * <p>Runs on a network thread, not the server thread: read what you need, but don't touch worlds or players.
  */
+@FiredBy(core = FULL)
 public class ServerListPingEvent extends ServerEvent {
     private final SocketAddress address;
     private Component motd;

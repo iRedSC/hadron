@@ -1,11 +1,15 @@
 package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /** A player pressed the swap-hands key. Change what ends up in each hand, or cancel so nothing moves. */
+@FiredBy(core = FULL)
 public class PlayerSwapHandItemsEvent extends PlayerEvent implements Cancellable {
     private ItemStack mainHandItem;
     private ItemStack offHandItem;

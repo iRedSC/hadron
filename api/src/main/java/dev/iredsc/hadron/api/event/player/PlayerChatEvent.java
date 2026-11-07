@@ -1,11 +1,15 @@
 package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /** A player sent a chat message. Cancel it to send nothing, or replace what everyone sees with {@link #setMessage}. */
+@FiredBy(core = FULL)
 public class PlayerChatEvent extends PlayerEvent implements Cancellable {
     private final String rawText;
     private Component message;
