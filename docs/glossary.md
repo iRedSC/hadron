@@ -13,6 +13,9 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **Bridge**: a mod that makes one other mod speak Hadron's events, by attributing its actions and routing its effects that skip vanilla. ([bridges](bridges.md))
 - **Bridge API**: a loader-neutral interface or event a bridge publishes for extras, such as a network's contents. Official plugins use it with `bridge-depend:` and stay write-once.
 - **`mod-depend:`**: a plugin that compiles against a mod directly. It must declare `loader:`, and Hadron refuses it on any other loader.
+- **Helper**: API for something Minecraft makes hard (NPCs, bulk block edits, packets) that takes and returns Minecraft's own types and keeps the topic's version-specific code inside Hadron. Sits beside raw access, never wraps it. ([design](design.md#minecraft-versions))
+- **Rename table**: the classes, methods and fields Minecraft renamed in one version jump. Hadron rewrites an older plugin's references through it as the plugin loads.
+- **Link check**: Hadron resolving every Minecraft reference in a plugin jar at load, refusing the jar and naming each one that's missing.
 
 ## Events and actors
 

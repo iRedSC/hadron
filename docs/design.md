@@ -46,7 +46,7 @@ The modules make this a compile error rather than a rule:
 
 Hadron owns its events (`dev.iredsc.hadron.api.event`), named after Bukkit's: `Listener`, `@EventHandler(priority, ignoreCancelled)`, `Cancellable`, `PlayerJoinEvent`, `BlockBreakEvent`. They carry Minecraft's own types, and every action carries an actor saying who is behind it. They are the vocabulary plugins and bridges share, so the whole set is designed up front in [events.md](events.md): an event added late is one every existing plugin was blind to. Each port fires them from its loader's events where it has them, and from mixins where it doesn't; an event ships only once every port fires it.
 
-On Minecraft 1.21.1 Fabric runs with different class names than NeoForge, so a Fabric port renames each plugin jar's Minecraft references as it loads, as Paper does for Spigot plugins. If 26.1 and later ship unobfuscated, that step goes away.
+On Minecraft 1.21.1 Fabric runs with different class names than NeoForge, so a Fabric port renames each plugin jar's Minecraft references as it loads, as Paper does for Spigot plugins. If 26.1 and later ship unobfuscated, that remapping goes away; the same load step still applies renames between Minecraft versions ([Minecraft versions](#minecraft-versions)).
 
 ### Mods: two paths
 
@@ -59,17 +59,22 @@ See [bridges.md](bridges.md) for what a bridge is for, how one is judged done, a
 
 ## Minecraft versions
 
-There is no wrapper layer. Plugins use `ServerPlayer`, `CommandSourceStack` and the rest directly. A wrapper would hold plugins back to what it covers, and porting raw code is cheap for an agent: the compiler points at every break.
+There is no wrapper layer. Plugins use `ServerPlayer`, `CommandSourceStack` and the rest directly. A wrapper hides whatever it doesn't cover: when popular Bukkit plugins reach past Bukkit's API, it is for NPCs, bulk block edits, packets, advancements and player profiles, often by reflection on class names, because Bukkit gave them no way in. And the code that reaches Minecraft directly barely changes between versions: Citizens keeps a 34,662-line module per Minecraft version that differs by 2 lines from 26.2 to 26.3, and WorldEdit's adapters differ by 2 to 4 lines a jump. What does change, Hadron absorbs once, so a plugin needs no wrapper to survive a version bump.
 
-A plugin is built for one Minecraft version. Porting it is the agent's job, and Hadron makes that job small:
+A plugin is built for one Minecraft version and keeps loading on later ones until Minecraft changes something it uses:
 
 1. **One line picks the version.** `hadron { minecraft = "1.21.4" }` in `build.gradle.kts`; the Gradle plugin brings the matching Hadron.
-2. **A plugin can't run on the wrong version.** The build writes the Minecraft version into `plugin.yml`, and the host refuses a jar built for another one, saying which version it needs. It never loads and then crashes mid-game.
-3. **A port guide per version jump** (`docs/porting/<from>-to-<to>.md`) lists every change that touches plugins, with before and after code. It covers what the agent's training doesn't know about the newer version. Each guide is written while porting Hadron itself, which hits the same changes first.
-4. **Behavior tests move with the plugin.** The headless test run catches code that compiles on the new version but acts differently there.
-5. **Plugin data lives in Hadron's config and storage**, in plain YAML or JSON, never in NBT layouts. A port then never migrates saved data, the one part of a port that could lose players' work.
+2. **Renames are absorbed once, in Hadron.** Each version jump has a rename table beside its port guide, listing the classes, methods and fields Minecraft renamed. A plugin built for an older version has its Minecraft references rewritten through every table between its version and the server's as it loads, by the same step a Fabric port uses for class names. A tool proposes the entries by matching both versions' names; each is confirmed while porting Hadron, which hits every rename first.
+3. **A plugin that doesn't link never loads.** After renaming, Hadron resolves every Minecraft class, method and field the jar references against the running server, and refuses the jar if any is missing, listing each one with the port guide entry that covers it. Java links a call only when it first runs, so without this check the jar would load and then crash the first time a player reached the broken path. A jar built for a newer version than the server is refused outright. The build runs the same check against every newer version Hadron supports and prints where the plugin breaks (`breaks on 1.21.4: ServerPlayer.getStats()`), so an agent sees it before anyone deploys.
+4. **A port guide per version jump** (`docs/porting/<from>-to-<to>.md`) lists every change renaming can't absorb (a changed signature, a removed method, new behavior), with before and after code. It covers what the agent's training doesn't know about the newer version, and is written while porting Hadron itself.
+5. **Behavior tests move with the plugin.** The headless test run catches code that links on the new version but acts differently there, the one kind of break neither renaming nor the link check can see.
+6. **Plugin data lives in Hadron's config and storage**, in plain YAML or JSON, never in NBT layouts. A port then never migrates saved data, the one part of a port that could lose players' work.
+
+**Helpers fill what Minecraft makes hard, once.** Where plugins elsewhere reach into Minecraft's internals because their API left a gap (NPCs, bulk block edits, packets), Hadron adds a helper: API that takes and returns Minecraft's own types and keeps that topic's version-specific code inside Hadron. A helper sits beside raw access and never replaces it, so nothing is hidden; a version change in its topic is fixed in the helper, for every plugin at once.
 
 Hadron's own classes change only when Minecraft forces them to, and each such change goes in the port guide like any other.
+
+Today the host still refuses any jar built for another Minecraft version; the rename tables and link check come with Hadron's first port to a second version.
 
 ## Permissions
 
@@ -117,3 +122,5 @@ Hadron ships lightweight plugins server owners expect: essentials-style commands
 6. The skill, written against what exists, then tested by asking fresh agents for real plugins and fixing whatever they trip on.
 7. ~~Headless test runner~~: done ([testing.md](testing.md)). `hadronTest` for `examples/hello` and `selftest`; moves into the Gradle plugin with step 5.
 8. Bundled plugins; pilot bridges (Mekanism, AE2, Superb Warfare); the client companion.
+9. Helpers for NPCs, bulk block edits and packets.
+10. A second Minecraft version: its rename table, the load-time link check, and the first port guide.
