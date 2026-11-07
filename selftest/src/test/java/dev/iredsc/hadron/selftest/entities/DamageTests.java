@@ -7,12 +7,14 @@ import static dev.iredsc.hadron.selftest.entities.Fixtures.near;
 import static dev.iredsc.hadron.selftest.entities.Fixtures.spawn;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDeathEvent;
 import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -34,6 +36,7 @@ import net.minecraft.world.item.Items;
 /** EntityDamageEvent, EntityKnockbackEvent, EntityDeathEvent and ProjectileHitEvent, and who a hit is remembered as. */
 public final class DamageTests {
     @HadronTest
+    @Covers(EntityDamageEvent.class)
     void aPlayersHitIsThePlayersWithTheirWeapon(TestContext t) {
         TestPlayer alice = t.player("alice");
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -56,6 +59,7 @@ public final class DamageTests {
     }
 
     @HadronTest
+    @Covers(EntityDamageEvent.class)
     void aCancelledHitLeavesTheVictimUnhurtUnmovedAndTheSwordUnworn(TestContext t) {
         TestPlayer alice = t.player("alice");
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -74,6 +78,7 @@ public final class DamageTests {
     }
 
     @HadronTest
+    @Covers(EntityKnockbackEvent.class)
     void aHitsKnockbackIsTheAttackersAndPushesTheVictim(TestContext t) {
         TestPlayer alice = t.player("alice");
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -93,6 +98,7 @@ public final class DamageTests {
     }
 
     @HadronTest
+    @Covers(EntityKnockbackEvent.class)
     void zeroKnockbackLeavesTheVictimInPlaceButHurt(TestContext t) {
         TestPlayer alice = t.player("alice");
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -109,6 +115,7 @@ public final class DamageTests {
     }
 
     @HadronTest
+    @Covers(EntityKnockbackEvent.class)
     void strongerKnockbackPushesFurther(TestContext t) {
         TestPlayer alice = t.player("alice");
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -129,6 +136,7 @@ public final class DamageTests {
     }
 
     @HadronTest
+    @Covers(EntityDeathEvent.class)
     void changedDropsAndExperienceAreWhatTheMobLeaves(TestContext t) {
         TestPlayer alice = t.player("alice");
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -170,6 +178,10 @@ public final class DamageTests {
     }
 
     @HadronTest
+    @Covers(EntityDamageEvent.class)
+    @Covers(ProjectileHitEvent.class)
+    @Covers(value = Actor.class, method = "attribution")
+    @Covers(value = Attribution.class, method = "responsible")
     void anArrowsHitIsItsShootersAfterTicksInFlight(TestContext t) {
         TestPlayer alice = t.player("alice");
         Pig pig = spawn(t, EntityType.PIG, t.pos(3, 0, 4));
@@ -202,6 +214,7 @@ public final class DamageTests {
     }
 
     @HadronTest
+    @Covers(ProjectileHitEvent.class)
     void aCancelledArrowHitLeavesTheTargetUnhurt(TestContext t) {
         TestPlayer alice = t.player("alice");
         Pig pig = spawn(t, EntityType.PIG, t.pos(3, 0, 4));
@@ -222,6 +235,9 @@ public final class DamageTests {
     }
 
     @HadronTest
+    @Covers(EntityDamageEvent.class)
+    @Covers(value = Actor.class, method = "attribution")
+    @Covers(value = Attribution.class, method = "responsible")
     void anArrowStillAnswersToItsShooterAfterTheyLeave(TestContext t) {
         TestPlayer alice = t.player("alice");
         UUID aliceId = alice.uuid();
@@ -243,6 +259,9 @@ public final class DamageTests {
     }
 
     @HadronTest
+    @Covers(EntityDamageEvent.class)
+    @Covers(value = Actor.class, method = "attribution")
+    @Covers(value = Attribution.class, method = "responsible")
     void anArrowRemembersItsShooterThroughASave(TestContext t) {
         TestPlayer alice = t.player("alice");
         UUID aliceId = alice.uuid();
@@ -266,6 +285,9 @@ public final class DamageTests {
     }
 
     @HadronTest
+    @Covers(EntityDamageEvent.class)
+    @Covers(value = Actor.class, method = "attribution")
+    @Covers(value = Attribution.class, method = "responsible")
     void aTamedWolfsBiteIsItsOwners(TestContext t) {
         TestPlayer alice = t.player("alice");
         Wolf wolf = spawn(t, EntityType.WOLF, t.pos(2, 0, 2));
@@ -286,6 +308,9 @@ public final class DamageTests {
     }
 
     @HadronTest
+    @Covers(EntityDamageEvent.class)
+    @Covers(value = Actor.class, method = "attribution")
+    @Covers(value = Attribution.class, method = "responsible")
     void aReloadedWolfStillAnswersToItsOwner(TestContext t) {
         TestPlayer alice = t.player("alice");
         UUID aliceId = alice.uuid();

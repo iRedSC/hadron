@@ -10,6 +10,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockChangeEvent;
 import dev.iredsc.hadron.api.event.block.BucketEmptyEvent;
 import dev.iredsc.hadron.api.event.block.BucketFillEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -50,6 +51,7 @@ public final class BucketTests {
     }
 
     @HadronTest
+    @Covers(BucketEmptyEvent.class)
     void pouringABucketIsOneBucketEmptyByThePlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(2, 0, 0);
@@ -65,6 +67,7 @@ public final class BucketTests {
     }
 
     @HadronTest
+    @Covers(BucketEmptyEvent.class)
     void cancelledPourPlacesNoWaterAndKeepsTheBucketFull(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(2, 0, 0);
@@ -83,6 +86,7 @@ public final class BucketTests {
     }
 
     @HadronTest
+    @Covers(BucketFillEvent.class)
     void fillingABucketIsOneBucketFillByThePlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(2, 0, 0);
@@ -98,6 +102,7 @@ public final class BucketTests {
     }
 
     @HadronTest
+    @Covers(BucketFillEvent.class)
     void cancelledFillLeavesTheWaterAndTheBucketEmpty(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(2, 0, 0);
@@ -120,6 +125,7 @@ public final class BucketTests {
     // ---- Dispensers
 
     @HadronTest
+    @Covers(BucketEmptyEvent.class)
     void aDispenserPouringIsOneBucketEmptyByTheMachine(TestContext t) {
         BlockPos at = t.pos(2, 0, 0);
         DispenserBlockEntity dispenser = dispenser(t, at, Direction.EAST, new ItemStack(Items.WATER_BUCKET));
@@ -135,6 +141,7 @@ public final class BucketTests {
     }
 
     @HadronTest
+    @Covers(BucketEmptyEvent.class)
     void cancelledDispenserPourKeepsTheWaterBucketInside(TestContext t) {
         BlockPos at = t.pos(2, 0, 0);
         DispenserBlockEntity dispenser = dispenser(t, at, Direction.EAST, new ItemStack(Items.WATER_BUCKET));
@@ -155,6 +162,7 @@ public final class BucketTests {
     }
 
     @HadronTest
+    @Covers(BucketFillEvent.class)
     void aDispenserFillingIsOneBucketFillByTheMachine(TestContext t) {
         BlockPos at = t.pos(2, 0, 0);
         t.setBlock(at.east(), Blocks.WATER);
@@ -175,6 +183,7 @@ public final class BucketTests {
     }
 
     @HadronTest
+    @Covers(BucketFillEvent.class)
     void cancelledDispenserFillLeavesTheWaterAndTheBucketInside(TestContext t) {
         BlockPos at = t.pos(2, 0, 0);
         t.setBlock(at.east(), Blocks.WATER);

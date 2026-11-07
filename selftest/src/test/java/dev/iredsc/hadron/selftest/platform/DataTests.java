@@ -7,6 +7,7 @@ import dev.iredsc.hadron.api.data.PersistentDataType;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockPlaceEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -19,10 +20,9 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FenceGateBlock;
-import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.state.BlockState;
-
 /** PersistentData on every holder: where it lives, how long, and what a wrong read says. */
 public final class DataTests {
     private static NamespacedKey key(TestContext t) {
@@ -30,6 +30,10 @@ public final class DataTests {
     }
 
     @HadronTest
+    @Covers(value = PersistentData.class, method = "of")
+    @Covers(value = PersistentDataContainer.class, method = "set")
+    @Covers(value = PersistentDataContainer.class, method = "get")
+    @Covers(value = PersistentDataContainer.class, method = "has")
     void itemDataTravelsWithCopiesOfTheStack(TestContext t) {
         TestPlayer alice = t.player("alice");
         ItemStack stack = new ItemStack(Items.DIAMOND);
@@ -43,6 +47,9 @@ public final class DataTests {
     }
 
     @HadronTest
+    @Covers(value = PersistentData.class, method = "of")
+    @Covers(value = PersistentDataContainer.class, method = "set")
+    @Covers(value = PersistentDataContainer.class, method = "get")
     void entityDataIsSavedWithTheEntity(TestContext t) {
         Pig pig = EntityType.PIG.create(t.level());
         PersistentData.of(pig).set(key(t), PersistentDataType.INTEGER, 7);
@@ -55,6 +62,9 @@ public final class DataTests {
     }
 
     @HadronTest
+    @Covers(value = PersistentData.class, method = "of")
+    @Covers(value = PersistentDataContainer.class, method = "set")
+    @Covers(value = PersistentDataContainer.class, method = "get")
     void blockEntityDataIsSavedWithTheBlockEntity(TestContext t) {
         BlockPos pos = t.pos(1, 0, 0);
         t.setBlock(pos, Blocks.CHEST);
@@ -68,6 +78,9 @@ public final class DataTests {
     }
 
     @HadronTest
+    @Covers(value = PersistentData.class, method = "of")
+    @Covers(value = PersistentDataContainer.class, method = "set")
+    @Covers(value = PersistentDataContainer.class, method = "has")
     void positionDataSurvivesAStateChangeButNotAReplacement(TestContext t) {
         BlockPos pos = t.pos(1, 0, 0);
         BlockState gate = Blocks.OAK_FENCE_GATE.defaultBlockState();
@@ -81,6 +94,10 @@ public final class DataTests {
     }
 
     @HadronTest
+    @Covers(value = PersistentData.class, method = "of")
+    @Covers(value = PersistentDataContainer.class, method = "set")
+    @Covers(value = PersistentDataContainer.class, method = "get")
+    @Covers(value = PersistentDataContainer.class, method = "has")
     void positionDataMovesWithAPushedBlock(TestContext t) {
         dev.iredsc.hadron.selftest.items.Support.watch(t);
         BlockPos piston = t.pos(1, 0, 0);
@@ -97,6 +114,10 @@ public final class DataTests {
     }
 
     @HadronTest
+    @Covers(BlockPlaceEvent.class)
+    @Covers(value = PersistentData.class, method = "of")
+    @Covers(value = PersistentDataContainer.class, method = "set")
+    @Covers(value = PersistentDataContainer.class, method = "get")
     void cancelledPlacementKeepsThePositionsData(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos pos = t.pos(1, 0, 0);
@@ -115,6 +136,10 @@ public final class DataTests {
     }
 
     @HadronTest
+    @Covers(value = PersistentData.class, method = "of")
+    @Covers(value = PersistentDataContainer.class, method = "set")
+    @Covers(value = PersistentDataContainer.class, method = "get")
+    @Covers(value = PersistentDataContainer.class, method = "has")
     void chunkAndWorldDataStayOnTheirOwnHolder(TestContext t) {
         BlockPos here = t.pos(0, 0, 0);
         BlockPos farAway = here.offset(64, 0, 0);
@@ -129,6 +154,9 @@ public final class DataTests {
     }
 
     @HadronTest
+    @Covers(value = PersistentData.class, method = "of")
+    @Covers(value = PersistentDataContainer.class, method = "set")
+    @Covers(value = PersistentDataContainer.class, method = "get")
     void readingWithTheWrongTypeSaysHowToFixIt(TestContext t) {
         PersistentDataContainer data = PersistentData.of(t.level());
         data.set(key(t), PersistentDataType.STRING, "text");

@@ -7,6 +7,7 @@ import static dev.iredsc.hadron.selftest.entities.Fixtures.ready;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.player.PlayerFishEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -28,6 +29,7 @@ public final class FishingTests {
     }
 
     @HadronTest
+    @Covers(PlayerFishEvent.class)
     void castingIsTheAnglersAndCancelledLeavesNoBobber(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -56,6 +58,7 @@ public final class FishingTests {
     }
 
     @HadronTest
+    @Covers(PlayerFishEvent.class)
     void reelingInFiresAndCancelledLeavesTheBobberOutAndTheRodUnworn(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);

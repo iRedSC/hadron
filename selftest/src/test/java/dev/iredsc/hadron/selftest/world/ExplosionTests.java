@@ -1,11 +1,13 @@
 package dev.iredsc.hadron.selftest.world;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
 import dev.iredsc.hadron.api.event.world.ExplosionPrimeEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -20,7 +22,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
-
 /** TNT exploding: the prime (radius and fire) and the explosion (its block and entity lists). */
 public final class ExplosionTests {
     /** Primed TNT at pos(0, 0, 0) that goes off on the next tick. */
@@ -46,6 +47,7 @@ public final class ExplosionTests {
     // ---- ExplosionPrimeEvent
 
     @HadronTest
+    @Covers(ExplosionPrimeEvent.class)
     void tntGoingOffPrimesOnceWithTheTntAsActor(TestContext t) {
         List<ExplosionPrimeEvent> seen = new ArrayList<>();
         t.registerEvents(new Listener() {
@@ -63,6 +65,7 @@ public final class ExplosionTests {
     }
 
     @HadronTest
+    @Covers(ExplosionPrimeEvent.class)
     void cancelledPrimeDestroysNothing(TestContext t) {
         BlockPos dirt = t.pos(2, 0, 0);
         t.setBlock(dirt, Blocks.DIRT);
@@ -80,6 +83,7 @@ public final class ExplosionTests {
     }
 
     @HadronTest
+    @Covers(ExplosionPrimeEvent.class)
     void changedRadiusIsTheBlastsSize(TestContext t) {
         // TNT's radius of 4 reaches at most 6.9 blocks, so it can't touch a wall whose near face is 7.5 blocks away; a
         // radius of 8 does. A wall rather than one block, so enough of the blast's rays hit it.
@@ -99,6 +103,7 @@ public final class ExplosionTests {
     }
 
     @HadronTest
+    @Covers(ExplosionPrimeEvent.class)
     void changedFireSetsFires(TestContext t) {
         t.registerEvents(new Listener() {
             @EventHandler
@@ -117,6 +122,7 @@ public final class ExplosionTests {
     // ---- ExplosionEvent
 
     @HadronTest
+    @Covers(ExplosionEvent.class)
     void explosionListsItsBlocksOnceAndBreaksNoneAsABlockBreak(TestContext t) {
         BlockPos dirt = t.pos(2, 0, 0);
         t.setBlock(dirt, Blocks.DIRT);
@@ -144,6 +150,7 @@ public final class ExplosionTests {
     }
 
     @HadronTest
+    @Covers(ExplosionEvent.class)
     void cancelledExplosionBreaksNothingAndHurtsNobody(TestContext t) {
         BlockPos dirt = t.pos(2, 0, 0);
         t.setBlock(dirt, Blocks.DIRT);
@@ -167,6 +174,7 @@ public final class ExplosionTests {
     }
 
     @HadronTest
+    @Covers(ExplosionEvent.class)
     void aBlockTakenOffTheListSurvives(TestContext t) {
         BlockPos kept = t.pos(2, 0, 0);
         BlockPos lost = t.pos(-2, 0, 0);
@@ -184,6 +192,9 @@ public final class ExplosionTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(ExplosionPrimeEvent.class)
+    @Covers(value = Actor.class, method = "attribution")
+    @Covers(value = Attribution.class, method = "responsible")
     void tntAPlayerLitExplodesOnTheirBehalf(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(2, 0, 0);

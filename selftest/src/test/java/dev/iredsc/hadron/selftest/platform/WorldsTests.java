@@ -6,6 +6,7 @@ import com.mojang.brigadier.tree.RootCommandNode;
 import dev.iredsc.hadron.api.world.WorldCreator;
 import dev.iredsc.hadron.api.world.WorldGenerator;
 import dev.iredsc.hadron.api.world.Worlds;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -24,10 +25,18 @@ import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Blocks;
-
 /** Worlds made, entered, unloaded, reloaded and deleted while the server runs. */
 public final class WorldsTests {
     @HadronTest
+    @Covers(value = Worlds.class, method = "create")
+    @Covers(value = Worlds.class, method = "get")
+    @Covers(value = Worlds.class, method = "unload")
+    @Covers(value = Worlds.class, method = "isCreated")
+    @Covers(value = Worlds.class, method = "load")
+    @Covers(value = Worlds.class, method = "delete")
+    @Covers(value = WorldCreator.class, method = "generator")
+    @Covers(value = WorldCreator.class, method = "spawn")
+    @Covers(value = WorldGenerator.class, method = "voidWorld")
     void aCreatedWorldTakesPlayersUnloadsThemOutAndReloadsWithItsBlocks(TestContext t) {
         TestPlayer alice = t.player("alice");
         ResourceLocation key = ResourceLocation.fromNamespaceAndPath("selftest", "lifecycle");

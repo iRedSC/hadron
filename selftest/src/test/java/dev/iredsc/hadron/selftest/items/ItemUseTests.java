@@ -16,6 +16,7 @@ import dev.iredsc.hadron.api.event.item.ItemDamageEvent;
 import dev.iredsc.hadron.api.event.item.ItemHeldEvent;
 import dev.iredsc.hadron.api.event.item.ItemRepairEvent;
 import dev.iredsc.hadron.api.event.item.ItemUseEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -44,6 +45,7 @@ public final class ItemUseTests {
     private static final int CHEST_MENU_SLOT = 6;
 
     @HadronTest
+    @Covers(ItemUseEvent.class)
     void refusedUseThrowsNothingAndKeepsTheStack(TestContext t) {
         TestPlayer alice = t.player("alice");
         alice.hold(new ItemStack(Items.SNOWBALL, 16));
@@ -66,6 +68,7 @@ public final class ItemUseTests {
     }
 
     @HadronTest
+    @Covers(ItemConsumeEvent.class)
     void refusedEatingKeepsTheFoodAndTheHunger(TestContext t) {
         TestPlayer alice = t.player("alice");
         alice.player().getFoodData().setFoodLevel(10);
@@ -88,6 +91,7 @@ public final class ItemUseTests {
     }
 
     @HadronTest
+    @Covers(ItemDamageEvent.class)
     void changedItemDamageIsTheDurabilityLost(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos stone = t.pos(1, 0, 0);
@@ -110,6 +114,7 @@ public final class ItemUseTests {
     }
 
     @HadronTest
+    @Covers(ItemDamageEvent.class)
     void cancelledItemDamageKeepsDurabilityButTheBlockStillBreaks(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos stone = t.pos(1, 0, 0);
@@ -127,6 +132,7 @@ public final class ItemUseTests {
     }
 
     @HadronTest
+    @Covers(ItemBreakEvent.class)
     void aToolRunningOutFiresItemBreakForItsUser(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos stone = t.pos(1, 0, 0);
@@ -150,6 +156,7 @@ public final class ItemUseTests {
     }
 
     @HadronTest
+    @Covers(ItemRepairEvent.class)
     void refusedMendingLeavesTheToolDamaged(TestContext t) {
         TestPlayer alice = t.player("alice");
         ItemStack pick = new ItemStack(Items.IRON_PICKAXE);
@@ -174,6 +181,7 @@ public final class ItemUseTests {
     }
 
     @HadronTest
+    @Covers(ItemHeldEvent.class)
     void refusedHotbarChangeKeepsTheSelectedSlot(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<ItemHeldEvent> heard = new ArrayList<>();
@@ -193,6 +201,7 @@ public final class ItemUseTests {
     }
 
     @HadronTest
+    @Covers(EquipEvent.class)
     void refusedRightClickEquipKeepsTheArmourInHand(TestContext t) {
         TestPlayer alice = t.player("alice");
         alice.hold(new ItemStack(Items.IRON_CHESTPLATE));
@@ -215,6 +224,7 @@ public final class ItemUseTests {
     }
 
     @HadronTest
+    @Covers(EquipmentChangeEvent.class)
     void rightClickEquipFiresEquipmentChangeAfterwards(TestContext t) {
         TestPlayer alice = t.player("alice");
         alice.hold(new ItemStack(Items.IRON_CHESTPLATE));
@@ -236,6 +246,7 @@ public final class ItemUseTests {
     }
 
     @HadronTest
+    @Covers(EquipEvent.class)
     void refusedArmourSlotClickLeavesTheArmourOnTheCursor(TestContext t) {
         TestPlayer alice = t.player("alice");
         alice.hold(new ItemStack(Items.IRON_CHESTPLATE));
@@ -262,6 +273,7 @@ public final class ItemUseTests {
     }
 
     @HadronTest
+    @Covers(EquipEvent.class)
     void refusedDispenserEquipLeavesTheHelmetInTheDispenser(TestContext t) {
         Support.watch(t);
         BlockPos dispenser = t.pos(2, 0, 0);

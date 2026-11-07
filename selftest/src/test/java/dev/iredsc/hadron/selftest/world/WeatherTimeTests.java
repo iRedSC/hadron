@@ -6,6 +6,7 @@ import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.world.TimeSkipEvent;
 import dev.iredsc.hadron.api.event.world.WeatherChangeEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import java.util.ArrayList;
@@ -22,6 +23,7 @@ public final class WeatherTimeTests {
     }
 
     @HadronTest
+    @Covers(WeatherChangeEvent.class)
     void weatherCommandIsAWeatherChangeByTheServer(TestContext t) {
         ServerLevel overworld = t.server().overworld();
         clear(overworld);
@@ -47,6 +49,7 @@ public final class WeatherTimeTests {
     }
 
     @HadronTest
+    @Covers(WeatherChangeEvent.class)
     void cancelledWeatherChangeKeepsItClear(TestContext t) {
         ServerLevel overworld = t.server().overworld();
         clear(overworld);
@@ -69,6 +72,7 @@ public final class WeatherTimeTests {
     }
 
     @HadronTest
+    @Covers(TimeSkipEvent.class)
     void timeCommandIsOneTimeSkipByTheServer(TestContext t) {
         // /time touches every world, but only the overworld owns the clock, so one event.
         ServerLevel overworld = t.server().overworld();
@@ -95,6 +99,7 @@ public final class WeatherTimeTests {
     }
 
     @HadronTest
+    @Covers(TimeSkipEvent.class)
     void cancelledTimeSkipKeepsTheTime(TestContext t) {
         ServerLevel overworld = t.server().overworld();
         long before = overworld.getDayTime();
@@ -115,6 +120,7 @@ public final class WeatherTimeTests {
     }
 
     @HadronTest
+    @Covers(TimeSkipEvent.class)
     void changedSkipAmountIsTheTimeSet(TestContext t) {
         ServerLevel overworld = t.server().overworld();
         long before = overworld.getDayTime();

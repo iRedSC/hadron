@@ -7,6 +7,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.block.BlockPistonExtendEvent;
 import dev.iredsc.hadron.api.event.block.BlockPistonRetractEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import java.util.ArrayList;
@@ -47,6 +48,7 @@ public final class PistonTests {
     }
 
     @HadronTest
+    @Covers(BlockPistonExtendEvent.class)
     void aPistonPushIsOneExtendEventWithTheMove(TestContext t) {
         BlockPos piston = piston(t, Blocks.PISTON);
         List<BlockMoveEvent> seen = recordMoves(t);
@@ -64,6 +66,7 @@ public final class PistonTests {
     }
 
     @HadronTest
+    @Covers(BlockPistonExtendEvent.class)
     void cancelledPistonPushMovesNothing(TestContext t) {
         BlockPos piston = piston(t, Blocks.PISTON);
         List<BlockPistonExtendEvent> seen = new ArrayList<>();
@@ -82,6 +85,7 @@ public final class PistonTests {
     }
 
     @HadronTest
+    @Covers(BlockPistonRetractEvent.class)
     void aStickyPistonPullIsOneRetractEvent(TestContext t) {
         BlockPos piston = piston(t, Blocks.STICKY_PISTON);
         power(t, piston, true);
@@ -101,6 +105,7 @@ public final class PistonTests {
     }
 
     @HadronTest
+    @Covers(BlockPistonRetractEvent.class)
     void cancelledPistonRetractPullsNothing(TestContext t) {
         BlockPos piston = piston(t, Blocks.STICKY_PISTON);
         power(t, piston, true);

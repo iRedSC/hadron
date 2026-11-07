@@ -11,6 +11,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.event.entity.HangingPlaceEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileLaunchEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -33,6 +34,7 @@ import net.minecraft.world.level.block.Blocks;
 /** EntitySpawnEvent, ProjectileLaunchEvent and HangingPlaceEvent: who spawned it, and a refusal costs nothing. */
 public final class SpawnTests {
     @HadronTest
+    @Covers(EntitySpawnEvent.class)
     void aConsoleSummonIsTheServersCommandSpawn(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         ready(t);
@@ -52,6 +54,7 @@ public final class SpawnTests {
     }
 
     @HadronTest
+    @Covers(EntitySpawnEvent.class)
     void aRefusedSummonLeavesNoEntity(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         ready(t);
@@ -68,6 +71,7 @@ public final class SpawnTests {
     }
 
     @HadronTest
+    @Covers(EntitySpawnEvent.class)
     void aSpawnEggIsThePlayersSpawn(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -87,6 +91,7 @@ public final class SpawnTests {
     }
 
     @HadronTest
+    @Covers(EntitySpawnEvent.class)
     void aRefusedSpawnEggIsNotSpent(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -109,6 +114,7 @@ public final class SpawnTests {
     }
 
     @HadronTest
+    @Covers(ProjectileLaunchEvent.class)
     void aThrownSnowballIsLaunchedByItsThrower(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -130,6 +136,7 @@ public final class SpawnTests {
     }
 
     @HadronTest
+    @Covers(ProjectileLaunchEvent.class)
     void aRefusedSnowballIsGivenBack(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -150,6 +157,7 @@ public final class SpawnTests {
     }
 
     @HadronTest
+    @Covers(ProjectileLaunchEvent.class)
     void aRefusedArrowFromABowKeepsTheArrowAndTheBow(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -179,6 +187,7 @@ public final class SpawnTests {
     }
 
     @HadronTest
+    @Covers(EntitySpawnEvent.class)
     void aRefusedBoatIsGivenBack(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -202,6 +211,7 @@ public final class SpawnTests {
     }
 
     @HadronTest
+    @Covers(HangingPlaceEvent.class)
     void aHungItemFrameIsThePlayersOnTheClickedFace(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -226,6 +236,7 @@ public final class SpawnTests {
     }
 
     @HadronTest
+    @Covers(HangingPlaceEvent.class)
     void aRefusedItemFrameIsNotSpent(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);

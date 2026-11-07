@@ -12,6 +12,7 @@ import dev.iredsc.hadron.api.event.world.WorldUnloadEvent;
 import dev.iredsc.hadron.api.world.WorldCreator;
 import dev.iredsc.hadron.api.world.WorldGenerator;
 import dev.iredsc.hadron.api.world.Worlds;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import java.util.ArrayList;
@@ -30,6 +31,7 @@ public final class WorldTests {
     // ---- Lightning
 
     @HadronTest
+    @Covers(LightningStrikeEvent.class)
     void summonedLightningIsOneStrikeByTheServer(TestContext t) {
         List<LightningStrikeEvent> seen = new ArrayList<>();
         t.registerEvents(new Listener() {
@@ -46,6 +48,7 @@ public final class WorldTests {
     }
 
     @HadronTest
+    @Covers(LightningStrikeEvent.class)
     void cancelledLightningStrikesNothing(TestContext t) {
         List<LightningStrikeEvent> tried = new ArrayList<>();
         t.registerEvents(new Listener() {
@@ -91,6 +94,7 @@ public final class WorldTests {
     }
 
     @HadronTest
+    @Covers(PortalCreateEvent.class)
     void fillingAFrameIsOnePortalCreate(TestContext t) {
         BlockPos inside = frame(t);
         List<PortalCreateEvent> seen = new ArrayList<>();
@@ -109,6 +113,7 @@ public final class WorldTests {
     }
 
     @HadronTest
+    @Covers(PortalCreateEvent.class)
     void cancelledPortalCreateLeavesTheFrameEmpty(TestContext t) {
         BlockPos inside = frame(t);
         t.registerEvents(new Listener() {
@@ -124,6 +129,12 @@ public final class WorldTests {
     // ---- Worlds
 
     @HadronTest
+    @Covers(WorldLoadEvent.class)
+    @Covers(WorldUnloadEvent.class)
+    @Covers(value = Worlds.class, method = "create")
+    @Covers(value = Worlds.class, method = "unload")
+    @Covers(value = WorldCreator.class, method = "generator")
+    @Covers(value = WorldGenerator.class, method = "voidWorld")
     void creatingAWorldLoadsItAndUnloadingItUnloadsIt(TestContext t) {
         ResourceLocation key = ResourceLocation.fromNamespaceAndPath("hadronselftest", "lifecycle");
         List<ServerLevel> loaded = new ArrayList<>();
@@ -152,6 +163,7 @@ public final class WorldTests {
     }
 
     @HadronTest
+    @Covers(WorldSaveEvent.class)
     void saveAllSavesThisWorld(TestContext t) {
         List<ServerLevel> saved = new ArrayList<>();
         t.registerEvents(new Listener() {

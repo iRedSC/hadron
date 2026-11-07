@@ -12,6 +12,7 @@ import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityCombustEvent;
+import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
 import dev.iredsc.hadron.api.event.entity.EntityPotionEffectEvent;
 import dev.iredsc.hadron.api.event.entity.EntityPotionEffectExpireEvent;
 import dev.iredsc.hadron.api.event.entity.EntityRegainHealthEvent;
@@ -19,7 +20,7 @@ import dev.iredsc.hadron.api.event.entity.EntityStatusChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTargetEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTransformEvent;
 import dev.iredsc.hadron.api.event.entity.EntityVelocityEvent;
-import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -44,6 +45,7 @@ import net.minecraft.world.level.block.Blocks;
 /** Healing, fire, effects, AI, air, targets and conversions: who caused each, cancels undo, changes apply. */
 public final class EntityStateTests {
     @HadronTest
+    @Covers(EntityRegainHealthEvent.class)
     void aChangedHealIsTheHealthRegained(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -63,6 +65,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityRegainHealthEvent.class)
     void aCancelledHealLeavesTheHealth(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -85,6 +88,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityCombustEvent.class)
     void aFireAspectHitSetsFireForTheAttackerForTheChosenTime(TestContext t) {
         TestPlayer alice = t.player("alice");
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -106,6 +110,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityCombustEvent.class)
     void aCancelledCombustLeavesTheVictimUnburnt(TestContext t) {
         TestPlayer alice = t.player("alice");
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -124,6 +129,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityPotionEffectEvent.class)
     void aConsoleEffectIsTheServersAndCancelledIsNeverApplied(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -146,6 +152,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityPotionEffectEvent.class)
     void aCancelledEffectRemovalKeepsTheEffect(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -165,6 +172,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityPotionEffectExpireEvent.class)
     void anEffectRunningOutIsReported(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -182,6 +190,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityStatusChangeEvent.class)
     void aConsoleNoAiChangeIsTheServersAndCancelledKeepsTheAi(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         Pig pig = spawnWithAi(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -215,6 +224,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityAirChangeEvent.class)
     void holdingBreathUnderWaterIsNatures(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         Pig pig = pigUnderWater(t);
@@ -233,6 +243,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityAirChangeEvent.class)
     void cancelledAirLossKeepsTheBreath(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         Pig pig = pigUnderWater(t);
@@ -248,6 +259,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityVelocityEvent.class)
     void aConsoleLaunchIsAVelocityChangeByTheServer(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -270,6 +282,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityTargetEvent.class)
     void aZombieChoosingItsTargetIsTheZombies(TestContext t) {
         requireMonsters(t);
         TestPlayer alice = t.player("alice");
@@ -289,6 +302,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityTargetEvent.class)
     void aRedirectedTargetIsWhoTheMobTargets(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         Zombie zombie = spawn(t, EntityType.ZOMBIE, t.pos(4, 0, 0));
@@ -305,6 +319,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityTargetEvent.class)
     void aCancelledTargetLeavesTheMobWithoutOne(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         Zombie zombie = spawn(t, EntityType.ZOMBIE, t.pos(4, 0, 0));
@@ -324,6 +339,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityTransformEvent.class)
     void lightningTurningAPigIntoAZombifiedPiglinIsReported(TestContext t) {
         requireMonsters(t);
         t.player("alice"); // entities only tick, and commands only find them, near a player
@@ -344,6 +360,7 @@ public final class EntityStateTests {
     }
 
     @HadronTest
+    @Covers(EntityTransformEvent.class)
     void aCancelledTransformKeepsThePig(TestContext t) {
         requireMonsters(t);
         t.player("alice"); // entities only tick, and commands only find them, near a player

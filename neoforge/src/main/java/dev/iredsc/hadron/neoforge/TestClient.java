@@ -672,7 +672,11 @@ final class TestClient implements TestPlayer {
                 connection.send(ServerboundLoginAcknowledgedPacket.INSTANCE);
                 connection.setupOutboundProtocol(ConfigurationProtocols.SERVERBOUND);
                 connection.send(new ServerboundCustomPayloadPacket(new BrandPayload("vanilla")));
-                connection.send(new ServerboundClientInformationPacket(ClientInformation.createDefault()));
+                // What a real client sends with its options untouched: unlike vanilla's server-side default, a client allows
+                // server listings unless the player turns it off, so the server list's sample shows test players.
+                connection.send(new ServerboundClientInformationPacket(new ClientInformation("en_us", 12,
+                        net.minecraft.world.entity.player.ChatVisiblity.FULL, true, 0x7F,
+                        net.minecraft.world.entity.player.Player.DEFAULT_MAIN_HAND, false, true)));
                 phase = Phase.CONFIGURATION;
             }
             // Claims every pack the server offers, so it sends no registry contents it doesn't have to.

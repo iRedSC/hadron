@@ -18,6 +18,7 @@ import dev.iredsc.hadron.api.event.player.PlayerSwapHandItemsEvent;
 import dev.iredsc.hadron.api.event.player.PlayerToggleFlightEvent;
 import dev.iredsc.hadron.api.event.player.PlayerToggleSneakEvent;
 import dev.iredsc.hadron.api.event.player.PlayerToggleSprintEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -51,6 +52,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerToggleSneakEvent.class)
     void sneakingFiresAndCancelledStaysStanding(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<Boolean> asked = new ArrayList<>();
@@ -67,6 +69,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerToggleSneakEvent.class)
     void anUncancelledSneakSneaks(TestContext t) {
         TestPlayer alice = t.player("alice");
         int[] asked = {0};
@@ -82,6 +85,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerToggleSprintEvent.class)
     void sprintingFiresAndCancelledStaysWalking(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<Boolean> asked = new ArrayList<>();
@@ -104,6 +108,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerToggleFlightEvent.class)
     void startingToFlyFiresAndCancelledStaysGrounded(TestContext t) {
         TestPlayer alice = t.player("alice");
         allowFlight(alice, true);
@@ -123,6 +128,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerAbilitiesChangeEvent.class)
     void grantingFlightFiresAndCancelledTakesItBack(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<PlayerAbilitiesChangeEvent> events = new ArrayList<>();
@@ -141,6 +147,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerFlightRevokeEvent.class)
     void revokingFlightIsReported(TestContext t) {
         TestPlayer alice = t.player("alice");
         allowFlight(alice, true);
@@ -157,6 +164,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerGameModeChangeEvent.class)
     void aGameModeCommandFiresAndCancelledKeepsTheMode(TestContext t) {
         TestPlayer alice = t.player("alice");
         alice.setOp(true);
@@ -176,6 +184,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerExpChangeEvent.class)
     void aChangedExperienceGainIsWhatTheyGet(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<Integer> asked = new ArrayList<>();
@@ -192,6 +201,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerExpChangeEvent.class)
     void aCancelledExperienceGainGivesNothing(TestContext t) {
         TestPlayer alice = t.player("alice");
         t.registerEvents(new Listener() {
@@ -205,6 +215,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerLevelChangeEvent.class)
     void gainingLevelsIsReportedOnce(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<int[]> changes = new ArrayList<>();
@@ -222,6 +233,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerAdvancementDoneEvent.class)
     void anAdvancementDoneIsReported(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<String> done = new ArrayList<>();
@@ -241,6 +253,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerSwapHandItemsEvent.class)
     void aCancelledHandSwapLeavesBothHands(TestContext t) {
         TestPlayer alice = t.player("alice");
         alice.hold(new ItemStack(Items.DIAMOND));
@@ -259,6 +272,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerSwapHandItemsEvent.class)
     void aChangedHandSwapPutsTheChosenItems(TestContext t) {
         TestPlayer alice = t.player("alice");
         alice.hold(new ItemStack(Items.DIAMOND));
@@ -289,6 +303,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerBedEnterEvent.class)
     void goingToBedFiresAndCancelledStaysAwake(TestContext t) {
         TestPlayer alice = t.player("alice");
         long time = bedAtNight(t);
@@ -312,6 +327,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerBedLeaveEvent.class)
     void leavingABedIsReported(TestContext t) {
         TestPlayer alice = t.player("alice");
         long time = bedAtNight(t);
@@ -335,6 +351,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerChangedWorldEvent.class)
     void changingWorldsIsReportedWithTheOldWorld(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<ServerLevel> from = new ArrayList<>();
@@ -351,6 +368,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerMoveEvent.class)
     void walkingIntoTheNextBlockIsAMove(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<PlayerMoveEvent> events = new ArrayList<>();
@@ -368,6 +386,7 @@ public final class PlayerStateTests {
     }
 
     @HadronTest
+    @Covers(PlayerMoveEvent.class)
     void aCancelledMovePutsThePlayerBack(TestContext t) {
         TestPlayer alice = t.player("alice");
         t.registerEvents(new Listener() {
