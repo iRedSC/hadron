@@ -185,6 +185,11 @@ public final class BridgeContractTests {
                 chest.getBlockState(), after, unlocked, a), () -> chest.loadWithComponents(unlocked,
                 t.level().registryAccess()));
         t.assertTrue(refused, "callEvent should report the cancel to the bridge");
+        BlockDataChangeEvent unlock = (BlockDataChangeEvent) changes.get(1);
+        after.putString("Lock", "changed");
+        unlock.getBeforeData().putString("Lock", "changed");
+        t.assertEquals("secret", unlock.getBeforeData().getString("Lock"), "the data before, kept from the bridge's "
+                + "tag and a listener's copy");
         t.assertTrue(chest.saveWithoutMetadata(t.level().registryAccess()).contains("Lock"), "a cancelled data change "
                 + "should leave the lock");
     }
@@ -223,6 +228,13 @@ public final class BridgeContractTests {
                 + "should change the recorded data");
         strung.putString("type", "copper");
         t.assertTrue(e.getBeforeData().isEmpty(), "no wire before");
+        CompoundTag cut = strung.copy();
+        BlockDataChangeEvent removal = new BlockDataChangeEvent(t.level(), from, wire, span, cut, new CompoundTag(),
+                machine(t, alice));
+        cut.putString("type", "gold");
+        removal.getBeforeData().putString("type", "iron");
+        t.assertEquals("copper", removal.getBeforeData().getString("type"), "a removed wire's data before, kept from "
+                + "the bridge's tag and a listener's copy");
         t.assertTrue(refused && wires.isEmpty(), "a wire crossing a protected space should be refused");
         refuses(t, "list every space", () -> new BlockDataChangeEvent(t.level(), from, wire, List.of(),
                 new CompoundTag(), strung, machine(t, alice)));
@@ -278,6 +290,12 @@ public final class BridgeContractTests {
                 () -> stored[0] = farmer);
         t.assertTrue(refused, "callEvent should report the cancel to the bridge");
         t.assertEquals("builder", stored[0].getString("job"), "a refused change keeps the old job");
+        EntityDataChangeEvent change = (EntityDataChangeEvent) seen.get(1);
+        builder.putString("job", "changed");
+        change.getBeforeData().putString("job", "changed");
+        t.assertEquals("builder", change.getBeforeData().getString("job"), "the data before, kept from the bridge's "
+                + "tag and a listener's copy");
+        builder.putString("job", "builder");
         refuses(t, "isn't a mod's id", () -> new EntityDataChangeEvent(pig,
                 ResourceLocation.fromNamespaceAndPath("hadron", "job"), builder, farmer, machine(t, alice)));
     }
@@ -487,7 +505,14 @@ public final class BridgeContractTests {
         InventoryHolder.PerPlayer copy = (InventoryHolder.PerPlayer) e.getChanges().get(0).holder();
         t.assertEquals(chest, copy.at(), "where the copy is, for protection");
         t.assertEquals(alice.uuid(), copy.owner(), "whose copy");
+        t.assertEquals(Optional.of(chest), chest.place(), "a chest is its own place");
         t.assertEquals(Optional.of(chest), alices.place(), "a claim check finds the copy's chest");
+        InventoryHolder cart = new InventoryHolder.Entity(alice.player());
+        t.assertEquals(Optional.of(cart), cart.place(), "an entity is its own place");
+        t.assertEquals(Optional.of(chest), new InventoryHolder.Item(chest, loot).place(), "a backpack in a chest");
+        t.assertEquals(Optional.of(cart), new InventoryHolder.Item(cart, loot).place(), "a backpack on an entity");
+        t.assertEquals(Optional.of(cart), new InventoryHolder.PerPlayer(cart, bob.uuid()).place(), "a copy in an "
+                + "entity is at the entity");
         t.assertEquals(Optional.of(chest), new InventoryHolder.Item(alices, loot).place(), "and a backpack inside it");
         t.assertEquals(Optional.empty(), new InventoryHolder.Linked(InventoryHolder.Linked.ENDER_CHEST,
                 alice.uuid().toString()).place(), "an ender chest has no place");

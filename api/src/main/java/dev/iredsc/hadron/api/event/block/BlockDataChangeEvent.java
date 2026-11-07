@@ -101,7 +101,7 @@ public class BlockDataChangeEvent extends BlockChangeEvent {
         LevelChunk chunk = level.getChunkSource().getChunkNow(SectionPos.blockToSectionCoord(p.getX()),
                 SectionPos.blockToSectionCoord(p.getZ()));
         if (chunk == null) {
-            throw new IllegalArgumentException(p.toShortString() + " is in an unloaded chunk: load it before firing, "
+            throw new IllegalArgumentException(p.toShortString() + " is in an unloaded chunk: load it with level.getChunk(pos) before firing, "
                     + "since protection must see every space the data covers, and reading it here would load it "
                     + "unseen");
         }

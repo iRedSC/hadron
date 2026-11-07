@@ -74,7 +74,7 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 | └ `StructureGrowEvent` | a tree or structure grows from one block | `TreeGrower` |
 | `BlockMoveEvent` | blocks relocate with their data and scheduled ticks; source to target mapping, and the space swept through | `PistonBaseBlock`, through its leaves |
 | ├ `BlockPistonExtendEvent`, `BlockPistonRetractEvent` | | `PistonBaseBlock` |
-| └ `StructureMoveEvent` | a contraption, ship or spatial transfer assembles, moves, rotates or disassembles; old and new transforms | bridge (Create, Valkyrien Skies, AE2 spatial IO) |
+| └ `StructureMoveEvent` | a contraption or ship assembles, moves, rotates or disassembles within one level; old and new transforms | bridge (Create, Valkyrien Skies) |
 | `BlockDropItemEvent` | a broken block's drops are about to appear; the item entities and experience are editable, and a cancel drops nothing | `Block.dropResources` (NeoForge's `BlockDropsEvent`), so player mining, `destroyBlock` and blocks losing their support |
 | `BlockUseEvent` | an actor right-clicks or activates a block, including remotely through a linked terminal | `useItemOn`, `useWithoutItem` |
 | `BlockRedstoneEvent` | an actor changes the signal a block emits without changing its state | bridge (Integrated Dynamics, LaserIO) |
@@ -172,7 +172,7 @@ Everything measured in amounts that isn't an item stack: energy, fluids in tanks
 | Event | What | Core chokepoint |
 |---|---|---|
 | `ResourceChangeEvent` | a holder's amount changes; old and new | core for currencies, through the produce and consume leaves; bridges for everything else |
-| ├ `ResourceProduceEvent` | created in one step: a reactor's waste, a burned fuel item's energy, a quest's currency reward | core for currency deposits; bridges for everything else |
+| ├ `ResourceProduceEvent` | created in one step: a reactor's waste, a spell conjuring water, a quest's currency reward | core for currency deposits; bridges for everything else |
 | ├ `ResourceConsumeEvent` | destroyed in one step: a spell's mana, a launch's fuel, a vein depleted; a machine's running power draw isn't reported ([bridge-hooks](bridge-hooks.md#the-rule-for-firing)) | core for currency withdrawals; bridges for everything else |
 | └ `ResourceConvertEvent` | one resource into another in one step: fuel to heat to steam | bridge |
 | `ResourceTransferEvent` | an amount moves between holders: a cable, a pipe, a wireless charger reaching a player in another dimension, a payment | core for currency transfers; bridges for energy, fluids and mods' resources |
@@ -242,7 +242,7 @@ Designed but not in `api`, because core can't yet fire them for every actor with
 ## Left out
 
 - **An event per spell school or damage type.** Damage, healing, effects, blocks, spawns and teleports already describe what spells do; the spell is on the operation.
-- **An event per tick.** A machine's job fires its own event once, and its per-tick spending runs silent; drift with no job (heat settling, air leaking) is the holder's own state. Acceleration is one event per change. So hot loops don't fire thousands of events ([bridge-hooks](bridge-hooks.md#the-rule-for-firing)).
+- **An event per tick of a machine's job.** A machine's job fires its own event once, and its per-tick spending runs silent; drift with no job (heat settling, air leaking) is the holder's own state. Acceleration is one event per change. So a machine's job doesn't fire thousands of events ([bridge-hooks](bridge-hooks.md#the-rule-for-firing)).
 - **Mod progression state** (Twilight Forest's conquered bosses, quest progress). It changes no world, player or item; plugins that need it use the bridge's extras.
 - **Client-only data** (local waypoints, minimap settings).
 - **Data tied to no place** (a computer's files, a mod's network database). Plugins guard it through the block or item that reaches it, and whatever it makes happen in the world fires its own events.
