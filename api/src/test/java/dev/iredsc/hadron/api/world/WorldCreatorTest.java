@@ -116,4 +116,13 @@ class WorldCreatorTest {
         assertEquals(new BlockPos(1, 2, 3), c.spawn().orElseThrow());
         assertNotSame(pos, c.spawn().orElseThrow());
     }
+
+    @Covers(value = WorldCreator.class, method = "toString")
+    @Test
+    void itsTextNamesTheKeyAndEverySetting() {
+        String text = new WorldCreator(id("a:b")).seed(42).keepSpawnLoaded(true).toString();
+        assertTrue(text.startsWith("WorldCreator[a:b, "), text);
+        assertTrue(text.contains(", seed=42, "), text);
+        assertTrue(text.contains("keepSpawnLoaded=true"), text);
+    }
 }

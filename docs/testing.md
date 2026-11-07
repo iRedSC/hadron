@@ -169,14 +169,14 @@ void cancellingABreakKeepsTheBlock(TestContext t) { ... }
 **What isn't counted, and why:**
 
 - **Constructors:** an instance method can't be tested without one, and the checks a constructor makes are tested where it refuses input.
-- **What the compiler writes:** `equals`, `hashCode`, `toString`, record accessors, an enum's `values` and `valueOf`, bridge and synthetic methods. Nothing of Hadron's runs in them.
+- **What the compiler writes:** a record's own `equals`, `hashCode` and `toString` and its plain accessors, an enum's `values` and `valueOf`, bridge and synthetic methods. Nothing of Hadron's runs in them. The check reads the bytecode to tell, so one written by hand (`NamespacedKey.equals`, a record accessor that copies) is Hadron's code and needs a test.
 - **The non-event types in the event packages** (`Cancellable`, `BlockChange`, `Resource`, the holders, `EventHandler`): they are the events' vocabulary, and the event tests read them.
 - **Annotation types.**
 - **The port's and the host's wiring:** types named `Port`, `Lifecycle`, `Backend`, plus `NetBackend`, `Actors.Memory` and `PluginContext`, and what they nest. Their Javadoc says plugins never use them; the loader port installs them before any plugin runs, so every test runs through them.
 
 There is no list of exceptions, and none should be added for something that simply lacks a test: write the test.
 
-**Nothing can look covered that isn't.** The check fails on a `@Covers` that is on a method that isn't a test (`@HadronTest`, or JUnit's `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory`, `@TestTemplate`) or is on a `@Disabled` one; that names a type outside `api`'s public types; that names an abstract event (it lists the concrete ones to name instead); that names a type that isn't an event without a method; or that names a method the type and its API supertypes don't have (it lists the ones they do).
+**Nothing can look covered that isn't.** The check fails on a `@Covers` that is on a method that isn't a test (`@HadronTest`, or JUnit's `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory`, `@TestTemplate`) or is on a `@Disabled` one, or in a `@Disabled` class or a class around it; that names a type outside `api`'s public types; that names an abstract event (it lists the concrete ones to name instead); that names a type that isn't an event without a method; or that names a method the type and its API supertypes don't have (it lists the ones they do).
 
 **Economy providers** are covered through Hadron's own JSON provider: a test registering an `EconomyProvider` of its own would switch the store for the rest of the run, since once a plugin has provided accounts Hadron refuses to fall back to its file.
 
