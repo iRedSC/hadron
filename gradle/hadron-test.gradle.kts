@@ -26,19 +26,38 @@ abstract class HadronTestTask : DefaultTask() {
         fun check(task: Task, report: File, jar: String, log: File, extra: String = "") {
             if (!report.isFile) {
                 throw GradleException("The test server stopped before writing its report, so no test ran to the end. "
-                        + "Its log says why: $log")
+                        + "Its log says why: ${keep(report, log)}")
             }
             val text = report.readText()
             task.logger.lifecycle(text)
             val json = File(report.parentFile, report.name.removeSuffix(".txt") + ".json")
             val summary = text.lines().firstOrNull { it.startsWith("SUMMARY $jar ") }
                 ?: throw GradleException("The report has no results for $jar: the server stopped before reaching it, "
-                        + "or it wasn't staged. Report: $report; log: $log$extra")
+                        + "or it wasn't staged. Report and log, kept: ${keep(report, log)}$extra")
             if (!Regex(""" passed, 0 failed$""").containsMatchIn(summary) || !text.trimEnd().endsWith("RESULT: PASSED")) {
                 throw GradleException("Hadron tests failed (${summary.removePrefix("SUMMARY ")}). The failures are "
-                        + "above and in $report; as JSON: $json$extra")
+                        + "above; the report (text and JSON) and server log, kept: ${keep(report, log)}$extra")
             }
             task.logger.lifecycle("Report: $report\nJSON: $json")
+        }
+
+        /** How many failed runs' evidence is kept. */
+        private const val KEEP_FAILURES = 10
+
+        /**
+         * Copies a failed run's report and server log to failures/<time> beside the report, where the next run
+         * can't overwrite them: a failure that won't happen again on demand keeps its evidence. Returns that folder.
+         */
+        fun keep(report: File, log: File): File {
+            val root = File(report.parentFile, "failures")
+            val stamp = java.time.LocalDateTime.now().format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMdd-HHmmss-SSS"))
+            val dir = File(root, stamp)
+            dir.mkdirs()
+            val json = File(report.parentFile, report.name.removeSuffix(".txt") + ".json")
+            for (f in listOf(report, json, log)) if (f.isFile) f.copyTo(File(dir, f.name), overwrite = true)
+            root.listFiles()?.filter { it.isDirectory }?.sortedBy { it.name }?.dropLast(KEEP_FAILURES)
+                ?.forEach { it.deleteRecursively() }
+            return dir
         }
     }
 }
