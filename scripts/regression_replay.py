@@ -41,7 +41,6 @@ TREE = WORK / "tree"
 LOGS = WORK / "logs"
 LOCK = os.environ.get("HADRON_GRADLE_LOCK", "/tmp/hadron-ingame.lock")
 ID_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
-GRADLE_TIMEOUT = 45 * 60
 
 # Where a test's class lives decides its tier and the Gradle task that runs it.
 FAST_PROJECTS = {"api": ":api", "common": ":common", "neoforge": ":neoforge", "examples/hello": ":examples:hello"}
@@ -180,6 +179,7 @@ class GuardRun:
     failed: dict[str, bool] = field(default_factory=dict)
     trouble: str | None = None  # a reason the results can't be trusted at all
     log: Path | None = None
+    exit: int = 0  # Gradle's exit code; nonzero is expected when guards fail, never at baseline
 
 
 def locate(guard: Guard) -> tuple[str, str]:
@@ -202,51 +202,15 @@ def locate(guard: Guard) -> tuple[str, str]:
     return (IN_GAME_PROJECT if tier == "in-game" else FAST_PROJECTS[module]), fqcn
 
 
-TIMED_OUT = -1
-
-
-def group_alive(pgid: int) -> bool:
-    try:
-        os.killpg(pgid, 0)
-        return True
-    except ProcessLookupError:
-        return False
-
-
-def stop(proc: subprocess.Popen) -> None:
-    """Ends the build and everything it started (flock, Gradle, a test server), so nothing still reads the tree once
-    the replay resets it. Waits for the whole process group, not only flock, and kills what outlives the request."""
-    for sig in (signal.SIGTERM, signal.SIGKILL):
-        if not group_alive(proc.pid):
-            break
-        os.killpg(proc.pid, sig)
-        deadline = time.monotonic() + 30
-        while group_alive(proc.pid) and time.monotonic() < deadline:
-            time.sleep(0.2)
-    try:
-        proc.wait(timeout=5)
-    except subprocess.TimeoutExpired:
-        pass
-
-
 def gradle(args: list[str], log: Path) -> int:
+    """Runs Gradle in the throwaway tree under the shared lock. No timeout: the release job has its own, which ends
+    every process, and Ctrl-C reaches Gradle, which cancels its build."""
     log.parent.mkdir(parents=True, exist_ok=True)
-    # --no-daemon keeps the whole build in this process group, so stop() can end it; a daemon would outlive it.
-    cmd = ["flock", LOCK, "./gradlew", "--console=plain", "--no-daemon", *args]
+    cmd = ["flock", LOCK, "./gradlew", "--console=plain", *args]
     with log.open("w") as out:
         out.write("$ " + " ".join(cmd) + "\n")
         out.flush()
-        # Its own process group, so a timeout or an interrupt can end the whole build, not only flock.
-        proc = subprocess.Popen(cmd, cwd=TREE, stdout=out, stderr=subprocess.STDOUT, start_new_session=True)
-        try:
-            return proc.wait(timeout=GRADLE_TIMEOUT)
-        except subprocess.TimeoutExpired:
-            stop(proc)
-            out.write(f"\nreplay: Gradle ran past {GRADLE_TIMEOUT // 60} minutes and was stopped\n")
-            return TIMED_OUT
-        except BaseException:
-            stop(proc)
-            raise
+        return subprocess.run(cmd, cwd=TREE, stdout=out, stderr=subprocess.STDOUT).returncode
 
 
 def compile_trouble(log: Path) -> str | None:
@@ -270,9 +234,7 @@ def run_fast(guards: list[Guard], label: str) -> GuardRun:
         args.append(f"{project}:test")
         for g, fqcn in items:
             args += ["--tests", f"{fqcn}.{g.method}"]
-    if gradle(args, run.log) == TIMED_OUT:
-        run.trouble = f"Gradle timed out, so its results can't be trusted (see {run.log.relative_to(ROOT)})"
-        return run
+    run.exit = gradle(args, run.log)
     for project, items in by_project.items():
         results = TREE / project.strip(":").replace(":", "/") / "build" / "test-results" / "test"
         for g, fqcn in items:
@@ -302,9 +264,7 @@ def run_in_game(guards: list[Guard], label: str) -> GuardRun:
     args = [":selftest:hadronTest"]
     for g in guards:
         args += ["--tests", g.test]
-    if gradle(args, run.log) == TIMED_OUT:
-        run.trouble = f"Gradle timed out, so its results can't be trusted (see {run.log.relative_to(ROOT)})"
-        return run
+    run.exit = gradle(args, run.log)
     # The next run overwrites the server's log, so keep this one's beside the Gradle log.
     server_log = TREE / "neoforge" / "build" / "hadron-test" / "run" / "logs" / "latest.log"
     if server_log.exists():
@@ -333,6 +293,7 @@ def run_guards(guards: list[Guard], label: str) -> GuardRun:
         run = runner(chosen, label)
         merged.failed.update(run.failed)
         merged.trouble = merged.trouble or run.trouble
+        merged.exit = merged.exit or run.exit
         merged.log = run.log
     return merged
 
@@ -381,6 +342,10 @@ def replay(entries: list[Entry], base: str) -> list[Result]:
     every = sorted({g for e in runnable for g in e.guards}, key=lambda g: (g.tier, g.test))
     print(f"Baseline: {len(every)} guard test(s) at {base[:10]}, nothing undone ...", flush=True)
     base_run = run_guards(every, "baseline")
+    if base_run.exit != 0 and not base_run.trouble:
+        # With nothing undone every guard passes, so Gradle must succeed; a failure (a server crashing on stop, a
+        # broken build) means the results can't be trusted.
+        base_run.trouble = f"Gradle failed at baseline with exit code {base_run.exit} (see {base_run.log.relative_to(ROOT)})"
     bad_at_base: dict[str, str] = {}
     for g in every:
         if base_run.trouble:
