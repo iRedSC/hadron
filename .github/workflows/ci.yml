@@ -29,7 +29,8 @@ jobs:
           # Only main writes the cache, so a PR can't poison what every later run reads.
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - run: ./gradlew build
-      # The council gate's own tests, so a change to it can't loosen it unnoticed.
+      # The council gate's own tests: they catch a change that breaks the gate by mistake. (A PR can edit these too;
+      # what stops a PR loosening its own gate is that council.yml runs main's copy.)
       - run: python3 -m unittest discover -s .github/scripts
       - name: Keep test reports
         if: failure()

@@ -79,11 +79,85 @@ class ReviewTable(unittest.TestCase):
     def test_out_of_order_columns_fail(self):
         self.assertTrue(problems(body(PASSING, ["Round 2", "Round 1"])))
 
+    def test_a_confirm_after_a_failed_round_fails(self):
+        # A Confirm must not stand in for a fourth round.
+        rows = {"Deep": ["7/10", "7/10", "7/10", "9/10"], "Asker": ["1 asked, 0 open"] * 4,
+                "Explainer": ["0 misread, 0 open"] * 4}
+        self.assertTrue(problems(body(rows, ["Round 1", "Round 2", "Round 3", "Confirm"])))
+
+    def test_a_confirm_that_adds_questions_fails(self):
+        rows = dict(PASSING, Deep=["7/10", "9/10", "9/10"], Asker=["4 asked, 2 open", "5 asked, 1 open",
+                                                                   "6 asked, 0 open"],
+                    Explainer=["2 misread, 1 open", "2 misread, 0 open", "2 misread, 0 open"])
+        self.assertTrue(problems(body(rows, ["Round 1", "Round 2", "Confirm"])))
+
+    def test_a_confirm_that_settles_what_was_left_passes(self):
+        rows = {"Deep": ["7/10", "9/10", "9/10"], "Asker": ["4 asked, 2 open", "5 asked, 1 open", "5 asked, 0 open"],
+                "Explainer": ["2 misread, 1 open", "2 misread, 1 open", "2 misread, 0 open"]}
+        self.assertEqual(problems(body(rows, ["Round 1", "Round 2", "Confirm"])), [])
+
+    def test_a_second_row_for_one_member_fails(self):
+        text = body(dict(PASSING, Deep=["7/10", "3/10"]), ["Round 1", "Round 2"])
+        text = text.replace("| Asker |", "| Deep | 9/10 | 9/10 |\n| Asker |", 1)
+        self.assertTrue(problems(text))
+
+    def test_a_second_table_further_down_doesnt_count(self):
+        failing = dict(PASSING, Deep=["7/10", "3/10"])
+        text = body(failing, ["Round 1", "Round 2"]).replace(
+            "\n\n🤖", "\n\nNotes:\n\n| Deep | 9/10 | 9/10 |\n\n🤖")
+        self.assertTrue(problems(text))
+
+    def test_a_blank_earlier_result_fails(self):
+        self.assertTrue(problems(body(dict(PASSING, Asker=["", "5 asked, 0 open"]), ["Round 1", "Round 2"])))
+
+    def test_a_score_above_ten_fails(self):
+        self.assertTrue(problems(body(dict(PASSING, Deep=["7/10", "80/10"]), ["Round 1", "Round 2"])))
+
+    def test_more_open_than_asked_fails(self):
+        self.assertTrue(problems(body(dict(PASSING, Asker=["1 asked, 3 open", "5 asked, 0 open"]),
+                                      ["Round 1", "Round 2"])))
+
+    def test_a_short_commit_gets_its_own_message(self):
+        found = problems(body(PASSING, ["Round 1", "Round 2"], commit=HEAD[:8]))
+        self.assertTrue(any("too short" in p for p in found), found)
+
+    def test_the_round_cap_message_says_to_wait_for_the_owner(self):
+        rows = {name: [cells[-1]] * 4 for name, cells in PASSING.items()}
+        found = problems(body(rows, ["Round 1", "Round 2", "Round 3", "Round 4"]))
+        self.assertTrue(any("wait for the owner" in p for p in found), found)
+
 
 class Config(unittest.TestCase):
     def config(self, **changes) -> dict:
-        members = [{"name": n, "role": r, "provider": "p", "model": "m", "effort": "high"} for n, r in MEMBERS]
+        members = [{"name": n, "role": r, "provider": "claudeAgent", "model": "m", "effort": "high"}
+                   for n, r in MEMBERS]
         return {"min_score": 8, "member": members, **changes}
+
+    def test_min_score_must_be_a_whole_number_from_1_to_10(self):
+        for bad in (True, 0, 11, -1, 8.5, "8"):
+            self.assertTrue(gate.config_problems(self.config(min_score=bad)), bad)
+
+    def test_a_codex_member_with_a_claude_option_is_refused(self):
+        config = self.config()
+        config["member"][0]["provider"] = "codex"
+        self.assertTrue(gate.config_problems(config))
+
+    def test_a_member_needs_exactly_one_option(self):
+        none, two = self.config(), self.config()
+        del none["member"][0]["effort"]
+        two["member"][0]["thinking"] = True
+        self.assertTrue(gate.config_problems(none))
+        self.assertTrue(gate.config_problems(two))
+
+    def test_an_option_value_must_be_one_it_takes(self):
+        config = self.config()
+        config["member"][0]["effort"] = "hgih"
+        self.assertTrue(gate.config_problems(config))
+
+    def test_an_unknown_provider_is_refused(self):
+        config = self.config()
+        config["member"][0]["provider"] = "gemini"
+        self.assertTrue(gate.config_problems(config))
 
     def test_a_full_council_is_valid(self):
         self.assertEqual(gate.config_problems(self.config()), [])
@@ -111,6 +185,30 @@ class Config(unittest.TestCase):
 
     def test_the_committed_council_is_valid(self):
         self.assertEqual(gate.config_problems(gate.council()), [])
+
+
+class Paths(unittest.TestCase):
+    RULES = [(g, gate.glob_to_regex(g)) for g in ("gradle/**", "**build.gradle.kts", "api/data/*.java")]
+
+    def test_a_change_under_a_protected_glob_needs_review(self):
+        dead, hits = gate.needs_review(["api/data/Store.java", "README.md"],
+                                       ["gradle/a.kts", "build.gradle.kts", "api/data/Store.java"], self.RULES)
+        self.assertEqual(dead, [])
+        self.assertEqual(hits, [("api/data/Store.java", "api/data/*.java")])
+
+    def test_star_stays_inside_one_folder(self):
+        _, hits = gate.needs_review(["api/data/deep/Store.java"], ["gradle/a", "build.gradle.kts",
+                                                                   "api/data/A.java"], self.RULES)
+        self.assertEqual(hits, [])
+
+    def test_a_glob_that_matches_nothing_is_reported(self):
+        dead, _ = gate.needs_review([], ["gradle/a", "build.gradle.kts"], self.RULES)
+        self.assertEqual(dead, ["api/data/*.java"])
+
+    def test_nested_build_files_are_protected(self):
+        _, hits = gate.needs_review(["neoforge/build.gradle.kts"], ["gradle/a", "build.gradle.kts",
+                                                                     "api/data/A.java"], self.RULES)
+        self.assertEqual(hits, [("neoforge/build.gradle.kts", "**build.gradle.kts")])
 
 
 if __name__ == "__main__":

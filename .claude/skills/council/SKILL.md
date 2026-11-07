@@ -10,6 +10,9 @@ place of a person: deep reviewers find what's wrong, and small models ask why th
 In Hadron the Council check (`.github/workflows/council.yml`) blocks a PR touching a path in
 `.github/council-paths.txt` until the PR description holds a passing review of its head commit.
 
+In this skill, **you are the author**: the agent running the council on its own PR. You fix, answer and record. The
+**owner** is the person the agent works for, who decides only what changes a PR's purpose.
+
 ## Before a round
 
 Fix what you already know about, answer open PR comments, and run the checks the change needs (`./gradlew build`, and
@@ -41,12 +44,15 @@ placeholders filled in. Write the brief out; don't paraphrase the quoted parts.
 > and not the obvious alternative, why this name, why this is here and not there, what happens if this is empty or
 > missing, why this proves what it says. Each question names a file and line. Don't score and don't propose fixes.
 
-From round 2 on, also give them the PR's "Council questions" section and add: "First, for each earlier question, say
-settled or open, and why." So a question stays open across rounds until its asker agrees it's settled. Ask each to end
-with `Tally: <asked> asked, <open> open`.
+Label each asker's questions by asker in the PR's "Council questions" section (for example S1, S2 for one, T1, T2 for
+the other). From round 2 on, give each asker its own earlier questions with their answers, and add: "First, for each
+of your earlier questions, say settled or open, and why." So a question stays open across passes until the asker who
+asked it agrees it's settled, and each tally counts only that asker's questions. Ask each to end with
+`Tally: <asked> asked, <open> open`.
 
-**Explainers** (`role = "explain"`) stand in for a plugin-writing agent that knows nothing of Hadron, so they must not
-learn what the change is for. Give them a snapshot with no history, not the worktree:
+**Explainers** (`role = "explain"`) stand in for an agent meeting this code for the first time, so they must not hear
+the author's account of the change: no commit messages, no PR, no purpose. What the code and its docs say about
+themselves is part of the code, and stays in. Give them a snapshot with no history, not the worktree:
 
 ```bash
 dir=$(mktemp -d /tmp/council-explain-XXXX)
@@ -100,9 +106,13 @@ design is wrong, not that it needs one more patch.
   whole class of finding can't happen, rather than fixing the instances. A redesign within the PR's purpose is yours to
   make; say in the PR which findings it removes and why. One that changes the purpose is the owner's call.
 - **A Confirm pass** may follow the last round, once, when that round's deep reviewers all passed and only questions
-  or misreadings were left. Settle them, push, and run the whole council again as "Confirm". It must pass with nothing
-  left to fix; anything it finds means the architecture gets reconsidered, below.
-- **If round 3 (or its Confirm pass) doesn't pass, there is no round 4.** Stop changing code and reconsider the
+  or misreadings were left. Settle them, push, and run the whole council again as "Confirm", with a narrower brief:
+  deep reviewers re-score the change; askers rule settled or open on their listed questions and ask nothing new;
+  explainers explain again, and you check only whether the misreadings already listed came back. New questions or
+  misreadings in Confirm aren't counted (put them in the PR as follow-ups), so the gate refuses a Confirm whose totals
+  differ from the round before it. A listed misreading that comes back, a question still open, or a deep score below
+  the bar means the architecture gets reconsidered, below.
+- **If the last round doesn't pass and can't take a Confirm, or its Confirm doesn't pass, there is no round 4.** Stop changing code and reconsider the
   architecture:
   1. List every finding across the rounds, grouped by the part of the design it came from.
   2. Name the root cause: the assumption or structure those findings share.
