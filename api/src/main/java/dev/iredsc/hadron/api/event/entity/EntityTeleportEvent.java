@@ -10,8 +10,9 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * An entity is about to move other than by walking: a command, an ender pearl, chorus fruit, an enderman, a portal,
- * a mod's waystone or teleporter. Its passengers travel with it and are listed here rather than getting their own
- * events. Cancel it and nothing moves; an ender pearl's fall damage is not dealt.
+ * a mod's waystone or teleporter. Its passengers are listed here rather than getting their own events, and go wherever
+ * it goes within a world. A move to another world that no listener redirected keeps vanilla's rule, which leaves riders
+ * behind (a ridden pig sent with {@code /execute in ... run tp}); a redirect with {@link #setTo} always takes them. Cancel it and nothing moves; an ender pearl's fall damage is not dealt.
  *
  * <p>{@link #setTo} sends it somewhere else instead, in this world or another, with its passengers. A redirected ender
  * pearl still deals its fall damage. Chorus fruit and endermen sent elsewhere in the same world still settle on the

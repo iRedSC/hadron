@@ -26,8 +26,6 @@ import net.minecraft.world.phys.Vec3;
 public final class EntityTeleports {
     /** Entities in a teleport already asked about, or being moved by the port itself, with their passengers. */
     private static final Set<Entity> travelling = Collections.newSetFromMap(new IdentityHashMap<>());
-    /** Above zero while the port moves something it can't name (players out of an unloading world). */
-    private static int quiet;
     /** A cause NeoForge told us about for this entity in this tick, and whether it was already asked. */
     private static Entity marked;
     private static int markedTick;
@@ -40,11 +38,11 @@ public final class EntityTeleports {
 
     /** Whether either is in a teleport under way, so a dismount it causes can't be refused. */
     static boolean inProgress(Entity rider, Entity vehicle) {
-        return quiet > 0 || travelling.contains(rider) || travelling.contains(vehicle);
+        return travelling.contains(rider) || travelling.contains(vehicle);
     }
 
     private static boolean suppressed(Entity entity) {
-        return quiet > 0 || travelling.contains(entity);
+        return travelling.contains(entity);
     }
 
     /**
@@ -198,18 +196,6 @@ public final class EntityTeleports {
         }
     }
 
-    /**
-     * Moves something without firing teleport events, for any entity: only for moves that can't name what they move.
-     * Prefer {@link #quietly(Entity, Runnable)}, which leaves other entities' teleports meanwhile to be asked about.
-     */
-    static void quietly(Runnable move) {
-        quiet++;
-        try {
-            move.run();
-        } finally {
-            quiet--;
-        }
-    }
 
     /** Marks the next teleport of this entity, this tick, as a portal's. */
     public static void portal(Entity entity) {

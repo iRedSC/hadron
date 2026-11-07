@@ -232,7 +232,7 @@ final class WorldsManager implements Worlds.Backend {
             player.teleportTo(target, spot.x, spot.y, spot.z, player.getYRot(), player.getXRot());
         }
         for (ServerPlayer player : List.copyOf(level.players())) {
-            EntityTeleports.quietly(() -> player.teleportTo(target, spot.x, spot.y, spot.z, player.getYRot(),
+            EntityTeleports.quietly(player, () -> player.teleportTo(target, spot.x, spot.y, spot.z, player.getYRot(),
                     player.getXRot()));
         }
         if (!level.players().isEmpty()) {
@@ -398,7 +398,7 @@ final class WorldsManager implements Worlds.Backend {
         ServerLevel overworld = server.overworld();
         Vec3 spawn = Vec3.atBottomCenterOf(overworld.getSharedSpawnPos());
         for (ServerPlayer player : List.copyOf(level.players())) {
-            EntityTeleports.quietly(() -> player.teleportTo(overworld, spawn.x, spawn.y, spawn.z, player.getYRot(),
+            EntityTeleports.quietly(player, () -> player.teleportTo(overworld, spawn.x, spawn.y, spawn.z, player.getYRot(),
                     player.getXRot()));
         }
         unpublish(dimension, opened);

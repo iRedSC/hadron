@@ -32,6 +32,8 @@ While a modded block entity or entity ticks, core makes it the actor, with no ow
 
 `Level.setBlock` and its neighbours run millions of times. An event fires only when someone listens and either an actor is on the stack or the position matters to a listener (a region, a logged area). Otherwise a server without bridges would get slower for nothing. This gets a benchmark before any bridge is built.
 
+**Not built yet: listeners can't name the positions that matter to them.** Until they can, a write with no actor on the stack (an unbridged mod's queued task calling `setBlock` directly) fires nothing even while a region plugin listens, so it is an interception gap, not an `Unknown` action that protection could deny. Regions need this before they ship.
+
 ## Coverage report
 
 The owner never has to work out which bridges are missing. At startup, and on `/hadron coverage`, Hadron lists every installed mod that adds blocks, block entities, entities or items and has no bridge loaded, with:
@@ -85,6 +87,7 @@ Two plugin integrations come with them:
 ## What's next
 
 1. The actor stack and core's events at their chokepoints, with the chokepoint benchmark.
-2. The coverage report and the official bridge list.
-3. The acceptance test as a kit any bridge can run.
-4. The three pilot bridges, then this document rewritten from what they taught.
+2. Areas of interest: a way for a listener to name the positions that matter to it, so actorless writes there fire as `Unknown` (see "The chokepoint cost").
+3. The coverage report and the official bridge list.
+4. The acceptance test as a kit any bridge can run.
+5. The three pilot bridges, then this document rewritten from what they taught.
