@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.data;
 
+import org.jspecify.annotations.Nullable;
 import java.util.Set;
 
 /**
@@ -26,7 +27,7 @@ public interface PersistentDataContainer {
      *
      * @throws IllegalArgumentException when the key holds a value of another type; the message names both
      */
-    <P, C> C get(NamespacedKey key, PersistentDataType<P, C> type);
+    <P, C> @Nullable C get(NamespacedKey key, PersistentDataType<P, C> type);
 
     /** The value, or {@code defaultValue} when the key holds none. A value of another type still throws. */
     <P, C> C getOrDefault(NamespacedKey key, PersistentDataType<P, C> type, C defaultValue);

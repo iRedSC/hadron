@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.block;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -36,7 +37,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
         bridges = "drops the mod spawns itself when it breaks or harvests a block, before spawning them; honour the "
                 + "edited list and experience")
 public class BlockDropItemEvent extends BlockEvent implements Cancellable {
-    private final BlockEntity blockEntity;
+    private final @Nullable BlockEntity blockEntity;
     private final List<ItemEntity> items;
     private final ItemStack tool;
     private int experience;
@@ -48,7 +49,7 @@ public class BlockDropItemEvent extends BlockEvent implements Cancellable {
      * @param items the live list of item entities about to be added to the world
      * @param tool what broke it; {@code ItemStack.EMPTY} when nothing was held
      */
-    public BlockDropItemEvent(ServerLevel level, BlockPos pos, BlockState state, BlockEntity blockEntity,
+    public BlockDropItemEvent(ServerLevel level, BlockPos pos, BlockState state, @Nullable BlockEntity blockEntity,
             List<ItemEntity> items, ItemStack tool, int experience, Actor actor) {
         super(level, pos, state, List.of(broken(level, pos, state, blockEntity)), actor);
         this.blockEntity = blockEntity;
@@ -61,7 +62,8 @@ public class BlockDropItemEvent extends BlockEvent implements Cancellable {
      * The break, from the block and block entity that were there to what is there now. The data before is copied
      * now: by the time drops roll, a player's break has already removed the block entity, so reading it later throws.
      */
-    private static BlockChange broken(ServerLevel level, BlockPos pos, BlockState state, BlockEntity blockEntity) {
+    private static BlockChange broken(ServerLevel level, BlockPos pos, BlockState state,
+            @Nullable BlockEntity blockEntity) {
         BlockState now = level.getBlockState(pos);
         CompoundTag before = blockEntity != null ? blockEntity.saveWithFullMetadata(level.registryAccess()) : null;
         return BlockChange.withData(level, pos, state, now, before,

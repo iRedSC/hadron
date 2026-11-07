@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.neoforge.mixin.item.CompoundContainerAccessor;
 import java.lang.reflect.Field;
@@ -27,7 +29,7 @@ public final class InventoryHolders {
     private InventoryHolders() {}
 
     /** What holds a container. {@code viewer} lets a player's own ender chest be named; may be null. */
-    public static InventoryHolder of(Container container, Player viewer) {
+    public static InventoryHolder of(Container container, @Nullable Player viewer) {
         if (container instanceof BlockEntity be && be.getLevel() instanceof ServerLevel level) {
             return new InventoryHolder.Block(level, be.getBlockPos());
         }
@@ -97,6 +99,7 @@ public final class InventoryHolders {
      * anvils, enchanting tables, and most mods' menus), an entity (horses) or a merchant. Found by type, so mods' menus
      * are covered too; a field the module system hides is skipped.
      */
+    @StaticState(reason = "fields found by reflection, derived from the class alone and stored on it, so an entry never goes stale and goes with its class loader")
     private static final ClassValue<List<Field>> FIELDS = new ClassValue<>() {
         @Override
         protected List<Field> computeValue(Class<?> type) {

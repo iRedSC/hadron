@@ -1,8 +1,8 @@
 diff --git a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-index 5ce626b..b048bc8 100644
+index 28c29bf..33347fc 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-@@ -921,7 +921,6 @@ public final class PluginHost implements PluginManager {
+@@ -893,7 +893,6 @@ public final class PluginHost implements PluginManager {
                          + ASYNC_GRACE_MILLIS / 1000 + "s; " + (callOnDisable ? "disabling" : "stopping") + " it anyway. "
                          + "A background task that loops should return once isEnabled() is false");
              }
@@ -10,7 +10,7 @@ index 5ce626b..b048bc8 100644
              if (callOnDisable && running instanceof State.Enabled) {
                  try {
                      plugin.onDisable();
-@@ -1203,28 +1202,6 @@ public final class PluginHost implements PluginManager {
+@@ -1189,29 +1188,6 @@ public final class PluginHost implements PluginManager {
      private static final java.util.List<java.util.function.Consumer<JavaPlugin>> DISABLE_HOOKS =
              new java.util.concurrent.CopyOnWriteArrayList<>();
  
@@ -23,6 +23,7 @@ index 5ce626b..b048bc8 100644
 -        BEFORE_DISABLE_HOOKS.add(java.util.Objects.requireNonNull(hook, "hook"));
 -    }
 -
+-    @StaticState(reason = "Hadron's own modules register these once when the mod loads; plugins never do")
 -    private static final java.util.List<java.util.function.ObjLongConsumer<JavaPlugin>> BEFORE_DISABLE_HOOKS =
 -            new java.util.concurrent.CopyOnWriteArrayList<>();
 -
@@ -40,10 +41,10 @@ index 5ce626b..b048bc8 100644
          for (java.util.function.Consumer<JavaPlugin> hook : DISABLE_HOOKS) {
              try {
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java
-index 7c098f8..712aa91 100644
+index 6071410..d52bb1b 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java
-@@ -10,7 +10,6 @@ import java.util.ArrayList;
+@@ -12,7 +12,6 @@ import java.util.ArrayList;
  import java.util.Comparator;
  import java.util.List;
  import java.util.concurrent.ConcurrentHashMap;
@@ -51,7 +52,7 @@ index 7c098f8..712aa91 100644
  import net.minecraft.network.protocol.Packet;
  import net.minecraft.network.protocol.PacketFlow;
  import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
-@@ -125,7 +124,6 @@ final class NetPackets {
+@@ -130,7 +129,6 @@ final class NetPackets {
                  throw new IllegalStateException(plugin.getName() + " can't register packet handlers while it isn't "
                          + "enabled; register them in onEnable");
              }
@@ -59,13 +60,15 @@ index 7c098f8..712aa91 100644
              Handler h = new Handler(plugin, type, priority, body, registered++, side);
              side.all.add(h);
              side.changed();
-@@ -133,43 +131,9 @@ final class NetPackets {
+@@ -138,45 +136,9 @@ final class NetPackets {
          }
      }
  
 -    /** Each plugin's handler calls in progress, so disabling can wait for them; a count is its own monitor. */
+-    @StaticState(reason = "each plugin's in-flight handler count, removed in its disable hook")
 -    private static final ConcurrentHashMap<JavaPlugin, int[]> RUNNING = new ConcurrentHashMap<>();
 -    /** The plugin whose handler this thread is inside, so a handler that disables its own plugin doesn't wait on itself. */
+-    @StaticState(reason = "the plugin whose handler this thread is running, restored in a finally when the handler returns")
 -    private static final ThreadLocal<JavaPlugin> INSIDE = new ThreadLocal<>();
 -
 -    /**
@@ -103,7 +106,7 @@ index 7c098f8..712aa91 100644
              for (Side side : new Side[] {OUT, IN}) {
                  boolean changed = side.all.removeIf(h -> {
                      if (h.plugin != plugin) return false;
-@@ -253,29 +217,15 @@ final class NetPackets {
+@@ -260,29 +222,15 @@ final class NetPackets {
          for (Handler h : handlers) {
              // A dispatch may hold a snapshot from before an unregister or a disable. The plugin stops counting as
              // enabled before its onDisable runs, so no handler runs against what onDisable closed.
@@ -136,10 +139,10 @@ index 7c098f8..712aa91 100644
          }
          return event.cancelled ? null : event.packet;
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPort.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPort.java
-index 8dd0d27..36bb88b 100644
+index dcd1473..471de37 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPort.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPort.java
-@@ -30,7 +30,6 @@ final class NetPort implements NetBackend {
+@@ -31,7 +31,6 @@ final class NetPort implements NetBackend {
          // Lowest, so the name a plugin asked for is the one shown, whatever mods add earlier.
          NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST, NetNames::nameFormat);
          NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST, NetNames::tabListNameFormat);

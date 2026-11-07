@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.Hadron;
 import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.net.PacketEvent;
@@ -27,6 +29,7 @@ final class NetPackets {
 
     private static final Handler[] NONE = new Handler[0];
     private static final Object LOCK = new Object();
+    @StaticState(reason = "a sequence ordering handlers registered at one priority; it only needs to grow")
     private static long registered;
 
     static final Side OUT = new Side(true);
@@ -84,7 +87,7 @@ final class NetPackets {
         }
 
         /** Null when nobody listens to this class. */
-        Handler[] handlers(Class<?> type) {
+        Handler @Nullable [] handlers(Class<?> type) {
             if (!any) return null;
             ConcurrentHashMap<Class<?>, Handler[]> map = byClass;
             Handler[] h = map.get(type);
@@ -134,8 +137,10 @@ final class NetPackets {
     }
 
     /** Each plugin's handler calls in progress, so disabling can wait for them; a count is its own monitor. */
+    @StaticState(reason = "each plugin's in-flight handler count, removed in its disable hook")
     private static final ConcurrentHashMap<JavaPlugin, int[]> RUNNING = new ConcurrentHashMap<>();
     /** The plugin whose handler this thread is inside, so a handler that disables its own plugin doesn't wait on itself. */
+    @StaticState(reason = "the plugin whose handler this thread is running, restored in a finally when the handler returns")
     private static final ThreadLocal<JavaPlugin> INSIDE = new ThreadLocal<>();
 
     /**
@@ -192,14 +197,14 @@ final class NetPackets {
      * A packet on its way to a player in game. Returns what to send instead, the same packet if nothing changed, or
      * null to send nothing.
      */
-    static Packet<?> outgoing(ServerPlayer player, Packet<?> packet) {
+    static @Nullable Packet<?> outgoing(ServerPlayer player, Packet<?> packet) {
         if (packet.isTerminal()) return packet;
         if (packet instanceof ClientboundBundlePacket bundle) return bundle(player, bundle);
         return single(player, packet);
     }
 
     @SuppressWarnings("unchecked")
-    private static Packet<?> bundle(ServerPlayer player, ClientboundBundlePacket bundle) {
+    private static @Nullable Packet<?> bundle(ServerPlayer player, ClientboundBundlePacket bundle) {
         List<Packet<? super ClientGamePacketListener>> parts = null;
         int index = 0;
         for (Packet<? super ClientGamePacketListener> part : bundle.subPackets()) {
@@ -226,7 +231,7 @@ final class NetPackets {
         return parts.isEmpty() ? null : new ClientboundBundlePacket(parts);
     }
 
-    private static Packet<?> single(ServerPlayer player, Packet<?> packet) {
+    private static @Nullable Packet<?> single(ServerPlayer player, Packet<?> packet) {
         Handler[] handlers = OUT.handlers(packet.getClass());
         if (handlers != null) {
             packet = run(handlers, player, packet, true);
@@ -239,7 +244,7 @@ final class NetPackets {
     }
 
     /** A packet from a player in game, before the server handles it. Null to drop it. */
-    static Packet<?> incoming(ServerPlayer player, Packet<?> packet) {
+    static @Nullable Packet<?> incoming(ServerPlayer player, Packet<?> packet) {
         Handler[] handlers = IN.handlers(packet.getClass());
         return handlers == null ? packet : run(handlers, player, packet, false);
     }
@@ -248,7 +253,7 @@ final class NetPackets {
         return IN.any;
     }
 
-    private static Packet<?> run(Handler[] handlers, ServerPlayer player, Packet<?> packet, boolean outgoing) {
+    private static @Nullable Packet<?> run(Handler[] handlers, ServerPlayer player, Packet<?> packet, boolean outgoing) {
         Event event = new Event(player, packet, outgoing);
         for (Handler h : handlers) {
             // A dispatch may hold a snapshot from before an unregister or a disable. The plugin stops counting as
@@ -286,7 +291,7 @@ final class NetPackets {
         private final boolean outgoing;
         Packet<?> packet;
         boolean cancelled;
-        Handler current;
+        @Nullable Handler current;
 
         Event(ServerPlayer player, Packet<?> packet, boolean outgoing) {
             this.player = player;
@@ -351,16 +356,27 @@ final class NetPackets {
         public void runOnServerThread(Runnable task) {
             if (task == null) throw new IllegalArgumentException("runOnServerThread(null): pass the code to run");
             // A plugin disabling, or a server stopping, mid-packet: the task is skipped, as documented.
-            if (!current.plugin.isEnabled() || Hadron.Lifecycle.running() == null) return;
+            Handler handler = handler();
+            if (!handler.plugin.isEnabled() || Hadron.Lifecycle.running() == null) return;
             try {
-                Hadron.getScheduler().runTask(current.plugin, task);
+                Hadron.getScheduler().runTask(handler.plugin, task);
             } catch (IllegalStateException disabledMeanwhile) {
                 // Lost the race with the plugin's disable; skipped as well.
             }
         }
 
+        /** The handler being called now; a packet event is only ever seen from inside one. */
+        private Handler handler() {
+            Handler handler = current;
+            if (handler == null) {
+                throw new IllegalStateException("This packet event was kept past its handler; read and change it only "
+                        + "inside the handler that received it");
+            }
+            return handler;
+        }
+
         private void looking(String what) {
-            if (current.priority == EventPriority.MONITOR) {
+            if (handler().priority == EventPriority.MONITOR) {
                 throw new IllegalStateException("A MONITOR packet handler can't " + what + " the packet; register it "
                         + "at HIGHEST to change packets");
             }

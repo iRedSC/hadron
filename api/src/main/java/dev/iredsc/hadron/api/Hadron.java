@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.plugin.PluginManager;
 import dev.iredsc.hadron.api.plugin.Scheduler;
 import dev.iredsc.hadron.api.plugin.Server;
@@ -13,7 +15,8 @@ import net.minecraft.server.level.ServerPlayer;
  * at hand. Plugins usually go through {@code getServer()} instead.
  */
 public final class Hadron {
-    private static volatile Server server;
+    @StaticState(reason = "the static entry point plugins call, as Bukkit's is; the port installs the running server when it starts and clears it when it stops")
+    private static volatile @Nullable Server server;
 
     private Hadron() {}
 
@@ -45,11 +48,13 @@ public final class Hadron {
         return getServer().getOnlinePlayers();
     }
 
-    public static ServerPlayer getPlayer(String name) {
+    /** Exact name, ignoring case; null when they're offline. */
+    public static @Nullable ServerPlayer getPlayer(String name) {
         return getServer().getPlayer(name);
     }
 
-    public static ServerPlayer getPlayer(UUID id) {
+    /** Null when they're offline. */
+    public static @Nullable ServerPlayer getPlayer(UUID id) {
         return getServer().getPlayer(id);
     }
 
@@ -65,12 +70,12 @@ public final class Hadron {
     public static final class Lifecycle {
         private Lifecycle() {}
 
-        public static void install(Server running) {
+        public static void install(@Nullable Server running) {
             server = running;
         }
 
         /** Null while no server is running. */
-        public static Server running() {
+        public static @Nullable Server running() {
             return server;
         }
     }

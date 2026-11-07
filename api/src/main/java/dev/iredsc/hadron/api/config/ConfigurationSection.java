@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.config;
 
+import org.jspecify.annotations.Nullable;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -28,24 +29,24 @@ public interface ConfigurationSection {
     /** The last part of {@link #getCurrentPath}. */
     String getName();
 
-    ConfigurationSection getParent();
+    @Nullable ConfigurationSection getParent();
 
-    Object get(String path);
+    @Nullable Object get(String path);
 
-    Object get(String path, Object def);
+    @Nullable Object get(String path, @Nullable Object def);
 
     /** Null removes the value. A map becomes a section. */
-    void set(String path, Object value);
+    void set(String path, @Nullable Object value);
 
     ConfigurationSection createSection(String path);
 
-    ConfigurationSection getConfigurationSection(String path);
+    @Nullable ConfigurationSection getConfigurationSection(String path);
 
     boolean isConfigurationSection(String path);
 
-    String getString(String path);
+    @Nullable String getString(String path);
 
-    String getString(String path, String def);
+    @Nullable String getString(String path, @Nullable String def);
 
     boolean isString(String path);
 
@@ -72,9 +73,9 @@ public interface ConfigurationSection {
 
     boolean isBoolean(String path);
 
-    List<?> getList(String path);
+    @Nullable List<?> getList(String path);
 
-    List<?> getList(String path, List<?> def);
+    @Nullable List<?> getList(String path, @Nullable List<?> def);
 
     boolean isList(String path);
 

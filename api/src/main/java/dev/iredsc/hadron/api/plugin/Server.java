@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.plugin;
 
+import org.jspecify.annotations.Nullable;
 import java.io.File;
 import java.util.List;
 import java.util.UUID;
@@ -23,10 +24,10 @@ public interface Server {
     List<ServerPlayer> getOnlinePlayers();
 
     /** Exact name, ignoring case; null when they're offline. */
-    ServerPlayer getPlayer(String name);
+    @Nullable ServerPlayer getPlayer(String name);
 
     /** Null when they're offline. */
-    ServerPlayer getPlayer(UUID id);
+    @Nullable ServerPlayer getPlayer(UUID id);
 
     /** Sends to every player and the console. {@code &} color codes work. */
     void broadcastMessage(String message);

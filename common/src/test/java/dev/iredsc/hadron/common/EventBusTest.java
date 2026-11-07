@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -480,6 +481,7 @@ class EventBusTest {
     // ---- threads ----
 
     @Test
+    @Nondeterministic(reason = "Subscription.awaitIdle takes a System.nanoTime deadline, so testing it reads that clock; every margin is seconds")
     void awaitIdleWaitsForACallOnAnotherThread() throws Exception {
         CountDownLatch inside = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -503,6 +505,7 @@ class EventBusTest {
     }
 
     @Test
+    @Nondeterministic(reason = "Subscription.awaitIdle takes a System.nanoTime deadline, so testing it reads that clock; every margin is seconds")
     void awaitIdleReturnsAtOnceWhenNothingIsCalling() {
         EventBus.Subscription sub = subscribe(new Listener() {
             @EventHandler
@@ -514,6 +517,7 @@ class EventBusTest {
     }
 
     @Test
+    @Nondeterministic(reason = "Subscription.awaitIdle takes a System.nanoTime deadline, so testing it reads that clock; the release sleeps so the wait has begun before the call ends, and the test passes either way, only proving less")
     void awaitIdleWaitsUntilACallInProgressEnds() throws Exception {
         CountDownLatch inside = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
@@ -546,6 +550,7 @@ class EventBusTest {
     }
 
     @Test
+    @Nondeterministic(reason = "Subscription.awaitIdle takes a System.nanoTime deadline, so testing it reads that clock; every margin is seconds")
     void awaitIdleFromInsideTheHandlerDoesntWaitForItself() {
         List<EventBus.Subscription> subs = new ArrayList<>();
         List<Boolean> idle = new ArrayList<>();

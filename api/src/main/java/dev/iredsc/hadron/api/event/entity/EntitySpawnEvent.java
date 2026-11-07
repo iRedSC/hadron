@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -18,11 +19,11 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  */
 @FiredBy(core = FULL)
 public class EntitySpawnEvent extends EntityEvent implements Cancellable {
-    private final MobSpawnType reason;
+    private final @Nullable MobSpawnType reason;
     private boolean cancelled;
 
     /** {@code reason} is null for entities that aren't mobs and mobs spawned without one. */
-    public EntitySpawnEvent(Entity entity, MobSpawnType reason, Actor actor) {
+    public EntitySpawnEvent(Entity entity, @Nullable MobSpawnType reason, Actor actor) {
         super(entity, actor);
         this.reason = reason;
     }

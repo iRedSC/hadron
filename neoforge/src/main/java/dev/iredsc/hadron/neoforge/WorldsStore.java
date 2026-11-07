@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
@@ -43,7 +44,7 @@ final class WorldsStore {
 
     /** One created world. {@code spawn} is null until the world first loads and finds one. */
     record Definition(ResourceLocation key, ResourceKey<DimensionType> type, WorldGenerator generator, long seed,
-            BlockPos spawn, float angle, boolean keepSpawnLoaded, boolean loaded) {
+            @Nullable BlockPos spawn, float angle, boolean keepSpawnLoaded, boolean loaded) {
         Definition withSpawn(BlockPos pos, float newAngle) {
             return new Definition(key, type, generator, seed, pos, newAngle, keepSpawnLoaded, loaded);
         }
@@ -76,7 +77,7 @@ final class WorldsStore {
         return file;
     }
 
-    Definition get(ResourceLocation key) {
+    @Nullable Definition get(ResourceLocation key) {
         return worlds.get(key);
     }
 

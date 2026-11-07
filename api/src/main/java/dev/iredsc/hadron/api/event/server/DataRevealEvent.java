@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.server;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
@@ -27,8 +28,8 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 public class DataRevealEvent extends ServerEvent implements Cancellable {
     private final ServerPlayer viewer;
     private final ServerLevel level;
-    private final BlockPos pos;
-    private final Entity entity;
+    private final @Nullable BlockPos pos;
+    private final @Nullable Entity entity;
     private final CompoundTag data;
     private boolean cancelled;
 

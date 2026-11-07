@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.plugin;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.config.YamlConfiguration;
 import java.io.File;
 import java.io.IOException;
@@ -22,7 +23,7 @@ import org.slf4j.Logger;
  */
 public abstract class JavaPlugin implements CommandExecutor, TabCompleter {
     private final PluginContext context;
-    private YamlConfiguration config;
+    private @Nullable YamlConfiguration config;
 
     protected JavaPlugin() {
         if (!(getClass().getClassLoader() instanceof PluginContext loader)) {
@@ -53,7 +54,7 @@ public abstract class JavaPlugin implements CommandExecutor, TabCompleter {
     }
 
     @Override
-    public List<String> onTabComplete(CommandSourceStack sender, PluginCommand command, String label, String[] args) {
+    public @Nullable List<String> onTabComplete(CommandSourceStack sender, PluginCommand command, String label, String[] args) {
         return null;
     }
 
@@ -98,26 +99,32 @@ public abstract class JavaPlugin implements CommandExecutor, TabCompleter {
     }
 
     /** A file from inside this plugin's jar, or null. */
-    public final InputStream getResource(String path) {
+    public final @Nullable InputStream getResource(String path) {
         return context.resource(path);
     }
 
     /** {@code config.yml} in the data folder, with the jar's own config.yml behind it for anything missing. */
     public final YamlConfiguration getConfig() {
-        if (config == null) reloadConfig();
-        return config;
+        YamlConfiguration loaded = config;
+        return loaded != null ? loaded : load();
     }
 
     public final void reloadConfig() {
-        config = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "config.yml"));
+        load();
+    }
+
+    private YamlConfiguration load() {
+        YamlConfiguration loaded = YamlConfiguration.loadConfiguration(new File(getDataFolder(), "config.yml"));
         try (InputStream defaults = getResource("config.yml")) {
             if (defaults != null) {
-                config.setDefaults(YamlConfiguration.loadConfiguration(
+                loaded.setDefaults(YamlConfiguration.loadConfiguration(
                         new InputStreamReader(defaults, StandardCharsets.UTF_8)));
             }
         } catch (IOException ignored) {
             // Closing a read-only stream from our own jar.
         }
+        config = loaded;
+        return loaded;
     }
 
     public final void saveConfig() {

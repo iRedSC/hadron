@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.item;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
@@ -24,7 +25,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 @FiredBy(core = PARTIAL, coreSees = "every vanilla slot, after the fact", bridges = "the mod's extra slots")
 public class EquipmentChangeEvent extends ItemEvent {
     private final LivingEntity entity;
-    private final EquipmentSlot slot;
+    private final @Nullable EquipmentSlot slot;
     private final String slotName;
     private final ItemStack from;
 
@@ -40,7 +41,7 @@ public class EquipmentChangeEvent extends ItemEvent {
         this(level, entity, null, Objects.requireNonNull(slotName, "slotName"), from, to, actor);
     }
 
-    private EquipmentChangeEvent(ServerLevel level, LivingEntity entity, EquipmentSlot slot, String slotName,
+    private EquipmentChangeEvent(ServerLevel level, LivingEntity entity, @Nullable EquipmentSlot slot, String slotName,
             ItemStack from, ItemStack to, Actor actor) {
         super(level, to.copy(), actor);
         this.entity = Objects.requireNonNull(entity, "entity");

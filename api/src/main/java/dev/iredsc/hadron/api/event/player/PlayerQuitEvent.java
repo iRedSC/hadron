@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.event.FiredBy;
+import org.jspecify.annotations.Nullable;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -13,25 +14,25 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  */
 @FiredBy(core = FULL)
 public class PlayerQuitEvent extends PlayerEvent {
-    private Component quitMessage;
+    private @Nullable Component quitMessage;
 
     public PlayerQuitEvent(ServerPlayer player) {
         this(player, null);
     }
 
     /** @param quitMessage the line about to be broadcast, or null for none */
-    public PlayerQuitEvent(ServerPlayer player, Component quitMessage) {
+    public PlayerQuitEvent(ServerPlayer player, @Nullable Component quitMessage) {
         super(player);
         this.quitMessage = quitMessage;
     }
 
     /** The line about to be broadcast to everyone, or null when none will be. */
-    public Component getQuitMessage() {
+    public @Nullable Component getQuitMessage() {
         return quitMessage;
     }
 
     /** Broadcast this instead; null or an empty component broadcasts nothing. */
-    public void setQuitMessage(Component quitMessage) {
+    public void setQuitMessage(@Nullable Component quitMessage) {
         this.quitMessage = quitMessage;
     }
 }

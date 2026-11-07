@@ -84,7 +84,7 @@ class ResourceTest {
     @Covers(value = ResourceHolder.Account.class, method = "player")
     @Test
     void aPlayersAccountIsKeyedByUuid() {
-        UUID id = UUID.randomUUID();
+        UUID id = new UUID(0x1234_5678L, 0x9abc_def0L);
         assertEquals(id.toString(), ResourceHolder.Account.player(id).id());
         assertThrows(IllegalArgumentException.class, () -> new ResourceHolder.Account(" "));
         assertThrows(NullPointerException.class, () -> ResourceHolder.Account.player(null));

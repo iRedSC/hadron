@@ -2,6 +2,7 @@ package dev.iredsc.hadron.selftest.hostile;
 
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.PluginCommand;
+import dev.iredsc.hadron.checks.Nondeterministic;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import net.minecraft.commands.CommandSourceStack;
@@ -53,30 +54,36 @@ public final class HostilePlugin extends JavaPlugin {
             }, 1, 1);
         }
         if (is("forever") || is("reload")) {
-            getServer().getScheduler().runTaskAsynchronously(this, () -> {
-                log("forever started " + version);
-                boolean triedAfterDisable = false;
-                while (!released()) {
-                    if (!isEnabled() && !triedAfterDisable) {
-                        // A disabled version's leftover thread asking for server-thread work: it must never run.
-                        triedAfterDisable = true;
-                        try {
-                            getServer().getScheduler().runTask(this, () -> log("stale sync task ran " + version));
-                            log("stale schedule accepted " + version);
-                        } catch (RuntimeException refused) {
-                            log("stale schedule refused " + version);
-                        }
-                    }
-                    try {
-                        Thread.sleep(5);
-                    } catch (InterruptedException e) {
-                        // Never returns: that is the point. Only RELEASE ends it.
-                    }
-                }
-                log("forever returned " + version);
-            });
+            getServer().getScheduler().runTaskAsynchronously(this, this::runForever);
         }
         if (is("reload")) getServer().getScheduler().runTaskTimer(this, () -> log("tick " + version), 1, 1);
+    }
+
+    /** The task that never returns until {@link #RELEASE}, as a plugin's runaway worker thread would. */
+    @Nondeterministic(reason = "plays a plugin's runaway worker thread, which spins on its own; the test waits on the "
+            + "host with ticks, not on this")
+    private void runForever() {
+        String version = getDescription().getVersion();
+        log("forever started " + version);
+        boolean triedAfterDisable = false;
+        while (!released()) {
+            if (!isEnabled() && !triedAfterDisable) {
+                // A disabled version's leftover thread asking for server-thread work: it must never run.
+                triedAfterDisable = true;
+                try {
+                    getServer().getScheduler().runTask(this, () -> log("stale sync task ran " + version));
+                    log("stale schedule accepted " + version);
+                } catch (RuntimeException refused) {
+                    log("stale schedule refused " + version);
+                }
+            }
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                // Never returns: that is the point. Only RELEASE ends it.
+            }
+        }
+        log("forever returned " + version);
     }
 
     @Override

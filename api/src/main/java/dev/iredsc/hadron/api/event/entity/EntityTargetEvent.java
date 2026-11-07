@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -15,10 +16,10 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
  */
 @FiredBy(core = PARTIAL, coreSees = "mobs", bridges = "turret blocks")
 public class EntityTargetEvent extends EntityEvent implements Cancellable {
-    private LivingEntity target;
+    private @Nullable LivingEntity target;
     private boolean cancelled;
 
-    public EntityTargetEvent(LivingEntity entity, LivingEntity target, Actor actor) {
+    public EntityTargetEvent(LivingEntity entity, @Nullable LivingEntity target, Actor actor) {
         super(entity, actor);
         this.target = target;
     }
@@ -34,7 +35,7 @@ public class EntityTargetEvent extends EntityEvent implements Cancellable {
     }
 
     /** Make it target this instead; null to make it target nothing. */
-    public void setTarget(LivingEntity target) {
+    public void setTarget(@Nullable LivingEntity target) {
         this.target = target;
     }
 

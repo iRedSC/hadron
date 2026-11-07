@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Optional;
@@ -19,9 +20,9 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
                 + "expiry is after-only",
         fillIn = "old and new controller")
 public class EntityControlExpireEvent extends EntityEvent {
-    private final UUID controller;
+    private final @Nullable UUID controller;
 
-    public EntityControlExpireEvent(Entity entity, UUID controller, Actor actor) {
+    public EntityControlExpireEvent(Entity entity, @Nullable UUID controller, Actor actor) {
         super(entity, actor);
         this.controller = controller;
     }

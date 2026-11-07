@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.server.ServiceRegisterEvent;
 import dev.iredsc.hadron.api.event.server.ServiceUnregisterEvent;
@@ -112,7 +113,7 @@ final class Services implements ServicesManager {
     }
 
     /** Also drops emptied services, whose interface may be a plugin's class that would keep its old loader alive. */
-    private synchronized void removeWhere(Object provider, JavaPlugin plugin) {
+    private synchronized void removeWhere(@Nullable Object provider, @Nullable JavaPlugin plugin) {
         for (Iterator<Map.Entry<Class<?>, List<Registration>>> lists = byService.entrySet().iterator(); lists.hasNext(); ) {
             Map.Entry<Class<?>, List<Registration>> entry = lists.next();
             List<Registration> list = entry.getValue();
@@ -128,7 +129,7 @@ final class Services implements ServicesManager {
     }
 
     @Override
-    public synchronized <T> T load(Class<T> service) {
+    public synchronized <T> @Nullable T load(Class<T> service) {
         // Vault habit: plugins look the economy up as a service. It is Hadron's own, whoever stores the accounts.
         if (service == dev.iredsc.hadron.api.economy.Economy.class) {
             return service.cast(dev.iredsc.hadron.api.economy.Economy.Lifecycle.running());

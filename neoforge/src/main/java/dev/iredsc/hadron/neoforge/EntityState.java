@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import net.minecraft.world.level.Level;
 
@@ -9,14 +10,14 @@ import net.minecraft.world.level.Level;
  */
 public interface EntityState {
     /** The cached actor for this entity, or null until first asked or after its attribution changed. */
-    Actor hadron$actor();
+    @Nullable Actor hadron$actor();
 
-    void hadron$setActor(Actor actor);
+    void hadron$setActor(@Nullable Actor actor);
 
     /** Where the entity was last seen by the move check; only meaningful while {@link #hadron$tracked()}. */
     boolean hadron$tracked();
 
-    Level hadron$trackedLevel();
+    @Nullable Level hadron$trackedLevel();
 
     double hadron$trackedX();
 

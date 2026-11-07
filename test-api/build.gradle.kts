@@ -24,3 +24,11 @@ dependencies {
     compileOnly(platform("org.junit:junit-bom:5.13.4"))
     compileOnly("org.junit.jupiter:junit-jupiter-api")
 }
+
+// Compile-time checks (gradle/hadron-checks.gradle.kts): Error Prone's errors, NullAway, and Hadron's own checks.
+dependencies { compileOnly(project(":build-checks")) }
+extra["hadronChecks.nullAway"] = listOf("main")
+extra["hadronChecks.exemptions"] = true
+extra["hadronChecks.staticState"] = listOf("main")
+extra["hadronChecks.determinism"] = listOf<String>()
+apply(from = rootProject.file("gradle/hadron-checks.gradle.kts"))

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.entity.EntityVelocityEvent;
@@ -17,6 +18,7 @@ public final class EntityVelocities {
     private EntityVelocities() {}
 
     /** Above zero inside a knockback, which its own event reports. */
+    @StaticState(reason = "a server-thread depth count around one knockback, back to zero when it returns")
     static int knockback;
 
     /** The velocity to set: {@code next} itself, a listener's change, or the current one when cancelled. */
@@ -26,7 +28,7 @@ public final class EntityVelocities {
                 || !entity.isAddedToLevel()) {
             return next;
         }
-        Actor actor = Actors.currentOr(null);
+        Actor actor = EntityActors.current();
         if (actor == null || EntityActors.isSelf(actor, entity)) return next;
         Vec3 current = entity.getDeltaMovement();
         if (current.equals(next)) return next;

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.data;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import java.util.Locale;
 import java.util.Objects;
@@ -48,7 +49,7 @@ public final class NamespacedKey {
     }
 
     /** Parses {@code "namespace:key"}. Returns null when it isn't one, as Bukkit does. */
-    public static NamespacedKey fromString(String string) {
+    public static @Nullable NamespacedKey fromString(String string) {
         int colon = Objects.requireNonNull(string, "string").indexOf(':');
         if (colon <= 0 || colon == string.length() - 1) return null;
         String namespace = string.substring(0, colon);
@@ -58,7 +59,7 @@ public final class NamespacedKey {
     }
 
     /** Null when either part isn't valid; for reading keys back from storage. */
-    static NamespacedKey parse(String namespace, String key) {
+    static @Nullable NamespacedKey parse(String namespace, String key) {
         return NAMESPACE.matcher(namespace).matches() && KEY.matcher(key).matches()
                 ? new NamespacedKey(namespace, key) : null;
     }
@@ -87,7 +88,7 @@ public final class NamespacedKey {
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equals(@Nullable Object other) {
         return other instanceof NamespacedKey k && k.namespace.equals(namespace) && k.key.equals(key);
     }
 

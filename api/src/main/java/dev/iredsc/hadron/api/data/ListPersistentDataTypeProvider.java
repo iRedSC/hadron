@@ -4,22 +4,22 @@ import java.util.UUID;
 
 /** {@link PersistentDataType#LIST}: {@code PersistentDataType.LIST.strings()}, or {@code listTypeFrom(type)}. */
 public final class ListPersistentDataTypeProvider {
-    private static final ListPersistentDataType<Byte, Byte> BYTES = new ListType<>(Builtin.BYTE);
-    private static final ListPersistentDataType<Short, Short> SHORTS = new ListType<>(Builtin.SHORT);
-    private static final ListPersistentDataType<Integer, Integer> INTEGERS = new ListType<>(Builtin.INTEGER);
-    private static final ListPersistentDataType<Long, Long> LONGS = new ListType<>(Builtin.LONG);
-    private static final ListPersistentDataType<Float, Float> FLOATS = new ListType<>(Builtin.FLOAT);
-    private static final ListPersistentDataType<Double, Double> DOUBLES = new ListType<>(Builtin.DOUBLE);
-    private static final ListPersistentDataType<Byte, Boolean> BOOLEANS = new ListType<>(Builtin.BOOLEAN);
-    private static final ListPersistentDataType<String, String> STRINGS = new ListType<>(Builtin.STRING);
-    private static final ListPersistentDataType<UUID, UUID> UUIDS = new ListType<>(Builtin.UUID);
-    private static final ListPersistentDataType<byte[], byte[]> BYTE_ARRAYS =
+    private final ListPersistentDataType<Byte, Byte> BYTES = new ListType<>(Builtin.BYTE);
+    private final ListPersistentDataType<Short, Short> SHORTS = new ListType<>(Builtin.SHORT);
+    private final ListPersistentDataType<Integer, Integer> INTEGERS = new ListType<>(Builtin.INTEGER);
+    private final ListPersistentDataType<Long, Long> LONGS = new ListType<>(Builtin.LONG);
+    private final ListPersistentDataType<Float, Float> FLOATS = new ListType<>(Builtin.FLOAT);
+    private final ListPersistentDataType<Double, Double> DOUBLES = new ListType<>(Builtin.DOUBLE);
+    private final ListPersistentDataType<Byte, Boolean> BOOLEANS = new ListType<>(Builtin.BOOLEAN);
+    private final ListPersistentDataType<String, String> STRINGS = new ListType<>(Builtin.STRING);
+    private final ListPersistentDataType<UUID, UUID> UUIDS = new ListType<>(Builtin.UUID);
+    private final ListPersistentDataType<byte[], byte[]> BYTE_ARRAYS =
             new ListType<>(Builtin.BYTE_ARRAY);
-    private static final ListPersistentDataType<int[], int[]> INTEGER_ARRAYS =
+    private final ListPersistentDataType<int[], int[]> INTEGER_ARRAYS =
             new ListType<>(Builtin.INTEGER_ARRAY);
-    private static final ListPersistentDataType<long[], long[]> LONG_ARRAYS =
+    private final ListPersistentDataType<long[], long[]> LONG_ARRAYS =
             new ListType<>(Builtin.LONG_ARRAY);
-    private static final ListPersistentDataType<PersistentDataContainer, PersistentDataContainer> CONTAINERS =
+    private final ListPersistentDataType<PersistentDataContainer, PersistentDataContainer> CONTAINERS =
             new ListType<>(Builtin.TAG_CONTAINER);
 
     ListPersistentDataTypeProvider() {}

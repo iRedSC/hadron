@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.plugin;
 
+import org.jspecify.annotations.Nullable;
 import java.util.List;
 
 /**
@@ -17,7 +18,7 @@ public interface ServicesManager {
     void unregisterAll(JavaPlugin plugin);
 
     /** The highest priority provider, or null when nobody provides it. */
-    <T> T load(Class<T> service);
+    <T> @Nullable T load(Class<T> service);
 
     /** Every provider, highest priority first. */
     <T> List<T> loadAll(Class<T> service);

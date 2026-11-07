@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.data;
 
+import org.jspecify.annotations.Nullable;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import net.minecraft.core.UUIDUtil;
@@ -56,8 +57,8 @@ final class Builtin<P, C> implements PersistentDataType<P, C> {
             t -> ((ListTag) t).isEmpty() || ((ListTag) t).getElementType() == Tag.TAG_COMPOUND,
             Builtin::encodeContainers, Builtin::decodeContainers, a -> a, a -> a);
 
-    private static final Builtin<?, ?>[] ALL = {BYTE, SHORT, INTEGER, LONG, FLOAT, DOUBLE, BOOLEAN, STRING, UUID,
-        BYTE_ARRAY, INTEGER_ARRAY, LONG_ARRAY, TAG_CONTAINER, TAG_CONTAINER_ARRAY};
+    private static final java.util.List<Builtin<?, ?>> ALL = java.util.List.of(BYTE, SHORT, INTEGER, LONG, FLOAT,
+            DOUBLE, BOOLEAN, STRING, UUID, BYTE_ARRAY, INTEGER_ARRAY, LONG_ARRAY, TAG_CONTAINER, TAG_CONTAINER_ARRAY);
 
     final String constant;
     private final Class<P> primitive;
@@ -89,7 +90,7 @@ final class Builtin<P, C> implements PersistentDataType<P, C> {
     }
 
     /** The built-in type a Bukkit-style custom type is stored as, by its primitive class; null if none. */
-    static Builtin<?, ?> byPrimitive(Class<?> type) {
+    static @Nullable Builtin<?, ?> byPrimitive(Class<?> type) {
         for (Builtin<?, ?> builtin : ALL) {
             if (builtin.complex == type) return builtin;
         }

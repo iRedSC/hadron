@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.data.PersistentData;
 import java.util.function.Supplier;
 import net.minecraft.core.HolderLookup;
@@ -28,7 +29,7 @@ final class DataPort {
         }
 
         @Override
-        public CompoundTag write(CompoundTag data, HolderLookup.Provider provider) {
+        public @Nullable CompoundTag write(CompoundTag data, HolderLookup.Provider provider) {
             return data.isEmpty() ? null : data.copy();
         }
     };

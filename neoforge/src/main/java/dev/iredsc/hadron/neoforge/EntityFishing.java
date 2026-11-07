@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.player.PlayerFishEvent;
 import dev.iredsc.hadron.api.event.player.PlayerFishEvent.State;
 import java.util.List;
@@ -24,13 +25,13 @@ public final class EntityFishing {
 
     private EntityFishing() {}
 
-    private static ServerPlayer angler(FishingHook hook) {
+    private static @Nullable ServerPlayer angler(FishingHook hook) {
         return hook.level() instanceof ServerLevel && hook.getPlayerOwner() instanceof ServerPlayer player
                 ? player : null;
     }
 
-    private static PlayerFishEvent fire(FishingHook hook, ServerPlayer player, State state, Entity caught,
-            List<ItemStack> items, int exp) {
+    private static PlayerFishEvent fire(FishingHook hook, ServerPlayer player, State state, @Nullable Entity caught,
+            @Nullable List<ItemStack> items, int exp) {
         return Hooks.post(new PlayerFishEvent(player, hook, state, caught, items, exp, EntityActors.of(player)));
     }
 

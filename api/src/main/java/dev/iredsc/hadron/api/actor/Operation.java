@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.actor;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -19,6 +21,7 @@ import java.util.concurrent.atomic.AtomicLong;
  * }</pre>
  */
 public final class Operation {
+    @StaticState(reason = "a sequence for operation ids, which only need to be unique in the process")
     private static final AtomicLong IDS = new AtomicLong();
 
     private final long id;
@@ -40,7 +43,7 @@ public final class Operation {
     }
 
     /** The innermost open operation on this thread, or null if none is open. */
-    public static Operation current() {
+    public static @Nullable Operation current() {
         return Actors.currentOperation();
     }
 

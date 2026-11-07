@@ -16,8 +16,11 @@ neoForge {
 
 dependencies {
     compileOnly(project(":api"))
+    compileOnly(project(":build-checks"))
     testCompileOnly(project(":api"))
     testCompileOnly(project(":test-api"))
+    // @Nondeterministic, for the self-tests that test waits on other threads; Hadron's code only.
+    testCompileOnly(project(":build-checks"))
 }
 
 tasks.processResources {
@@ -42,3 +45,8 @@ extra["hadronCoverage.tests"] = listOf(
 )
 extra["hadronCoverage.dependsOn"] = listOf(":api:classes", "testClasses", ":api:testClasses", ":common:testClasses")
 apply(from = rootProject.file("gradle/hadron-coverage.gradle.kts"))
+
+// Compile-time checks every plugin build runs (gradle/hadron-checks.gradle.kts): Error Prone's errors, no static
+// mutable state, and deterministic tests. Hadron's own tests may exempt a wait on another thread, with a reason.
+extra["hadronChecks.exemptions"] = true
+apply(from = rootProject.file("gradle/hadron-checks.gradle.kts"))

@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.entity.EntityBreedEvent;
@@ -241,10 +243,15 @@ final class EntityEvents {
 
     // The client sends "interact at" first and plain "interact" only if that did nothing, so one click can reach both.
     // The first decides for the click; the second in the same tick repeats its answer without asking again.
-    private static Entity lastUser;
-    private static Entity lastUsed;
-    private static InteractionHand lastHand;
+    @StaticState(reason = "one click's answer, repeated for its second interact packet; checked against the tick, so a stale one is ignored")
+    private static @Nullable Entity lastUser;
+    @StaticState(reason = "one click's answer, repeated for its second interact packet; checked against the tick, so a stale one is ignored")
+    private static @Nullable Entity lastUsed;
+    @StaticState(reason = "one click's answer, repeated for its second interact packet; checked against the tick, so a stale one is ignored")
+    private static @Nullable InteractionHand lastHand;
+    @StaticState(reason = "one click's answer, repeated for its second interact packet; checked against the tick, so a stale one is ignored")
     private static long lastTick = Long.MIN_VALUE;
+    @StaticState(reason = "one click's answer, repeated for its second interact packet; checked against the tick, so a stale one is ignored")
     private static boolean lastCancelled;
 
     private static void use(PlayerInteractEvent.EntityInteract event) {

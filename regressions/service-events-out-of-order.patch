@@ -1,10 +1,11 @@
 diff --git a/common/src/main/java/dev/iredsc/hadron/common/Services.java b/common/src/main/java/dev/iredsc/hadron/common/Services.java
-index a283d5c..6489aed 100644
+index 2fe35b2..4248f1d 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/Services.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/Services.java
-@@ -1,12 +1,10 @@
+@@ -1,13 +1,11 @@
  package dev.iredsc.hadron.common;
  
+ import org.jspecify.annotations.Nullable;
 -import dev.iredsc.hadron.api.event.Event;
  import dev.iredsc.hadron.api.event.server.ServiceRegisterEvent;
  import dev.iredsc.hadron.api.event.server.ServiceUnregisterEvent;
@@ -15,7 +16,7 @@ index a283d5c..6489aed 100644
  import java.util.ArrayList;
  import java.util.Collections;
  import java.util.Comparator;
-@@ -15,19 +13,9 @@ import java.util.Iterator;
+@@ -16,19 +14,9 @@ import java.util.Iterator;
  import java.util.List;
  import java.util.Map;
  
@@ -35,7 +36,7 @@ index a283d5c..6489aed 100644
  
      Services(PluginHost host) {
          this.host = host;
-@@ -48,7 +36,8 @@ final class Services implements ServicesManager {
+@@ -49,7 +37,8 @@ final class Services implements ServicesManager {
      @Override
      public <T> void register(Class<T> service, T provider, JavaPlugin plugin, ServicePriority priority) {
          add(service, provider, plugin, priority);
@@ -45,7 +46,7 @@ index a283d5c..6489aed 100644
      }
  
      private synchronized <T> void add(Class<T> service, T provider, JavaPlugin plugin, ServicePriority priority) {
-@@ -60,7 +49,6 @@ final class Services implements ServicesManager {
+@@ -61,7 +50,6 @@ final class Services implements ServicesManager {
          List<Registration> list = byService.get(service);
          if (list == null) byService.put(service, list = new ArrayList<Registration>());
          list.add(new Registration(provider, plugin, priority));
@@ -53,7 +54,7 @@ index a283d5c..6489aed 100644
          // Stable sort: among equal priorities the first registered stays first.
          Collections.sort(list, new Comparator<Registration>() {
              @Override
-@@ -72,47 +60,22 @@ final class Services implements ServicesManager {
+@@ -73,47 +61,22 @@ final class Services implements ServicesManager {
  
      @Override
      public void unregister(Object provider) {
@@ -102,13 +103,13 @@ index a283d5c..6489aed 100644
      }
  
      /** Also drops emptied services, whose interface may be a plugin's class that would keep its old loader alive. */
--    private synchronized void removeWhere(Object provider, JavaPlugin plugin) {
-+    private synchronized List<ServiceUnregisterEvent> removeWhere(Object provider, JavaPlugin plugin) {
+-    private synchronized void removeWhere(@Nullable Object provider, @Nullable JavaPlugin plugin) {
++    private synchronized List<ServiceUnregisterEvent> removeWhere(@Nullable Object provider, @Nullable JavaPlugin plugin) {
 +        List<ServiceUnregisterEvent> removed = new ArrayList<ServiceUnregisterEvent>();
          for (Iterator<Map.Entry<Class<?>, List<Registration>>> lists = byService.entrySet().iterator(); lists.hasNext(); ) {
              Map.Entry<Class<?>, List<Registration>> entry = lists.next();
              List<Registration> list = entry.getValue();
-@@ -120,11 +83,12 @@ final class Services implements ServicesManager {
+@@ -121,11 +84,12 @@ final class Services implements ServicesManager {
                  Registration r = it.next();
                  if (r.provider == provider || r.plugin == plugin) {
                      it.remove();
