@@ -50,7 +50,8 @@ object ContractDocs {
         ),
         "testing.md" to Rules(
             // The harness's internals, Hadron's own suite, and how bundles are made: not what a test author needs.
-            sections = listOf("## How a run works", "## What Hadron's own tests cover", "## Blind tests"),
+            sections = listOf("## How a run works", "## What Hadron's own tests cover", "## Blind tests",
+                    "## Mutation testing"),
             replace = listOf(
                 "`./gradlew test` (`:api:test`, `:common:test`, a plugin's own `test`)" to "`./gradlew test`",
                 "`examples/hello`'s `HelloFastTest` is the example to copy: it checks the plugin's packed " +
@@ -331,6 +332,7 @@ tasks.register<Sync>("contractBundle") {
         from("gradlew", "gradlew.bat")
         from("gradle/wrapper") { into("gradle/wrapper") }
         from("gradle/hadron-coverage.gradle.kts") { into("gradle") }
+        from("gradle/hadron-test-server.gradle.kts") { into("gradle") }
         from(testRunner) { into("gradle") }
         from(files(apiJar, testApiJar, modJar)) { into("libs") }
     }
