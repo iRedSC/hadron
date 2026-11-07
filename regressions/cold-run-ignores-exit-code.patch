@@ -1,0 +1,23 @@
+diff --git a/gradle/hadron-test-server.gradle.kts b/gradle/hadron-test-server.gradle.kts
+index d9be0da..96d5d39 100644
+--- a/gradle/hadron-test-server.gradle.kts
++++ b/gradle/hadron-test-server.gradle.kts
+@@ -96,18 +96,6 @@ tasks.named<JavaExec>("runHadronTest") {
+         }
+         HadronTestServer.prepare(run, mod)
+     }
+-    // The server exits 0 only when every test passed. A failing run's report already says why, so hadronTest reports
+-    // it; but a nonzero exit after a passing report means the server broke after the tests (a crash while stopping,
+-    // a mod failing at shutdown), and trusting the report alone would end that green.
+-    doLast {
+-        val code = (this as JavaExec).executionResult.get().exitValue
+-        val report = root.resolve("report.txt")
+-        val passed = report.isFile && report.readLines().lastOrNull { it.startsWith("RESULT:") }?.trim() == "RESULT: PASSED"
+-        if (code != 0 && passed) {
+-            throw GradleException("The test server reported every test passed, then exited with code $code, so "
+-                    + "something broke after the tests ran. Its log says what: " + root.resolve("run/logs/latest.log"))
+-        }
+-    }
+ }
+ 
+ // The watching test server starts as fresh as the one-off one, keeping only the inbox, where hadronWatch has just

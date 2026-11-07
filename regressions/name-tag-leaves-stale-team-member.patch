@@ -1,0 +1,77 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetNames.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetNames.java
+index c357efc..d1ed6e9 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetNames.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetNames.java
+@@ -75,14 +75,7 @@ final class NetNames {
+         check(plugin, player, tag, "set name tags");
+         if (tag != null) validate(tag);
+         String real = player.getGameProfile().getName();
+-        Owned<String> before = TAGS.get(player.getUUID());
+-        if (Objects.equals(before == null ? null : before.value(), tag)) {
+-            put(TAGS, plugin, player.getUUID(), tag);
+-            return;
+-        }
+-        // Under the name other clients know now, before the mapping changes what team packets say.
+-        leaveTeamOnOtherClients(player);
+-        put(TAGS, plugin, player.getUUID(), tag);
++        if (!put(TAGS, plugin, player.getUUID(), tag)) return;
+         if (tag == null) {
+             TAG_BY_NAME.remove(real);
+             REAL_NAME.remove(player.getUUID());
+@@ -137,12 +130,6 @@ final class NetNames {
+             ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(id);
+             if (p != null) p.refreshTabListName();
+         }
+-        List<UUID> owned = new ArrayList<UUID>();
+-        for (Map.Entry<UUID, Owned<String>> e : TAGS.entrySet()) if (e.getValue().plugin() == plugin) owned.add(e.getKey());
+-        for (UUID id : owned) {
+-            ServerPlayer p = server == null ? null : server.getPlayerList().getPlayer(id);
+-            if (p != null) leaveTeamOnOtherClients(p);
+-        }
+         List<UUID> tagged = drop(TAGS, plugin);
+         if (tagged.isEmpty()) return;
+         for (UUID id : tagged) REAL_NAME.remove(id);
+@@ -168,38 +155,19 @@ final class NetNames {
+         return out;
+     }
+ 
+-    /**
+-     * Takes the player out of their team on every other client, under the name that client knows them by. Sent before
+-     * a tag changes, so the old name doesn't stay a member there; {@link #resendProfile} adds the new one.
+-     */
+-    private static void leaveTeamOnOtherClients(ServerPlayer target) {
+-        PlayerTeam team = target.getTeam();
+-        if (team == null) return;
+-        Packet<?> leave = ClientboundSetPlayerTeamPacket.createPlayerPacket(team, target.getScoreboardName(),
+-                ClientboundSetPlayerTeamPacket.Action.REMOVE);
+-        for (ServerPlayer viewer : new ArrayList<>(target.server.getPlayerList().getPlayers())) {
+-            if (viewer != target) viewer.connection.send(leave);
+-        }
+-    }
+-
+     /** A client reads a player's profile name only when it spawns them, so each viewer gets the player afresh. */
+     private static void resendProfile(ServerPlayer target) {
+         PlayerTeam team = target.getTeam();
+         for (ServerPlayer viewer : new ArrayList<>(target.server.getPlayerList().getPlayers())) {
+-            if (viewer == target) continue;
+-            boolean sees = NetVisibility.canSee(viewer, target);
+-            if (sees) {
+-                NetPort.untrack(viewer, target);
+-                viewer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(target.getUUID())));
+-                viewer.connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(target)));
+-            }
+-            // Team packets reach every client, seen or not, as vanilla sends them; leaveTeamOnOtherClients took
+-            // the old name out.
++            if (viewer == target || !NetVisibility.canSee(viewer, target)) continue;
++            NetPort.untrack(viewer, target);
++            viewer.connection.send(new ClientboundPlayerInfoRemovePacket(List.of(target.getUUID())));
++            viewer.connection.send(ClientboundPlayerInfoUpdatePacket.createPlayerInitializing(List.of(target)));
+             if (team != null) {
+                 viewer.connection.send(ClientboundSetPlayerTeamPacket.createPlayerPacket(team,
+                         target.getScoreboardName(), ClientboundSetPlayerTeamPacket.Action.ADD));
+             }
+-            if (sees) NetPort.retrack(viewer, target);
++            NetPort.retrack(viewer, target);
+         }
+     }
+ 

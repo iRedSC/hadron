@@ -38,3 +38,33 @@ jobs:
             neoforge/build/hadron-test/run/logs/
             **/build/reports/tests/
           if-no-files-found: ignore
+
+  # Every fixed bug stays fixed: each fix in regressions/regressions.toml is undone in a throwaway worktree and its
+  # guard tests must fail (docs/testing.md, "Regression replay"). Each in-game entry boots a server, so this is slow
+  # and runs for releases only, after the plain checks pass.
+  regressions:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history: a patch that no longer applies falls back to a three-way merge, which needs old blobs.
+          fetch-depth: 0
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: true
+      - run: ./gradlew regressionReplay
+      - name: Keep the replay's report and logs
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: regression-replay
+          path: |
+            build/regression-replay/report.json
+            build/regression-replay/logs/
+          if-no-files-found: ignore

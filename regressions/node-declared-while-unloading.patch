@@ -1,0 +1,46 @@
+diff --git a/api/src/main/java/dev/iredsc/hadron/api/Node.java b/api/src/main/java/dev/iredsc/hadron/api/Node.java
+index 8df24af..124f083 100644
+--- a/api/src/main/java/dev/iredsc/hadron/api/Node.java
++++ b/api/src/main/java/dev/iredsc/hadron/api/Node.java
+@@ -68,13 +68,6 @@ public final class Node {
+             throw new IllegalArgumentException("Permission node '" + id + "' must look like plugin.thing, lowercase");
+         }
+         String root = id.substring(0, id.indexOf('.'));
+-        // Checked under the lock release takes, and a plugin is never alive again once it starts unloading, so a
+-        // declaration either lands before release removes it or is refused: a stray task can't put one back after.
+-        if (owner instanceof dev.iredsc.hadron.api.plugin.PluginContext plugin && !plugin.alive()) {
+-            throw new IllegalStateException(plugin.description().getName() + " declared permission node " + id
+-                    + " after it began unloading, from code still running once it was disabled. Declare nodes as "
+-                    + "static constants, and stop background work in onDisable");
+-        }
+         if (owner instanceof dev.iredsc.hadron.api.plugin.PluginContext plugin && RESERVED_ROOTS.contains(root)) {
+             throw new dev.iredsc.hadron.api.plugin.PluginException("it declares permission node " + id
+                     + ", but '" + root + ".' is reserved for nodes Hadron makes itself. Start it with the plugin's "
+diff --git a/api/src/main/java/dev/iredsc/hadron/api/plugin/PluginContext.java b/api/src/main/java/dev/iredsc/hadron/api/plugin/PluginContext.java
+index 784f7fa..d4228b6 100644
+--- a/api/src/main/java/dev/iredsc/hadron/api/plugin/PluginContext.java
++++ b/api/src/main/java/dev/iredsc/hadron/api/plugin/PluginContext.java
+@@ -26,9 +26,6 @@ public interface PluginContext {
+ 
+     boolean enabled();
+ 
+-    /** Loaded or enabled, and not yet unloading. Once false it never turns true again. */
+-    boolean alive();
+-
+     /** A command from plugin.yml; null for a name it doesn't declare. */
+     PluginCommand command(String name);
+ 
+diff --git a/common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java b/common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java
+index d077ef5..ca178ce 100644
+--- a/common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java
++++ b/common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java
+@@ -137,8 +137,7 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
+         return this.server == server;
+     }
+ 
+-    @Override
+-    public boolean alive() {
++    boolean alive() {
+         return phase == Phase.LOADED || phase == Phase.ENABLED;
+     }
+ 
