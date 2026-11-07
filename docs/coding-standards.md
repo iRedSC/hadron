@@ -42,7 +42,7 @@ A test must be able to fail. Reject:
 - **Tautological tests**, which restate the code: asserting a constant equals itself, or computing the expected value the same way the code does.
 - **Structure-sensitive tests**, which check how the code is built rather than what it does: private fields, call order, a class's shape. Test at the event, the API method or the command, the way a plugin would.
 - **Over-mocked tests**, which mock the thing under test until nothing real runs. Hadron has no fake Minecraft by design; anything that touches the world goes in the in-game tier.
-- **Tests that pass by luck**: a test that relies on an earlier test's state. (Sleeps, the wall clock and unseeded randomness fail the build.)
+- **Tests that pass by luck**: a test that relies on an earlier test's state. (Sleeps, the wall clock and unseeded randomness fail the build in their common forms; the check can't see every one.)
 - **An exemption that doesn't hold**: a `@StaticState` or `@Nondeterministic` whose reason the code doesn't bear out.
 - **A `@Covers` the test doesn't earn.** The test must fire or call what it names and check the result, not merely mention it.
 - **An assertion loosened to make a failure go away.** A red test is a Hadron bug, a test bug or a contract gap; say which.
