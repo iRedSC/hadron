@@ -67,7 +67,7 @@ Core fires these for vanilla's paths; the bridge covers its mod's.
 | `BlockFertilizeEvent` | bone meal | growth accelerators that grow without bone meal |
 | `EntityStatusChangeEvent` | a mob's AI turned off or on | the mod's stuns, freezes, holds and interrupted casts, with its own status ids |
 | `EntityTargetEvent` | mobs | turret blocks |
-| `EntityVelocityEvent` | knockback from hits and blasts | other pushes: gravity wells, grappling hooks, launch pads |
+| `EntityVelocityEvent` | any velocity set while something other than the entity acts (commands, explosions, entities, machines, mods with an actor pushed); knockback as `EntityKnockbackEvent` | pushes the mod makes with nothing on the stack: push the actor instead, and core fires it |
 | `ExperiencePickupEvent` | players and fake players | machines storing experience |
 | `ProjectileHitEvent` | projectile entities | hitscan weapons with no projectile, with the shooter as the entity |
 | `ExplosionEvent` | `Level.explode` and `Explosion` | explosions the mod computes without vanilla's `Explosion` |

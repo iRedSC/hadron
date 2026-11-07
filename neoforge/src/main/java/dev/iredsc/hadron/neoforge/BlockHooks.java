@@ -103,6 +103,12 @@ public final class BlockHooks {
 
     private BlockHooks() {}
 
+    /**
+     * A retracting piston's head, which {@code PistonStructureResolver} is shown as air while Hadron asks what the
+     * piston will pull (vanilla resolves only after removing it). Server thread only; null otherwise.
+     */
+    public static BlockPos pistonHiddenHead;
+
     /** What the current thread is doing to blocks. Reused, so entering and leaving a tick allocates nothing. */
     private static final class Context {
         int suppressed;

@@ -40,4 +40,14 @@ abstract class LivingEntityMixin {
             original.call();
         }
     }
+
+    @Inject(method = "knockback", at = @At("HEAD"))
+    private void hadron$knockbackStart(double strength, double x, double z, CallbackInfo ci) {
+        dev.iredsc.hadron.neoforge.EntityVelocities.enterKnockback();
+    }
+
+    @Inject(method = "knockback", at = @At("RETURN"))
+    private void hadron$knockbackEnd(double strength, double x, double z, CallbackInfo ci) {
+        dev.iredsc.hadron.neoforge.EntityVelocities.exitKnockback();
+    }
 }

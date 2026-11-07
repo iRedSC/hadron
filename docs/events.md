@@ -103,7 +103,7 @@ Payload: the entity, its position, and what changed.
 | `EntityPotionEffectEvent` | a registered effect added, changed or removed | `addEffect`, `removeEffect` |
 | `EntityStatusChangeEvent` | a restriction outside the effect registry: stunned, frozen, AI disabled, casting interrupted, held | `Mob.setNoAi`, bridges |
 | `EntityAttributeChangeEvent` | an attribute's base value or modifiers change; source of the modifier | `AttributeInstance` setters |
-| `EntityVelocityEvent` | an actor pushes, pulls or launches an entity; old and new velocity | `setDeltaMovement`, `push` with an actor |
+| `EntityVelocityEvent` | an actor pushes, pulls or launches an entity; old and new velocity | `setDeltaMovement` while something other than the entity acts |
 | └ `EntityKnockbackEvent` | knockback from a hit or blast | `LivingEntity.knockback` |
 | `EntityMoveEvent` | an entity with an actor or controller (a player, a vehicle) crosses into another block | movement ticks, only when a listener's area is involved |
 | └ `PlayerMoveEvent` | | |

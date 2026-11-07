@@ -247,9 +247,6 @@ public final class EntityStateTests {
         t.assertEquals(pig.getMaxAirSupply(), pig.getAirSupply(), "the pig's air");
     }
 
-    // KNOWN BUG: EntityVelocityEvent ships in api with "setDeltaMovement, push with an actor" as its chokepoint, but
-    // core fires only its EntityKnockbackEvent subclass (LivingKnockBackEvent). Nothing fires the event itself, so a
-    // plugin listening for launches never hears an operator's, a wind charge's or a mod's (events.md rule 7).
     @HadronTest
     void aConsoleLaunchIsAVelocityChangeByTheServer(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player

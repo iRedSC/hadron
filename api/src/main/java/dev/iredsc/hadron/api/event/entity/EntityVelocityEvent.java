@@ -9,8 +9,10 @@ import net.minecraft.world.phys.Vec3;
 /**
  * An actor is about to push, pull or launch an entity. Cancel it and the entity's velocity is left alone.
  *
- * <p>Core fires this as {@link EntityKnockbackEvent} for hits and blasts. Other pushes (a mod's gravity well, a
- * grappling hook, a launch pad) are fired by that mod's bridge, with the velocity before and after.
+ * <p>Core fires it whenever something other than the entity sets its velocity while acting: a command, an
+ * explosion, another entity, a machine, a mod's code with an actor on the stack. An entity's own movement and physics
+ * never fire it. Knockback from a hit is {@link EntityKnockbackEvent} instead, fired once. Pushes a mod makes with
+ * nothing on the stack are fired by that mod's bridge.
  */
 public class EntityVelocityEvent extends EntityEvent implements Cancellable {
     private final Vec3 oldVelocity;

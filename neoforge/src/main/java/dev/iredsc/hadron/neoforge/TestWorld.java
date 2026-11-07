@@ -73,6 +73,57 @@ final class TestWorld implements TestContext {
                 level.setBlock(ORIGIN.offset(x, -1, z), Blocks.BEDROCK.defaultBlockState(), Block.UPDATE_CLIENTS);
             }
         }
+        // The test's area stays loaded and ticking with or without a player in it, as a forceloaded area does, so
+        // machines, item entities and mobs run in a test that never joins anyone.
+        int cx = ORIGIN.getX() >> 4, cz = ORIGIN.getZ() >> 4;
+        for (int x = -FORCED_RADIUS; x <= FORCED_RADIUS; x++) {
+            for (int z = -FORCED_RADIUS; z <= FORCED_RADIUS; z++) level.setChunkForced(cx + x, cz + z, true);
+        }
+    }
+
+    /** Chunks around the origin kept loaded and entity-ticking for the whole test: a 5 by 5 chunk area. */
+    private static final int FORCED_RADIUS = 2;
+
+    /**
+     * Before the test's first line: waits, outside its tick limit, until the test's area ticks entities and its
+     * entities are loaded. Chunk loading runs on worker threads that server ticks alone don't wait for, so without
+     * this a test acting at once on a busy machine could find nothing there, and pass or fail by luck.
+     */
+    void awaitReady() {
+        long deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(30);
+        long chunk = net.minecraft.world.level.ChunkPos.asLong(ORIGIN.getX() >> 4, ORIGIN.getZ() >> 4);
+        while (!(level.isPositionEntityTicking(ORIGIN) && level.areEntitiesLoaded(chunk))) {
+            if (System.nanoTime() > deadline) {
+                throw new IllegalStateException("The test world's area didn't start ticking entities within 30 s; "
+                        + "the server is too busy or its chunk loading is stuck. Check the server log.");
+            }
+            startBudget();
+            server.tickServer(TestWorld::shortBudget);
+            // Chunk loading finishes in tasks the server runs while it waits between ticks; run them here.
+            int ran = 0;
+            while (ran < 100_000 && server.pollTask()) ran++;
+            try {
+                Thread.sleep(5);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return;
+            }
+        }
+    }
+
+    /**
+     * Each harness tick lets the server spend a moment on the work it does when it has time to spare (unloading
+     * chunks, saving), as a real server's idle part of the tick would, so chunks unload in tests too.
+     */
+    private static long budgetEnd;
+
+    private static boolean shortBudget() {
+        return System.nanoTime() < budgetEnd;
+    }
+
+    /** Starts a tick's 2 ms of spare time. */
+    private static void startBudget() {
+        budgetEnd = System.nanoTime() + 2_000_000L;
     }
 
     // ---- TestContext ----
@@ -166,7 +217,8 @@ final class TestWorld implements TestContext {
             spent++;
             ticking = true;
             try {
-                server.tickServer(() -> false);
+                startBudget();
+                server.tickServer(TestWorld::shortBudget);
             } finally {
                 ticking = false;
             }

@@ -203,6 +203,7 @@ final class TestRunner {
         TestWorld world;
         try {
             world = new TestWorld(server, plugin, address, id, ++worlds, c.test().timeout());
+            world.awaitReady();
         } catch (RuntimeException e) {
             return fail(id, null, "Couldn't create the test's world, so it didn't run: " + e, stack(e));
         }

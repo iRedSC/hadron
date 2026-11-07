@@ -27,7 +27,6 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.piston.PistonStructureResolver;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.material.PushReaction;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
@@ -140,16 +139,11 @@ final class BlockEvents {
                 || pulled.is(Blocks.PISTON) || pulled.is(Blocks.STICKY_PISTON));
         if (extend || pulls) {
             // NeoForge asks before vanilla removes the head, but vanilla works out what a retract pulls only once the
-            // head is gone (a head can't be pushed, so the resolver would find nothing). Hide it from the resolver,
-            // in the chunk's data only, for as long as the resolver looks.
+            // head is gone (a head can't be pushed, so the resolver would find nothing). The resolver is shown air
+            // where the head is, for as long as it looks; the world itself is never touched.
             BlockPos headPos = pos.relative(facing);
-            BlockState headState = level.getBlockState(headPos);
-            LevelChunkSection section = !extend && headState.is(Blocks.PISTON_HEAD)
-                    ? level.getChunkAt(headPos).getSection(level.getSectionIndex(headPos.getY())) : null;
-            if (section != null) {
-                section.setBlockState(headPos.getX() & 15, headPos.getY() & 15, headPos.getZ() & 15,
-                        Blocks.AIR.defaultBlockState(), false);
-            }
+            boolean hide = !extend && level.getBlockState(headPos).is(Blocks.PISTON_HEAD);
+            if (hide) BlockHooks.pistonHiddenHead = headPos;
             try {
                 PistonStructureResolver resolver = new PistonStructureResolver(level, pos, facing, extend);
                 if (resolver.resolve()) {
@@ -159,10 +153,7 @@ final class BlockEvents {
                     return; // it can't push, so it won't move
                 }
             } finally {
-                if (section != null) {
-                    section.setBlockState(headPos.getX() & 15, headPos.getY() & 15, headPos.getZ() & 15, headState,
-                            false);
-                }
+                if (hide) BlockHooks.pistonHiddenHead = null;
             }
         }
         Direction moving = extend ? facing : facing.getOpposite();

@@ -172,8 +172,6 @@ public final class BreakPlaceTests {
         assertPlayer(t, seen.get(0).getActor(), alice);
     }
 
-    // KNOWN BUG: the axe keeps its lost durability. NeoForge's item-use capture (CommonHooks.onPlaceItemIntoWorld)
-    // saves the stack's live component map rather than a copy, so a cancelled place "restores" the worn components.
     @HadronTest
     void cancelledStripKeepsTheLogAndTheAxesDurability(TestContext t) {
         TestPlayer alice = t.player("alice");

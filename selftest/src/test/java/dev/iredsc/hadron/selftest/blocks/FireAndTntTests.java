@@ -54,9 +54,6 @@ public final class FireAndTntTests {
         t.assertEquals(1, alice.player().getMainHandItem().getDamageValue(), "the flint and steel's damage");
     }
 
-    // KNOWN BUG: the flint and steel keeps its lost durability. NeoForge's item-use capture
-    // (CommonHooks.onPlaceItemIntoWorld) saves the stack's live component map rather than a copy, so a cancelled place
-    // "restores" the already-worn components. Same for every item worn by use on a block (axes, hoes, shovels).
     @HadronTest
     void cancelledIgniteLeavesNoFireAndTheFlintUnworn(TestContext t) {
         TestPlayer alice = t.player("alice");
