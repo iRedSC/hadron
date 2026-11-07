@@ -12,7 +12,6 @@ import com.google.errorprone.matchers.Description;
 import com.google.errorprone.util.ASTHelpers;
 import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.ExpressionTree;
-import com.sun.source.tree.LiteralTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.NewArrayTree;
 import com.sun.source.tree.NewClassTree;
@@ -108,7 +107,8 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
     }
 
     /** Why a final field of this type and initializer holds state, or null when it isn't a known-mutable kind. */
-    private String held(Type declared, ExpressionTree init, VisitorState state) {
+    private String held(Type declared, ExpressionTree written, VisitorState state) {
+        ExpressionTree init = written == null ? null : ASTHelpers.stripParentheses(written);
         if (init != null && init.getKind() == Tree.Kind.NULL_LITERAL) return null;
         Type type = init == null || ASTHelpers.getType(init) == null ? declared : ASTHelpers.getType(init);
         if (declared instanceof Type.ArrayType || type instanceof Type.ArrayType) {
@@ -125,7 +125,14 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
         // A collection built here (`new HashMap<>()`) or typed as a mutable class is refused. One that comes back from a
         // call typed only as Map or List passes: the check can't see what the call returns, and refusing it would refuse
         // the valid `static final Map<..> REGISTRY = build()` that returns Map.copyOf.
-        boolean visible = init instanceof NewClassTree || (state.getTypes().erasure(type).tsym.flags() & Flags.INTERFACE) == 0;
+        // Only the JDK's own classes count: a plugin's own collection class may well be unmodifiable.
+        String typeName = state.getTypes().erasure(type).tsym.getQualifiedName().toString();
+        boolean jdk = typeName.startsWith("java.util.") && (state.getTypes().erasure(type).tsym.flags() & Flags.INTERFACE) == 0;
+        // A `new` of a java.util class counts; an anonymous subclass (with a body) is the plugin's own class.
+        boolean visible = jdk || mutableFactory(init) || (init instanceof NewClassTree created
+                && created.getClassBody() == null && ASTHelpers.getType(created.getIdentifier()) != null
+                && state.getTypes().erasure(ASTHelpers.getType(created.getIdentifier())).tsym.getQualifiedName()
+                        .toString().startsWith("java.util."));
         for (String name : COLLECTIONS) {
             if (visible && isSubtype(type, name, state) && !unmodifiable(type, init, state)) {
                 return "holds a " + name(type, state) + ", which can be changed";
@@ -219,8 +226,21 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
     private static boolean emptyArray(ExpressionTree init) {
         if (!(init instanceof NewArrayTree array)) return false;
         if (array.getInitializers() != null) return array.getInitializers().isEmpty();
-        return array.getDimensions().size() == 1 && array.getDimensions().get(0) instanceof LiteralTree size
-                && Integer.valueOf(0).equals(size.getValue());
+        // The outer length decides: new String[0][1] and new String[ZERO] have no element to change.
+        return !array.getDimensions().isEmpty()
+                && Integer.valueOf(0).equals(ASTHelpers.constValue(array.getDimensions().get(0), Integer.class));
+    }
+
+    /** The JDK's factories that hand back a changeable collection behind an interface type. */
+    private static boolean mutableFactory(ExpressionTree init) {
+        if (!(init instanceof MethodInvocationTree call) || !(ASTHelpers.getSymbol(call) instanceof MethodSymbol m)) {
+            return false;
+        }
+        String owner = m.owner.getQualifiedName().toString();
+        String name = m.getSimpleName().toString();
+        return (owner.equals("java.util.Arrays") && name.equals("asList"))
+                || (owner.equals("java.util.Collections") && (name.startsWith("synchronized")
+                        || name.startsWith("checked") || name.equals("newSetFromMap")));
     }
 
     private Description describe(VariableTree tree, String message) {
