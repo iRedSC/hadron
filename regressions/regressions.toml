@@ -348,14 +348,11 @@ guards = [
 ]
 
 [[regression]]
-id = "human-review-gate-runs-pr-copy"
-bug = "The human-review gate ran the PR's own copy of its script, so a PR could switch it off."
+id = "gate-runs-pr-copy"
+bug = "The review gate ran the PR's own copy of its script, so a PR could switch it off."
 fix = "9a63431"
-paths = [
-    ".github/human-review-paths.txt",
-    ".github/scripts/human_review.py",
-    ".github/workflows/human-review.yml",
-]
+note = "The gate was later rewritten as council.yml; the patch checks out the PR's head instead of main."
+paths = [".github/workflows/council.yml"]
 unguarded = "CI configuration: only GitHub runs it, on pull_request_target."
 
 [[regression]]

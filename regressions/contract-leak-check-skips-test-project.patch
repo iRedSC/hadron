@@ -44,10 +44,10 @@ index 005003b..230100f 100644
          }
          if (!check.problems.isEmpty()) {
 diff --git a/gradle/hadron-contract.gradle.kts b/gradle/hadron-contract.gradle.kts
-index 7257c9c..212d59d 100644
+index 3f1940a..77f225c 100644
 --- a/gradle/hadron-contract.gradle.kts
 +++ b/gradle/hadron-contract.gradle.kts
-@@ -284,6 +284,24 @@ val contractDocs = tasks.register("contractDocs") {
+@@ -286,6 +286,24 @@ val contractDocs = tasks.register("contractDocs") {
      }
  }
  
@@ -69,10 +69,10 @@ index 7257c9c..212d59d 100644
 +    doLast { marker.writeText("clean\n") }
 +}
 +
- // Hadron's jars as the bundle ships them: repacked without timestamps, so the same sources make the same bytes.
+ // Hadron's jars as the bundle ships them: repacked without timestamps, so the same sources should make the same
+ // bytes (not tested).
  fun repack(name: String, from: String, fileName: String) = tasks.register<Zip>(name) {
-     dependsOn(from)
-@@ -318,14 +336,11 @@ val readmeTokens = mapOf(
+@@ -321,14 +339,11 @@ val readmeTokens = mapOf(
      "MINECRAFT_VERSION" to providers.gradleProperty("minecraft_version").get(),
  )
  
@@ -92,7 +92,7 @@ index 7257c9c..212d59d 100644
      from("gradle/contract/README.md") {
          filter<org.apache.tools.ant.filters.ReplaceTokens>("tokens" to readmeTokens)
      }
-@@ -341,31 +356,6 @@ val contractAssemble = tasks.register<Sync>("contractAssemble") {
+@@ -344,31 +359,6 @@ val contractAssemble = tasks.register<Sync>("contractAssemble") {
          from(files(apiJar, testApiJar, modJar, harnessJar)) { into("libs") }
      }
      inputs.properties(readmeTokens)
