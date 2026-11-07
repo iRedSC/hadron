@@ -195,7 +195,7 @@ final class TagContainer implements PersistentDataContainer {
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equals(@Nullable Object other) {
         if (!(other instanceof TagContainer that)) return false;
         CompoundTag a = view();
         CompoundTag b = that.view();

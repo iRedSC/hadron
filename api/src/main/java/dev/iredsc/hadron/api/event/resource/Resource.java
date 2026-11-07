@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.resource;
 
+import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
@@ -71,7 +72,7 @@ public record Resource(ResourceLocation id, String unit) {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         return o instanceof Resource r && r.id.equals(id);
     }
 

@@ -23,11 +23,13 @@ public final class PluginCommand {
         this.completer = plugin;
     }
 
-    public void setExecutor(CommandExecutor executor) {
+    /** Null restores the plugin's own onCommand. */
+    public void setExecutor(@Nullable CommandExecutor executor) {
         this.executor = executor == null ? plugin : executor;
     }
 
-    public void setTabCompleter(TabCompleter completer) {
+    /** Null restores the plugin's own onTabComplete. */
+    public void setTabCompleter(@Nullable TabCompleter completer) {
         this.completer = completer == null ? plugin : completer;
     }
 

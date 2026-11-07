@@ -76,7 +76,7 @@ public final class Attribution {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         return o instanceof Attribution a && Objects.equals(responsible, a.responsible)
                 && Objects.equals(controller, a.controller) && Objects.equals(authority, a.authority);
     }

@@ -88,7 +88,7 @@ public final class NamespacedKey {
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equals(@Nullable Object other) {
         return other instanceof NamespacedKey k && k.namespace.equals(namespace) && k.key.equals(key);
     }
 
