@@ -11,16 +11,16 @@ import net.minecraft.world.level.block.state.BlockState;
 import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
- * A block's state, its block entity's data, or a mod's own data at the block is about to change, from {@link #getBefore()} to {@link #getAfter()}.
- * Cancel it and nothing in {@link #getBlocks()} changes.
+ * A block's state, its block entity's data, or a mod's own data at the block is about to change, from
+ * {@link #getBefore()} to {@link #getAfter()}. Cancel it and nothing in {@link #getBlocks()} changes.
  *
  * <p>Fired as it is when an actor changes a block in a way no subclass names, such as opening a door or a machine
  * switching itself on. Listen here to hear every change, including breaks, places, burns, flows and growth.
  */
 @FiredBy(core = PARTIAL,
         coreSees = "every block state change, through `Level.setBlock`",
-        bridges = "block entity data changes, and a mod's own data at block spaces, as `BlockDataChangeEvent`, and growth without bone meal, as "
-                + "`BlockFertilizeEvent`")
+        bridges = "block entity data changes, and a mod's own data at block spaces, as `BlockDataChangeEvent`, and "
+                + "growth without bone meal, as `BlockFertilizeEvent`")
 public class BlockChangeEvent extends BlockEvent implements Cancellable {
     private boolean cancelled;
 

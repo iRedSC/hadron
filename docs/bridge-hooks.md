@@ -81,8 +81,8 @@ Core fires these for vanilla's paths; the bridge covers its mod's.
 | `InventoryChangeEvent` | hoppers, hopper minecarts and droppers, as `InventoryMoveItemEvent` | the mod's own slot writes: machine outputs, pipes, storage networks |
 | `InventoryMoveItemEvent` | hoppers, hopper minecarts and droppers, into and out of vanilla containers and mods' item handlers | the mod's pipes and networks |
 | `ResourceChangeEvent` | currencies, through its produce and consume leaves | an amount of energy, fluid in a tank, chemical, mana, heat, radiation, a vein's reserve or skill points that changes with no fitting leaf (set by a command), with resource id and unit, holder, old and new amount |
-| `ResourceConsumeEvent` | currency withdrawals | energy, fluid, chemical, mana, heat, radiation, a vein's reserve or skill points the mod uses up, with resource id and unit, holder, old and new amount |
-| `ResourceProduceEvent` | currency deposits | energy, fluid, chemical, mana, heat, radiation or skill points the mod makes from nothing, with resource id and unit, holder, old and new amount |
+| `ResourceConsumeEvent` | currency withdrawals | energy, fluid, chemical, mana, heat, radiation, a vein's reserve or skill points the mod uses up in one step, never a running machine's per-tick draw, with resource id and unit, holder, old and new amount |
+| `ResourceProduceEvent` | currency deposits | energy, fluid, chemical, mana, heat, radiation or skill points the mod makes from nothing in one step, never a running generator's per-tick output, with resource id and unit, holder, old and new amount |
 | `ResourceTransferEvent` | currency transfers between accounts | the mod's cables, pipes, wireless chargers and payments, with both holders and the amount actually accepted |
 | `ExplosionEvent` | `Level.explode` and `Explosion` | explosions the mod computes without vanilla's `Explosion` |
 | `PlayerFishEvent` | any rod whose bobber is a `FishingHook` | fishing that doesn't use a `FishingHook` (a mod's own bobber entity), at each step it has |

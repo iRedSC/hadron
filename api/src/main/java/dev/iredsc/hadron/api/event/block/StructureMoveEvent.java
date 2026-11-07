@@ -21,11 +21,6 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
  * bridge fires it before its mod changes anything, with the transforms before and after, the blocks leaving or
  * entering the world as {@link #getMoves()}, and every space the structure passes through or lands in as
  * {@link #getSweptSpace()}; while it only moves, with no blocks entering or leaving, moves may be empty.
- *
- * <p>A move between levels (a teleposer, AE2's spatial storage) is two of these in one operation: {@code ASSEMBLE} in
- * the source level and {@code DISASSEMBLE} in the target, each with no moves and only its own level's spaces in
- * {@link #getBlocks()}, so no position is read in the wrong level. The bridge fires both before changing anything
- * and moves nothing if either is cancelled.
  */
 @FiredBy(core = NONE,
         bridges = "assembles, moves, rotates or disassembles a contraption, ship or spatial transfer",

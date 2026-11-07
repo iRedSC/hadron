@@ -84,8 +84,6 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 
 Fluid placed or drained without a bucket (a Refined Storage constructor, a hose pulley) is a `BlockPlaceEvent` or `BlockBreakEvent` plus a `ResourceTransferEvent` in one operation.
 
-A move between levels (a teleposer, AE2's spatial storage) fires as two `StructureMoveEvent`s in one operation: `ASSEMBLE` in the source level and `DISASSEMBLE` in the target, each listing only its own level's spaces and no moves, so no position is ever read in the wrong level. The bridge fires both before changing anything, and moves nothing if either is cancelled.
-
 As in Bukkit, `BlockMultiPlaceEvent` extends `BlockPlaceEvent`, `BlockSpreadEvent` extends `BlockFormEvent` which extends `BlockGrowEvent`, and the bucket events extend `BlockChangeEvent`, so a listener for the broader event never misses the narrower one. `BlockFromToEvent.getPos()` is the block flowed into; `getFromPos()` is the source. An explosion's blocks are reported once, in `ExplosionEvent`'s editable list, not as one break event each.
 
 ### Entities: `EntityEvent`
@@ -238,6 +236,7 @@ Designed but not in `api`, because core can't yet fire them for every actor with
 - `EntityLeashEvent`, `EntityUnleashEvent`, `EntityShearEvent`, `ArmorStandManipulateEvent`: need hooks inside interface methods or per-path logic.
 - `EntityAttributeChangeEvent`, `EntityRelationshipChangeEvent`, `FoodLevelChangeEvent`: the vanilla classes that change don't know their entity.
 - `BiomeChangeEvent`: biome writes are too hot and scattered for one hook.
+- Moves between levels (a teleposer, AE2's spatial storage): a `BlockEvent` holds one level, and splitting a move into one event per level lets one side pass while the other is refused. Designed with the AE2 pilot, whose spatial storage moves blocks into its own dimension.
 - `ResourceTransferEvent` from the port's energy and fluid capabilities: no single point sees both ends; bridges fire it meanwhile.
 
 ## Left out

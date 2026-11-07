@@ -5,10 +5,12 @@ import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.SectionPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunk;
 
 import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 
@@ -95,11 +97,14 @@ public class BlockDataChangeEvent extends BlockChangeEvent {
     }
 
     private static BlockState loadedState(ServerLevel level, BlockPos p) {
-        if (!level.hasChunkAt(p)) {
+        LevelChunk chunk = level.getChunkSource().getChunkNow(SectionPos.blockToSectionCoord(p.getX()),
+                SectionPos.blockToSectionCoord(p.getZ()));
+        if (chunk == null) {
             throw new IllegalArgumentException(p.toShortString() + " is in an unloaded chunk: load it before firing, "
-                    + "since protection must see every space the data covers, and reading it here would load it unseen");
+                    + "since protection must see every space the data covers, and reading it here would load it "
+                    + "unseen");
         }
-        return level.getBlockState(p);
+        return chunk.getBlockState(p);
     }
 
     /** Whose data this is: {@link #BLOCK_ENTITY}, or an id in the mod's namespace. */
@@ -108,8 +113,9 @@ public class BlockDataChangeEvent extends BlockChangeEvent {
     }
 
     /**
-     * A copy of the data before, in its owner's format. For a mod's own data, {@link #getBlocks()} still holds each
-     * space's block entity data, which this change leaves as it is.
+     * A copy of the data before, in its owner's format: the block entity's for {@link #BLOCK_ENTITY}, otherwise the
+     * mod's. To restore a block entity, use each space's data in {@link #getBlocks()}, which is always the block
+     * entity's.
      */
     public CompoundTag getBeforeData() {
         return before == null ? primary().getBeforeData().orElseThrow() : before.copy();

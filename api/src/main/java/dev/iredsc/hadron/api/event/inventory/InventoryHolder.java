@@ -28,8 +28,9 @@ import net.minecraft.world.item.ItemStack;
 public sealed interface InventoryHolder {
     /**
      * Where the inventory is, for protection: the block or entity itself, the place a per-player copy belongs to, or
-     * whatever holds the item a backpack is in. Empty for storage with no place (an ender chest) or nothing known.
-     * Check this rather than matching {@link Block} alone, so a Lootr chest or a backpack in a chest is protected too.
+     * whatever holds the item a backpack is in. Check this rather than matching {@link Block} alone, so a Lootr chest
+     * or a backpack in a chest is protected too. Empty for an ender chest, whose contents are its player's wherever
+     * it is opened, and for {@link Unknown}, which protection denies on its own: check for it first.
      */
     default Optional<InventoryHolder> place() {
         return switch (this) {

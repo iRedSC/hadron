@@ -43,7 +43,6 @@ import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.item.ItemStack;
@@ -226,6 +225,13 @@ public final class BridgeContractTests {
                 new CompoundTag(), strung, machine(t, alice)));
         refuses(t, "list it too", () -> new BlockDataChangeEvent(t.level(), from, wire, List.of(to),
                 new CompoundTag(), strung, machine(t, alice)));
+        BlockPos far = new BlockPos(1_000_000, 64, 1_000_000);
+        t.assertTrue(t.level().getChunkSource().getChunkNow(far.getX() >> 4, far.getZ() >> 4) == null, "the far space "
+                + "should be in an unloaded chunk");
+        refuses(t, "unloaded chunk", () -> new BlockDataChangeEvent(t.level(), from, wire, List.of(from, far),
+                new CompoundTag(), strung, machine(t, alice)));
+        t.assertTrue(t.level().getChunkSource().getChunkNow(far.getX() >> 4, far.getZ() >> 4) == null, "a refused "
+                + "event shouldn't have loaded the chunk");
         refuses(t, "isn't a mod's id", () -> new BlockDataChangeEvent(t.level(), from,
                 ResourceLocation.withDefaultNamespace("wire"), span, new CompoundTag(), strung, machine(t, alice)));
         t.assertEquals(BlockDataChangeEvent.BLOCK_ENTITY, new BlockDataChangeEvent(t.level(), from,
@@ -369,56 +375,6 @@ public final class BridgeContractTests {
                 "a BlockMoveEvent listener should hear the StructureMoveEvent with its phase and transforms, but "
                         + "heard " + seen.get(0));
         t.assertBlock(to, Blocks.OAK_PLANKS);
-    }
-
-    @HadronTest
-    @Covers(StructureMoveEvent.class)
-    void aMoveBetweenLevelsIsTwoStructureMovesEachInItsOwnLevel(TestContext t) {
-        TestPlayer alice = t.player("alice");
-        ServerLevel nether = t.server().getLevel(net.minecraft.world.level.Level.NETHER);
-        BlockPos from = t.pos(1, 0, 0);
-        BlockPos to = new BlockPos(0, 64, 0);
-        nether.getChunk(to); // a teleposer's target is loaded before it fires
-        nether.setBlockAndUpdate(to, Blocks.AIR.defaultBlockState());
-        t.setBlock(from, Blocks.OAK_PLANKS);
-        BlockState planks = t.getBlock(from);
-        boolean[] cancel = {false};
-        List<StructureMoveEvent> seen = record(t, StructureMoveEvent.class, new boolean[] {false});
-        t.registerEvents(new Listener() {
-            @EventHandler
-            void on(BlockEvent e) { // a claim in the nether, checked by each space's own level
-                if (e.getLevel() == nether && e instanceof dev.iredsc.hadron.api.event.Cancellable c && cancel[0]) {
-                    c.setCancelled(true);
-                }
-            }
-        });
-        Runnable teleport = () -> {
-            try (Actors.Scope scope = Actors.push(machine(t, alice))) {
-                Actor a = Actors.currentOr(Actor.Unknown.INSTANCE);
-                var manager = t.plugin().getServer().getPluginManager();
-                boolean out = manager.callEvent(new StructureMoveEvent(t.level(), from, planks,
-                        StructureMoveEvent.Phase.ASSEMBLE, new Matrix4d(), new Matrix4d(), List.of(), List.of(),
-                        List.of(BlockChange.of(t.level(), from, planks, Blocks.AIR.defaultBlockState())), a));
-                boolean in = manager.callEvent(new StructureMoveEvent(nether, to, Blocks.AIR.defaultBlockState(),
-                        StructureMoveEvent.Phase.DISASSEMBLE, new Matrix4d(), new Matrix4d(), List.of(), List.of(to),
-                        List.of(BlockChange.of(nether, to, nether.getBlockState(to), planks)), a));
-                if (out || in) return; // either refused: nothing moves
-                nether.setBlockAndUpdate(to, planks);
-                t.setBlock(from, Blocks.AIR);
-            }
-        };
-        cancel[0] = true;
-        teleport.run();
-        t.assertBlock(from, Blocks.OAK_PLANKS);
-        t.assertTrue(nether.getBlockState(to).isAir(), "a move refused at its target should leave the target empty");
-        t.assertEquals(List.of(t.level(), nether), seen.stream().map(BlockEvent::getLevel).toList(),
-                "one event in each level");
-        t.assertTrue(seen.stream().allMatch(e -> e.getMoves().isEmpty()), "no moves, so no position in the wrong level");
-        cancel[0] = false;
-        teleport.run();
-        t.assertBlock(from, Blocks.AIR);
-        t.assertTrue(nether.getBlockState(to).is(Blocks.OAK_PLANKS), "an allowed move lands in the nether");
-        nether.setBlockAndUpdate(to, Blocks.AIR.defaultBlockState());
     }
 
     // ---- Entities
