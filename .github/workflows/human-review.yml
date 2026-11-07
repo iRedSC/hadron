@@ -1,0 +1,33 @@
+# A PR touching a path in .github/human-review-paths.txt fails this check until the owner adds the `human-reviewed`
+# label. A new commit removes the label, because a review covers the commits it saw, not ones pushed after.
+name: Human review
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, labeled, unlabeled]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Drop a review that predates this commit
+        if: github.event.action == 'synchronize' && contains(github.event.pull_request.labels.*.name, 'human-reviewed')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: gh pr edit "$PR" --remove-label human-reviewed
+      - name: Check
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          # On synchronize the label was just removed above, so it no longer counts.
+          REVIEWED: ${{ github.event.action != 'synchronize' && contains(github.event.pull_request.labels.*.name, 'human-reviewed') }}
+        run: python3 .github/scripts/human_review.py

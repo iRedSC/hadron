@@ -4,6 +4,26 @@ For whoever reviews a change, not whoever writes it. The writer works from [AGEN
 
 A rule that a build check could enforce doesn't belong here. Write the check instead (see "Growing this file").
 
+## How to review
+
+- **Start the summary with a count**: "2 findings" or "No findings". Then one line per finding, worst first.
+- **Every finding cites a file and line** and says what goes wrong, with evidence from the code, never a guess from a name.
+- **No nits.** Style, naming taste and tidy-ups are not findings. An agent author fixes every comment, so each nit costs a full round.
+- **Mark pre-existing problems as such.** A bug the PR didn't introduce is "pre-existing", so it doesn't read as the author's fault.
+- **Name the class, not the instance.** When a mistake can recur, say so ("every listener that keeps the live stack"), so one round fixes all of them.
+- **At most 3 rounds.** After the third, stop reviewing and ask whether the approach is wrong. From the second round on, review only what changed since the last one, and never raise a finding again that was already answered.
+- **Skip** generated files, `build/`, and test reports.
+
+What counts as a failure depends on where the change is:
+
+| Where | It fails when |
+|---|---|
+| `api/` | an agent's first guess compiles but does the wrong thing, or a promise in the Javadoc isn't kept |
+| `common/`, `neoforge/` | a cancel leaves something behind, the wrong actor is blamed, or a hot path gets slower with nobody listening |
+| `neoforge/**/mixin/net/` | a client's packet can crash, stall or fool the server |
+| tests | the test could pass with the feature broken |
+| docs | they lie: they promise coverage, behaviour or a command that isn't there |
+
 ## Tests
 
 A test must be able to fail. Reject:
@@ -32,7 +52,7 @@ A test must be able to fail. Reject:
 
 ## Growing this file
 
-After each merged PR, look at every fix made during its review, its test runs or its triage, and ask which check would have caught it first. In order of preference:
+After each merged PR, look at every fix made during its review, its test runs or its triage, and ask which check would have caught it first. A bug fix also needs a test that fails without the fix, so the bug can't return unnoticed. In order of preference:
 
 1. **A type or API that can't be misused.** Then the mistake can't be written.
 2. **A build check** (like `coverageCheck` or the `plugin.yml` checks) that fails and says the fix.
