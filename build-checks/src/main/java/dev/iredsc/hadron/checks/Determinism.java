@@ -10,6 +10,7 @@ import com.google.errorprone.BugPattern;
 import com.google.errorprone.ErrorProneFlags;
 import com.google.errorprone.VisitorState;
 import com.google.errorprone.bugpatterns.BugChecker;
+import com.google.errorprone.bugpatterns.BugChecker.MemberReferenceTreeMatcher;
 import com.google.errorprone.bugpatterns.BugChecker.MethodInvocationTreeMatcher;
 import com.google.errorprone.bugpatterns.BugChecker.NewClassTreeMatcher;
 import com.google.errorprone.matchers.Description;
@@ -17,6 +18,7 @@ import com.google.errorprone.matchers.Matcher;
 import com.google.errorprone.matchers.Matchers;
 import com.google.errorprone.util.ASTHelpers;
 import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.NewClassTree;
 import com.sun.source.tree.Tree;
@@ -36,7 +38,8 @@ import javax.inject.Inject;
                 + "and seeded randomness",
         severity = ERROR,
         suppressionAnnotations = {})
-public final class Determinism extends BugChecker implements MethodInvocationTreeMatcher, NewClassTreeMatcher {
+public final class Determinism extends BugChecker
+        implements MethodInvocationTreeMatcher, MemberReferenceTreeMatcher, NewClassTreeMatcher {
     static final String EXEMPTION = "dev.iredsc.hadron.checks.Nondeterministic";
 
     private final boolean exemptions;
@@ -55,45 +58,65 @@ public final class Determinism extends BugChecker implements MethodInvocationTre
             + "t.await(condition, ticks); in a plugin or Hadron's host, the scheduler's runTaskLater(ticks) or the "
             + "server's tick count.";
 
-    private static final Matcher<ExpressionTree> CLOCK = staticMethod().onClass("java.lang.System")
-            .namedAnyOf("currentTimeMillis", "nanoTime");
-    private static final Matcher<ExpressionTree> NOW = staticMethod()
-            .onClassAny("java.time.Instant", "java.time.LocalDateTime", "java.time.LocalTime", "java.time.ZonedDateTime",
-                    "java.time.OffsetDateTime", "java.time.LocalDate")
-            .named("now");
+    private static final Matcher<ExpressionTree> CLOCK = Matchers.anyOf(
+            staticMethod().onClass("java.lang.System").namedAnyOf("currentTimeMillis", "nanoTime"),
+            // The system clock itself: whatever reads it later (millis(), instant(), Instant.now(clock)) reads the
+            // wall clock. Clock.fixed(...) and Clock.offset of a fixed clock stay allowed.
+            staticMethod().onClass("java.time.Clock")
+                    .namedAnyOf("systemUTC", "systemDefaultZone", "system", "tickSeconds", "tickMinutes", "tickMillis"),
+            staticMethod().onClass("java.time.InstantSource").named("system"),
+            // now() and now(ZoneId) read the system clock; now(Clock) reads the clock it's given.
+            Matchers.allOf(
+                    staticMethod().onClassAny("java.time.Instant", "java.time.LocalDateTime", "java.time.LocalTime",
+                                    "java.time.ZonedDateTime", "java.time.OffsetDateTime", "java.time.OffsetTime",
+                                    "java.time.LocalDate", "java.time.Year", "java.time.YearMonth",
+                                    "java.time.MonthDay")
+                            .named("now"),
+                    Matchers.not(staticMethod().anyClass().named("now").withParameters("java.time.Clock"))));
     private static final Matcher<ExpressionTree> SLEEP = Matchers.anyOf(
             staticMethod().onClass("java.lang.Thread").named("sleep"),
             instanceMethod().onExactClass("java.util.concurrent.TimeUnit").named("sleep"));
     private static final Matcher<ExpressionTree> RANDOM = Matchers.anyOf(
             staticMethod().onClass("java.lang.Math").named("random"),
-            staticMethod().onClass("java.util.concurrent.ThreadLocalRandom").named("current"));
-    private static final Matcher<ExpressionTree> NEW_RANDOM = constructor().forClass("java.util.Random")
-            .withNoParameters();
+            staticMethod().onClass("java.util.concurrent.ThreadLocalRandom").named("current"),
+            staticMethod().onClass("net.minecraft.util.RandomSource").named("create").withNoParameters(),
+            constructor().forClass("java.util.Random").withNoParameters(),
+            constructor().forClass("java.util.SplittableRandom").withNoParameters());
 
     @Override
     public Description matchMethodInvocation(MethodInvocationTree tree, VisitorState state) {
+        return check(tree, state);
+    }
+
+    /** System::nanoTime and Thread::sleep are the same calls, made later. */
+    @Override
+    public Description matchMemberReference(MemberReferenceTree tree, VisitorState state) {
+        return check(tree, state);
+    }
+
+    @Override
+    public Description matchNewClass(NewClassTree tree, VisitorState state) {
+        return check(tree, state);
+    }
+
+    private Description check(ExpressionTree tree, VisitorState state) {
         String message;
-        if (CLOCK.matches(tree, state) || NOW.matches(tree, state)) {
-            message = "Reading the wall clock makes a result depend on how fast the machine runs." + TICKS;
+        if (CLOCK.matches(tree, state)) {
+            message = "Reading the wall clock makes a result depend on how fast the machine runs." + TICKS
+                    + " Code that takes a java.time.Clock can be given Clock.fixed(...).";
         } else if (SLEEP.matches(tree, state)) {
             message = "Sleeping waits a fixed wall time, so it passes on a fast machine and fails on a busy one."
                     + TICKS + " To wait for another thread (an async task, a chunk loading), in a test, "
                     + "t.awaitAsync(\"what\", condition, ticks); elsewhere, wait on what it signals (a "
                     + "CompletableFuture, a latch).";
         } else if (RANDOM.matches(tree, state)) {
-            message = "Unseeded randomness can't be repeated when a test fails. Take a java.util.Random with a seed "
-                    + "(new Random(seed)), or the level's own RandomSource, so the same seed gives the same result.";
+            message = "Unseeded randomness can't be repeated when a test fails. Pass a seed: new Random(seed), "
+                    + "new SplittableRandom(seed), RandomSource.create(seed), or use the level's own RandomSource, "
+                    + "so the same seed gives the same result.";
         } else {
             return Description.NO_MATCH;
         }
         return report(tree, state, message);
-    }
-
-    @Override
-    public Description matchNewClass(NewClassTree tree, VisitorState state) {
-        if (!NEW_RANDOM.matches(tree, state)) return Description.NO_MATCH;
-        return report(tree, state, "new Random() is seeded from the clock, so a failure can't be repeated. Pass a "
-                + "seed: new Random(seed), or use the level's own RandomSource.");
     }
 
     private Description report(Tree tree, VisitorState state, String message) {

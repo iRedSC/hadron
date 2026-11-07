@@ -102,5 +102,6 @@ dependencies { compileOnly(project(":build-checks")) }
 extra["hadronChecks.nullAway"] = listOf("main")
 extra["hadronChecks.exemptions"] = true
 extra["hadronChecks.staticState"] = listOf("main")
-extra["hadronChecks.determinism"] = listOf<String>()
+// Tests are deterministic (docs/design.md); the api itself reads no clock.
+extra["hadronChecks.determinism"] = listOf("test")
 apply(from = rootProject.file("gradle/hadron-checks.gradle.kts"))

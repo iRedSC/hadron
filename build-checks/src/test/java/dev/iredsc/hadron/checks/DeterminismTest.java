@@ -44,6 +44,74 @@ class DeterminismTest {
     }
 
     @Test
+    void refusesMemberReferencesSystemClocksAndOtherUnseededSources() {
+        helper.addSourceLines("net/minecraft/util/RandomSource.java",
+                        "package net.minecraft.util;",
+                        "public interface RandomSource {",
+                        "  static RandomSource create() { return null; }",
+                        "  static RandomSource create(long seed) { return null; }",
+                        "}")
+                .addSourceLines("com/example/MyTests.java",
+                "package com.example;",
+                "import java.time.*;",
+                "import java.util.*;",
+                "import java.util.function.*;",
+                "import net.minecraft.util.RandomSource;",
+                "class MyTests {",
+                "  interface Sleeper { void sleep(long ms) throws InterruptedException; }",
+                "  void later() {",
+                "    // BUG: Diagnostic contains: wall clock",
+                "    LongSupplier nanos = System::nanoTime;",
+                "    // BUG: Diagnostic contains: Sleeping",
+                "    Sleeper sleeper = Thread::sleep;",
+                "    // BUG: Diagnostic contains: wall clock",
+                "    Supplier<Instant> now = Instant::now;",
+                "    // BUG: Diagnostic contains: Pass a seed",
+                "    Supplier<Random> random = Random::new;",
+                "    // BUG: Diagnostic contains: wall clock",
+                "    long millis = Clock.systemUTC().millis();",
+                "    // BUG: Diagnostic contains: wall clock",
+                "    Instant instant = Clock.systemDefaultZone().instant();",
+                "    // BUG: Diagnostic contains: wall clock",
+                "    InstantSource source = InstantSource.system();",
+                "    // BUG: Diagnostic contains: wall clock",
+                "    LocalDate today = LocalDate.now(ZoneId.of(\"UTC\"));",
+                "    // BUG: Diagnostic contains: Pass a seed",
+                "    SplittableRandom split = new SplittableRandom();",
+                "    // BUG: Diagnostic contains: Pass a seed",
+                "    RandomSource mc = RandomSource.create();",
+                "  }",
+                "}")
+                .doTest();
+    }
+
+    @Test
+    void acceptsFixedClocksAndSeededSources() {
+        helper.addSourceLines("net/minecraft/util/RandomSource.java",
+                        "package net.minecraft.util;",
+                        "public interface RandomSource {",
+                        "  static RandomSource create() { return null; }",
+                        "  static RandomSource create(long seed) { return null; }",
+                        "}")
+                .addSourceLines("com/example/MyTests.java",
+                "package com.example;",
+                "import java.time.*;",
+                "import java.util.*;",
+                "import net.minecraft.util.RandomSource;",
+                "class MyTests {",
+                "  void fixed(long seed) {",
+                "    Clock clock = Clock.fixed(Instant.EPOCH, ZoneOffset.UTC);",
+                "    Instant at = Instant.now(clock);",
+                "    LocalDate day = LocalDate.now(clock);",
+                "    long millis = Clock.offset(clock, Duration.ofSeconds(5)).millis();",
+                "    SplittableRandom split = new SplittableRandom(seed);",
+                "    RandomSource mc = RandomSource.create(seed);",
+                "  }",
+                "}")
+                .doTest();
+    }
+
+    @Test
     void acceptsSeededRandomnessAndTicks() {
         helper.addSourceLines("com/example/MyTests.java",
                 "package com.example;",
