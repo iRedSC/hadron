@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.item;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -24,13 +25,13 @@ public class PrepareAnvilEvent extends ItemEvent implements Cancellable {
     private final AnvilMenu menu;
     private final ItemStack left;
     private final ItemStack right;
-    private final String renameText;
+    private final @Nullable String renameText;
     private ItemStack result;
     private int repairCost;
     private boolean cancelled;
 
     public PrepareAnvilEvent(ServerLevel level, ServerPlayer viewer, InventoryHolder holder, AnvilMenu menu,
-            ItemStack left, ItemStack right, String renameText, ItemStack result, int repairCost, Actor actor) {
+            ItemStack left, ItemStack right, @Nullable String renameText, ItemStack result, int repairCost, Actor actor) {
         super(level, left.copy(), actor);
         this.viewer = Objects.requireNonNull(viewer, "viewer");
         this.holder = Objects.requireNonNull(holder, "holder");
@@ -67,7 +68,7 @@ public class PrepareAnvilEvent extends ItemEvent implements Cancellable {
     }
 
     /** The name typed, or null if none. */
-    public String getRenameText() {
+    public @Nullable String getRenameText() {
         return renameText;
     }
 

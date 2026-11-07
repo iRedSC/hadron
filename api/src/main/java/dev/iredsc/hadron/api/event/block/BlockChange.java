@@ -56,13 +56,13 @@ public final class BlockChange {
      * "no block entity". Use this when the data after is already in place, or moves with the block (a piston push).
      */
     public static BlockChange live(ServerLevel level, BlockPos pos, BlockState before, BlockState after,
-            BlockEntity beforeEntity, BlockEntity afterEntity) {
+            @Nullable BlockEntity beforeEntity, @Nullable BlockEntity afterEntity) {
         return new BlockChange(pos, before, after, level.registryAccess(), beforeEntity, null, afterEntity, null);
     }
 
     /** A change whose data was already copied. Either tag may be null for "no block entity". */
-    public static BlockChange withData(BlockPos pos, BlockState before, BlockState after, CompoundTag beforeData,
-            CompoundTag afterData) {
+    public static BlockChange withData(BlockPos pos, BlockState before, BlockState after,
+            @Nullable CompoundTag beforeData, @Nullable CompoundTag afterData) {
         return new BlockChange(pos, before, after, null, null, beforeData, null, afterData);
     }
 

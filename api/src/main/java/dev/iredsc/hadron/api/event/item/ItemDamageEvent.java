@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.item;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -18,13 +19,13 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  */
 @FiredBy(core = FULL)
 public class ItemDamageEvent extends ItemChangeEvent {
-    private final LivingEntity entity;
+    private final @Nullable LivingEntity entity;
     private int damage;
 
     /**
      * @param entity who holds the item, or null when nobody does (a dispenser's shears)
      */
-    public ItemDamageEvent(ServerLevel level, InventoryHolder holder, LivingEntity entity, ItemStack item, int damage,
+    public ItemDamageEvent(ServerLevel level, InventoryHolder holder, @Nullable LivingEntity entity, ItemStack item, int damage,
             Actor actor) {
         super(level, holder, item, damaged(item, damage), actor);
         this.entity = entity;

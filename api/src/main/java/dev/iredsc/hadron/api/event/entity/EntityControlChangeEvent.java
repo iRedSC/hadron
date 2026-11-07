@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -23,11 +24,11 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
                 + "expiry is after-only",
         fillIn = "old and new controller")
 public class EntityControlChangeEvent extends EntityEvent implements Cancellable {
-    private final UUID oldController;
-    private final UUID newController;
+    private final @Nullable UUID oldController;
+    private final @Nullable UUID newController;
     private boolean cancelled;
 
-    public EntityControlChangeEvent(Entity entity, UUID oldController, UUID newController, Actor actor) {
+    public EntityControlChangeEvent(Entity entity, @Nullable UUID oldController, @Nullable UUID newController, Actor actor) {
         super(entity, actor);
         this.oldController = oldController;
         this.newController = newController;

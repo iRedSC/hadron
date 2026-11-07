@@ -31,12 +31,12 @@ public class EntityPotionEffectEvent extends EntityEvent implements Cancellable 
     }
 
     private final Holder<MobEffect> effect;
-    private final MobEffectInstance oldEffect;
+    private final @Nullable MobEffectInstance oldEffect;
     private final @Nullable MobEffectInstance newEffect;
     private final Action action;
     private boolean cancelled;
 
-    public EntityPotionEffectEvent(LivingEntity entity, Holder<MobEffect> effect, MobEffectInstance oldEffect,
+    public EntityPotionEffectEvent(LivingEntity entity, Holder<MobEffect> effect, @Nullable MobEffectInstance oldEffect,
             @Nullable MobEffectInstance newEffect, Action action, Actor actor) {
         super(entity, actor);
         this.effect = Objects.requireNonNull(effect, "effect");
