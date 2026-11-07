@@ -2,6 +2,18 @@
 
 `./gradlew hadronTest` runs a plugin in a headless server with scripted players and reports pass or fail, so an agent proves a plugin works before claiming it does. Hadron tests itself the same way: every event, cancel, change and API is covered by tests written with the harness plugin authors use.
 
+## Two tiers
+
+| | Fast tests | In-game tests |
+|---|---|---|
+| What they check | anything that decides rather than acts: rules, maths, parsing, validation | anything that touches the world, a player or a packet |
+| Run with | `./gradlew test` (`:api:test`, `:common:test`, a plugin's own `test`) | `./gradlew hadronTest`, or warm with `hadronWatch` and `hadronRerun` |
+| Written as | JUnit 5 `@Test`, in `src/test/java` | `@HadronTest` taking a `TestContext`, in `src/test/java` |
+| Minecraft | registries only: put `@WithMinecraft` on the class (or call `MinecraftBootstrap.ensure()`), then `ItemStack`, `BlockState`, components and `ResourceLocation` work; classes without it never boot Minecraft | a real headless server, real players over an in-memory connection |
+| Cost | milliseconds a test; about 6 s once per JVM to boot the registries | about 14 s to boot a server, then about half a second a test; a warm rerun about 5 s |
+
+Use the fast tier for every decision you can, and the in-game tier for every effect. Both tiers live in the same `src/test/java`; `hadronTest` runs only classes holding an `@HadronTest`, so a JUnit class never reaches the server. `examples/hello`'s `HelloFastTest` is the example to copy: it checks the plugin's packed `plugin.yml` against Hadron's own rules, so a bad one fails at `./gradlew test` instead of at server start.
+
 ## What a test looks like
 
 ```java

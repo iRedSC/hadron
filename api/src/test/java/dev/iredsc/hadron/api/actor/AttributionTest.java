@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.actor;
 
+import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
@@ -16,10 +17,10 @@ class AttributionTest {
     private static final UUID DRIVER = UUID.fromString("00000000-0000-0000-0000-000000000002");
     private static final UUID ADMIN = UUID.fromString("00000000-0000-0000-0000-000000000003");
 
+    @Covers(value = Attribution.class, method = "none")
+    @Covers(value = Attribution.class, method = "isEmpty")
     @Test
     void noneIsEmptyAndActsForNobody() {
-        // COVERS: Attribution#none
-        // COVERS: Attribution#isEmpty
         Attribution none = Attribution.none();
         assertTrue(none.isEmpty());
         assertEquals(Optional.empty(), none.responsible());
@@ -29,10 +30,10 @@ class AttributionTest {
         assertSame(none, Attribution.none());
     }
 
+    @Covers(value = Attribution.class, method = "of")
+    @Covers(value = Attribution.class, method = "actingFor")
     @Test
     void ofMakesTheResponsiblePlayerTheOneActedFor() {
-        // COVERS: Attribution#of
-        // COVERS: Attribution#actingFor
         Attribution a = Attribution.of(OWNER);
         assertEquals(Optional.of(OWNER), a.responsible());
         assertEquals(Optional.empty(), a.controller());
@@ -40,37 +41,37 @@ class AttributionTest {
         assertFalse(a.isEmpty());
     }
 
+    @Covers(value = Attribution.class, method = "of")
     @Test
     void ofNullIsRefusedPointingAtNone() {
-        // COVERS: Attribution#of
         NullPointerException e = assertThrows(NullPointerException.class, () -> Attribution.of(null));
         assertTrue(e.getMessage().contains("Attribution.none()"), e.getMessage());
     }
 
+    @Covers(value = Attribution.class, method = "actingFor")
+    @Covers(value = Attribution.class, method = "withController")
     @Test
     void aControllerIsWhomProtectionChecksOverTheOwner() {
-        // COVERS: Attribution#actingFor
-        // COVERS: Attribution#withController
         Attribution charmed = Attribution.of(OWNER).withController(DRIVER);
         assertEquals(Optional.of(DRIVER), charmed.actingFor());
         assertEquals(Optional.of(OWNER), charmed.responsible());
     }
 
+    @Covers(value = Attribution.class, method = "withAuthority")
+    @Covers(value = Attribution.class, method = "actingFor")
     @Test
     void authorityAloneActsForNobody() {
-        // COVERS: Attribution#withAuthority
-        // COVERS: Attribution#actingFor
         Attribution a = Attribution.none().withAuthority(ADMIN);
         assertFalse(a.isEmpty());
         assertEquals(Optional.of(ADMIN), a.authority());
         assertEquals(Optional.empty(), a.actingFor());
     }
 
+    @Covers(value = Attribution.class, method = "withResponsible")
+    @Covers(value = Attribution.class, method = "withController")
+    @Covers(value = Attribution.class, method = "withAuthority")
     @Test
     void withMethodsReturnCopiesAndLeaveTheOriginal() {
-        // COVERS: Attribution#withResponsible
-        // COVERS: Attribution#withController
-        // COVERS: Attribution#withAuthority
         Attribution base = Attribution.of(OWNER);
         Attribution changed = base.withResponsible(DRIVER).withController(OWNER).withAuthority(ADMIN);
         assertEquals(Optional.of(OWNER), base.responsible());
@@ -79,21 +80,16 @@ class AttributionTest {
         assertEquals(Optional.of(OWNER), changed.controller());
         assertEquals(Optional.of(ADMIN), changed.authority());
     }
-
+    @Covers(value = Attribution.class, method = "isEmpty")
     @Test
     void clearingEveryPartEqualsNone() {
-        // COVERS: Attribution#equals
-        // COVERS: Attribution#isEmpty
         Attribution cleared = Attribution.of(OWNER).withResponsible(null);
         assertTrue(cleared.isEmpty());
         assertEquals(Attribution.none(), cleared);
         assertEquals(Attribution.none().hashCode(), cleared.hashCode());
     }
-
     @Test
     void equalityComparesAllThreeParts() {
-        // COVERS: Attribution#equals
-        // COVERS: Attribution#hashCode
         Attribution a = Attribution.of(OWNER).withController(DRIVER).withAuthority(ADMIN);
         Attribution b = Attribution.of(OWNER).withController(DRIVER).withAuthority(ADMIN);
         assertEquals(a, b);
@@ -104,10 +100,10 @@ class AttributionTest {
         assertTrue(a.toString().contains(OWNER.toString()));
     }
 
+    @Covers(value = Actor.class, method = "attribution")
+    @Covers(value = Actor.class, method = "actingFor")
     @Test
     void serverNatureAndUnknownActorsCarryNoAttribution() {
-        // COVERS: Actor#attribution
-        // COVERS: Actor#actingFor
         assertTrue(new Actor.Server("Server").attribution().isEmpty());
         assertTrue(Actor.Nature.INSTANCE.attribution().isEmpty());
         assertTrue(Actor.Unknown.INSTANCE.attribution().isEmpty());

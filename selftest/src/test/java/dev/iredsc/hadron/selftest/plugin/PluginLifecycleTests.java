@@ -40,7 +40,7 @@ public final class PluginLifecycleTests {
     private static String pluginYml(String minecraft) {
         return String.join("\n",
                 "name: " + NAME,
-                "version: 1.2",
+                "version: \"1.2\"",
                 "minecraft: " + minecraft,
                 "main: " + ProbePlugin.class.getName(),
                 "description: Probes Hadron's plugin lifecycle",

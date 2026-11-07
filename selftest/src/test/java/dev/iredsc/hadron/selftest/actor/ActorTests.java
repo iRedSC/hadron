@@ -122,10 +122,12 @@ public final class ActorTests {
     @Covers(BlockPlaceEvent.class)
     void anOperationGroupsEveryEventFiredInsideIt(TestContext t) {
         List<Operation> seen = new ArrayList<>();
+        List<String> heard = new ArrayList<>(); // for the failure message: which placements arrived
         t.registerEvents(new Listener() {
             @EventHandler
             void on(BlockPlaceEvent e) {
                 seen.add(e.getOperation());
+                heard.add(e.getPos().subtract(t.pos(0, 0, 0)) + " by " + e.getActor() + " in " + e.getOperation());
             }
         });
         t.assertEquals(null, Operation.current(), "the open operation outside any");
@@ -143,7 +145,7 @@ public final class ActorTests {
         t.assertEquals(null, Operation.current(), "the open operation after the scope closed");
         // With nothing pushed, a bare setBlock is nobody's and fires nothing; an actor outside any operation does.
         Actors.acting(Actor.Nature.INSTANCE, () -> t.setBlock(t.pos(3, 0, 0), Blocks.STONE));
-        t.assertEquals(3, seen.size(), "the placements heard");
+        t.assertEquals(3, seen.size(), "the placements heard (expected at 1, 2 and 3 along x; heard " + heard + ")");
         t.assertTrue(seen.get(0) == open && seen.get(1) == open, "both placements inside the operation should "
                 + "carry it, but carried " + seen);
         t.assertTrue(seen.get(2) != open && seen.get(2).id() != open.id(), "a placement outside should get an "

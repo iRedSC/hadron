@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api;
 
+import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNotSame;
@@ -81,20 +82,20 @@ class NodeTest {
         }
     }
 
+    @Covers(value = Node.class, method = "declare")
     @ParameterizedTest
     @ValueSource(strings = {"homes", "Homes.set", "homes.", ".set", "homes..set", "homes.se t", "homes.*"})
     void aMalformedIdIsRefused(String id) {
-        // COVERS: Node#declare
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> Node.declare(id, Default.OPS, ""));
         assertTrue(e.getMessage().contains("plugin.thing"), e.getMessage());
     }
 
+    @Covers(value = Node.class, method = "declare")
+    @Covers(value = Node.class, method = "get")
+    @Covers(value = Node.class, method = "all")
     @Test
     void aDeclaredNodeIsFoundByIdAndListed() {
-        // COVERS: Node#declare
-        // COVERS: Node#get
-        // COVERS: Node#all
         String id = id();
         Node node = Node.declare(id, Default.EVERYONE, "Do the thing");
         assertEquals(id, node.id);
@@ -106,49 +107,43 @@ class NodeTest {
         assertNull(Node.get("nodetest.never"));
     }
 
+    @Covers(value = Node.class, method = "declare")
     @Test
     void declaringTwiceWithTheSameDefaultGivesTheFirstNode() {
-        // COVERS: Node#declare
         String id = id();
         assertSame(Node.declare(id, Default.OPS, "a"), Node.declare(id, Default.OPS, "b"));
     }
 
+    @Covers(value = Node.class, method = "declare")
     @Test
     void declaringTwiceWithDifferentDefaultsIsRefusedNamingBoth() {
-        // COVERS: Node#declare
         String id = id();
         Node.declare(id, Default.OPS, "");
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> Node.declare(id, Default.EVERYONE, ""));
         assertTrue(e.getMessage().contains("OPS") && e.getMessage().contains("EVERYONE"), e.getMessage());
     }
-
+    @Covers(value = Node.Lifecycle.class, method = "declare")
     @ParameterizedTest
     @ValueSource(strings = {"use", "place", "break", "open", "attack", "command", "packet", "hadron"})
     void aPluginCantDeclareUnderAReservedRoot(String root) {
-        // COVERS: Node#RESERVED_ROOTS
-        // COVERS: Node.Lifecycle#declare
         PluginException e = assertThrows(PluginException.class, () -> Node.Lifecycle.declare(root + ".x",
                 Default.OPS, "", new PluginLoaderStandIn()));
         assertTrue(e.getMessage().contains("such as homes.x"), e.getMessage());
     }
-
     @Test
     void hadronItselfMayDeclareUnderAReservedRoot() {
-        // COVERS: Node#RESERVED_ROOTS
         assertNotNull(Node.Lifecycle.declare("hadron.nodetest" + IDS.incrementAndGet(), Default.OPS, "", null));
     }
-
     @Test
     void aReservedWordFurtherInIsFine() {
-        // COVERS: Node#RESERVED_ROOTS
         assertNotNull(Node.Lifecycle.declare("homes.use" + IDS.incrementAndGet(), Default.OPS, "",
                 new PluginLoaderStandIn()));
     }
 
+    @Covers(value = Node.Lifecycle.class, method = "declareImplicit")
     @Test
     void anImplicitNodeGivesWayToTheExplicitDeclaration() {
-        // COVERS: Node.Lifecycle#declareImplicit
         String id = id();
         ClassLoader owner = new PluginLoaderStandIn();
         Node implicit = Node.Lifecycle.declareImplicit(id, "command permission", owner);
@@ -160,9 +155,9 @@ class NodeTest {
         assertSame(explicit, Node.Lifecycle.declareImplicit(id, "again", owner));
     }
 
+    @Covers(value = Node.Lifecycle.class, method = "release")
     @Test
     void releasingTheLastOwnerRemovesTheNode() {
-        // COVERS: Node.Lifecycle#release
         String id = id();
         ClassLoader first = new PluginLoaderStandIn();
         ClassLoader second = new PluginLoaderStandIn();
@@ -174,9 +169,9 @@ class NodeTest {
         assertNull(Node.get(id));
     }
 
+    @Covers(value = Node.Lifecycle.class, method = "release")
     @Test
     void aDeclarationWithNoClassLoaderIsPermanent() {
-        // COVERS: Node.Lifecycle#release
         String id = id();
         Node.Lifecycle.declare(id, Default.OPS, "", null);
         Node.Lifecycle.release(null);

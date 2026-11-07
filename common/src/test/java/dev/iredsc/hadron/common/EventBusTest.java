@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -64,7 +65,6 @@ class EventBusTest {
 
     @Test
     void handlersRunLowestToMonitor() {
-        // COVERS: EventBus#post
         subscribe(new Listener() {
             @EventHandler(priority = EventPriority.MONITOR)
             void monitor(Ping p) {
@@ -103,7 +103,6 @@ class EventBusTest {
 
     @Test
     void equalPrioritiesRunInTheOrderRegistered() {
-        // COVERS: EventBus#post
         for (String name : List.of("a", "b", "c")) {
             subscribe(new Listener() {
                 @EventHandler
@@ -119,7 +118,6 @@ class EventBusTest {
 
     @Test
     void aLaterRegisteredHigherPriorityStillRunsAfter() {
-        // COVERS: EventBus#post
         subscribe(new Listener() {
             @EventHandler(priority = EventPriority.HIGH)
             void on(Ping p) {
@@ -139,9 +137,9 @@ class EventBusTest {
 
     // ---- cancellation ----
 
+    @Covers(value = EventHandler.class, method = "ignoreCancelled")
     @Test
     void ignoreCancelledSkipsWhatAnEarlierHandlerCancelled() {
-        // COVERS: EventHandler#ignoreCancelled
         subscribe(new Listener() {
             @EventHandler(priority = EventPriority.LOW)
             void cancel(Stoppable s) {
@@ -163,9 +161,9 @@ class EventBusTest {
         assertEquals(List.of("monitor sees true"), event.heard);
     }
 
+    @Covers(value = EventHandler.class, method = "ignoreCancelled")
     @Test
     void anUncancelledEventReachesIgnoreCancelledHandlers() {
-        // COVERS: EventHandler#ignoreCancelled
         subscribe(new Listener() {
             @EventHandler(ignoreCancelled = true)
             void on(Stoppable s) {
@@ -179,7 +177,6 @@ class EventBusTest {
 
     @Test
     void aLaterHandlerCanUncancel() {
-        // COVERS: EventBus#post
         subscribe(new Listener() {
             @EventHandler(priority = EventPriority.LOW)
             void cancel(Stoppable s) {
@@ -206,7 +203,6 @@ class EventBusTest {
 
     @Test
     void aHandlerForAParentClassHearsSubclasses() {
-        // COVERS: EventBus#post
         subscribe(new Listener() {
             @EventHandler
             void any(Event e) {
@@ -233,7 +229,6 @@ class EventBusTest {
 
     @Test
     void listensIsTrueOnlyWhenSomethingHearsTheClass() {
-        // COVERS: EventBus#listens
         assertFalse(bus.listens(Ping.class));
         List<EventBus.Subscription> subs = subscribe(new Listener() {
             @EventHandler
@@ -247,7 +242,6 @@ class EventBusTest {
 
     @Test
     void listensSeesAParentClassHandler() {
-        // COVERS: EventBus#listens
         subscribe(new Listener() {
             @EventHandler
             void any(Ping p) {}
@@ -260,7 +254,6 @@ class EventBusTest {
 
     @Test
     void aRemovedHandlerHearsNothingMore() {
-        // COVERS: EventBus.Subscription#remove
         List<EventBus.Subscription> subs = subscribe(new Listener() {
             @EventHandler
             void on(Ping p) {
@@ -277,7 +270,6 @@ class EventBusTest {
 
     @Test
     void aHandlerAddedAfterAPostIsHeardByTheNext() {
-        // COVERS: EventBus#subscribe
         bus.post(new Ping());
         subscribe(new Listener() {
             @EventHandler
@@ -292,7 +284,6 @@ class EventBusTest {
 
     @Test
     void aHandlerRemovedMidPostIsSkippedForTheRestOfIt() {
-        // COVERS: EventBus.Subscription#remove
         List<EventBus.Subscription> later = new ArrayList<>();
         subscribe(new Listener() {
             @EventHandler(priority = EventPriority.LOW)
@@ -313,7 +304,6 @@ class EventBusTest {
 
     @Test
     void subscribeReturnsOneSubscriptionPerHandler() {
-        // COVERS: EventBus#subscribe
         Listener listener = new Listener() {
             @EventHandler
             void a(Ping p) {}
@@ -355,7 +345,6 @@ class EventBusTest {
 
     @Test
     void inheritedPrivateAndStaticHandlersAreFoundAndAnOverrideRunsOnce() {
-        // COVERS: EventBus#subscribe
         subscribe(new ChildListener());
         Ping ping = new Ping();
         bus.post(ping);
@@ -365,7 +354,6 @@ class EventBusTest {
 
     @Test
     void aHandlerThatDoesntTakeOneEventIsRefusedAndNothingIsRegistered() {
-        // COVERS: EventBus#subscribe
         Listener bad = new Listener() {
             @EventHandler
             void good(Ping p) {
@@ -386,7 +374,6 @@ class EventBusTest {
 
     @Test
     void aHandlerWithTwoParametersIsRefused() {
-        // COVERS: EventBus#subscribe
         assertThrows(IllegalArgumentException.class, () -> subscribe(new Listener() {
             @EventHandler
             void two(Ping a, Ping b) {}
@@ -397,7 +384,6 @@ class EventBusTest {
 
     @Test
     void aThrowingHandlerCostsOnlyItsOwnCall() {
-        // COVERS: EventBus#post
         subscribe(new Listener() {
             @EventHandler(priority = EventPriority.LOW)
             void broken(Ping p) {
@@ -419,7 +405,6 @@ class EventBusTest {
 
     @Test
     void aFrequentFailureIsLoggedFiveTimesThenEveryThousandth() {
-        // COVERS: EventBus#post
         subscribe(new Listener() {
             @EventHandler
             void broken(Ping p) {
@@ -434,7 +419,6 @@ class EventBusTest {
 
     @Test
     void anErrorThrownByAHandlerIsContainedToo() {
-        // COVERS: EventBus#post
         subscribe(new Listener() {
             @EventHandler
             void broken(Ping p) {
@@ -449,7 +433,6 @@ class EventBusTest {
 
     @Test
     void awaitIdleWaitsForACallOnAnotherThread() throws Exception {
-        // COVERS: EventBus.Subscription#awaitIdle
         CountDownLatch inside = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
         List<EventBus.Subscription> subs = subscribe(new Listener() {
@@ -473,7 +456,6 @@ class EventBusTest {
 
     @Test
     void awaitIdleFromInsideTheHandlerDoesntWaitForItself() {
-        // COVERS: EventBus.Subscription#awaitIdle
         List<EventBus.Subscription> subs = new ArrayList<>();
         List<Boolean> idle = new ArrayList<>();
         subs.addAll(subscribe(new Listener() {

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.plugin;
 
+import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
@@ -34,9 +35,9 @@ class PluginDescriptionTest {
         return assertThrows(PluginException.class, () -> PluginDescription.parse(yaml)).getMessage();
     }
 
+    @Covers(value = PluginDescription.class, method = "parse")
     @Test
     void aMinimalPluginYmlParsesWithEmptyDefaults() {
-        // COVERS: PluginDescription#parse
         PluginDescription d = PluginDescription.parse(minimal());
         assertEquals("Homes", d.getName());
         assertEquals("1.0", d.getVersion());
@@ -54,10 +55,10 @@ class PluginDescriptionTest {
         assertEquals("Homes v1.0", d.getFullName());
     }
 
+    @Covers(value = PluginDescription.class, method = "parse")
     @ParameterizedTest
     @ValueSource(strings = {"name", "version", "main"})
     void eachRequiredKeyIsNamedWhenMissing(String key) {
-        // COVERS: PluginDescription#parse
         Map<String, Object> yaml = minimal();
         yaml.remove(key);
         assertEquals("plugin.yml needs '" + key + "'", refusal(yaml));
@@ -65,54 +66,59 @@ class PluginDescriptionTest {
         assertEquals("plugin.yml needs '" + key + "'", refusal(yaml));
     }
 
+    @Covers(value = PluginDescription.class, method = "parse")
     @Test
     void aMissingMinecraftVersionSaysHowToFillItIn() {
-        // COVERS: PluginDescription#parse
         Map<String, Object> yaml = minimal();
         yaml.remove("minecraft");
         String message = refusal(yaml);
         assertTrue(message.contains("minecraft: ${minecraft_version}"), message);
     }
 
+    @Covers(value = PluginDescription.class, method = "parse")
     @ParameterizedTest
     @ValueSource(strings = {"My Plugin", "a/b", "ü", "x:y"})
     void aNameWithOtherCharactersIsRefused(String name) {
-        // COVERS: PluginDescription#parse
         Map<String, Object> yaml = minimal();
         yaml.put("name", name);
         assertTrue(refusal(yaml).contains("may only use letters, digits"));
     }
 
+    @Covers(value = PluginDescription.class, method = "getVersion")
     @Test
-    void anUnquotedVersionIsTheNumberYamlReadNotTheTextWritten() {
-        // COVERS: PluginDescription#getVersion
-        // Known gap, as in Bukkit: YAML reads 1.10 as the float 1.1 before Hadron sees it. Quote versions.
-        PluginDescription d = parse("name: Homes\nversion: 1.10\nmain: a.B\nminecraft: 1.21\n");
-        assertEquals("1.1", d.getVersion());
+    void anUnquotedVersionIsRefusedSinceYamlWouldHaveChangedIt() {
+        // YAML reads 1.10 as the number 1.1, so an unquoted version can't be trusted: refuse it with the fix.
+        PluginException e = assertThrows(PluginException.class,
+                () -> parse("name: Homes\nversion: 1.10\nmain: a.B\nminecraft: \"1.21\"\n"));
+        assertTrue(e.getMessage().contains("must be quoted") && e.getMessage().contains("version: \"1.1\""),
+                e.getMessage());
+        assertThrows(PluginException.class, () -> parse("name: Homes\nversion: \"1.10\"\nmain: a.B\nminecraft: 1.21\n"));
+        PluginDescription d = parse("name: Homes\nversion: \"1.10\"\nmain: a.B\nminecraft: \"1.21\"\n");
+        assertEquals("1.10", d.getVersion());
         assertEquals("1.21", d.getMinecraft());
     }
 
+    @Covers(value = PluginDescription.class, method = "parse")
     @Test
     void aSingleValueKeyGivenAListIsRefused() {
-        // COVERS: PluginDescription#parse
         Map<String, Object> yaml = minimal();
         yaml.put("description", List.of("a", "b"));
         assertEquals("plugin.yml 'description' must be a single value", refusal(yaml));
     }
 
+    @Covers(value = PluginDescription.class, method = "getAuthors")
     @Test
     void authorComesBeforeAuthors() {
-        // COVERS: PluginDescription#getAuthors
         Map<String, Object> yaml = minimal();
         yaml.put("author", "Ann");
         yaml.put("authors", List.of("Bo", "Cy"));
         assertEquals(List.of("Ann", "Bo", "Cy"), PluginDescription.parse(yaml).getAuthors());
     }
 
+    @Covers(value = PluginDescription.class, method = "getDepend")
+    @Covers(value = PluginDescription.class, method = "getSoftDepend")
     @Test
     void aListKeyTakesOneValueOrAListButNotAMap() {
-        // COVERS: PluginDescription#getDepend
-        // COVERS: PluginDescription#getSoftDepend
         Map<String, Object> yaml = minimal();
         yaml.put("depend", "Vault");
         yaml.put("softdepend", List.of("A", "B"));
@@ -123,10 +129,10 @@ class PluginDescriptionTest {
         assertEquals("plugin.yml 'depend' must be a list", refusal(yaml));
     }
 
+    @Covers(value = PluginDescription.class, method = "getModDepend")
+    @Covers(value = PluginDescription.class, method = "getLoader")
     @Test
     void modDependNeedsALoader() {
-        // COVERS: PluginDescription#getModDepend
-        // COVERS: PluginDescription#getLoader
         Map<String, Object> yaml = minimal();
         yaml.put("mod-depend", List.of("ae2"));
         assertTrue(refusal(yaml).contains("loader: neoforge"));
@@ -136,9 +142,9 @@ class PluginDescriptionTest {
         assertEquals("neoforge", d.getLoader());
     }
 
+    @Covers(value = PluginDescription.class, method = "getCommands")
     @Test
     void commandsAreLowercasedWithUsageAndAliases() {
-        // COVERS: PluginDescription#getCommands
         PluginDescription d = parse("""
                 name: Homes
                 version: '1'
@@ -164,17 +170,17 @@ class PluginDescriptionTest {
         assertEquals(List.of("home", "sethome"), List.copyOf(d.getCommands().keySet()));
     }
 
+    @Covers(value = PluginDescription.class, method = "getCommands")
     @Test
     void permissionMessageIsRefusedBecauseItNeverShows() {
-        // COVERS: PluginDescription#getCommands
         Map<String, Object> yaml = minimal();
         yaml.put("commands", Map.of("home", Map.of("permission-message", "no")));
         assertTrue(refusal(yaml).contains("Remove the line"));
     }
 
+    @Covers(value = PluginDescription.class, method = "getCommands")
     @Test
     void commandsMustBeAMapOfMaps() {
-        // COVERS: PluginDescription#getCommands
         Map<String, Object> yaml = minimal();
         yaml.put("commands", List.of("home"));
         assertEquals("plugin.yml 'commands' must be a map of names", refusal(yaml));
@@ -182,9 +188,9 @@ class PluginDescriptionTest {
         assertEquals("plugin.yml 'commands.home' must be a map", refusal(yaml));
     }
 
+    @Covers(value = PluginDescription.class, method = "getPermissions")
     @Test
     void permissionDefaultsMapToWhoHasThem() {
-        // COVERS: PluginDescription#getPermissions
         Map<String, Object> permissions = new LinkedHashMap<>();
         permissions.put("homes.a", Map.of("default", true));
         permissions.put("homes.b", Map.of("default", false));
@@ -201,25 +207,25 @@ class PluginDescriptionTest {
         assertEquals("homes.d", specs.get(3).node);
     }
 
+    @Covers(value = PluginDescription.class, method = "getPermissions")
     @Test
     void anUnknownPermissionDefaultIsRefusedListingTheChoices() {
-        // COVERS: PluginDescription#getPermissions
         Map<String, Object> yaml = minimal();
         yaml.put("permissions", Map.of("homes.a", Map.of("default", "notop")));
         assertTrue(refusal(yaml).contains("use true, false or op"));
     }
 
+    @Covers(value = PluginDescription.class, method = "getPermissions")
     @Test
     void permissionChildrenAreRefusedPointingAtWildcards() {
-        // COVERS: PluginDescription#getPermissions
         Map<String, Object> yaml = minimal();
         yaml.put("permissions", Map.of("homes.admin", Map.of("children", Map.of("homes.a", true))));
         assertTrue(refusal(yaml).contains("homes.*"));
     }
 
+    @Covers(value = PluginDescription.class, method = "getDepend")
     @Test
     void theParsedListsCantBeChanged() {
-        // COVERS: PluginDescription#getDepend
         Map<String, Object> yaml = new HashMap<>(minimal());
         yaml.put("depend", List.of("A"));
         PluginDescription d = PluginDescription.parse(yaml);

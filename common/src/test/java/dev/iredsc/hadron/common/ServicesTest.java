@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.api.plugin.ServicesManager;
+import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -97,19 +99,19 @@ class ServicesTest {
         }, "Test", org.slf4j.LoggerFactory.getLogger("test"));
     }
 
+    @Covers(value = ServicesManager.class, method = "load")
+    @Covers(value = ServicesManager.class, method = "isProvidedFor")
     @Test
     void nothingIsProvidedUntilRegistered() {
-        // COVERS: ServicesManager#load
-        // COVERS: ServicesManager#isProvidedFor
         assertNull(services.load(Greeter.class));
         assertEquals(List.of(), services.loadAll(Greeter.class));
         assertFalse(services.isProvidedFor(Greeter.class));
     }
 
+    @Covers(value = ServicesManager.class, method = "register")
+    @Covers(value = ServicesManager.class, method = "load")
     @Test
     void theHighestPriorityProviderWins() {
-        // COVERS: ServicesManager#register
-        // COVERS: ServicesManager#load
         services.register(Greeter.class, new Named("low"), alpha, ServicePriority.Low);
         services.register(Greeter.class, new Named("highest"), beta, ServicePriority.Highest);
         services.register(Greeter.class, new Named("normal"), alpha, ServicePriority.Normal);
@@ -119,24 +121,24 @@ class ServicesTest {
         assertTrue(services.isProvidedFor(Greeter.class));
     }
 
+    @Covers(value = ServicesManager.class, method = "register")
     @Test
     void amongEqualPrioritiesTheFirstRegisteredWins() {
-        // COVERS: ServicesManager#register
         services.register(Greeter.class, new Named("first"), alpha, ServicePriority.Normal);
         services.register(Greeter.class, new Named("second"), beta, ServicePriority.Normal);
         assertEquals("first", services.load(Greeter.class).greet());
     }
 
+    @Covers(value = ServicesManager.class, method = "register")
     @Test
     void registeringAnnouncesTheServiceProviderAndPlugin() {
-        // COVERS: ServicesManager#register
         services.register(Greeter.class, new Named("a"), alpha, ServicePriority.Normal);
         assertEquals(List.of("register Greeter Named[name=a] by Alpha"), announced);
     }
 
+    @Covers(value = ServicesManager.class, method = "register")
     @Test
     void aProviderThatDoesntImplementTheServiceIsRefused() {
-        // COVERS: ServicesManager#register
         @SuppressWarnings({"unchecked", "rawtypes"})
         Class<Object> greeter = (Class) Greeter.class;
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
@@ -146,9 +148,9 @@ class ServicesTest {
         assertEquals(List.of(), announced);
     }
 
+    @Covers(value = ServicesManager.class, method = "register")
     @Test
     void aPluginThatIsUnloadingCantRegister() {
-        // COVERS: ServicesManager#register
         TestPlugins.beginUnload(alpha);
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> services.register(Greeter.class, new Named("a"), alpha, ServicePriority.Normal));
@@ -156,17 +158,17 @@ class ServicesTest {
         assertFalse(services.isProvidedFor(Greeter.class));
     }
 
+    @Covers(value = ServicesManager.class, method = "register")
     @Test
     void aPluginOfAnotherServerCantRegister() {
-        // COVERS: ServicesManager#register
         JavaPlugin stranger = TestPlugins.create("Stranger", null);
         assertThrows(IllegalStateException.class,
                 () -> services.register(Greeter.class, new Named("x"), stranger, ServicePriority.Normal));
     }
 
+    @Covers(value = ServicesManager.class, method = "unregister")
     @Test
     void unregisteringAProviderRemovesItFromEveryService() {
-        // COVERS: ServicesManager#unregister
         class Both implements Greeter, Other {
             @Override
             public String greet() {
@@ -191,9 +193,9 @@ class ServicesTest {
         assertTrue(announced.contains("unregister Other Both by Alpha"), announced.toString());
     }
 
+    @Covers(value = ServicesManager.class, method = "unregisterAll")
     @Test
     void unregisterAllRemovesOnlyThatPluginsProviders() {
-        // COVERS: ServicesManager#unregisterAll
         services.register(Greeter.class, new Named("alpha"), alpha, ServicePriority.Highest);
         services.register(Greeter.class, new Named("beta"), beta, ServicePriority.Lowest);
         services.register(Other.class, new OtherImpl(), alpha, ServicePriority.Normal);
@@ -204,9 +206,9 @@ class ServicesTest {
         assertEquals(2, announced.size(), announced.toString());
     }
 
+    @Covers(value = ServicesManager.class, method = "unregister")
     @Test
     void unregisteringSomethingNeverRegisteredDoesNothing() {
-        // COVERS: ServicesManager#unregister
         services.register(Greeter.class, new Named("a"), alpha, ServicePriority.Normal);
         announced.clear();
         services.unregister(new Named("a")); // equal but not the same object
@@ -214,9 +216,9 @@ class ServicesTest {
         assertEquals(List.of(), announced);
     }
 
+    @Covers(value = ServicesManager.class, method = "register")
     @Test
     void aListenerMayLookServicesUpWhileHearingARegistration() throws Exception {
-        // COVERS: ServicesManager#register
         List<Object> seen = new ArrayList<>();
         events(host).subscribe(new Listener() {
             @EventHandler
@@ -228,9 +230,9 @@ class ServicesTest {
         assertEquals(List.of(new Named("a")), seen, "the provider is in place before anyone hears of it");
     }
 
+    @Covers(value = ServicesManager.class, method = "load")
     @Test
     void theEconomyServiceIsAlwaysHadronsOwn() {
-        // COVERS: ServicesManager#load
         Economy running = (Economy) Proxy.newProxyInstance(Economy.class.getClassLoader(),
                 new Class<?>[] {Economy.class}, (p, m, a) -> null);
         Economy before = Economy.Lifecycle.running();
@@ -246,9 +248,9 @@ class ServicesTest {
         }
     }
 
+    @Covers(value = ServicesManager.class, method = "load")
     @Test
     void theEconomyServiceIsNullWhileNoServerRuns() {
-        // COVERS: ServicesManager#load
         Economy before = Economy.Lifecycle.running();
         Economy.Lifecycle.install(null);
         try {

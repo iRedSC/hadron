@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common.economy;
 
+import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertInstanceOf;
@@ -147,9 +148,9 @@ class EconomyCoreTest {
 
     // ---- lifecycle ----
 
+    @Covers(value = Economy.class, method = "get")
     @Test
     void startMakesEconomyGetWorkAndCloseUndoesIt() {
-        // COVERS: Economy#get
         start();
         assertSame(economy, Economy.Lifecycle.running());
         economy.close();
@@ -157,9 +158,9 @@ class EconomyCoreTest {
         economy.close(); // twice is harmless
     }
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void afterCloseChangesAreUnavailableAndReadsSayTheServerIsStopping() {
-        // COVERS: Economy#deposit
         start();
         economy.close();
         EconomyResult result = economy.deposit(ANN, money("1.00"));
@@ -168,9 +169,9 @@ class EconomyCoreTest {
         assertTrue(e.getMessage().contains("stopping"), e.getMessage());
     }
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void closingSavesBalancesForTheNextStart() {
-        // COVERS: Economy#deposit
         start();
         fund(ANN, "4.20");
         economy.close();
@@ -187,19 +188,19 @@ class EconomyCoreTest {
 
     // ---- the default currency ----
 
+    @Covers(value = Economy.class, method = "getDefaultCurrency")
     @Test
     void theFirstStartWritesAConfigNamingMoney() throws Exception {
-        // COVERS: Economy#getDefaultCurrency
         start();
         String config = Files.readString(dir.resolve("economy.yml"));
         assertTrue(config.contains("default-currency: money"), config);
         assertEquals(MONEY, economy.getDefaultCurrency());
     }
 
+    @Covers(value = Economy.class, method = "getDefaultCurrency")
+    @Covers(value = Economy.class, method = "getCurrencies")
     @Test
     void aPluginCurrencyCanBeTheDefault() throws Exception {
-        // COVERS: Economy#getDefaultCurrency
-        // COVERS: Economy#getCurrencies
         Files.writeString(dir.resolve("economy.yml"), "default-currency: '  gems '\n");
         start();
         economy.registerCurrency(gemsPlugin, GEMS);
@@ -210,9 +211,9 @@ class EconomyCoreTest {
         assertEquals(money("0.00"), economy.getBalance(ANN, MONEY));
     }
 
+    @Covers(value = Economy.class, method = "getDefaultCurrency")
     @Test
     void aMissingDefaultSaysWhichFileAndWhatIsRegistered() throws Exception {
-        // COVERS: Economy#getDefaultCurrency
         Files.writeString(dir.resolve("economy.yml"), "default-currency: gems\n");
         start();
         IllegalStateException e = assertThrows(IllegalStateException.class, economy::getDefaultCurrency);
@@ -222,11 +223,11 @@ class EconomyCoreTest {
                 e.getMessage());
     }
 
+    @Covers(value = Economy.class, method = "deposit")
+    @Covers(value = Economy.class, method = "getBalance")
+    @Covers(value = Economy.class, method = "has")
     @Test
     void withoutItsDefaultTheShortFormsRefuseRatherThanGuess() throws Exception {
-        // COVERS: Economy#deposit
-        // COVERS: Economy#getBalance
-        // COVERS: Economy#has
         Files.writeString(dir.resolve("economy.yml"), "default-currency: gems\n");
         start();
         assertEquals(new EconomyResult.NoSuchCurrency("gems"), economy.deposit(ANN, money("1")));
@@ -237,9 +238,9 @@ class EconomyCoreTest {
         assertTrue(host.events.isEmpty());
     }
 
+    @Covers(value = Economy.class, method = "getDefaultCurrency")
     @Test
     void aBlankDefaultLineFallsBackToMoney() throws Exception {
-        // COVERS: Economy#getDefaultCurrency
         Files.writeString(dir.resolve("economy.yml"), "other: 1\n");
         start();
         assertEquals(MONEY, economy.getDefaultCurrency());
@@ -247,27 +248,27 @@ class EconomyCoreTest {
 
     // ---- currencies ----
 
+    @Covers(value = Economy.class, method = "registerCurrency")
+    @Covers(value = Economy.class, method = "getCurrency")
     @Test
     void registeringACurrencyMakesItUsable() {
-        // COVERS: Economy#registerCurrency
-        // COVERS: Economy#getCurrency
         start();
         assertSame(GEMS, economy.registerCurrency(gemsPlugin, GEMS));
         assertEquals(GEMS, economy.getCurrency("gems").orElseThrow());
         assertEquals(List.of(MONEY, GEMS), economy.getCurrencies());
     }
 
+    @Covers(value = Economy.class, method = "registerCurrency")
     @Test
     void registeringTheSameCurrencyAgainFromTheSamePluginIsANoOp() {
-        // COVERS: Economy#registerCurrency
         start();
         economy.registerCurrency(gemsPlugin, GEMS);
         assertEquals(GEMS, economy.registerCurrency(gemsPlugin, new Currency("gems", "gem", "gems", 0)));
     }
 
+    @Covers(value = Economy.class, method = "registerCurrency")
     @Test
     void redefiningYourOwnCurrencyIsRefusedShowingTheOldDefinition() {
-        // COVERS: Economy#registerCurrency
         start();
         economy.registerCurrency(gemsPlugin, GEMS);
         IllegalStateException e = assertThrows(IllegalStateException.class,
@@ -275,9 +276,9 @@ class EconomyCoreTest {
         assertTrue(e.getMessage().contains("already registered by Gems as Currency[name=gems"), e.getMessage());
     }
 
+    @Covers(value = Economy.class, method = "registerCurrency")
     @Test
     void anotherPluginsCurrencyNameIsRefusedNamingTheOwner() {
-        // COVERS: Economy#registerCurrency
         start();
         economy.registerCurrency(gemsPlugin, GEMS);
         IllegalStateException e = assertThrows(IllegalStateException.class,
@@ -286,18 +287,18 @@ class EconomyCoreTest {
         assertTrue(e.getMessage().contains("Economy.get().getCurrency(\"gems\")"), e.getMessage());
     }
 
+    @Covers(value = Economy.class, method = "registerCurrency")
     @Test
     void moneyBelongsToHadron() {
-        // COVERS: Economy#registerCurrency
         start();
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> economy.registerCurrency(gemsPlugin, new Currency("money", "buck", "bucks", 2)));
         assertTrue(e.getMessage().contains("already registered by Hadron"), e.getMessage());
     }
 
+    @Covers(value = Economy.class, method = "registerCurrency")
     @Test
     void aPluginThatIsUnloadingCantRegisterACurrency() {
-        // COVERS: Economy#registerCurrency
         start();
         host.alive.remove(gemsPlugin);
         IllegalStateException e = assertThrows(IllegalStateException.class,
@@ -306,9 +307,9 @@ class EconomyCoreTest {
         assertTrue(economy.getCurrency("gems").isEmpty());
     }
 
+    @Covers(value = Economy.class, method = "registerCurrency")
     @Test
     void aDisabledPluginsCurrenciesGoButTheirBalancesStay() {
-        // COVERS: Economy#registerCurrency
         start();
         economy.registerCurrency(gemsPlugin, GEMS);
         assertInstanceOf(EconomyResult.Done.class, economy.deposit(ANN, GEMS, money("5")));
@@ -321,9 +322,9 @@ class EconomyCoreTest {
         assertEquals(money("5"), economy.getBalance(ANN, GEMS), "the reloaded plugin finds its balances again");
     }
 
+    @Covers(value = Economy.class, method = "registerCurrency")
     @Test
     void forgettingAPluginLeavesOtherPluginsCurrencies() {
-        // COVERS: Economy#registerCurrency
         start();
         economy.registerCurrency(gemsPlugin, GEMS);
         JavaPlugin other = plugin("Coins");
@@ -333,9 +334,9 @@ class EconomyCoreTest {
         assertTrue(economy.getCurrency("money").isPresent());
     }
 
+    @Covers(value = Economy.class, method = "getBalance")
     @Test
     void aCurrencyHeldFromBeforeAReloadUsesTheCurrentDefinition() {
-        // COVERS: Economy#getBalance
         start();
         economy.registerCurrency(gemsPlugin, GEMS);
         Currency stale = new Currency("gems", "old gem", "old gems", 3); // same name, older shape
@@ -345,9 +346,9 @@ class EconomyCoreTest {
 
     // ---- amounts ----
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void moreDecimalPlacesThanTheCurrencyHasIsRefusedPointingAtRound() {
-        // COVERS: Economy#deposit
         start();
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> economy.deposit(ANN, MONEY, money("0.005")));
@@ -356,18 +357,18 @@ class EconomyCoreTest {
         assertTrue(host.events.isEmpty());
     }
 
+    @Covers(value = Economy.class, method = "deposit")
     @ParameterizedTest
     @ValueSource(strings = {"1", "1.5", "1.50", "1.500000"})
     void trailingZerosDontCountAsDecimalPlaces(String amount) {
-        // COVERS: Economy#deposit
         start();
         EconomyResult result = economy.deposit(ANN, MONEY, money(amount));
         assertEquals(money(amount).setScale(2), ((EconomyResult.Done) result).amount());
     }
 
+    @Covers(value = Economy.class, method = "withdraw")
     @Test
     void negativeAmountsAreRefusedPointingAtTheOtherCall() {
-        // COVERS: Economy#withdraw
         start();
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> economy.withdraw(ANN, MONEY, money("-1")));
@@ -375,17 +376,17 @@ class EconomyCoreTest {
         assertThrows(IllegalArgumentException.class, () -> economy.has(ANN, MONEY, money("-1")));
     }
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void aBadAmountIsRefusedEvenForAnUnregisteredCurrency() {
-        // COVERS: Economy#deposit
         start();
         assertThrows(IllegalArgumentException.class, () -> economy.deposit(ANN, GEMS, money("0.5")));
         assertEquals(new EconomyResult.NoSuchCurrency("gems"), economy.deposit(ANN, GEMS, money("1")));
     }
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void nullsAreRefused() {
-        // COVERS: Economy#deposit
         start();
         assertThrows(NullPointerException.class, () -> economy.deposit(null, MONEY, money("1")));
         assertThrows(NullPointerException.class, () -> economy.deposit(ANN, null, money("1")));
@@ -395,19 +396,19 @@ class EconomyCoreTest {
 
     // ---- accounts ----
 
+    @Covers(value = Economy.class, method = "deposit")
+    @Covers(value = Economy.class, method = "hasAccount")
     @Test
     void anOfflineStrangerHasNoAccountToPayInto() {
-        // COVERS: Economy#deposit
-        // COVERS: Economy#hasAccount
         start();
         assertFalse(economy.hasAccount(NOBODY));
         assertEquals(new EconomyResult.NoSuchAccount(NOBODY), economy.deposit(NOBODY, money("1.00")));
         assertTrue(host.events.isEmpty());
     }
 
+    @Covers(value = Economy.class, method = "hasAccount")
     @Test
     void anOnlinePlayersAccountIsMadeTheFirstTimeItsTouched() {
-        // COVERS: Economy#hasAccount
         start();
         assertTrue(economy.hasAccount(ANN), "online players always have an account");
         assertEquals(money("0.00"), economy.getBalance(ANN, MONEY));
@@ -417,9 +418,9 @@ class EconomyCoreTest {
         assertEquals(money("1.00"), economy.getBalance(ANN));
     }
 
+    @Covers(value = Economy.class, method = "createAccount")
     @Test
     void createAccountMakesAnOfflineOne() {
-        // COVERS: Economy#createAccount
         start();
         assertTrue(economy.createAccount(NOBODY));
         assertFalse(economy.createAccount(NOBODY));
@@ -428,9 +429,9 @@ class EconomyCoreTest {
 
     // ---- deposit ----
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void aDepositAddsAndFiresAProduceEventInMinorUnits() {
-        // COVERS: Economy#deposit
         start();
         fund(ANN, "1.25");
         EconomyResult result = economy.deposit(ANN, money("2.50"));
@@ -443,27 +444,27 @@ class EconomyCoreTest {
         assertEquals(250, event.getAmount());
     }
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void aCancelledDepositChangesNothing() {
-        // COVERS: Economy#deposit
         start();
         host.listener = e -> e.setCancelled(true);
         assertEquals(new EconomyResult.Refused(MONEY, money("1.00")), economy.deposit(ANN, money("1")));
         assertEquals(money("0.00"), economy.getBalance(ANN));
     }
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void aZeroDepositSucceedsWithoutAnEvent() {
-        // COVERS: Economy#deposit
         start();
         fund(ANN, "1.00");
         assertEquals(new EconomyResult.Done(MONEY, money("0.00"), money("1.00")), economy.deposit(ANN, money("0")));
         assertTrue(host.events.isEmpty());
     }
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void theEventCarriesTheActorOnTop() {
-        // COVERS: Economy#deposit
         start();
         Actor console = new Actor.Server("Server");
         try (Actors.Scope scope = Actors.push(console)) {
@@ -474,9 +475,9 @@ class EconomyCoreTest {
         assertSame(Actor.Unknown.INSTANCE, host.events.get(1).getActor(), "nobody on the stack is Unknown");
     }
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void aDepositThatWouldOverflowIsRefusedBeforeAnyoneHearsOfIt() {
-        // COVERS: Economy#deposit
         start();
         economy.registerCurrency(gemsPlugin, GEMS);
         assertInstanceOf(EconomyResult.Done.class,
@@ -491,9 +492,9 @@ class EconomyCoreTest {
 
     // ---- withdraw ----
 
+    @Covers(value = Economy.class, method = "withdraw")
     @Test
     void aWithdrawalTakesAndFiresAConsumeEvent() {
-        // COVERS: Economy#withdraw
         start();
         fund(ANN, "5.00");
         assertEquals(new EconomyResult.Done(MONEY, money("1.50"), money("3.50")), economy.withdraw(ANN, money("1.5")));
@@ -502,9 +503,9 @@ class EconomyCoreTest {
         assertEquals(350, event.getNewAmount());
     }
 
+    @Covers(value = Economy.class, method = "withdraw")
     @Test
     void overdrawingIsRefusedSayingHowMuchIsMissing() {
-        // COVERS: Economy#withdraw
         start();
         fund(ANN, "1.00");
         EconomyResult result = economy.withdraw(ANN, money("1.01"));
@@ -514,17 +515,17 @@ class EconomyCoreTest {
         assertTrue(host.events.isEmpty(), "nothing to cancel: the check comes before the event");
     }
 
+    @Covers(value = Economy.class, method = "withdraw")
     @Test
     void withdrawingEverythingLeavesZero() {
-        // COVERS: Economy#withdraw
         start();
         fund(ANN, "2.00");
         assertEquals(new EconomyResult.Done(MONEY, money("2.00"), money("0.00")), economy.withdraw(ANN, money("2")));
     }
 
+    @Covers(value = Economy.class, method = "has")
     @Test
     void hasComparesWithTheBalance() {
-        // COVERS: Economy#has
         start();
         fund(ANN, "2.00");
         assertTrue(economy.has(ANN, money("2")));
@@ -534,9 +535,9 @@ class EconomyCoreTest {
 
     // ---- transfer ----
 
+    @Covers(value = Economy.class, method = "transfer")
     @Test
     void aTransferMovesMoneyAndFiresOneTransferEvent() {
-        // COVERS: Economy#transfer
         start();
         fund(ANN, "10.00");
         fund(BO, "1.00");
@@ -550,9 +551,9 @@ class EconomyCoreTest {
         assertEquals(250, event.getAmount());
     }
 
+    @Covers(value = Economy.class, method = "transfer")
     @Test
     void aCancelledTransferMovesNothing() {
-        // COVERS: Economy#transfer
         start();
         fund(ANN, "10.00");
         host.listener = e -> e.setCancelled(true);
@@ -561,9 +562,9 @@ class EconomyCoreTest {
         assertEquals(money("0.00"), economy.getBalance(BO));
     }
 
+    @Covers(value = Economy.class, method = "transfer")
     @Test
     void aTransferNeedsEnoughMoneyAndBothAccounts() {
-        // COVERS: Economy#transfer
         start();
         fund(ANN, "1.00");
         assertInstanceOf(EconomyResult.NotEnoughMoney.class, economy.transfer(ANN, BO, money("2")));
@@ -573,9 +574,9 @@ class EconomyCoreTest {
         assertTrue(host.events.isEmpty());
     }
 
+    @Covers(value = Economy.class, method = "transfer")
     @Test
     void aTransferToYourselfChecksTheBalanceButChangesNothing() {
-        // COVERS: Economy#transfer
         start();
         fund(ANN, "1.00");
         assertEquals(new EconomyResult.Done(MONEY, money("1.00"), money("1.00")),
@@ -584,9 +585,9 @@ class EconomyCoreTest {
         assertTrue(host.events.isEmpty());
     }
 
+    @Covers(value = Economy.class, method = "transfer")
     @Test
     void aTransferThatWouldOverflowTheRecipientIsRefusedBeforeTheEvent() {
-        // COVERS: Economy#transfer
         start();
         economy.registerCurrency(gemsPlugin, GEMS);
         economy.deposit(ANN, GEMS, BigDecimal.ONE);
@@ -599,9 +600,9 @@ class EconomyCoreTest {
 
     // ---- listeners using the economy ----
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void aListenerCantChangeTheAccountBeingDecided() {
-        // COVERS: Economy#deposit
         start();
         List<Throwable> thrown = new ArrayList<>();
         host.listener = e -> {
@@ -617,9 +618,9 @@ class EconomyCoreTest {
         assertEquals(money("1.00"), economy.getBalance(ANN), "the outer change wins, nothing is lost or doubled");
     }
 
+    @Covers(value = Economy.class, method = "transfer")
     @Test
     void aListenerCantChangeEitherSideOfATransfer() {
-        // COVERS: Economy#transfer
         start();
         fund(ANN, "5.00");
         List<Throwable> thrown = new ArrayList<>();
@@ -634,9 +635,9 @@ class EconomyCoreTest {
         assertInstanceOf(IllegalStateException.class, thrown.get(0));
     }
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void aListenerMayReadTheAccountAndChangeOthers() {
-        // COVERS: Economy#deposit
         start();
         fund(ANN, "1.00");
         List<Object> seen = new ArrayList<>();
@@ -653,9 +654,9 @@ class EconomyCoreTest {
         assertEquals(money("0.10"), economy.getBalance(BO));
     }
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void theRefusalEndsWithTheChangeSoTheAccountIsFreeAfter() {
-        // COVERS: Economy#deposit
         start();
         host.listener = e -> {
             throw new IllegalStateException("listener bug escaping a fake host");
@@ -677,17 +678,17 @@ class EconomyCoreTest {
             host.provider = provider;
         }
 
+        @Covers(value = Economy.class, method = "deposit")
         @Test
         void aRegisteredProviderStoresTheAccounts() {
-            // COVERS: Economy#deposit
             economy.deposit(ANN, money("3"));
             assertEquals(money("3.00"), provider.accounts.get(ANN).get("money"));
             assertEquals(0, timer.waiting(), "Hadron's own file is untouched");
         }
 
+        @Covers(value = Economy.class, method = "deposit")
         @Test
         void oncePluginAccountsWereUsedTheirAbsenceFailsRatherThanSplittingBalances() {
-            // COVERS: Economy#deposit
             economy.deposit(ANN, money("3"));
             host.provider = null; // the plugin disabled, or is mid-reload
             EconomyResult.Unavailable result = assertInstanceOf(EconomyResult.Unavailable.class,
@@ -701,9 +702,9 @@ class EconomyCoreTest {
             assertEquals(money("3.00"), economy.getBalance(ANN, MONEY));
         }
 
+        @Covers(value = Economy.class, method = "deposit")
         @Test
         void aThrowingProviderFailsTheOperationAndChangesNothing() {
-            // COVERS: Economy#deposit
             economy.deposit(ANN, money("3"));
             host.provider = new MapProvider() {
                 {
@@ -720,9 +721,9 @@ class EconomyCoreTest {
             assertTrue(result.reason().contains("database down"), result.reason());
         }
 
+        @Covers(value = Economy.class, method = "withdraw")
         @Test
         void aNegativeOrNullBalanceFromAProviderIsAFailureNotAValue() {
-            // COVERS: Economy#withdraw
             provider.createAccount(ANN);
             provider.accounts.get(ANN).put("money", money("-5"));
             EconomyResult.Unavailable result = assertInstanceOf(EconomyResult.Unavailable.class,
@@ -741,9 +742,9 @@ class EconomyCoreTest {
             assertInstanceOf(EconomyResult.Unavailable.class, economy.deposit(ANN, money("1")));
         }
 
+        @Covers(value = Economy.class, method = "getBalance")
         @Test
         void aBalanceStoredAtMoreDecimalsRoundsDownNeverUp() {
-            // COVERS: Economy#getBalance
             provider.createAccount(ANN);
             provider.accounts.get(ANN).put("money", money("1.239"));
             assertEquals(money("1.23"), economy.getBalance(ANN, MONEY));
@@ -751,9 +752,9 @@ class EconomyCoreTest {
         }
     }
 
+    @Covers(value = Economy.class, method = "deposit")
     @Test
     void anUnreadableEconomyFileMakesChangesUnavailableAndIsLeftAlone() throws Exception {
-        // COVERS: Economy#deposit
         Files.writeString(dir.resolve("economy.json"), "{ broken");
         start();
         EconomyResult.Unavailable result = assertInstanceOf(EconomyResult.Unavailable.class,

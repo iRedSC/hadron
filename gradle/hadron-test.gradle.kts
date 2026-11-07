@@ -188,7 +188,18 @@ val hadronTestIndex = tasks.register("hadronTestIndex") {
     outputs.dir(out)
     doLast {
         val names = classes.files.filter { it.isDirectory }.flatMap { dir ->
-            dir.walkTopDown().filter { it.isFile && it.name.endsWith(".class") }
+            // Only classes holding an @HadronTest: the server loads each one, and a fast JUnit test class can name
+            // types (TestInfo, extensions) the server doesn't have. A class file names its annotations' types in its
+            // constant pool, so finding the descriptor's bytes is enough to tell.
+            val marker = "Ldev/iredsc/hadron/test/HadronTest;".toByteArray(Charsets.UTF_8)
+            fun holdsHadronTest(bytes: ByteArray): Boolean {
+                outer@ for (i in 0..bytes.size - marker.size) {
+                    for (j in marker.indices) if (bytes[i + j] != marker[j]) continue@outer
+                    return true
+                }
+                return false
+            }
+            dir.walkTopDown().filter { it.isFile && it.name.endsWith(".class") && holdsHadronTest(it.readBytes()) }
                 .map { it.relativeTo(dir).path.removeSuffix(".class").replace(File.separatorChar, '.') }.toList()
         }.sorted()
         val index = out.get().file("META-INF/hadron-tests.txt").asFile

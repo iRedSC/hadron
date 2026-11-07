@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.data;
 
+import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -36,18 +37,8 @@ class ItemDataTest {
         assertTrue(again.has(KEY, type));
         return again.get(KEY, type);
     }
-
     @Test
     void everyScalarTypeReadsBackWhatWasSet() {
-        // COVERS: PersistentDataType#BYTE
-        // COVERS: PersistentDataType#SHORT
-        // COVERS: PersistentDataType#INTEGER
-        // COVERS: PersistentDataType#LONG
-        // COVERS: PersistentDataType#FLOAT
-        // COVERS: PersistentDataType#DOUBLE
-        // COVERS: PersistentDataType#BOOLEAN
-        // COVERS: PersistentDataType#STRING
-        // COVERS: PersistentDataType#UUID
         assertEquals((byte) -7, roundTrip(PersistentDataType.BYTE, (byte) -7));
         assertEquals((short) 30000, roundTrip(PersistentDataType.SHORT, (short) 30000));
         assertEquals(Integer.MIN_VALUE, roundTrip(PersistentDataType.INTEGER, Integer.MIN_VALUE));
@@ -60,12 +51,8 @@ class ItemDataTest {
         UUID id = UUID.randomUUID();
         assertEquals(id, roundTrip(PersistentDataType.UUID, id));
     }
-
     @Test
     void arraysReadBackAndAreCopiedBothWays() {
-        // COVERS: PersistentDataType#BYTE_ARRAY
-        // COVERS: PersistentDataType#INTEGER_ARRAY
-        // COVERS: PersistentDataType#LONG_ARRAY
         assertArrayEquals(new byte[] {1, 2}, roundTrip(PersistentDataType.BYTE_ARRAY, new byte[] {1, 2}));
         assertArrayEquals(new long[] {3L, 4L}, roundTrip(PersistentDataType.LONG_ARRAY, new long[] {3L, 4L}));
         PersistentDataContainer data = data();
@@ -77,20 +64,16 @@ class ItemDataTest {
         read[1] = 99; // nor does changing what get returned
         assertArrayEquals(new int[] {1, 2, 3}, data.get(KEY, PersistentDataType.INTEGER_ARRAY));
     }
-
     @Test
     void booleansAreStoredAsBytesAsInBukkit() {
-        // COVERS: PersistentDataType#BOOLEAN
         PersistentDataContainer data = data();
         data.set(KEY, PersistentDataType.BOOLEAN, true);
         assertEquals((byte) 1, data.get(KEY, PersistentDataType.BYTE));
         data.set(KEY, PersistentDataType.BYTE, (byte) 5);
         assertEquals(true, data.get(KEY, PersistentDataType.BOOLEAN));
     }
-
     @Test
     void aUuidNeedsExactlyFourInts() {
-        // COVERS: PersistentDataType#UUID
         PersistentDataContainer data = data();
         data.set(KEY, PersistentDataType.INTEGER_ARRAY, new int[] {1, 2, 3});
         assertFalse(data.has(KEY, PersistentDataType.UUID));
@@ -98,9 +81,9 @@ class ItemDataTest {
         assertTrue(data.has(KEY, PersistentDataType.UUID));
     }
 
+    @Covers(value = PersistentDataContainer.class, method = "get")
     @Test
     void readingWithTheWrongTypeSaysBothTypes() {
-        // COVERS: PersistentDataContainer#get
         PersistentDataContainer data = data();
         data.set(KEY, PersistentDataType.STRING, "x");
         assertFalse(data.has(KEY, PersistentDataType.INTEGER));
@@ -111,10 +94,10 @@ class ItemDataTest {
         assertTrue(e.getMessage().contains("read as INTEGER"), e.getMessage());
     }
 
+    @Covers(value = PersistentDataContainer.class, method = "get")
+    @Covers(value = PersistentDataContainer.class, method = "getOrDefault")
     @Test
     void aMissingKeyReadsAsNullOrTheDefault() {
-        // COVERS: PersistentDataContainer#get
-        // COVERS: PersistentDataContainer#getOrDefault
         PersistentDataContainer data = data();
         assertNull(data.get(KEY, PersistentDataType.STRING));
         assertEquals("d", data.getOrDefault(KEY, PersistentDataType.STRING, "d"));
@@ -122,26 +105,26 @@ class ItemDataTest {
         assertTrue(data.isEmpty());
     }
 
+    @Covers(value = PersistentDataContainer.class, method = "set")
     @Test
     void storingNullIsRefusedPointingAtRemove() {
-        // COVERS: PersistentDataContainer#set
         NullPointerException e = assertThrows(NullPointerException.class,
                 () -> data().set(KEY, PersistentDataType.STRING, null));
         assertTrue(e.getMessage().contains("remove(key)"), e.getMessage());
     }
 
+    @Covers(value = PersistentData.class, method = "of")
     @Test
     void writingToAnEmptyStackIsRefused() {
-        // COVERS: PersistentData#of
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> PersistentData.of(ItemStack.EMPTY).set(KEY, PersistentDataType.INTEGER, 1));
         assertTrue(e.getMessage().contains("empty item stack"), e.getMessage());
         assertNull(PersistentData.of(ItemStack.EMPTY).get(KEY, PersistentDataType.INTEGER));
     }
 
+    @Covers(value = PersistentDataContainer.class, method = "remove")
     @Test
     void removingTheLastValueLeavesTheStackAsIfNeverTouched() {
-        // COVERS: PersistentDataContainer#remove
         ItemStack stack = new ItemStack(Items.DIAMOND);
         PersistentData.of(stack).set(KEY, PersistentDataType.INTEGER, 1);
         assertFalse(ItemStack.isSameItemSameComponents(stack, new ItemStack(Items.DIAMOND)));
@@ -150,29 +133,27 @@ class ItemDataTest {
                 "a stack with its data removed must stack with a fresh one again");
     }
 
+    @Covers(value = PersistentData.class, method = "of")
     @Test
     void hadronsDataSitsUnderItsOwnCustomDataKey() {
-        // COVERS: PersistentData#of
         ItemStack stack = new ItemStack(Items.DIAMOND);
         PersistentData.of(stack).set(KEY, PersistentDataType.INTEGER, 7);
         assertEquals(7, stack.get(DataComponents.CUSTOM_DATA).copyTag().getCompound("hadron").getCompound("test")
                 .getInt("value"));
     }
 
+    @Covers(value = PersistentDataContainer.class, method = "getKeys")
     @Test
     void keysListEveryStoredKey() {
-        // COVERS: PersistentDataContainer#getKeys
         PersistentDataContainer data = data();
         data.set(KEY, PersistentDataType.INTEGER, 1);
         data.set(new NamespacedKey("other", "x"), PersistentDataType.INTEGER, 2);
         assertEquals(Set.of(KEY, new NamespacedKey("other", "x")), data.getKeys());
         assertThrows(UnsupportedOperationException.class, () -> data.getKeys().clear());
     }
-
+    @Covers(value = ListPersistentDataTypeProvider.class, method = "listTypeFrom")
     @Test
     void listsOfEveryKindReadBack() {
-        // COVERS: PersistentDataType#LIST
-        // COVERS: ListPersistentDataTypeProvider#listTypeFrom
         assertEquals(List.of("a", "b"), roundTrip(PersistentDataType.LIST.strings(), List.of("a", "b")));
         assertEquals(List.of(1, 2, 3), roundTrip(PersistentDataType.LIST.integers(), List.of(1, 2, 3)));
         assertEquals(List.of(), roundTrip(PersistentDataType.LIST.longs(), List.of()));
@@ -181,18 +162,18 @@ class ItemDataTest {
         assertEquals(List.of(List.of("x"), List.of()), roundTrip(nested, List.of(List.of("x"), List.of())));
     }
 
+    @Covers(value = PersistentDataContainer.class, method = "has")
     @Test
     void aListOfStringsIsNotAListOfInts() {
-        // COVERS: PersistentDataContainer#has
         PersistentDataContainer data = data();
         data.set(KEY, PersistentDataType.LIST.strings(), List.of("a"));
         assertFalse(data.has(KEY, PersistentDataType.LIST.integers()));
         assertThrows(IllegalArgumentException.class, () -> data.get(KEY, PersistentDataType.LIST.integers()));
     }
 
+    @Covers(value = PersistentDataType.class, method = "adapt")
     @Test
     void anAdaptedTypeStoresAsItsBase() {
-        // COVERS: PersistentDataType#adapt
         PersistentDataType<Long, Instant> instant = PersistentDataType.adapt(PersistentDataType.LONG, Instant.class,
                 Instant::ofEpochMilli, Instant::toEpochMilli);
         PersistentDataContainer data = data();
@@ -203,9 +184,9 @@ class ItemDataTest {
         assertEquals(Instant.class, instant.getComplexType());
     }
 
+    @Covers(value = PersistentDataType.class, method = "adapt")
     @Test
     void anAdaptedTypeThatReturnsNullSaysWhichFunction() {
-        // COVERS: PersistentDataType#adapt
         PersistentDataType<String, Object> nullTo = PersistentDataType.adapt(PersistentDataType.STRING, Object.class,
                 s -> s, o -> null);
         NullPointerException e = assertThrows(NullPointerException.class, () -> data().set(KEY, nullTo, "x"));
@@ -243,15 +224,15 @@ class ItemDataTest {
         }
     };
 
+    @Covers(value = PersistentDataType.class, method = "getPrimitiveType")
     @Test
     void aBukkitStyleTypeOnABuiltInPrimitiveWorks() {
-        // COVERS: PersistentDataType#getPrimitiveType
         assertEquals(new Tagged("hi"), roundTrip(BUKKIT_STYLE, new Tagged("hi")));
     }
 
+    @Covers(value = PersistentDataType.class, method = "getPrimitiveType")
     @Test
     void aBukkitStyleTypeOnAnUnknownPrimitiveIsRefusedPointingAtAdapt() {
-        // COVERS: PersistentDataType#getPrimitiveType
         PersistentDataType<Instant, Instant> unknown = new PersistentDataType<>() {
             @Override
             public Class<Instant> getPrimitiveType() {
@@ -277,10 +258,8 @@ class ItemDataTest {
                 () -> data().set(KEY, unknown, Instant.EPOCH));
         assertTrue(e.getMessage().contains("PersistentDataType.adapt"), e.getMessage());
     }
-
     @Test
     void aNestedContainerReadIsLiveAndAnUnsetOneIsCopied() {
-        // COVERS: PersistentDataType#TAG_CONTAINER
         ItemStack stack = new ItemStack(Items.DIAMOND);
         PersistentDataContainer data = PersistentData.of(stack);
         PersistentDataContainer built = data.getAdapterContext().newPersistentDataContainer();
@@ -293,10 +272,8 @@ class ItemDataTest {
         assertEquals(3, PersistentData.of(stack).get(KEY, PersistentDataType.TAG_CONTAINER)
                 .get(OTHER, PersistentDataType.INTEGER));
     }
-
     @Test
     void aLiveNestedContainerWhoseKeyWasOverwrittenSaysToGetItAgain() {
-        // COVERS: PersistentDataType#TAG_CONTAINER
         PersistentDataContainer data = data();
         data.set(KEY, PersistentDataType.TAG_CONTAINER, PersistentData.newContainer());
         PersistentDataContainer live = data.get(KEY, PersistentDataType.TAG_CONTAINER);
@@ -305,10 +282,8 @@ class ItemDataTest {
                 () -> live.set(OTHER, PersistentDataType.INTEGER, 1));
         assertTrue(e.getMessage().contains("get the container again"), e.getMessage());
     }
-
     @Test
     void containerArraysReadBackAsCopies() {
-        // COVERS: PersistentDataType#TAG_CONTAINER_ARRAY
         PersistentDataContainer one = PersistentData.newContainer();
         one.set(OTHER, PersistentDataType.STRING, "a");
         PersistentDataContainer[] read = roundTrip(PersistentDataType.TAG_CONTAINER_ARRAY,
@@ -319,10 +294,8 @@ class ItemDataTest {
         assertThrows(NullPointerException.class, () -> data().set(KEY, PersistentDataType.TAG_CONTAINER_ARRAY,
                 new PersistentDataContainer[] {null}));
     }
-
     @Test
     void storingAContainerNotFromHadronIsRefused() {
-        // COVERS: PersistentDataType#TAG_CONTAINER
         PersistentDataContainer foreign = (PersistentDataContainer) java.lang.reflect.Proxy.newProxyInstance(
                 getClass().getClassLoader(), new Class<?>[] {PersistentDataContainer.class}, (p, m, a) -> null);
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
@@ -330,9 +303,9 @@ class ItemDataTest {
         assertTrue(e.getMessage().contains("newPersistentDataContainer"), e.getMessage());
     }
 
+    @Covers(value = PersistentDataContainer.class, method = "copyTo")
     @Test
     void copyToReplacesOnlyWhenAsked() {
-        // COVERS: PersistentDataContainer#copyTo
         PersistentDataContainer from = data();
         from.set(KEY, PersistentDataType.INTEGER, 1);
         from.set(OTHER, PersistentDataType.INTEGER, 2);
@@ -346,10 +319,8 @@ class ItemDataTest {
         from.copyTo(replace, true);
         assertEquals(1, replace.get(KEY, PersistentDataType.INTEGER));
     }
-
     @Test
     void containersWithTheSameDataAreEqual() {
-        // COVERS: PersistentDataContainer#equals
         PersistentDataContainer a = data();
         PersistentDataContainer b = PersistentData.newContainer();
         assertEquals(a, b); // both empty
@@ -360,18 +331,16 @@ class ItemDataTest {
         assertEquals(a.hashCode(), b.hashCode());
     }
 
+    @Covers(value = PersistentData.class, method = "of")
     @Test
     void worldHoldersNeedTheModRunning() {
-        // COVERS: PersistentData#of
         // No port is installed in a fast test; the error says so rather than failing obscurely.
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> new PersistentData.Port.Missing().chunk(null));
         assertTrue(e.getMessage().contains("item stacks work without it"), e.getMessage());
     }
-
     @Test
     void typesNameThemselvesInErrors() {
-        // COVERS: PersistentDataType#STRING
         assertEquals("PersistentDataType.STRING", PersistentDataType.STRING.toString());
         assertEquals("LIST of INTEGER", Values.describe(PersistentDataType.LIST.integers()));
     }

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.actor;
 
+import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -63,19 +64,19 @@ class ActorsTest {
 
     // ---- push and pop ----
 
+    @Covers(value = Actors.class, method = "current")
+    @Covers(value = Actors.class, method = "currentOr")
+    @Covers(value = Actors.class, method = "isEmpty")
     @Test
     void anEmptyStackHasNoActorAndCurrentOrGivesTheFallback() {
-        // COVERS: Actors#current
-        // COVERS: Actors#currentOr
-        // COVERS: Actors#isEmpty
         assertTrue(Actors.isEmpty());
         assertEquals(Optional.empty(), Actors.current());
         assertSame(Actor.Unknown.INSTANCE, Actors.currentOr(Actor.Unknown.INSTANCE));
     }
 
+    @Covers(value = Actors.class, method = "push")
     @Test
     void aPushedActorIsOnTopUntilItsScopeCloses() {
-        // COVERS: Actors#push
         try (Actors.Scope scope = Actors.push(CONSOLE)) {
             assertEquals(Optional.of(CONSOLE), Actors.current());
             assertSame(CONSOLE, Actors.currentOr(Actor.Nature.INSTANCE));
@@ -84,10 +85,10 @@ class ActorsTest {
         assertTrue(Actors.isEmpty());
     }
 
+    @Covers(value = Actors.class, method = "push")
+    @Covers(value = Actors.Scope.class, method = "close")
     @Test
     void nestedPushesUnwindInReverseOrder() {
-        // COVERS: Actors#push
-        // COVERS: Actors.Scope#close
         try (Actors.Scope outer = Actors.push(CONSOLE)) {
             try (Actors.Scope inner = Actors.push(BLOCK)) {
                 assertSame(BLOCK, Actors.current().orElseThrow());
@@ -97,17 +98,17 @@ class ActorsTest {
         assertTrue(Actors.isEmpty());
     }
 
+    @Covers(value = Actors.class, method = "push")
     @Test
     void pushingNullIsRefusedWithTheFix() {
-        // COVERS: Actors#push
         NullPointerException e = assertThrows(NullPointerException.class, () -> Actors.push(null));
         assertTrue(e.getMessage().contains("Actor.Unknown.INSTANCE"), e.getMessage());
         assertTrue(Actors.isEmpty());
     }
 
+    @Covers(value = Actors.Scope.class, method = "close")
     @Test
     void closingAScopeTwiceDoesNothingTheSecondTime() {
-        // COVERS: Actors.Scope#close
         Actors.Scope first = Actors.push(CONSOLE);
         first.close();
         try (Actors.Scope second = Actors.push(BLOCK)) {
@@ -116,9 +117,9 @@ class ActorsTest {
         }
     }
 
+    @Covers(value = Actors.Scope.class, method = "close")
     @Test
     void closingAnOuterScopeClosesInnerOnesLeftOpen() {
-        // COVERS: Actors.Scope#close
         Actors.Scope outer = Actors.push(CONSOLE);
         Actors.push(BLOCK); // leaked: never closed
         Actors.push(Actor.Nature.INSTANCE); // leaked
@@ -126,9 +127,9 @@ class ActorsTest {
         assertTrue(Actors.isEmpty());
     }
 
+    @Covers(value = Actors.Scope.class, method = "close")
     @Test
     void aLeakedScopeClosedLateLeavesNewerPushesAlone() {
-        // COVERS: Actors.Scope#close
         Actors.Scope outer = Actors.push(CONSOLE);
         Actors.Scope leaked = Actors.push(BLOCK);
         outer.close(); // repairs the leak
@@ -141,9 +142,9 @@ class ActorsTest {
         }
     }
 
+    @Covers(value = Actors.Scope.class, method = "close")
     @Test
     void closingOnAnotherThreadIsRefusedAndLeavesTheStackAlone() throws Exception {
-        // COVERS: Actors.Scope#close
         try (Actors.Scope scope = Actors.push(CONSOLE)) {
             AtomicReference<Throwable> thrown = new AtomicReference<>();
             Thread other = new Thread(() -> {
@@ -161,9 +162,9 @@ class ActorsTest {
         }
     }
 
+    @Covers(value = Actors.class, method = "current")
     @Test
     void eachThreadHasItsOwnStack() throws Exception {
-        // COVERS: Actors#current
         try (Actors.Scope scope = Actors.push(CONSOLE)) {
             AtomicReference<Optional<Actor>> seen = new AtomicReference<>();
             Thread worker = new Thread(() -> seen.set(Actors.current()));
@@ -173,9 +174,9 @@ class ActorsTest {
         }
     }
 
+    @Covers(value = Actors.class, method = "push")
     @Test
     void theStackGrowsPastItsInitialSize() {
-        // COVERS: Actors#push
         List<Actors.Scope> scopes = new ArrayList<>();
         for (int i = 0; i < 100; i++) scopes.add(Actors.push(new Actor.Server("s" + i)));
         assertEquals("s99", ((Actor.Server) Actors.current().orElseThrow()).name());
@@ -186,9 +187,9 @@ class ActorsTest {
         assertTrue(Actors.isEmpty());
     }
 
+    @Covers(value = Actors.class, method = "acting")
     @Test
     void actingRunsTheWorkWithTheActorOnTopAndRestoresItAfter() {
-        // COVERS: Actors#acting
         String result = Actors.acting(CONSOLE, () -> ((Actor.Server) Actors.current().orElseThrow()).name());
         assertEquals("Server", result);
         AtomicReference<Actor> seen = new AtomicReference<>();
@@ -197,9 +198,9 @@ class ActorsTest {
         assertTrue(Actors.isEmpty());
     }
 
+    @Covers(value = Actors.class, method = "acting")
     @Test
     void actingRestoresTheStackWhenTheWorkThrows() {
-        // COVERS: Actors#acting
         assertThrows(IllegalStateException.class, () -> Actors.acting(CONSOLE, (Runnable) () -> {
             throw new IllegalStateException("boom");
         }));
@@ -208,10 +209,10 @@ class ActorsTest {
 
     // ---- the port's allocation-free path ----
 
+    @Covers(value = Actors.Port.class, method = "enter")
+    @Covers(value = Actors.Port.class, method = "exit")
     @Test
     void portEnterAndExitPushAndPop() {
-        // COVERS: Actors.Port#enter
-        // COVERS: Actors.Port#exit
         long handle = Actors.Port.enter(CONSOLE);
         try {
             assertSame(CONSOLE, Actors.current().orElseThrow());
@@ -221,9 +222,9 @@ class ActorsTest {
         assertTrue(Actors.isEmpty());
     }
 
+    @Covers(value = Actors.Port.class, method = "enter")
     @Test
     void portHandlesCarryTheirDepth() {
-        // COVERS: Actors.Port#enter
         long outer = Actors.Port.enter(CONSOLE);
         long inner = Actors.Port.enter(BLOCK);
         assertEquals(0, outer >>> 40);
@@ -232,9 +233,9 @@ class ActorsTest {
         Actors.Port.exit(outer);
     }
 
+    @Covers(value = Actors.Port.class, method = "exit")
     @Test
     void portExitOfAStaleHandleDoesNothing() {
-        // COVERS: Actors.Port#exit
         long stale = Actors.Port.enter(CONSOLE);
         Actors.Port.exit(stale);
         long fresh = Actors.Port.enter(BLOCK);
@@ -244,25 +245,25 @@ class ActorsTest {
         assertTrue(Actors.isEmpty());
     }
 
+    @Covers(value = Actors.Port.class, method = "exit")
     @Test
     void portExitClosesWhatWasLeftOpenAboveIt() {
-        // COVERS: Actors.Port#exit
         long handle = Actors.Port.enter(CONSOLE);
         Actors.push(BLOCK); // leaked by some mod's code inside the tick
         Actors.Port.exit(handle);
         assertTrue(Actors.isEmpty());
     }
 
+    @Covers(value = Actors.Port.class, method = "enter")
     @Test
     void portEnterRefusesNull() {
-        // COVERS: Actors.Port#enter
         assertThrows(NullPointerException.class, () -> Actors.Port.enter(null));
         assertTrue(Actors.isEmpty());
     }
 
+    @Covers(value = Actors.Port.class, method = "enter")
     @Test
     void tokensWrapWithinFortyBitsAndSkipZero() throws Exception {
-        // COVERS: Actors.Port#enter
         long mask = (1L << 40) - 1;
         setNextToken(mask - 1);
         long last = Actors.Port.enter(CONSOLE); // token mask
@@ -278,26 +279,26 @@ class ActorsTest {
         assertTrue(Actors.isEmpty());
     }
 
+    @Covers(value = Actors.Port.class, method = "installMemory")
     @Test
     void installingNullMemoryIsRefused() {
-        // COVERS: Actors.Port#installMemory
         assertThrows(NullPointerException.class, () -> Actors.Port.installMemory(null));
     }
 
     // ---- operations ----
 
+    @Covers(value = Operation.class, method = "current")
     @Test
     void noOperationIsOpenOutsideBegin() {
-        // COVERS: Operation#current
         assertNull(Operation.current());
         try (Actors.Scope scope = Actors.push(CONSOLE)) {
             assertNull(Operation.current());
         }
     }
 
+    @Covers(value = Operation.class, method = "begin")
     @Test
     void beginOpensAnOperationWithItsActorOnTop() {
-        // COVERS: Operation#begin
         try (Actors.Scope scope = Operation.begin(CONSOLE)) {
             Operation open = Operation.current();
             assertSame(CONSOLE, open.actor());
@@ -307,10 +308,10 @@ class ActorsTest {
         assertTrue(Actors.isEmpty());
     }
 
+    @Covers(value = Actors.class, method = "push")
+    @Covers(value = Operation.class, method = "current")
     @Test
     void anActorPushedInsideAnOperationKeepsIt() {
-        // COVERS: Actors#push
-        // COVERS: Operation#current
         try (Actors.Scope op = Operation.begin(CONSOLE)) {
             Operation open = Operation.current();
             try (Actors.Scope inner = Actors.push(BLOCK)) {
@@ -323,9 +324,9 @@ class ActorsTest {
         }
     }
 
+    @Covers(value = Operation.class, method = "begin")
     @Test
     void aNestedOperationReplacesTheOuterUntilItCloses() {
-        // COVERS: Operation#begin
         try (Actors.Scope outer = Operation.begin(CONSOLE)) {
             Operation first = Operation.current();
             try (Actors.Scope inner = Operation.begin(BLOCK)) {
@@ -336,10 +337,10 @@ class ActorsTest {
         }
     }
 
+    @Covers(value = Operation.class, method = "single")
+    @Covers(value = Operation.class, method = "id")
     @Test
     void singleOperationsGetFreshIdsAndDontOpenAnything() {
-        // COVERS: Operation#single
-        // COVERS: Operation#id
         Operation a = Operation.single(CONSOLE);
         Operation b = Operation.single(CONSOLE);
         assertTrue(b.id() > a.id());
@@ -347,9 +348,9 @@ class ActorsTest {
         assertThrows(NullPointerException.class, () -> Operation.single(null));
     }
 
+    @Covers(value = Actors.Port.class, method = "exit")
     @Test
     void anEmptyStackStaysUsableAfterRepeatedCleanup() {
-        // COVERS: Actors.Port#exit
         assertDoesNotThrow(() -> Actors.Port.exit(1));
         assertTrue(Actors.isEmpty());
     }

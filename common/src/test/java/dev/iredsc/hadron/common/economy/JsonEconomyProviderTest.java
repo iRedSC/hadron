@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common.economy;
 
+import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -52,7 +53,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void aMissingFileStartsEmptyAndIsntWrittenUntilSomethingChanges() {
-        // COVERS: JsonEconomyProvider#load
         store.load();
         assertFalse(store.hasAccount(ANN));
         assertEquals(0, timer.waiting());
@@ -62,7 +62,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void aChangeSavesFiveSecondsLaterNotAtOnce() {
-        // COVERS: JsonEconomyProvider#setBalances
         store.load();
         store.setBalances(MONEY, Map.of(ANN, new BigDecimal("1.00")));
         assertFalse(Files.exists(file));
@@ -73,7 +72,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void aBurstOfChangesIsOneSave() {
-        // COVERS: JsonEconomyProvider#setBalances
         store.load();
         for (int i = 0; i < 50; i++) store.setBalances(MONEY, Map.of(ANN, new BigDecimal(i)));
         store.createAccount(BO);
@@ -85,7 +83,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void aChangeAfterASaveSchedulesAnother() {
-        // COVERS: JsonEconomyProvider#setBalances
         store.load();
         store.setBalances(MONEY, Map.of(ANN, BigDecimal.ONE));
         timer.elapse();
@@ -98,7 +95,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void closingSavesWhatTheTimerHadntYet() {
-        // COVERS: JsonEconomyProvider#close
         store.load();
         store.setBalances(GEMS, Map.of(ANN, new BigDecimal("7")));
         store.close();
@@ -108,7 +104,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void afterCloseEveryCallFailsAndCloseAgainIsHarmless() {
-        // COVERS: JsonEconomyProvider#close
         store.load();
         store.close();
         store.close();
@@ -121,7 +116,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void balancesRoundTripExactlyIncludingScale() {
-        // COVERS: JsonEconomyProvider#getBalance
         store.load();
         store.setBalances(MONEY, Map.of(ANN, new BigDecimal("12345678901234567.89"), BO, new BigDecimal("0.10")));
         store.setBalances(GEMS, Map.of(ANN, new BigDecimal("3")));
@@ -134,7 +128,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void theFileIsSortedPlainTextWithItsFormat() throws Exception {
-        // COVERS: JsonEconomyProvider#close
         store.load();
         store.setBalances(MONEY, Map.of(BO, new BigDecimal("1E+3"), ANN, new BigDecimal("2.00")));
         store.close();
@@ -147,7 +140,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void anAccountWithNoBalanceReadsZeroAtTheCurrencysScale() {
-        // COVERS: JsonEconomyProvider#getBalance
         store.load();
         assertEquals(new BigDecimal("0.00"), store.getBalance(ANN, MONEY));
         store.createAccount(ANN);
@@ -156,7 +148,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void creatingAnExistingAccountLeavesItAsItWas() {
-        // COVERS: JsonEconomyProvider#createAccount
         store.load();
         assertTrue(store.createAccount(ANN));
         store.setBalances(MONEY, Map.of(ANN, BigDecimal.TEN));
@@ -166,7 +157,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void anEmptyAccountIsSavedToo() {
-        // COVERS: JsonEconomyProvider#createAccount
         store.load();
         store.createAccount(ANN);
         store.close();
@@ -177,7 +167,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void aSaveLeavesNoTemporaryFileBehind() throws Exception {
-        // COVERS: JsonEconomyProvider#close
         store.load();
         store.setBalances(MONEY, Map.of(ANN, BigDecimal.ONE));
         timer.elapse();
@@ -189,7 +178,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void aTemporaryFileLeftByACrashIsWrittenOverNotRead() throws Exception {
-        // COVERS: JsonEconomyProvider#load
         Files.createDirectories(file.getParent());
         Files.writeString(file.resolveSibling("economy.json.tmp"), "half a file {{{");
         store.load();
@@ -202,7 +190,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void aFailedSaveIsRetriedAndKeepsTheChange() throws Exception {
-        // COVERS: JsonEconomyProvider#setBalances
         Files.createDirectories(file.getParent());
         Path blocker = file.resolveSibling("economy.json.tmp");
         Files.createDirectory(blocker); // a directory where the temp file goes: writing it fails
@@ -230,7 +217,6 @@ class JsonEconomyProviderTest {
         "{\"accounts\": {\"00000000-0000-0000-0000-00000000000a\": 5}}",
     })
     void anUnreadableFileTurnsTheEconomyOffAndIsNeverOverwritten(String content) throws Exception {
-        // COVERS: JsonEconomyProvider#load
         Files.createDirectories(file.getParent());
         Files.writeString(file, content);
         byte[] before = Files.readAllBytes(file);
@@ -248,7 +234,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void aFixedFileLoadsOnTheNextLoad() throws Exception {
-        // COVERS: JsonEconomyProvider#load
         Files.createDirectories(file.getParent());
         Files.writeString(file, "broken");
         store.load();
@@ -261,7 +246,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void anOlderFileWithoutAFormatFieldStillLoads() throws Exception {
-        // COVERS: JsonEconomyProvider#load
         Files.createDirectories(file.getParent());
         Files.writeString(file, "{\"accounts\": {\"" + ANN + "\": {\"gems\": \"4\"}}}");
         store.load();
@@ -270,7 +254,6 @@ class JsonEconomyProviderTest {
 
     @Test
     void theDefaultTimerIsTheWallClockOnADaemonThread() throws Exception {
-        // COVERS: JsonEconomyProvider.SaveTimer#background
         JsonEconomyProvider.SaveTimer real = JsonEconomyProvider.SaveTimer.background();
         java.util.concurrent.CountDownLatch ran = new java.util.concurrent.CountDownLatch(1);
         boolean[] daemon = new boolean[1];

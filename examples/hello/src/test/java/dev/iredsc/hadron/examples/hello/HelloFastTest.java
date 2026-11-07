@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.examples.hello;
 
+import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -28,7 +29,6 @@ class HelloFastTest {
 
     @Test
     void pluginYmlPassesHadronsChecks() throws Exception {
-        // COVERS: HelloPlugin
         PluginDescription description = pluginYml();
         assertEquals("Hello", description.getName());
         assertEquals(HelloPlugin.class.getName(), description.getMain());
@@ -39,7 +39,6 @@ class HelloFastTest {
 
     @Test
     void aHelloEventStartsUncancelled() {
-        // COVERS: HelloEvent
         HelloEvent event = new HelloEvent("world");
         assertEquals("world", event.getWho());
         assertFalse(event.isCancelled());

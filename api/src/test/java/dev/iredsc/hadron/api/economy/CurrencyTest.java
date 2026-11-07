@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.economy;
 
+import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -25,8 +26,8 @@ class CurrencyTest {
         "1.4, 1 gem",
         "-3, -3 gems",
     })
+    @Covers(value = Currency.class, method = "format")
     void wholeCurrenciesFormatWithGroupingAndTheRightWord(String amount, String expected) {
-        // COVERS: Currency#format
         assertEquals(expected, GEMS.format(new BigDecimal(amount)));
     }
 
@@ -38,14 +39,14 @@ class CurrencyTest {
         "0.004, 0.00 dollars",
         "1000000.1, '1,000,000.10 dollars'",
     })
+    @Covers(value = Currency.class, method = "format")
     void decimalCurrenciesAlwaysShowTheirPlaces(String amount, String expected) {
-        // COVERS: Currency#format
         assertEquals(expected, DOLLARS.format(new BigDecimal(amount)));
     }
 
+    @Covers(value = Currency.class, method = "round")
     @Test
     void roundingIsHalfUpAsATillDoes() {
-        // COVERS: Currency#round
         assertEquals(new BigDecimal("0.01"), DOLLARS.round(new BigDecimal("0.005")));
         assertEquals(new BigDecimal("0.00"), DOLLARS.round(new BigDecimal("0.0049")));
         assertEquals(new BigDecimal("3"), GEMS.round(new BigDecimal("2.5")));
@@ -53,18 +54,18 @@ class CurrencyTest {
         assertThrows(NullPointerException.class, () -> DOLLARS.round(null));
     }
 
+    @Covers(value = Currency.class, method = "fromMinorUnits")
     @Test
     void minorUnitsCountTheSmallestUnit() {
-        // COVERS: Currency#fromMinorUnits
         assertEquals(new BigDecimal("1.50"), DOLLARS.fromMinorUnits(150));
         assertEquals(new BigDecimal("150"), GEMS.fromMinorUnits(150));
         assertEquals(new BigDecimal("92233720368547758.07"), DOLLARS.fromMinorUnits(Long.MAX_VALUE));
     }
 
+    @Covers(value = Currency.class, method = "id")
+    @Covers(value = Currency.class, method = "resource")
     @Test
     void aCurrencysIdAndResourceAreUnderHadronsNamespace() {
-        // COVERS: Currency#id
-        // COVERS: Currency#resource
         assertEquals("hadron:currency/gems", GEMS.id().toString());
         assertTrue(GEMS.resource().isCurrency());
         assertEquals("gems", GEMS.resource().unit());
@@ -73,7 +74,6 @@ class CurrencyTest {
     @ParameterizedTest
     @ValueSource(strings = {"", "Gems", "my gems", "a/b", "a:b"})
     void anInvalidNameIsRefusedWithAnExample(String name) {
-        // COVERS: Currency#Currency
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> new Currency(name, "gem", "gems", 0));
         assertTrue(e.getMessage().contains("\"coins\""), e.getMessage());
@@ -81,13 +81,11 @@ class CurrencyTest {
 
     @Test
     void aNullNameIsRefusedTheSameWay() {
-        // COVERS: Currency#Currency
         assertThrows(IllegalArgumentException.class, () -> new Currency(null, "gem", "gems", 0));
     }
 
     @Test
     void blankDisplayNamesAreRefused() {
-        // COVERS: Currency#Currency
         assertThrows(IllegalArgumentException.class, () -> new Currency("gems", " ", "gems", 0));
         assertThrows(IllegalArgumentException.class, () -> new Currency("gems", "gem", null, 0));
     }
@@ -95,15 +93,12 @@ class CurrencyTest {
     @ParameterizedTest
     @ValueSource(ints = {-1, Currency.MAX_DECIMALS + 1})
     void decimalsOutsideZeroToSixAreRefused(int decimals) {
-        // COVERS: Currency#Currency
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> new Currency("gems", "gem", "gems", decimals));
         assertTrue(e.getMessage().contains("at most " + Currency.MAX_DECIMALS), e.getMessage());
     }
-
     @Test
     void moneyIsDollarsWithCents() {
-        // COVERS: Economy#MONEY
         assertEquals(new Currency("money", "dollar", "dollars", 2), Economy.MONEY);
     }
 }
