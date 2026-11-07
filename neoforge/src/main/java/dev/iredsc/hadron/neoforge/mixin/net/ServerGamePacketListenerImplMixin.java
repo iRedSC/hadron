@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.net;
 
+import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.iredsc.hadron.neoforge.NetHooks;
@@ -20,7 +21,7 @@ public abstract class ServerGamePacketListenerImplMixin {
     @WrapOperation(method = "handleInteract", at = @At(value = "INVOKE", target = "Lnet/minecraft/network/protocol/"
             + "game/ServerboundInteractPacket;getTarget(Lnet/minecraft/server/level/ServerLevel;)"
             + "Lnet/minecraft/world/entity/Entity;"))
-    private Entity hadron$hidden(ServerboundInteractPacket packet, ServerLevel level, Operation<Entity> original) {
+    private @Nullable Entity hadron$hidden(ServerboundInteractPacket packet, ServerLevel level, Operation<Entity> original) {
         Entity target = original.call(packet, level);
         return target == null || NetHooks.canSee(player, target) ? target : null;
     }

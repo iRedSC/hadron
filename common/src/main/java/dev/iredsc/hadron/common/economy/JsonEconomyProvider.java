@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common.economy;
 
+import org.jspecify.annotations.Nullable;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
@@ -47,7 +48,7 @@ final class JsonEconomyProvider implements EconomyProvider {
     private boolean dirty;
     private boolean closed;
     /** Why the file couldn't be loaded, or null when it loaded (or didn't exist yet). */
-    private String broken;
+    private @Nullable String broken;
 
     /**
      * When a save runs, {@link #SAVE_DELAY_SECONDS} after the first unsaved change. The real one is a daemon thread on

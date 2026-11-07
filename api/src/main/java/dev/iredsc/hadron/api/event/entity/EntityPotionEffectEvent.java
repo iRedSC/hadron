@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -31,12 +32,12 @@ public class EntityPotionEffectEvent extends EntityEvent implements Cancellable 
 
     private final Holder<MobEffect> effect;
     private final MobEffectInstance oldEffect;
-    private final MobEffectInstance newEffect;
+    private final @Nullable MobEffectInstance newEffect;
     private final Action action;
     private boolean cancelled;
 
     public EntityPotionEffectEvent(LivingEntity entity, Holder<MobEffect> effect, MobEffectInstance oldEffect,
-            MobEffectInstance newEffect, Action action, Actor actor) {
+            @Nullable MobEffectInstance newEffect, Action action, Actor actor) {
         super(entity, actor);
         this.effect = Objects.requireNonNull(effect, "effect");
         this.oldEffect = oldEffect;

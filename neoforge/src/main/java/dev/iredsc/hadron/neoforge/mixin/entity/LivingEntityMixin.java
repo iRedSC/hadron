@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.entity;
 
+import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.iredsc.hadron.neoforge.EntityActors;
@@ -22,10 +23,10 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(LivingEntity.class)
 abstract class LivingEntityMixin implements EntityActors.Hurting {
-    @Unique private DamageSource hadron$hurting;
+    @Unique private @Nullable DamageSource hadron$hurting;
 
     @Override
-    public DamageSource hadron$hurting() {
+    public @Nullable DamageSource hadron$hurting() {
         return hadron$hurting;
     }
 

@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.economy;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import java.math.BigDecimal;
 import java.util.List;
@@ -135,16 +137,17 @@ public interface Economy {
 
     /** For Hadron's plugin host only. */
     final class Lifecycle {
-        private static volatile Economy running;
+        @StaticState(reason = "Hadron's economy installs itself when the server starts and clears it when it stops")
+        private static volatile @Nullable Economy running;
 
         private Lifecycle() {}
 
-        public static void install(Economy economy) {
+        public static void install(@Nullable Economy economy) {
             running = economy;
         }
 
         /** Null while no server is running. */
-        public static Economy running() {
+        public static @Nullable Economy running() {
             return running;
         }
     }

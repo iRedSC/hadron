@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
@@ -171,16 +173,22 @@ public final class ItemHooks {
         return cancelled;
     }
 
-    private static Object lastSlot;
-    private static ItemStack lastStack;
+    @StaticState(reason = "one equip answer, repeated for the same slot and stack in the same tick; checked against the time, so a stale one is ignored")
+    private static @Nullable Object lastSlot;
+    @StaticState(reason = "one equip answer, repeated for the same slot and stack in the same tick; checked against the time, so a stale one is ignored")
+    private static @Nullable ItemStack lastStack;
+    @StaticState(reason = "one equip answer, repeated for the same slot and stack in the same tick; checked against the time, so a stale one is ignored")
     private static long lastTime;
+    @StaticState(reason = "one equip answer, repeated for the same slot and stack in the same tick; checked against the time, so a stale one is ignored")
     private static boolean lastAnswer;
 
     // ---- Drops and pickups --------------------------------------------------------------------------------------
 
     /** The menu handling a click on the server thread, and a refused cursor throw waiting to go back on its cursor. */
-    private static AbstractContainerMenu clicking;
-    private static ItemStack keptForCursor;
+    @StaticState(reason = "set while one click is handled on the server thread and cleared when it ends")
+    private static @Nullable AbstractContainerMenu clicking;
+    @StaticState(reason = "set while one click is handled on the server thread and cleared when it ends")
+    private static @Nullable ItemStack keptForCursor;
 
     public static void clickStarts(AbstractContainerMenu menu) {
         clicking = menu;
@@ -319,7 +327,7 @@ public final class ItemHooks {
     // ---- Menus --------------------------------------------------------------------------------------------------
 
     /** A menu is about to open; true keeps it closed. {@code menu} is null for horse inventories. */
-    public static boolean open(ServerPlayer player, InventoryHolder holder, AbstractContainerMenu menu) {
+    public static boolean open(ServerPlayer player, InventoryHolder holder, @Nullable AbstractContainerMenu menu) {
         if (!Hooks.listens(InventoryOpenEvent.class)) return false;
         return Hooks.post(new InventoryOpenEvent(player, holder, menu, actor(player))).isCancelled();
     }
@@ -425,7 +433,7 @@ public final class ItemHooks {
     }
 
     private static boolean craft(ServerLevel level, AbstractContainerMenu menu, ServerPlayer player,
-            List<ItemStack> inputs, ItemStack result, RecipeHolder<?> recipe, Actor actor) {
+            List<ItemStack> inputs, ItemStack result, @Nullable RecipeHolder<?> recipe, Actor actor) {
         return Hooks.post(new ItemCraftEvent(level, InventoryHolders.ofMenu(menu, player), inputs, List.of(result),
                 recipe, actor)).isCancelled();
     }
@@ -490,8 +498,8 @@ public final class ItemHooks {
      * {@code menu} and {@code viewer} are null for a crafter crafting on its own. An empty grid offering nothing is
      * skipped: there is nothing to decide.
      */
-    public static ItemStack prepareCraft(ServerLevel level, InventoryHolder holder, AbstractContainerMenu menu,
-            ServerPlayer viewer, List<ItemStack> matrix, RecipeHolder<?> recipe, ItemStack result, Actor actor) {
+    public static ItemStack prepareCraft(ServerLevel level, InventoryHolder holder, @Nullable AbstractContainerMenu menu,
+            @Nullable ServerPlayer viewer, List<ItemStack> matrix, @Nullable RecipeHolder<?> recipe, ItemStack result, Actor actor) {
         if (!Hooks.listens(PrepareItemCraftEvent.class)) return result;
         if (result.isEmpty() && matrix.stream().allMatch(ItemStack::isEmpty)) return result;
         PrepareItemCraftEvent event = Hooks.post(new PrepareItemCraftEvent(level, holder, menu, viewer, matrix,
@@ -529,7 +537,7 @@ public final class ItemHooks {
 
     /** A furnace, campfire or brewing stand is about to finish; true leaves its inputs and makes nothing. */
     public static boolean smelt(Level level, BlockPos pos, List<ItemStack> inputs, List<ItemStack> outputs,
-            RecipeHolder<?> recipe) {
+            @Nullable RecipeHolder<?> recipe) {
         if (!(level instanceof ServerLevel server) || !Hooks.listens(ItemSmeltEvent.class)) return false;
         return Hooks.post(new ItemSmeltEvent(server, new InventoryHolder.Block(server, pos), inputs, List.of(),
                 outputs, recipe, machine(level, pos))).isCancelled();
@@ -557,7 +565,7 @@ public final class ItemHooks {
 
     /** As {@link #move}, into or out of a NeoForge item handler. */
     public static boolean moveHandler(InventoryHolder source, int sourceSlot, ItemStack sourceBefore,
-            InventoryHolder destination, IItemHandler destinationHandler, ItemStack item, InventoryHolder initiator,
+            InventoryHolder destination, @Nullable IItemHandler destinationHandler, ItemStack item, InventoryHolder initiator,
             Actor actor) {
         if (item.isEmpty() || !Hooks.listens(InventoryMoveItemEvent.class)) return false;
         if (destinationHandler != null && !canAccept(destinationHandler, item)) return false;
@@ -566,7 +574,7 @@ public final class ItemHooks {
     }
 
     /** Whether vanilla's HopperBlockEntity.addItem would move at least one of {@code stack} into the container. */
-    static boolean canAccept(Container destination, ItemStack stack, Direction face) {
+    static boolean canAccept(Container destination, ItemStack stack, @Nullable Direction face) {
         if (destination instanceof WorldlyContainer worldly && face != null) {
             for (int slot : worldly.getSlotsForFace(face)) if (accepts(destination, stack, slot, face)) return true;
             return false;
@@ -577,7 +585,7 @@ public final class ItemHooks {
         return false;
     }
 
-    private static boolean accepts(Container container, ItemStack stack, int slot, Direction face) {
+    private static boolean accepts(Container container, ItemStack stack, int slot, @Nullable Direction face) {
         if (!container.canPlaceItem(slot, stack)) return false;
         if (container instanceof WorldlyContainer worldly && !worldly.canPlaceItemThroughFace(slot, stack, face)) {
             return false;

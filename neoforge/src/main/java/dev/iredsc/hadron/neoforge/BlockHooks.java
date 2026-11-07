@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import com.google.common.collect.Lists;
 import com.mojang.logging.LogUtils;
 import dev.iredsc.hadron.api.actor.Actor;
@@ -108,7 +110,8 @@ public final class BlockHooks {
      * A retracting piston's head, which {@code PistonStructureResolver} is shown as air while Hadron asks what the
      * piston will pull (vanilla resolves only after removing it). Server thread only; null otherwise.
      */
-    public static BlockPos pistonHiddenHead;
+    @StaticState(reason = "set around one piston move's event on the server thread and cleared after it")
+    public static @Nullable BlockPos pistonHiddenHead;
 
     /** What the current thread is doing to blocks. Reused, so entering and leaving a tick allocates nothing. */
     private static final class Context {
@@ -117,7 +120,7 @@ public final class BlockHooks {
          * A change already decided for one position this game tick: TNT asked about before it is lit, so the removal
          * that follows is refused or let through without asking again. Consumed by that removal.
          */
-        LevelAccessor decidedLevel;
+        @Nullable LevelAccessor decidedLevel;
         long decidedPos = NO_POS;
         long decidedTime;
         boolean decidedCancelled;
@@ -142,20 +145,20 @@ public final class BlockHooks {
         long[] tickScopes = new long[8];
         int ticks;
         int forming;
-        Actor fertilizer;
+        @Nullable Actor fertilizer;
         /**
          * A container's emptying a command put off until its replacement is decided (see {@link #deferClear}), and
          * where; null when none is waiting.
          */
-        Runnable deferredClear;
-        LevelAccessor deferredClearLevel;
+        @Nullable Runnable deferredClear;
+        @Nullable LevelAccessor deferredClearLevel;
         long deferredClearPos = NO_POS;
         /** Inside {@link #patternBuild}: true while one runs on this thread. */
         boolean building;
         /** The build's blocks as they were, once allowed; null before then or if it was refused. */
-        List<BlockSnapshot> built;
-        Entity builtCreature;
-        Actors.Scope buildOperation;
+        @Nullable List<BlockSnapshot> built;
+        @Nullable Entity builtCreature;
+        Actors.@Nullable Scope buildOperation;
         /** Putting a refused build's blocks back, whose placing would otherwise find the pattern and build again. */
         boolean unbuilding;
         int lastUser = -1;
@@ -198,13 +201,13 @@ public final class BlockHooks {
      * {@link BlockBreakEvent} before the primed TNT exists, so a cancel leaves the block and spawns nothing. The block's
      * removal that follows obeys the same answer. True when cancelled.
      */
-    public static boolean cancelIgnition(Level level, BlockPos pos, BlockState state, Entity igniter) {
+    public static boolean cancelIgnition(Level level, BlockPos pos, BlockState state, @Nullable Entity igniter) {
         if (!(level instanceof ServerLevel server)) return false;
         Context ctx = CONTEXT.get();
         if (ctx.decidedLevel == level && ctx.decidedPos == pos.asLong() && ctx.decidedTime == level.getGameTime()) {
             return ctx.decidedCancelled; // already asked by the item use that lit it
         }
-        Actor actor = igniter != null ? actorFor(igniter) : Actors.currentOr(null);
+        Actor actor = actorOrStack(igniter);
         if (actor == null || !Hooks.listens(BlockBreakEvent.class)) return false;
         boolean cancelled = Hooks.post(new BlockBreakEvent(server, pos, state,
                 level.getFluidState(pos).createLegacyBlock(), actor)).isCancelled();
@@ -263,8 +266,7 @@ public final class BlockHooks {
 
     /** The actor for something an entity does: the player, a fake player for whatever is on the stack, or the entity. */
     static Actor actorFor(Entity entity) {
-        Actor top = Actors.currentOr(null);
-        if (entity == null) return top;
+        Actor top = EntityActors.current();
         if (entity instanceof FakePlayer fake) {
             if (top instanceof Actor.FakePlayer f && f.fake() == fake) return top;
             return new Actor.FakePlayer(fake, top != null ? top.attribution() : Attribution.none());
@@ -274,16 +276,27 @@ public final class BlockHooks {
         return new Actor.EntityActor(entity, Actors.remembered(entity));
     }
 
-    private static Actor orElse(Actor actor, Actor fallback) {
+    /** The actor for an entity, or whoever is on the stack when there is no entity; null when neither. */
+    static @Nullable Actor actorOrStack(@Nullable Entity entity) {
+        return entity != null ? actorFor(entity) : EntityActors.current();
+    }
+
+    private static Actor orElse(@Nullable Actor actor, Actor fallback) {
         return actor != null ? actor : fallback;
     }
 
     /** Who is acting when no entity is named: the stack, a block's tick, or nobody known. */
     private static Actor currentOr(Actor fallback) {
-        Actor top = Actors.currentOr(null);
+        Actor actor = current();
+        return actor != null ? actor : fallback;
+    }
+
+    /** The pushed actor, else the block entity ticking now, else null. */
+    private static @Nullable Actor current() {
+        Actor top = EntityActors.current();
         if (top != null) return top;
         Context ctx = CONTEXT.get();
-        return ctx.ticking() ? ctx.tickActor() : fallback;
+        return ctx.ticking() ? ctx.tickActor() : null;
     }
 
     /** Whether a registry id is outside the minecraft namespace; unregistered things count as modded. */
@@ -307,7 +320,7 @@ public final class BlockHooks {
      * The machine actor for a ticking block entity, reusing {@code cached} while its attribution and place are the
      * same, so a machine ticking every tick doesn't build a new actor each time.
      */
-    public static Actor.Machine machine(Actor.Machine cached, ServerLevel level, BlockEntity blockEntity) {
+    public static Actor.Machine machine(Actor.@Nullable Machine cached, ServerLevel level, BlockEntity blockEntity) {
         Attribution attribution = Actors.remembered(blockEntity);
         if (cached != null && cached.level() == level && cached.pos().equals(blockEntity.getBlockPos())
                 && cached.attribution().equals(attribution)) {
@@ -409,7 +422,7 @@ public final class BlockHooks {
     }
 
     /** What an actor's change from {@code before} to {@code after} is. */
-    private static Kind actorKind(BlockState before, BlockState after) {
+    private static @Nullable Kind actorKind(BlockState before, BlockState after) {
         if (before == after) return null;
         if (isFire(after) && !isFire(before)) return Kind.IGNITE;
         if (before.getBlock() == after.getBlock()) return Kind.CHANGE;
@@ -425,7 +438,7 @@ public final class BlockHooks {
      * falling blocks and bubble columns are left out: they are entity spawns or mechanics, and cancelling a hatch as
      * a fade would keep the egg and spawn the creature anyway.
      */
-    private static Kind naturalKind(Context ctx, BlockPos pos, BlockState before, BlockState after) {
+    private static @Nullable Kind naturalKind(Context ctx, BlockPos pos, BlockState before, BlockState after) {
         Block ticking = ctx.tickBlock();
         if (ticking instanceof Fallable || ticking instanceof TurtleEggBlock || ticking instanceof FrogspawnBlock
                 || ticking instanceof SnifferEggBlock || ticking instanceof BubbleColumnBlock) {
@@ -487,7 +500,7 @@ public final class BlockHooks {
             if (ctx.decidedTime == level.getGameTime()) return refuse;
         }
         if (ctx.suppresses(level, pos)) return false;
-        Actor actor = Actors.currentOr(null);
+        Actor actor = EntityActors.current();
         boolean ticking = ctx.ticking() && (actor == null || actor == ctx.tickActor());
         boolean fire = isFire(after);
         if (actor == null && !ticking && ctx.forming == 0 && !fire) return false;
@@ -528,7 +541,7 @@ public final class BlockHooks {
      * replacing {@code setBlock} at that position and happens only if that change is allowed: a refused replace keeps
      * the contents, and its event can read them. Anywhere but a live server level, it empties at once.
      */
-    public static void deferClear(LevelAccessor level, Object blockEntity, Runnable clear) {
+    public static void deferClear(@Nullable LevelAccessor level, Object blockEntity, Runnable clear) {
         if (!(level instanceof ServerLevel server) || !(blockEntity instanceof BlockEntity entity)
                 || server.captureBlockSnapshots || server.restoringBlockSnapshots) {
             clear.run();
@@ -574,7 +587,8 @@ public final class BlockHooks {
             if (built != null) {
                 unsuppress();
                 ctx.built = null;
-                if (!ctx.builtCreature.isAddedToLevel()) {
+                if (!java.util.Objects.requireNonNull(ctx.builtCreature, "built blocks without their creature")
+                        .isAddedToLevel()) {
                     ctx.unbuilding = true;
                     try {
                         restore(level, built);
@@ -609,7 +623,7 @@ public final class BlockHooks {
                 if (!server.getBlockState(pos).isAir()) blocks.add(BlockSnapshot.create(server.dimension(), server, pos));
             }
         }
-        Actor actor = currentOr(null);
+        Actor actor = current();
         if (actor != null && ctx.suppressed <= ctx.suppressedFloor) {
             if (ctx.building && ctx.buildOperation == null) {
                 ctx.buildOperation = dev.iredsc.hadron.api.actor.Operation.begin(actor);
@@ -650,14 +664,14 @@ public final class BlockHooks {
      * The top of {@code Level.destroyBlock}, before anything drops. A break by an actor or entity, or a block's tick
      * breaking itself (a cactus or sugar cane losing its support) as a {@link BlockFadeEvent}.
      */
-    public static boolean cancelDestroy(Level level, BlockPos pos, Entity entity) {
+    public static boolean cancelDestroy(Level level, BlockPos pos, @Nullable Entity entity) {
         if (level.isClientSide || level.captureBlockSnapshots || level.restoringBlockSnapshots
                 || !(level instanceof ServerLevel server)) {
             return false;
         }
         Context ctx = CONTEXT.get();
         if (ctx.suppresses(level, pos)) return false;
-        Actor actor = actorFor(entity);
+        Actor actor = actorOrStack(entity);
         boolean ticking = ctx.ticking() && entity == null && (actor == null || actor == ctx.tickActor());
         Kind kind;
         if (ticking) {
@@ -747,7 +761,7 @@ public final class BlockHooks {
      * A player is about to set a sign's text. Returns the text to write, or null if cancelled. Only fires for an edit
      * vanilla would accept.
      */
-    public static List<FilteredText> signChange(SignBlockEntity sign, Player player, boolean front,
+    public static @Nullable List<FilteredText> signChange(SignBlockEntity sign, Player player, boolean front,
             List<FilteredText> text) {
         if (!(sign.getLevel() instanceof ServerLevel level) || sign.isWaxed()
                 || !player.getUUID().equals(sign.getPlayerWhoMayEdit()) || !Hooks.listens(SignChangeEvent.class)) {
@@ -770,8 +784,8 @@ public final class BlockHooks {
     }
 
     /** A bucket is about to pour at {@code pos}; fires only for the space it will actually fill. */
-    public static boolean cancelBucketEmpty(BucketItem bucket, Player player, Level level, BlockPos pos,
-            BlockHitResult hit, ItemStack container) {
+    public static boolean cancelBucketEmpty(BucketItem bucket, @Nullable Player player, Level level, BlockPos pos,
+            @Nullable BlockHitResult hit, ItemStack container) {
         if (!(level instanceof ServerLevel server) || !(bucket.content instanceof FlowingFluid)
                 || CONTEXT.get().suppresses(level, pos) || !Hooks.listens(BucketEmptyEvent.class)) {
             return false;
@@ -797,8 +811,8 @@ public final class BlockHooks {
     }
 
     /** An empty bucket is about to take fluid from {@code pos}. {@code player} is null for a dispenser. */
-    public static boolean cancelBucketFill(Player player, LevelAccessor level, BlockPos pos, BlockState before,
-            ItemStack bucket, Direction face) {
+    public static boolean cancelBucketFill(@Nullable Player player, LevelAccessor level, BlockPos pos, BlockState before,
+            ItemStack bucket, @Nullable Direction face) {
         if (!(level instanceof ServerLevel server) || CONTEXT.get().suppresses(server, pos)
                 || !Hooks.listens(BucketFillEvent.class)) {
             return false;
@@ -851,7 +865,7 @@ public final class BlockHooks {
     }
 
     /** After a cancelled click the client has already predicted: show it the block and its inventory as they are. */
-    private static void resync(Player player, ServerLevel level, BlockPos pos) {
+    private static void resync(@Nullable Player player, ServerLevel level, BlockPos pos) {
         if (!(player instanceof ServerPlayer sp) || player instanceof FakePlayer) return;
         sp.connection.send(new ClientboundBlockUpdatePacket(level, pos));
         sp.inventoryMenu.sendAllDataToRemote();
@@ -934,7 +948,7 @@ public final class BlockHooks {
      * Bone meal applied at {@code pos}: everything it grows is one {@link BlockFertilizeEvent}. Cancelled, the blocks
      * go back and the bone meal is given back.
      */
-    public static boolean fertilize(ServerLevel level, BlockPos pos, Player player, ItemStack stack,
+    public static boolean fertilize(ServerLevel level, BlockPos pos, @Nullable Player player, ItemStack stack,
             BooleanSupplier work) {
         Actor actor = player != null ? actorFor(player) : currentOr(Actor.Unknown.INSTANCE);
         BlockState state = level.getBlockState(pos);
@@ -964,8 +978,9 @@ public final class BlockHooks {
      */
     public static boolean growStructure(ServerLevel level, BlockPos pos, BlockState sapling, BooleanSupplier work) {
         Context ctx = CONTEXT.get();
-        boolean bonemeal = ctx.fertilizer != null;
-        Actor actor = bonemeal ? ctx.fertilizer : currentOr(Actor.Nature.INSTANCE);
+        Actor fertilizer = ctx.fertilizer;
+        boolean bonemeal = fertilizer != null;
+        Actor actor = fertilizer != null ? fertilizer : currentOr(Actor.Nature.INSTANCE);
         boolean[] result = new boolean[1];
         boolean cancelled = captured(level, work, result, StructureGrowEvent.class,
                 changes -> new StructureGrowEvent(level, pos, sapling, changes, bonemeal, actor));
@@ -997,12 +1012,12 @@ public final class BlockHooks {
     }
 
     /** Who broke the block whose drops are falling: the breaker, else whoever acts now or the ticking block. */
-    static Actor dropActor(Entity breaker) {
-        Actor actor = actorFor(breaker);
+    static Actor dropActor(@Nullable Entity breaker) {
+        Actor actor = actorOrStack(breaker);
         return actor != null ? actor : currentOr(Actor.Unknown.INSTANCE);
     }
 
-    static Actor orUnknown(Actor actor) {
+    static Actor orUnknown(@Nullable Actor actor) {
         return orElse(actor, Actor.Unknown.INSTANCE);
     }
 }

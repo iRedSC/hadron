@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.player.PlayerDeathEvent;
 import dev.iredsc.hadron.api.event.player.PlayerJoinEvent;
 import dev.iredsc.hadron.api.event.player.PlayerQuitEvent;
@@ -20,19 +22,22 @@ import net.minecraft.world.scores.Team;
  */
 public final class PlayerMessages {
     /** A held line; {@code message} null when vanilla would have sent none. */
-    private record Held(Component message) {}
+    private record Held(@Nullable Component message) {}
 
+    @StaticState(reason = "weakly keyed by player, from vanilla's line to Hadron's event on the server thread; taken when sent")
     private static final Map<ServerPlayer, Held> JOINS = new WeakHashMap<>();
+    @StaticState(reason = "weakly keyed by player, from vanilla's line to Hadron's event on the server thread; taken when sent")
     private static final Map<ServerPlayer, Held> QUITS = new WeakHashMap<>();
+    @StaticState(reason = "weakly keyed by player, from vanilla's line to Hadron's event on the server thread; taken when sent")
     private static final Map<ServerPlayer, Held> DEATHS = new WeakHashMap<>();
 
     private PlayerMessages() {}
 
-    private static boolean shows(Component message) {
+    private static boolean shows(@Nullable Component message) {
         return message != null && !message.getString().isEmpty();
     }
 
-    private static void broadcast(ServerPlayer player, Component message) {
+    private static void broadcast(ServerPlayer player, @Nullable Component message) {
         if (shows(message)) player.server.getPlayerList().broadcastSystemMessage(message, false);
     }
 
@@ -46,13 +51,13 @@ public final class PlayerMessages {
     }
 
     /** The held join line, or null if none was held; taken, so it is sent once. */
-    static Component takeJoin(ServerPlayer player) {
+    static @Nullable Component takeJoin(ServerPlayer player) {
         Held held = JOINS.remove(player);
         return held == null ? null : held.message();
     }
 
     /** Sends the line the join event settled on. */
-    static void join(ServerPlayer player, Component message) {
+    static void join(ServerPlayer player, @Nullable Component message) {
         broadcast(player, message);
     }
 
@@ -69,12 +74,12 @@ public final class PlayerMessages {
         return true;
     }
 
-    static Component takeQuit(ServerPlayer player) {
+    static @Nullable Component takeQuit(ServerPlayer player) {
         Held held = QUITS.remove(player);
         return held == null ? null : held.message();
     }
 
-    static void quit(ServerPlayer player, Component message) {
+    static void quit(ServerPlayer player, @Nullable Component message) {
         broadcast(player, message);
     }
 
@@ -101,7 +106,7 @@ public final class PlayerMessages {
         return DEATHS.containsKey(player);
     }
 
-    static Component takeDeath(ServerPlayer player) {
+    static @Nullable Component takeDeath(ServerPlayer player) {
         Held held = DEATHS.remove(player);
         return held == null ? null : held.message();
     }
@@ -113,7 +118,7 @@ public final class PlayerMessages {
     }
 
     /** Shows the death screen with this line, and broadcasts it to whom the player's team allows, as vanilla does. */
-    static void death(ServerPlayer player, Component message) {
+    static void death(ServerPlayer player, @Nullable Component message) {
         boolean shown = shows(message);
         int id = player.getId();
         player.connection.send(new ClientboundPlayerCombatKillPacket(id, shown ? message : CommonComponents.EMPTY),

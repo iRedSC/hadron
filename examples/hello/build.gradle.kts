@@ -50,3 +50,7 @@ tasks.register<Copy>("deploy") {
 
 // ./gradlew :examples:hello:hadronTest runs src/test/java's @HadronTests in a headless server.
 apply(from = rootProject.file("gradle/hadron-test.gradle.kts"))
+
+// Compile-time checks every plugin build runs (gradle/hadron-checks.gradle.kts): Error Prone's errors, no static
+// mutable state, and deterministic tests.
+apply(from = rootProject.file("gradle/hadron-checks.gradle.kts"))

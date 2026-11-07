@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -29,11 +31,13 @@ public final class Node {
     public static final Set<String> RESERVED_ROOTS =
             Set.of("use", "place", "break", "open", "attack", "command", "packet", "hadron");
     private static final StackWalker WALKER = StackWalker.getInstance(StackWalker.Option.RETAIN_CLASS_REFERENCE);
+    @StaticState(reason = "permission nodes by owner; a plugin's are released when it unloads (Node.Lifecycle.release)")
     private static final Map<String, Node> declared = new TreeMap<>();
     /**
      * The class loaders of everyone who declared each node. A node goes when its last declarer (a plugin version)
      * unloads. Kept here rather than in the node, so a plugin holding a node never keeps another's loader alive.
      */
+    @StaticState(reason = "permission nodes by owner; a plugin's are released when it unloads (Node.Lifecycle.release)")
     private static final Map<String, Set<Object>> owners = new HashMap<>();
     /** Stands in for code with no class loader of its own, which never unloads. */
     private static final Object PERMANENT = new Object();
@@ -129,7 +133,7 @@ public final class Node {
     }
 
     /** Null when nothing declared it. */
-    public static synchronized Node get(String id) {
+    public static synchronized @Nullable Node get(String id) {
         return declared.get(id);
     }
 

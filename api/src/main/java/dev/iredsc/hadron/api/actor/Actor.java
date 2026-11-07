@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.actor;
 
+import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;

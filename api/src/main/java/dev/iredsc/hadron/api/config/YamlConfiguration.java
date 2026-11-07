@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.config;
 
+import org.jspecify.annotations.Nullable;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -20,7 +21,7 @@ import org.yaml.snakeyaml.Yaml;
  * hand-written comments in the jar's default file and save only what players change.
  */
 public class YamlConfiguration extends MemorySection {
-    private MemorySection defaults;
+    private @Nullable MemorySection defaults;
     private boolean copyDefaults;
 
     public YamlConfiguration() {
@@ -119,7 +120,7 @@ public class YamlConfiguration extends MemorySection {
         this.defaults = defaults;
     }
 
-    public YamlConfiguration getDefaults() {
+    public @Nullable YamlConfiguration getDefaults() {
         return defaults instanceof YamlConfiguration ? (YamlConfiguration) defaults : null;
     }
 
@@ -129,7 +130,7 @@ public class YamlConfiguration extends MemorySection {
     }
 
     @Override
-    protected ConfigurationSection defaults() {
+    protected @Nullable ConfigurationSection defaults() {
         return defaults;
     }
 

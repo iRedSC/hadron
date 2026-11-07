@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.player;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -56,7 +57,7 @@ public class PlayerFishEvent extends EntityEvent implements Cancellable {
 
     private final ServerPlayer player;
     private final State state;
-    private final Entity caught;
+    private final @Nullable Entity caught;
     private final List<ItemStack> items;
     private int exp;
     private boolean cancelled;
@@ -66,7 +67,7 @@ public class PlayerFishEvent extends EntityEvent implements Cancellable {
      * @param items the live catch on {@link State#CAUGHT_FISH}; ignored otherwise
      * @param exp the experience the catch gives on {@link State#CAUGHT_FISH}; ignored otherwise
      */
-    public PlayerFishEvent(ServerPlayer player, FishingHook hook, State state, Entity caught, List<ItemStack> items,
+    public PlayerFishEvent(ServerPlayer player, FishingHook hook, State state, @Nullable Entity caught, @Nullable List<ItemStack> items,
             int exp, Actor actor) {
         super(hook, actor);
         this.player = Objects.requireNonNull(player, "player");

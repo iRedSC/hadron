@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.iredsc.hadron.api.actor.Actors;

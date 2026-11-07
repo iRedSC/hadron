@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 import net.minecraft.commands.CommandSourceStack;
@@ -18,6 +20,7 @@ public final class Permissions {
     public static final String DEFAULT_GROUP = "default";
 
     private static final Logger LOG = LoggerFactory.getLogger("Hadron");
+    @StaticState(reason = "counts permission provider failures only to keep them from flooding the log")
     private static final AtomicInteger FAILURES = new AtomicInteger();
 
     private Permissions() {}
@@ -28,7 +31,7 @@ public final class Permissions {
     }
 
     /** The provider's answer; {@code none} without a provider or when it throws (logged, a few times in full). */
-    private static <T> T ask(Function<PermissionProvider, T> question, T none) {
+    private static <T> @Nullable T ask(Function<PermissionProvider, T> question, @Nullable T none) {
         PermissionProvider ranks = Providers.get(PermissionProvider.class);
         if (ranks == null) return none;
         try {

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.selftest.platform;
 
+import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.api.net.Packets;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import java.util.List;
@@ -30,20 +31,27 @@ public final class PacketProbePlugin extends JavaPlugin {
             if (text.equals("probe slow")) {
                 // Sent from a test thread: still running when the server thread starts disabling the probe.
                 log("slow started");
-                try {
-                    // Stay inside the call until the disable has begun (the probe stops counting as enabled before
-                    // its onDisable), then a little longer: without a wait, onDisable runs meanwhile.
-                    long until = System.nanoTime() + 10_000_000_000L;
-                    while (isEnabled() && System.nanoTime() < until) Thread.sleep(5);
-                    Thread.sleep(SLOW_MILLIS);
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                }
+                holdUntilDisabling();
                 log(closed ? "slow finished after onDisable" : "slow finished before onDisable");
             } else if (text.startsWith("probe")) {
                 log((closed ? "handled after onDisable: " : "handled: ") + text);
             }
         });
+    }
+
+    /**
+     * Stays inside the call until the disable has begun (the probe stops counting as enabled before its onDisable),
+     * then a little longer: without a wait, onDisable runs meanwhile.
+     */
+    @Nondeterministic(reason = "holds a handler open on a sending thread while the server thread disables the plugin")
+    private void holdUntilDisabling() {
+        try {
+            long until = System.nanoTime() + 10_000_000_000L;
+            while (isEnabled() && System.nanoTime() < until) Thread.sleep(5);
+            Thread.sleep(SLOW_MILLIS);
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     @Override

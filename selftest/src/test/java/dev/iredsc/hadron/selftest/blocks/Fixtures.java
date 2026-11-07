@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.selftest.blocks;
 
+import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -60,6 +61,7 @@ final class Fixtures {
         }, 300);
     }
 
+    @Nondeterministic(reason = "yields wall time to work on other threads (chunk workers, async tasks) between ticks, which run faster than it")
     static void pause() {
         try {
             Thread.sleep(5);

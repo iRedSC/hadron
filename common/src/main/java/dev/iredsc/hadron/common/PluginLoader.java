@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.PluginCommand;
 import dev.iredsc.hadron.api.plugin.PluginContext;
@@ -40,7 +41,7 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
     private final Server server;
     private final List<PluginLoader> dependencies;
     private final Map<String, PluginCommand> commands = new LinkedHashMap<>();
-    private JavaPlugin plugin;
+    private @Nullable JavaPlugin plugin;
     private enum Phase { LOADED, ENABLED, UNLOADING, DISPOSED }
     private volatile Phase phase = Phase.LOADED;
 
@@ -78,7 +79,7 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
     }
 
     /** From this jar, then from the declared plugins' jars and theirs. Null when none has it. */
-    private Class<?> findOwnOrDependency(String name) {
+    private @Nullable Class<?> findOwnOrDependency(String name) {
         synchronized (getClassLoadingLock(name)) {
             Class<?> c = findLoadedClass(name);
             if (c != null) return c;
@@ -129,8 +130,15 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
         this.plugin = plugin;
     }
 
-    JavaPlugin plugin() {
+    @Nullable JavaPlugin plugin() {
         return plugin;
+    }
+
+    /** The plugin, once its class was made: always, from a loaded jar on. */
+    JavaPlugin attached() {
+        JavaPlugin p = plugin;
+        if (p == null) throw new IllegalStateException(this + " has no JavaPlugin: its main class was never made");
+        return p;
     }
 
     boolean belongsTo(Server server) {
@@ -161,7 +169,7 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
     }
 
     @Override
-    public PluginCommand command(String name) {
+    public @Nullable PluginCommand command(String name) {
         return commands.get(name.toLowerCase(Locale.ROOT));
     }
 
@@ -170,7 +178,7 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
     }
 
     @Override
-    public InputStream resource(String path) {
+    public @Nullable InputStream resource(String path) {
         URL url = findResource(path);
         if (url == null) return null;
         try {

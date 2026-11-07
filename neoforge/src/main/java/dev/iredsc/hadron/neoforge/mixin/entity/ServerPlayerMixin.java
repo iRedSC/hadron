@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.entity;
 
+import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.iredsc.hadron.neoforge.EntityTeleports;
@@ -46,7 +47,7 @@ abstract class ServerPlayerMixin {
     }
 
     @WrapMethod(method = "changeDimension")
-    private Entity hadron$playerChangeDimension(DimensionTransition transition, Operation<Entity> original) {
+    private @Nullable Entity hadron$playerChangeDimension(DimensionTransition transition, Operation<Entity> original) {
         ServerPlayer self = (ServerPlayer) (Object) this;
         var pos = transition.pos();
         EntityTeleports.Destination to = EntityTeleports.ask(self, transition.newLevel(), pos.x, pos.y, pos.z,

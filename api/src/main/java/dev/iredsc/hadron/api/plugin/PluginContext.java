@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.plugin;
 
+import org.jspecify.annotations.Nullable;
 import java.io.File;
 import java.io.InputStream;
 import org.slf4j.Logger;
@@ -30,8 +31,8 @@ public interface PluginContext {
     boolean alive();
 
     /** A command from plugin.yml; null for a name it doesn't declare. */
-    PluginCommand command(String name);
+    @Nullable PluginCommand command(String name);
 
     /** A file inside the plugin's own jar (never another mod's or plugin's), or null. */
-    InputStream resource(String path);
+    @Nullable InputStream resource(String path);
 }

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.block;
 
+import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
@@ -21,14 +22,14 @@ public final class BlockChange {
     private final BlockPos pos;
     private final BlockState before;
     private final BlockState after;
-    private final HolderLookup.Provider registries;
-    private final BlockEntity beforeEntity;
-    private final BlockEntity afterEntity;
-    private CompoundTag beforeData;
-    private CompoundTag afterData;
+    private final HolderLookup.@Nullable Provider registries;
+    private final @Nullable BlockEntity beforeEntity;
+    private final @Nullable BlockEntity afterEntity;
+    private @Nullable CompoundTag beforeData;
+    private @Nullable CompoundTag afterData;
 
-    private BlockChange(BlockPos pos, BlockState before, BlockState after, HolderLookup.Provider registries,
-            BlockEntity beforeEntity, CompoundTag beforeData, BlockEntity afterEntity, CompoundTag afterData) {
+    private BlockChange(BlockPos pos, BlockState before, BlockState after, HolderLookup.@Nullable Provider registries,
+            @Nullable BlockEntity beforeEntity, @Nullable CompoundTag beforeData, @Nullable BlockEntity afterEntity, @Nullable CompoundTag afterData) {
         this.pos = Objects.requireNonNull(pos, "pos").immutable();
         this.before = Objects.requireNonNull(before, "before");
         this.after = Objects.requireNonNull(after, "after");
@@ -69,7 +70,7 @@ public final class BlockChange {
      * Data already copied before, and the data after read from a live block entity when asked for (null for none).
      */
     public static BlockChange withData(ServerLevel level, BlockPos pos, BlockState before, BlockState after,
-            CompoundTag beforeData, BlockEntity afterEntity) {
+            @Nullable CompoundTag beforeData, @Nullable BlockEntity afterEntity) {
         return new BlockChange(pos, before, after, level.registryAccess(), null, beforeData, afterEntity, null);
     }
 

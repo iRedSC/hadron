@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import net.minecraft.resources.ResourceKey;
@@ -8,14 +10,16 @@ import net.minecraft.world.level.Level;
 /** What the {@code mixin.worlds} mixins ask: a created world's own seed, and whether a closing world is discarded. */
 public final class WorldsHooks {
     /** Read from worldgen threads too. Set before a created world's ServerLevel is constructed. */
+    @StaticState(reason = "created worlds' seeds, read from worldgen threads; removed with a world and cleared when the server stops")
     private static final Map<ResourceKey<Level>, Long> SEEDS = new ConcurrentHashMap<>();
     /** Set on the server thread around closing a world unloaded without saving. */
+    @StaticState(reason = "set around closing one world on the server thread and reset after")
     private static boolean discarding;
 
     private WorldsHooks() {}
 
     /** The created world's seed, or null for every other dimension (which keeps the server's). */
-    public static Long seed(ResourceKey<Level> dimension) {
+    public static @Nullable Long seed(ResourceKey<Level> dimension) {
         return SEEDS.isEmpty() ? null : SEEDS.get(dimension);
     }
 

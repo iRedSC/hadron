@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
@@ -25,14 +27,20 @@ import net.minecraft.world.phys.Vec3;
  */
 public final class EntityTeleports {
     /** Entities in a teleport already asked about, or being moved by the port itself, with their passengers. */
+    @StaticState(reason = "entities mid-teleport on the server thread, removed when their teleport ends")
     private static final Set<Entity> travelling = Collections.newSetFromMap(new IdentityHashMap<>());
     /** A cause NeoForge told us about for this entity in this tick, and whether it was already asked. */
-    private static Entity marked;
+    @StaticState(reason = "a cause NeoForge reported for an entity's next teleport this tick; checked against the tick and cleared when used")
+    private static @Nullable Entity marked;
+    @StaticState(reason = "a cause NeoForge reported for an entity's next teleport this tick; checked against the tick and cleared when used")
     private static int markedTick;
-    private static TeleportCause markedCause;
+    @StaticState(reason = "a cause NeoForge reported for an entity's next teleport this tick; checked against the tick and cleared when used")
+    private static @Nullable TeleportCause markedCause;
+    @StaticState(reason = "a cause NeoForge reported for an entity's next teleport this tick; checked against the tick and cleared when used")
     private static boolean markedAsked;
     /** Where a listener on NeoForge's path sent it, when that changed the level or facing; null otherwise. */
-    private static Destination markedOverride;
+    @StaticState(reason = "a cause NeoForge reported for an entity's next teleport this tick; checked against the tick and cleared when used")
+    private static @Nullable Destination markedOverride;
 
     private EntityTeleports() {}
 
@@ -49,7 +57,7 @@ public final class EntityTeleports {
      * NeoForge named the cause of this entity's coming teleport; {@code asked} if we already fired the event, and
      * {@code override} the level and facing a listener chose there (NeoForge's event carries only the position).
      */
-    static void mark(Entity entity, TeleportCause cause, boolean asked, Destination override) {
+    static void mark(Entity entity, TeleportCause cause, boolean asked, @Nullable Destination override) {
         marked = entity;
         markedTick = entity.tickCount;
         markedCause = cause;
@@ -58,9 +66,9 @@ public final class EntityTeleports {
     }
 
     /** Where a teleport goes. {@code level} null means the entity's own level, on the client. */
-    public record Destination(ServerLevel level, double x, double y, double z, float yRot, float xRot) {
+    public record Destination(@Nullable ServerLevel level, double x, double y, double z, float yRot, float xRot) {
         /** Whether this differs from the teleport the method was called with. */
-        public boolean differs(Entity entity, ServerLevel toLevel, double x, double y, double z, float yRot,
+        public boolean differs(Entity entity, @Nullable ServerLevel toLevel, double x, double y, double z, float yRot,
                 float xRot) {
             ServerLevel asked = toLevel != null ? toLevel
                     : entity.level() instanceof ServerLevel own ? own : null;
@@ -83,13 +91,13 @@ public final class EntityTeleports {
      * go, which a listener may have changed, or null when cancelled. {@code toLevel} null means the entity's own
      * level.
      */
-    public static Destination ask(Entity entity, ServerLevel toLevel, double x, double y, double z, float yRot,
+    public static @Nullable Destination ask(Entity entity, @Nullable ServerLevel toLevel, double x, double y, double z, float yRot,
             float xRot) {
         Destination requested = new Destination(toLevel != null ? toLevel
                 : entity.level() instanceof ServerLevel own ? own : null, x, y, z, yRot, xRot);
         if (!(entity.level() instanceof ServerLevel from) || suppressed(entity)) return requested;
         boolean isMarked = marked == entity && markedTick == entity.tickCount;
-        TeleportCause cause = isMarked ? markedCause : TeleportCause.UNKNOWN;
+        TeleportCause cause = isMarked && markedCause != null ? markedCause : TeleportCause.UNKNOWN;
         boolean asked = isMarked && markedAsked;
         Destination override = isMarked ? markedOverride : null;
         // A mark covers exactly the next teleport: an approval never carries over to a second teleport this tick.

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.harness;
 
+import org.jspecify.annotations.Nullable;
 import java.io.IOException;
 import java.io.InputStream;
 import java.lang.reflect.Method;
@@ -20,7 +21,7 @@ final class TestSource {
     private TestSource() {}
 
     /** The file and first line of {@code method}'s body, or null if the class was compiled without lines. */
-    static String of(Class<?> type, Method method) {
+    static @Nullable String of(Class<?> type, Method method) {
         String resource = type.getName().replace('.', '/') + ".class";
         ClassLoader loader = type.getClassLoader();
         if (loader == null) return null;
@@ -36,7 +37,7 @@ final class TestSource {
                 }
 
                 @Override
-                public MethodVisitor visitMethod(int access, String name, String descriptor, String signature,
+                public @Nullable MethodVisitor visitMethod(int access, String name, String descriptor, String signature,
                                                  String[] exceptions) {
                     if (!(name + descriptor).equals(wanted)) return null;
                     return new MethodVisitor(Opcodes.ASM9) {

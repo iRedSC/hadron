@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.world;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.neoforge.PlayerState;
 import dev.iredsc.hadron.neoforge.WorldHooks;
@@ -21,7 +22,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public abstract class ServerPlayerMixin implements PlayerState {
     @Shadow public ServerGamePacketListenerImpl connection;
 
-    @Unique private Actor.Player hadron$actor;
+    @Unique private Actor.@Nullable Player hadron$actor;
     @Unique private boolean hadron$synced;
     @Unique private boolean hadron$mayfly;
     @Unique private float hadron$flySpeed;
