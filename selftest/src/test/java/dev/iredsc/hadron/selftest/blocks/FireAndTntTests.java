@@ -139,6 +139,23 @@ public final class FireAndTntTests {
         assertNature(t, ignites.get(0).getActor());
     }
 
+    @HadronTest(timeout = 900)
+    void cancelledBurnKeepsEveryBlock(TestContext t) {
+        List<BlockBurnEvent> burns = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockBurnEvent e) {
+                burns.add(e);
+                e.setCancelled(true);
+            }
+        });
+        BlockPos fire = fireInWool(t);
+        t.await("fire to try burning a wool block", () -> !burns.isEmpty(), 600);
+        t.tick(2);
+        t.assertBlock(fire.below(), Blocks.WHITE_WOOL);
+        for (Direction side : Direction.Plane.HORIZONTAL) t.assertBlock(fire.relative(side), Blocks.WHITE_WOOL);
+    }
+
     // ---- TNT
 
     private static List<BlockBreakEvent> recordBreaks(TestContext t, boolean cancel) {
@@ -183,13 +200,28 @@ public final class FireAndTntTests {
         t.assertEquals(0, alice.player().getMainHandItem().getDamageValue(), "the flint and steel's damage");
     }
 
+    private static void awaitDispense(TestContext t, BlockPos at, DispenserBlockEntity dispenser,
+            java.util.function.BooleanSupplier done) {
+        for (int i = 0; i < 40 && !done.getAsBoolean(); i++) t.tick();
+        if (!done.getAsBoolean()) {
+            t.fail("The dispenser never lit the TNT, 46 ticks after being powered. Dispenser: " + t.getBlock(at)
+                    + ", holding " + dispenser.getItem(0) + "; in front: " + t.getBlock(at.east()) + "; chunk ticking: "
+                    + t.level().isPositionEntityTicking(at) + "; block ticks pending there: "
+                    + t.level().getBlockTicks().hasScheduledTick(at, Blocks.DISPENSER));
+        }
+    }
+
     @HadronTest
     void aDispenserLightingTntIsOneBreakByTheMachine(TestContext t) {
         BlockPos at = t.pos(2, 0, 0);
         t.setBlock(at.east(), Blocks.TNT);
-        dispenser(t, at, Direction.EAST, new ItemStack(Items.FLINT_AND_STEEL));
+        DispenserBlockEntity dispenser = dispenser(t, at, Direction.EAST, new ItemStack(Items.FLINT_AND_STEEL));
         List<BlockBreakEvent> seen = recordBreaks(t, false);
         fire(t, at, Direction.EAST);
+        // KNOWN FLAKE: in 2 of 5 runs the dispenser hadn't lit the TNT 6 ticks after being powered (bucket dispensers
+        // with the same set-up never missed). Waiting for the effect, and saying what the dispenser looks like if it
+        // never comes, until the cause is found.
+        awaitDispense(t, at, dispenser, () -> !t.getBlock(at.east()).is(Blocks.TNT));
         t.assertBlock(at.east(), Blocks.AIR);
         t.assertEquals(1, entities(t, PrimedTnt.class, at.east(), 2), "the primed TNT");
         t.assertEquals(1, seen.size(), "the number of BlockBreakEvents for a dispenser lighting TNT");
@@ -203,6 +235,7 @@ public final class FireAndTntTests {
         DispenserBlockEntity dispenser = dispenser(t, at, Direction.EAST, new ItemStack(Items.FLINT_AND_STEEL));
         List<BlockBreakEvent> tried = recordBreaks(t, true);
         fire(t, at, Direction.EAST);
+        awaitDispense(t, at, dispenser, () -> !tried.isEmpty());
         t.assertEquals(1, tried.size(), "the dispenser's attempts to light the TNT (TNT block now: "
                 + t.getBlock(at.east()).getBlock() + ", primed TNT: " + entities(t, PrimedTnt.class, at.east(), 2)
                 + ", dispenser holds: " + dispenser.getItem(0) + ", triggered: "
