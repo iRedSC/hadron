@@ -59,6 +59,11 @@ import net.minecraft.network.protocol.cookie.ClientboundCookieRequestPacket;
 import net.minecraft.network.protocol.cookie.ServerboundCookieResponsePacket;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundChunkBatchFinishedPacket;
+import net.minecraft.network.protocol.game.ClientboundChunkBatchStartPacket;
+import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
+import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
+import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
 import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket;
 import net.minecraft.network.protocol.game.ClientboundLoginPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
@@ -157,6 +162,8 @@ final class TestClient implements TestPlayer {
     private volatile @Nullable ServerPlayer player;
     /** Bumped for each packet received, so settling knows when traffic stopped. */
     final AtomicLong activity = new AtomicLong();
+    /** Of {@link #activity}, the packets that aren't the world streaming in (chunks and their light). */
+    final AtomicLong effects = new AtomicLong();
 
     private final Object lock = new Object();
     private final List<Packet<?>> packets = new ArrayList<>();
@@ -681,8 +688,16 @@ final class TestClient implements TestPlayer {
                     + packet.getClass().getSimpleName() + ", a bug in the test harness rather than the test", e);
             throw e;
         } finally {
+            if (!streaming(packet)) effects.incrementAndGet();
             activity.incrementAndGet();
         }
+    }
+
+    /** Chunks and light arriving as the server streams the world in: finite, and no effect of the test's. */
+    private static boolean streaming(Packet<?> packet) {
+        return packet instanceof ClientboundLevelChunkWithLightPacket || packet instanceof ClientboundLightUpdatePacket
+                || packet instanceof ClientboundChunkBatchStartPacket || packet instanceof ClientboundChunkBatchFinishedPacket
+                || packet instanceof ClientboundForgetLevelChunkPacket || packet instanceof ClientboundSetChunkCacheCenterPacket;
     }
 
     private void record(Packet<?> packet) {
@@ -825,6 +840,7 @@ final class TestClient implements TestPlayer {
     private void disconnected(DisconnectionDetails details) {
         if (disconnectReason.isEmpty()) disconnectReason = details.reason().getString();
         phase = Phase.GONE;
+        effects.incrementAndGet();
         activity.incrementAndGet();
     }
 

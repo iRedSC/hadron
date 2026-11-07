@@ -320,6 +320,7 @@ final class TestWorld implements TestContext {
         int busy = 0;
         for (int round = 0; ; round++) {
             long before = activity();
+            long effectsBefore = effects();
             for (TestClient c : players.values()) c.connection().tick();
             fence();
             // The server runs its own queue (packets, tasks) before any chunk loading, so a task that ran while that
@@ -342,20 +343,25 @@ final class TestWorld implements TestContext {
             }
             boolean moved = activity() != before;
             if (ran == 0 && !moved) return;
-            if (!moved && queued == 0) {
-                // Only chunk loading, as between two real ticks: let it run, but it never holds the test up for long.
-                if (round >= CHUNK_ROUNDS) return;
-                continue;
-            }
-            if (++busy >= SETTLE_ROUNDS) {
-                // Returning now would let the next line (assertNoChat, assertNotSent) pass before what's pending
-                // arrives.
-                throw new IllegalStateException("Packets or server tasks were still arriving after " + SETTLE_ROUNDS
+            // The world streaming in, as between two real ticks: nothing arrived but chunks and light, and either
+            // something did arrive (the clients' acknowledgements are queued) or chunks loaded (a loaded chunk's
+            // entities finish in a queued task). It gets CHUNK_ROUNDS rather than SETTLE_ROUNDS. A task that
+            // re-queues itself is still caught once chunk loading stops.
+            boolean streaming = effects() == effectsBefore && (moved || ran > queued);
+            // Returning while packets or queued tasks still arrive would let the next line (assertNoChat,
+            // assertNotSent) pass before what's pending arrives: only chunk loading alone may outlast its rounds.
+            boolean onlyLoading = !moved && queued == 0;
+            if (streaming ? round >= CHUNK_ROUNDS && !onlyLoading : ++busy >= SETTLE_ROUNDS) {
+                throw new IllegalStateException("Packets or server tasks were still arriving after " + (streaming
+                        ? CHUNK_ROUNDS : SETTLE_ROUNDS)
                         + " rounds of letting them through without a tick, so the harness can't tell when this "
                         + "action's effects have all arrived. Something keeps making work without the server ticking: "
                         + "a task that re-queues itself, or a listener that answers every packet with another. Make it "
-                        + "wait for the next tick (a scheduled task), or stop it before the test acts.");
+                        + "wait for the next tick (a scheduled task), or stop it before the test acts. Server tasks "
+                        + "in the last round: " + queued + " queued, " + (ran - queued) + " chunk loading."
+                        + lastPacketsOfEach());
             }
+            if (streaming && round >= CHUNK_ROUNDS) return;
         }
     }
 
@@ -382,6 +388,12 @@ final class TestWorld implements TestContext {
     private long activity() {
         long sum = 0;
         for (TestClient c : players.values()) sum += c.activity.get();
+        return sum;
+    }
+
+    private long effects() {
+        long sum = 0;
+        for (TestClient c : players.values()) sum += c.effects.get();
         return sum;
     }
 
@@ -469,6 +481,13 @@ final class TestWorld implements TestContext {
                 }
             }
         }
+    }
+
+    /** Each player's last packets, for a failure that depends on what was still arriving. */
+    private String lastPacketsOfEach() {
+        StringBuilder out = new StringBuilder();
+        for (TestClient c : players.values()) out.append(" Last packets for ").append(c.name()).append(": ").append(lastPackets(c));
+        return out.toString();
     }
 
     private static String lastPackets(TestClient c) {

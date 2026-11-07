@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.selftest.harness;
 
+import dev.iredsc.hadron.api.net.PacketRegistration;
+import dev.iredsc.hadron.api.net.Packets;
 import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
@@ -10,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundChunkBatchFinishedPacket;
+import net.minecraft.network.protocol.game.ServerboundChunkBatchReceivedPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.TickTask;
 
@@ -47,6 +51,31 @@ public final class SettleTests {
                     + "), so an assertNoChat(alice, \"late\") here would pass early; it should fail instead");
         }
         t.assertTrue(failure.getMessage() != null && failure.getMessage().contains("re-queues itself"),
+                "the failure should say what keeps work arriving, but was: " + failure.getMessage());
+    }
+
+    @HadronTest
+    void anActionFailsWhenChunkPacketsKeepArriving(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        // A listener that answers every chunk acknowledgement with another batch: only chunk packets, never ending.
+        boolean[] on = {true};
+        PacketRegistration loop = Packets.onReceive(t.plugin(), ServerboundChunkBatchReceivedPacket.class, e -> {
+            e.setCancelled(true);
+            if (on[0]) e.getPlayer().connection.send(new ClientboundChunkBatchFinishedPacket(0));
+        });
+        RuntimeException failure = null;
+        try {
+            alice.player().connection.send(new ClientboundChunkBatchFinishedPacket(0));
+            alice.selectSlot(2);
+        } catch (RuntimeException e) {
+            failure = e;
+        } finally {
+            on[0] = false;
+            loop.unregister();
+        }
+        if (failure == null) t.fail("an action returned while chunk packets were still arriving, so a negative "
+                + "assertion right after it could pass early; it should fail instead");
+        t.assertTrue(failure.getMessage() != null && failure.getMessage().contains("answers every packet"),
                 "the failure should say what keeps work arriving, but was: " + failure.getMessage());
     }
 
