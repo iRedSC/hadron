@@ -2,6 +2,7 @@ package dev.iredsc.hadron.neoforge.mixin.entity;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import dev.iredsc.hadron.neoforge.EntityActors;
 import dev.iredsc.hadron.neoforge.EntityDeaths;
 import dev.iredsc.hadron.neoforge.EntitySpawnRefunds;
 import net.minecraft.server.level.ServerLevel;
@@ -9,16 +10,36 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Brackets the death loot, so the death event can decide drops and experience together; and refunds a released bow
- * or trident whose every spawn was refused.
+ * Brackets the death loot, so the death event can decide drops and experience together; refunds a released bow or
+ * trident whose every spawn was refused; and remembers the hit in progress.
  */
 @Mixin(LivingEntity.class)
-abstract class LivingEntityMixin {
+abstract class LivingEntityMixin implements EntityActors.Hurting {
+    @Unique private DamageSource hadron$hurting;
+
+    @Override
+    public DamageSource hadron$hurting() {
+        return hadron$hurting;
+    }
+
+    /** Remembers the hit in progress, so its knockback is blamed on it rather than on the previous hit. */
+    @WrapMethod(method = "hurt")
+    private boolean hadron$hurt(DamageSource source, float amount, Operation<Boolean> original) {
+        DamageSource outer = hadron$hurting;
+        hadron$hurting = source;
+        try {
+            return original.call(source, amount);
+        } finally {
+            hadron$hurting = outer;
+        }
+    }
+
     @Inject(method = "dropAllDeathLoot", at = @At("HEAD"))
     private void hadron$deathLootStart(ServerLevel level, DamageSource source, CallbackInfo ci) {
         EntityDeaths.begin((LivingEntity) (Object) this);
