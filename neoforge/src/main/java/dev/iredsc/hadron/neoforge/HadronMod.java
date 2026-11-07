@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.Hadron;
 import dev.iredsc.hadron.common.PluginHost;
 import java.io.File;
@@ -25,7 +27,8 @@ public final class HadronMod {
     public static final String MOD_ID = "hadron";
 
     /** Published to background dispatcher preparation; lifecycle changes stay on the server thread. */
-    private static volatile PluginHost host;
+    @StaticState(reason = "the running server's plugin host: made when it starts, cleared when it stops")
+    private static volatile @Nullable PluginHost host;
 
     public HadronMod(IEventBus modBus, ModContainer container) {
         NeoForge.EVENT_BUS.addListener(HadronMod::aboutToStart);
@@ -55,7 +58,8 @@ public final class HadronMod {
     }
 
     private static void starting(ServerStartingEvent event) {
-        host.start();
+        PluginHost running = host;
+        if (running != null) running.start();
     }
 
     private static void tick(ServerTickEvent.Post event) {

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;

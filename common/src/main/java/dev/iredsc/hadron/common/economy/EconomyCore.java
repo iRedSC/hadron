@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.common.economy;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.config.YamlConfiguration;
@@ -51,7 +53,8 @@ public final class EconomyCore implements Economy {
             default-currency: money
             """;
 
-    private static volatile EconomyCore current;
+    @StaticState(reason = "the running server's economy: set when it opens, cleared when it closes")
+    private static volatile @Nullable EconomyCore current;
 
     static {
         // Once per JVM; forwards to whichever server is running.
@@ -73,13 +76,13 @@ public final class EconomyCore implements Economy {
      * The class name of the last plugin provider seen this run, or null while only the built-in one has been used.
      * A name, not the provider, so a disabled plugin's classes aren't kept.
      */
-    private volatile String pluginProvider;
+    private volatile @Nullable String pluginProvider;
     private volatile String defaultName = Economy.MONEY.name();
     private boolean warnedDefault;
     private boolean closed;
 
     /** {@code owner} is null for Hadron's own. Holds the plugin only until it disables. */
-    private record Registered(Currency currency, JavaPlugin owner) {
+    private record Registered(Currency currency, @Nullable JavaPlugin owner) {
         String ownerName() {
             return owner == null ? "Hadron" : owner.getName();
         }
@@ -97,7 +100,7 @@ public final class EconomyCore implements Economy {
         void post(ResourceEvent event);
 
         /** The {@link EconomyProvider} a plugin registered as a service, or null for none. */
-        EconomyProvider registeredProvider();
+        @Nullable EconomyProvider registeredProvider();
 
         boolean isOnline(UUID account);
     }
@@ -116,7 +119,7 @@ public final class EconomyCore implements Economy {
             }
 
             @Override
-            public EconomyProvider registeredProvider() {
+            public @Nullable EconomyProvider registeredProvider() {
                 return host.server().getServicesManager().load(EconomyProvider.class);
             }
 
@@ -232,7 +235,7 @@ public final class EconomyCore implements Economy {
         throw new IllegalStateException(missingDefault());
     }
 
-    private Currency defaultOrNull() {
+    private @Nullable Currency defaultOrNull() {
         synchronized (currencies) {
             Registered r = currencies.get(defaultName);
             return r == null ? null : r.currency();
@@ -250,7 +253,7 @@ public final class EconomyCore implements Economy {
     }
 
     /** The registered definition for that name, or null; a plugin may hold a Currency from before a reload. */
-    private Currency registered(Currency currency) {
+    private @Nullable Currency registered(Currency currency) {
         Objects.requireNonNull(currency, "currency");
         synchronized (currencies) {
             Registered r = currencies.get(currency.name());
@@ -430,7 +433,7 @@ public final class EconomyCore implements Economy {
             if (closed) return new EconomyResult.Unavailable("the server is stopping");
             return work.run(provider());
         } catch (ProviderFailed e) {
-            return new EconomyResult.Unavailable(e.getMessage());
+            return new EconomyResult.Unavailable(String.valueOf(e.getMessage()));
         } finally {
             mine.removeAll(accounts);
             lock.unlock();
@@ -550,7 +553,7 @@ public final class EconomyCore implements Economy {
 
     /** A provider call failed; the operation ends with {@link EconomyResult.Unavailable}. */
     private static final class ProviderFailed extends RuntimeException {
-        ProviderFailed(String message, Throwable cause) {
+        ProviderFailed(String message, @Nullable Throwable cause) {
             super(message, cause);
         }
     }

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.net.NetBackend;
 import dev.iredsc.hadron.api.net.PacketHandler;
@@ -77,17 +78,17 @@ final class NetPort implements NetBackend {
     }
 
     @Override
-    public void setDisplayName(JavaPlugin plugin, ServerPlayer player, Component name) {
+    public void setDisplayName(JavaPlugin plugin, ServerPlayer player, @Nullable Component name) {
         NetNames.setDisplayName(plugin, player, name);
     }
 
     @Override
-    public void setPlayerListName(JavaPlugin plugin, ServerPlayer player, Component name) {
+    public void setPlayerListName(JavaPlugin plugin, ServerPlayer player, @Nullable Component name) {
         NetNames.setPlayerListName(plugin, player, name);
     }
 
     @Override
-    public void setNameTag(JavaPlugin plugin, ServerPlayer player, String tag) {
+    public void setNameTag(JavaPlugin plugin, ServerPlayer player, @Nullable String tag) {
         NetNames.setNameTag(plugin, player, tag);
     }
 
@@ -127,7 +128,7 @@ final class NetPort implements NetBackend {
         if (tracked != null) tracked.hadron$removePlayer(viewer);
     }
 
-    private static TrackedEntityAccessor tracked(ServerPlayer viewer, Entity target) {
+    private static @Nullable TrackedEntityAccessor tracked(ServerPlayer viewer, Entity target) {
         if (target.isRemoved() || viewer.level() != target.level() || !(target.level() instanceof ServerLevel level)) {
             return null;
         }

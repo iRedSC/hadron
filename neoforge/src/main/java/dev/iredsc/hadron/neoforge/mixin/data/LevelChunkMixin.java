@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.data;
 
+import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
 import com.llamalad7.mixinextras.sugar.Local;
 import dev.iredsc.hadron.neoforge.DataBlocks;
@@ -18,15 +19,15 @@ import org.spongepowered.asm.mixin.injection.At;
 @Mixin(LevelChunk.class)
 public abstract class LevelChunkMixin implements DataChunk {
     @Unique
-    private DataBlocks hadron$blocks;
+    private @Nullable DataBlocks hadron$blocks;
 
     @Override
-    public DataBlocks hadron$blocks() {
+    public @Nullable DataBlocks hadron$blocks() {
         return hadron$blocks;
     }
 
     @Override
-    public void hadron$setBlocks(DataBlocks blocks) {
+    public void hadron$setBlocks(@Nullable DataBlocks blocks) {
         hadron$blocks = blocks;
     }
 

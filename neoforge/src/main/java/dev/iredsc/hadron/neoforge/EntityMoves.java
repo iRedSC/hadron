@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.player.PlayerMoveEvent;
@@ -47,7 +48,7 @@ public final class EntityMoves {
         Vec3 to = new Vec3(x, y, z);
         EntityMoveEvent event = player
                 ? new PlayerMoveEvent((ServerPlayer) entity, from, to)
-                : new EntityMoveEvent(entity, from, to, EntityActors.of(driver));
+                : new EntityMoveEvent(entity, from, to, EntityActors.of(java.util.Objects.requireNonNull(driver, "checked a Player above")));
         if (!Hooks.post(event).isCancelled()) {
             state.hadron$track(entity.level(), x, y, z);
             return;
@@ -56,7 +57,7 @@ public final class EntityMoves {
         state.hadron$track(entity.level(), from.x, from.y, from.z);
     }
 
-    private static void putBack(Entity entity, LivingEntity driver, Vec3 from) {
+    private static void putBack(Entity entity, @Nullable LivingEntity driver, Vec3 from) {
         if (entity instanceof ServerPlayer player) {
             player.connection.teleport(from.x, from.y, from.z, player.getYRot(), player.getXRot());
             return;

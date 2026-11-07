@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.checks.Nondeterministic;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.Scheduler;
 import dev.iredsc.hadron.api.plugin.Task;
@@ -31,7 +33,7 @@ final class TaskScheduler implements Scheduler {
     });
     private long tick;
     private int nextId = 1;
-    private volatile Thread serverThread;
+    private volatile @Nullable Thread serverThread;
     /** Async runs in progress per plugin version, so disabling can wait for them; guarded by itself. */
     private final Map<JavaPlugin, Integer> inFlight = new HashMap<JavaPlugin, Integer>();
 
@@ -188,6 +190,7 @@ final class TaskScheduler implements Scheduler {
      * closes admission, so queued workers cannot enter while waiting. @return how many were still running when it
      * gave up; 0 when done.
      */
+    @Nondeterministic(reason = "waits for async tasks on other threads, up to the disable grace period")
     int awaitAsync(JavaPlugin plugin, long timeoutMillis) {
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMillis);
         synchronized (inFlight) {

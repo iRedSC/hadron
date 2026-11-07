@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common;
 
+import org.jspecify.annotations.Nullable;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
 import dev.iredsc.hadron.api.actor.Actor;
@@ -145,7 +146,7 @@ final class Trace {
         return s.isEmpty() ? s : Character.toUpperCase(s.charAt(0)) + s.substring(1);
     }
 
-    private static Class<?> load(String name) {
+    private static @Nullable Class<?> load(@Nullable String name) {
         if (name == null) return null;
         try {
             return Class.forName(name, false, Event.class.getClassLoader());
@@ -155,8 +156,8 @@ final class Trace {
     }
 
     /** Narrows a trace to one actor, a world, or a radius around where it was started. All must match. */
-    record Filters(String byKind, UUID byPlayer, String byName, ResourceKey<Level> world, ServerLevel nearLevel,
-            Vec3 nearPos, double radius) {
+    record Filters(@Nullable String byKind, @Nullable UUID byPlayer, @Nullable String byName,
+            @Nullable ResourceKey<Level> world, @Nullable ServerLevel nearLevel, @Nullable Vec3 nearPos, double radius) {
         static final Filters NONE = new Filters(null, null, null, null, null, null, 0);
 
         boolean none() {
@@ -324,7 +325,7 @@ final class Trace {
     }
 
     /** The sender's live trace; one left by an earlier login of the same player is ended, not reused. */
-    private Session current(CommandSourceStack source) {
+    private @Nullable Session current(CommandSourceStack source) {
         Object key = key(source);
         Session s = sessions.get(key);
         if (s != null && s.player != source.getPlayer()) {
@@ -354,7 +355,7 @@ final class Trace {
     // ---- One sender's trace ----
 
     /** What {@link Session#before} keeps for {@link Session#after}. */
-    private record Seen(Where where, Object[] values, boolean wasCancelled) {}
+    private record Seen(@Nullable Where where, Object[] values, boolean wasCancelled) {}
 
     private final class Session implements EventBus.Observer {
         final Object key;
@@ -396,7 +397,7 @@ final class Trace {
         }
 
         @Override
-        public Object before(Event event) {
+        public @Nullable Object before(Event event) {
             if (closed) return null;
             Actor actor = actor(event);
             Where where = where(event, actor);
@@ -409,14 +410,14 @@ final class Trace {
         }
 
         @Override
-        public void after(Event event, Object state, String canceller) {
+        public void after(Event event, Object state, @Nullable String canceller) {
             if (closed) return;
             Component line = line(event, (Seen) state, canceller);
             if (minecraft.isSameThread()) deliver(line);
             else pending.add(line);
         }
 
-        private boolean matches(Actor actor, Where where) {
+        private boolean matches(@Nullable Actor actor, @Nullable Where where) {
             Filters f = filters;
             if (f.none()) return true;
             if (f.byKind != null && (actor == null || !kind(actor).equalsIgnoreCase(f.byKind))) return false;
@@ -492,15 +493,15 @@ final class Trace {
     // ---- Reading an event ----
 
     /** Where an event happened: a world, and a point in it when there is one. */
-    private record Where(ServerLevel level, Vec3 pos, String text) {}
+    private record Where(ServerLevel level, @Nullable Vec3 pos, String text) {}
 
-    private static Actor actor(Event event) {
+    private static @Nullable Actor actor(Event event) {
         if (event instanceof ActionEvent a) return a.getActor();
         if (event instanceof PlayerEvent p) return new Actor.Player(p.getPlayer());
         return null;
     }
 
-    private static Where where(Event event, Actor actor) {
+    private static @Nullable Where where(Event event, @Nullable Actor actor) {
         if (event instanceof BlockEvent b) return at(b.getLevel(), Vec3.atLowerCornerOf(b.getPos()));
         if (event instanceof EntityEvent e) return at(e.getLevel(), e.getPosition());
         if (event instanceof ExplosionEvent x) return at(x.getLevel(), x.getLocation());
@@ -515,7 +516,7 @@ final class Trace {
         return null;
     }
 
-    private static Where actorWhere(Actor actor) {
+    private static @Nullable Where actorWhere(Actor actor) {
         return switch (actor) {
             case Actor.Player p -> at(p.player().serverLevel(), p.player().position());
             case Actor.FakePlayer f -> at(f.fake().serverLevel(), f.fake().position());
@@ -601,7 +602,7 @@ final class Trace {
         }
     };
 
-    private static Method getter(Class<?> type, String name) {
+    private static @Nullable Method getter(Class<?> type, String name) {
         try {
             Method m = type.getMethod(name);
             return m.getReturnType() == void.class || Modifier.isStatic(m.getModifiers()) ? null : m;
@@ -617,7 +618,7 @@ final class Trace {
         return out;
     }
 
-    private static Object read(Prop prop, Event event) {
+    private static @Nullable Object read(Prop prop, Event event) {
         try {
             return prop.getter.invoke(event);
         } catch (ReflectiveOperationException | RuntimeException e) {
@@ -625,7 +626,7 @@ final class Trace {
         }
     }
 
-    private static Object copy(Object value) {
+    private static @Nullable Object copy(@Nullable Object value) {
         if (value instanceof ItemStack s) return s.copy();
         if (value instanceof List<?> l) {
             List<Object> out = new ArrayList<>(l.size());
@@ -635,7 +636,7 @@ final class Trace {
         return value;
     }
 
-    private static boolean same(Object a, Object b) {
+    private static boolean same(Object a, @Nullable Object b) {
         if (a instanceof ItemStack x && b instanceof ItemStack y) return ItemStack.matches(x, y);
         if (a instanceof List<?> x && b instanceof List<?> y) {
             if (x.size() != y.size()) return false;
@@ -655,7 +656,7 @@ final class Trace {
         return out;
     }
 
-    private static String show(Object value) {
+    private static String show(@Nullable Object value) {
         String s;
         if (value == null) s = "none";
         else if (value instanceof Optional<?> o) return o.map(Trace::show).orElse("none");
@@ -676,7 +677,7 @@ final class Trace {
 
     // ---- The line ----
 
-    private Component line(Event event, Seen seen, String canceller) {
+    private Component line(Event event, Seen seen, @Nullable String canceller) {
         Actor actor = actor(event);
         Operation op = event instanceof ActionEvent a ? a.getOperation() : null;
         List<String> changed = changes(event, seen.values);
@@ -730,7 +731,7 @@ final class Trace {
     }
 
     /** "myplugin: Listener.on" to "myplugin". */
-    private static String plugin(String where) {
+    private static String plugin(@Nullable String where) {
         if (where == null) return "a plugin";
         int colon = where.indexOf(':');
         return colon < 0 ? where : where.substring(0, colon);

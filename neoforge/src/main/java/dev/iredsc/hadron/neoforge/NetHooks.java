@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import java.util.Collection;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.server.level.ServerPlayer;
@@ -15,7 +16,7 @@ public final class NetHooks {
     }
 
     /** What to send instead, or null to send nothing. */
-    public static Packet<?> outgoing(ServerPlayer player, Packet<?> packet) {
+    public static @Nullable Packet<?> outgoing(ServerPlayer player, Packet<?> packet) {
         return NetPackets.outgoing(player, packet);
     }
 
@@ -24,7 +25,7 @@ public final class NetHooks {
     }
 
     /** What to handle instead, or null to drop it. */
-    public static Packet<?> incoming(ServerPlayer player, Packet<?> packet) {
+    public static @Nullable Packet<?> incoming(ServerPlayer player, Packet<?> packet) {
         return NetPackets.incoming(player, packet);
     }
 

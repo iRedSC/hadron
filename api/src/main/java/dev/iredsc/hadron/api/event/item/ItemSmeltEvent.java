@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.item;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -30,7 +31,7 @@ public class ItemSmeltEvent extends ItemEvent implements Cancellable {
     private final List<ItemStack> inputs;
     private final List<ItemStack> catalysts;
     private final List<ItemStack> outputs;
-    private final RecipeHolder<?> recipe;
+    private final @Nullable RecipeHolder<?> recipe;
     private boolean cancelled;
 
     /**
@@ -40,7 +41,7 @@ public class ItemSmeltEvent extends ItemEvent implements Cancellable {
      * @param recipe the recipe, or null where there is none (brewing)
      */
     public ItemSmeltEvent(ServerLevel level, InventoryHolder holder, List<ItemStack> inputs, List<ItemStack> catalysts,
-            List<ItemStack> outputs, RecipeHolder<?> recipe, Actor actor) {
+            List<ItemStack> outputs, @Nullable RecipeHolder<?> recipe, Actor actor) {
         super(level, ItemCraftEvent.first(outputs), actor);
         this.holder = Objects.requireNonNull(holder,
                 "holder; use InventoryHolder.Unknown.INSTANCE when nothing is known");

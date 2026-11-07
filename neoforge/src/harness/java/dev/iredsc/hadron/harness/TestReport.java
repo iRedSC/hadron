@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.harness;
 
+import org.jspecify.annotations.Nullable;
 import com.google.gson.GsonBuilder;
 import com.google.gson.JsonArray;
 import com.google.gson.JsonNull;
@@ -36,15 +37,15 @@ final class TestReport {
      * @param location  the test's own line nearest the failure, or null
      * @param detail    the stack, or where the server thread was for a hung test; null for an assertion
      */
-    record Result(String id, String className, String method, Status status, String source, String location,
-                  String message, String detail, int ticks, long millis) {}
+    record Result(String id, @Nullable String className, @Nullable String method, Status status, @Nullable String source, @Nullable String location,
+                  @Nullable String message, @Nullable String detail, int ticks, long millis) {}
 
     static final class Suite {
         final String jar;
         final String plugin;
         final List<Result> results = new ArrayList<>();
         /** Why none of its tests could run, or null. */
-        String broken;
+        @Nullable String broken;
         /** The patterns this run was limited to, or empty for every test. */
         List<String> filter = List.of();
         /** How many tests the suite has, before the filter. */
@@ -271,7 +272,7 @@ final class TestReport {
         return String.format("%.1f s", millis / 1000.0);
     }
 
-    private static String indent(String text) {
+    private static String indent(@Nullable String text) {
         return text == null ? "" : text.strip().replace("\n", "\n    ");
     }
 }

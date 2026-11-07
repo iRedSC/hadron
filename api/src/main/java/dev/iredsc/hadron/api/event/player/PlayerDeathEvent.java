@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.player;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.entity.EntityDeathEvent;
@@ -30,7 +31,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 @FiredBy(core = FULL)
 public class PlayerDeathEvent extends EntityDeathEvent {
     private final List<ItemStack> kept;
-    private Component deathMessage;
+    private @Nullable Component deathMessage;
 
     public PlayerDeathEvent(ServerPlayer player, DamageSource source, List<ItemStack> drops, List<ItemStack> kept,
             int droppedExp, Actor actor) {
@@ -39,7 +40,7 @@ public class PlayerDeathEvent extends EntityDeathEvent {
 
     /** @param deathMessage the line about to be shown, or null for none (the showDeathMessages rule is off) */
     public PlayerDeathEvent(ServerPlayer player, DamageSource source, List<ItemStack> drops, List<ItemStack> kept,
-            int droppedExp, Component deathMessage, Actor actor) {
+            int droppedExp, @Nullable Component deathMessage, Actor actor) {
         super(player, source, drops, droppedExp, actor);
         this.kept = Objects.requireNonNull(kept, "kept");
         this.deathMessage = deathMessage;
@@ -59,7 +60,7 @@ public class PlayerDeathEvent extends EntityDeathEvent {
      * The line about to be shown on the death screen and broadcast, or null when none will be (the
      * {@code showDeathMessages} game rule is off).
      */
-    public Component getDeathMessage() {
+    public @Nullable Component getDeathMessage() {
         return deathMessage;
     }
 

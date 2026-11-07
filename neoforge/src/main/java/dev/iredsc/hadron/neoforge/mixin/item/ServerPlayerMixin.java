@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.item;
 
+import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -28,7 +29,7 @@ abstract class ServerPlayerMixin {
             method = "openMenu(Lnet/minecraft/world/MenuProvider;Ljava/util/function/Consumer;)Ljava/util/OptionalInt;",
             at = @At(value = "INVOKE",
                     target = "Lnet/minecraft/world/MenuProvider;createMenu(ILnet/minecraft/world/entity/player/Inventory;Lnet/minecraft/world/entity/player/Player;)Lnet/minecraft/world/inventory/AbstractContainerMenu;"))
-    private AbstractContainerMenu hadron$open(MenuProvider provider, int id, Inventory inventory, Player player,
+    private @Nullable AbstractContainerMenu hadron$open(MenuProvider provider, int id, Inventory inventory, Player player,
             Operation<AbstractContainerMenu> original) {
         AbstractContainerMenu menu = original.call(provider, id, inventory, player);
         if (menu == null) return null;

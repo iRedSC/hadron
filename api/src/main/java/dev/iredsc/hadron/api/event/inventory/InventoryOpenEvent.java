@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.inventory;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -20,14 +21,14 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 @FiredBy(core = FULL)
 public class InventoryOpenEvent extends InventoryEvent implements Cancellable {
     private final ServerPlayer viewer;
-    private final AbstractContainerMenu menu;
+    private final @Nullable AbstractContainerMenu menu;
     private boolean cancelled;
 
     /**
      * @param menu the menu about to open, or null where it doesn't exist yet (horse inventories are opened before
      *     their menu is built)
      */
-    public InventoryOpenEvent(ServerPlayer viewer, InventoryHolder holder, AbstractContainerMenu menu, Actor actor) {
+    public InventoryOpenEvent(ServerPlayer viewer, InventoryHolder holder, @Nullable AbstractContainerMenu menu, Actor actor) {
         super(holder, actor);
         this.viewer = Objects.requireNonNull(viewer, "viewer");
         this.menu = menu;

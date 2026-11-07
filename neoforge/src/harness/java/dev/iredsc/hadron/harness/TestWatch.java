@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.harness;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.Hadron;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.PluginManager;
@@ -69,7 +71,8 @@ final class TestWatch {
     private static final int UNLOAD_TICKS = 100;
     private static final int LOAD_TICKS = 100;
 
-    private static TestWatch active;
+    @StaticState(reason = "the warm test server's watcher: made when the server starts, ended when it stops")
+    private static @Nullable TestWatch active;
 
     /** Waiting for a build; or taking one, from the moment it's queued until its report is written. */
     private enum State { WAITING, RUNNING }
@@ -89,7 +92,7 @@ final class TestWatch {
     private State state = State.WAITING;
     /** Whether hadronWatchStop asked it to stop, the only stop that exits 0. */
     private volatile boolean stopAsked;
-    private volatile Current current;
+    private volatile @Nullable Current current;
     private int ticks;
     private int runs;
 
@@ -211,7 +214,7 @@ final class TestWatch {
      * deleted, the shared state put back, then the new jar loaded by the host. @return the jar in plugins/, or null
      * if the run can't go on (the report says why).
      */
-    private File install(Request r, TestReport report) throws IOException {
+    private @Nullable File install(Request r, TestReport report) throws IOException {
         File staged = new File(r.dir(), r.jar());
         String name = TestRunner.pluginName(staged);
         if (name == null) {
@@ -329,7 +332,7 @@ final class TestWatch {
         }
 
         /** @return what couldn't be put back, or null. */
-        String restore() {
+        @Nullable String restore() {
             List<String> failed = new ArrayList<>();
             step(failed, "game rules", () -> server.getGameRules().assignFrom(rules, server));
             step(failed, "time and weather", () -> {

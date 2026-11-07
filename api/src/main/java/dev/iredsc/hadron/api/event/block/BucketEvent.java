@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.block;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import java.util.List;
 import java.util.Optional;
@@ -15,9 +16,9 @@ import net.minecraft.world.item.ItemStack;
  */
 public abstract class BucketEvent extends BlockChangeEvent {
     private final ItemStack item;
-    private final Direction face;
+    private final @Nullable Direction face;
 
-    protected BucketEvent(ServerLevel level, BlockChange change, ItemStack item, Direction face, Actor actor) {
+    protected BucketEvent(ServerLevel level, BlockChange change, ItemStack item, @Nullable Direction face, Actor actor) {
         super(level, change.getPos(), change.getAfter(), List.of(change), actor);
         this.item = item.copy();
         this.face = face;

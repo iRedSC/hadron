@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.world;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.resources.ResourceLocation;
@@ -19,7 +21,8 @@ import net.minecraft.world.phys.Vec3;
  * from another thread, use {@code Hadron.getScheduler().runTask(plugin, ...)}.
  */
 public final class Worlds {
-    private static volatile Backend backend;
+    @StaticState(reason = "the port installs the running server's worlds when it starts and clears them when it stops")
+    private static volatile @Nullable Backend backend;
 
     private Worlds() {}
 
@@ -116,7 +119,7 @@ public final class Worlds {
         boolean isCreated(ResourceLocation key);
 
         /** {@code to} and {@code at} are both null for the overworld's spawn. */
-        void unload(ServerLevel level, boolean save, ServerLevel to, Vec3 at);
+        void unload(ServerLevel level, boolean save, @Nullable ServerLevel to, @Nullable Vec3 at);
 
         void delete(ResourceLocation key);
     }
@@ -126,7 +129,7 @@ public final class Worlds {
         private Port() {}
 
         /** Null between servers. */
-        public static void install(Backend installed) {
+        public static void install(@Nullable Backend installed) {
             backend = installed;
         }
     }

@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.event.FiredBy;
+import org.jspecify.annotations.Nullable;
 import java.net.SocketAddress;
 import java.util.Objects;
 import java.util.Optional;
@@ -17,7 +18,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 @FiredBy(core = FULL)
 public class PlayerLoginEvent extends PlayerEvent {
     private final SocketAddress address;
-    private Component kickMessage;
+    private @Nullable Component kickMessage;
 
     public PlayerLoginEvent(ServerPlayer player, SocketAddress address) {
         super(player);

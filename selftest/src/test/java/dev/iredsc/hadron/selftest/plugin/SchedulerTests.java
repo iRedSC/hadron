@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.selftest.plugin;
 
+import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.api.plugin.Scheduler;
 import dev.iredsc.hadron.api.plugin.Server;
 import dev.iredsc.hadron.api.plugin.Task;
@@ -104,6 +105,7 @@ public final class SchedulerTests {
         t.assertTrue(ran.contains("later"), "the delayed async task should have run");
     }
 
+    @Nondeterministic(reason = "yields wall time to work on other threads (chunk workers, async tasks) between ticks, which run faster than it")
     private static void sleep() {
         try {
             Thread.sleep(5);

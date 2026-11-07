@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.world.Worlds;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
@@ -14,7 +16,8 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  */
 final class WorldsPort {
     /** Server thread only. */
-    private static WorldsManager manager;
+    @StaticState(reason = "the running server's created worlds: made when it starts, cleared when it stops")
+    private static @Nullable WorldsManager manager;
 
     private WorldsPort() {}
 

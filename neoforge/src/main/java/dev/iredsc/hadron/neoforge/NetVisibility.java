@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import java.util.ArrayList;
 import java.util.Collection;
@@ -88,8 +90,11 @@ public final class NetVisibility {
     }
 
     /** Server thread only. */
+    @StaticState(reason = "each plugin's hiding rules, dropped in its disable hook")
     private static final Map<JavaPlugin, Rules> BY_PLUGIN = new IdentityHashMap<JavaPlugin, Rules>();
+    @StaticState(reason = "a snapshot of BY_PLUGIN for packet threads, rebuilt whenever it changes")
     private static volatile Rules[] rules = new Rules[0];
+    @StaticState(reason = "whether any rule exists, recomputed whenever BY_PLUGIN changes")
     private static volatile boolean active;
 
     static boolean active() {
@@ -221,7 +226,7 @@ public final class NetVisibility {
     }
 
     /** For showing, which only undoes: allowed from onDisable too, and a no-op once the plugin's hides are gone. */
-    private static Rules existing(JavaPlugin plugin) {
+    private static @Nullable Rules existing(JavaPlugin plugin) {
         NetPort.requireServerThread("Visibility");
         if (plugin == null) throw new IllegalArgumentException("Visibility needs the plugin doing the hiding; pass this");
         return BY_PLUGIN.get(plugin);
@@ -297,7 +302,7 @@ public final class NetVisibility {
         NetPort.retrack(viewer, target);
     }
 
-    private static Entity find(MinecraftServer server, UUID id) {
+    private static @Nullable Entity find(MinecraftServer server, UUID id) {
         ServerPlayer p = server.getPlayerList().getPlayer(id);
         if (p != null) return p;
         for (ServerLevel level : server.getAllLevels()) {
@@ -314,7 +319,8 @@ public final class NetVisibility {
      * {@code Entity.playSound} and {@code Player.playSound} on the server thread. Vanilla sends those as positional
      * sounds that don't name their entity, so this is how a hidden entity's sounds stay hidden.
      */
-    private static Entity soundSource;
+    @StaticState(reason = "set around one entity's sound on the server thread and restored after it")
+    private static @Nullable Entity soundSource;
 
     /** Runs an entity's own sound with it as the source, when anyone is hidden; otherwise just runs it. */
     public static void playingSound(Entity source, Runnable play) {
@@ -336,7 +342,7 @@ public final class NetVisibility {
      * hidden entity out of the packets of entities the viewer does see: riders, leash holders, damage sources and
      * projectile owners.
      */
-    static Packet<?> filter(ServerPlayer viewer, Packet<?> packet) {
+    static @Nullable Packet<?> filter(ServerPlayer viewer, Packet<?> packet) {
         if (!active) return packet;
         if (packet instanceof ClientboundPlayerInfoUpdatePacket info) return info(viewer, info);
         if (packet instanceof ClientboundSetPassengersPacket
@@ -366,7 +372,7 @@ public final class NetVisibility {
         return e != null && e != viewer && !canSee(viewer, e);
     }
 
-    private static Packet<?> secondary(ServerPlayer viewer, Packet<?> packet) {
+    private static @Nullable Packet<?> secondary(ServerPlayer viewer, Packet<?> packet) {
         switch (packet) {
             case ClientboundSetPassengersPacket p -> {
                 int[] riders = p.getPassengers();
@@ -433,7 +439,7 @@ public final class NetVisibility {
         }
     }
 
-    private static Packet<?> info(ServerPlayer viewer, ClientboundPlayerInfoUpdatePacket packet) {
+    private static @Nullable Packet<?> info(ServerPlayer viewer, ClientboundPlayerInfoUpdatePacket packet) {
         UUID v = viewer.getUUID();
         List<ClientboundPlayerInfoUpdatePacket.Entry> kept = null;
         List<ClientboundPlayerInfoUpdatePacket.Entry> entries = packet.entries();

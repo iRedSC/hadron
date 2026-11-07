@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
@@ -29,6 +30,7 @@ import net.minecraft.world.entity.projectile.Projectile;
  */
 public final class EntitySpawns {
     /** Above zero inside {@code Mob.convertTo}, whose new mob is a transform, not a spawn. */
+    @StaticState(reason = "a server-thread depth count around one conversion, back to zero when it returns")
     private static int converting;
 
     private EntitySpawns() {}
@@ -76,7 +78,9 @@ public final class EntitySpawns {
     }
 
     /** Spawns asked about and refused so far on the server thread; {@link EntitySpawnRefunds} compares them. */
+    @StaticState(reason = "a running count; EntitySpawnRefunds reads only its change across one dispense")
     static int attempts;
+    @StaticState(reason = "a running count; EntitySpawnRefunds reads only its change across one dispense")
     static int refused;
 
     /** With nothing on the stack: the world spawned it (natural mobs, weather), or a mod did and didn't say. */

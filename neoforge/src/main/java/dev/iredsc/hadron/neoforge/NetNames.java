@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import com.mojang.authlib.GameProfile;
 import dev.iredsc.hadron.api.net.DisplayNames;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
@@ -31,13 +33,19 @@ final class NetNames {
 
     record Owned<T>(JavaPlugin plugin, T value) {}
 
+    @StaticState(reason = "names plugins set, dropped in each plugin's disable hook")
     private static final Map<UUID, Owned<Component>> DISPLAY = new ConcurrentHashMap<>();
+    @StaticState(reason = "names plugins set, dropped in each plugin's disable hook")
     private static final Map<UUID, Owned<Component>> LIST = new ConcurrentHashMap<>();
+    @StaticState(reason = "names plugins set, dropped in each plugin's disable hook")
     private static final Map<UUID, Owned<String>> TAGS = new ConcurrentHashMap<>();
     /** Real name to tag, for team packets, which name players rather than carry their UUID. */
+    @StaticState(reason = "names plugins set, dropped in each plugin's disable hook")
     private static final Map<String, String> TAG_BY_NAME = new ConcurrentHashMap<>();
     /** Each tagged player's real name, kept while they are offline so TAG_BY_NAME can be rebuilt. */
+    @StaticState(reason = "names plugins set, dropped in each plugin's disable hook")
     private static final Map<UUID, String> REAL_NAME = new ConcurrentHashMap<>();
+    @StaticState(reason = "whether any name tag is set, recomputed whenever TAGS changes")
     private static volatile boolean tags;
 
     static boolean tagsActive() {
@@ -61,17 +69,17 @@ final class NetNames {
 
     // ---- Setters (server thread) ----
 
-    static void setDisplayName(JavaPlugin plugin, ServerPlayer player, Component name) {
+    static void setDisplayName(JavaPlugin plugin, ServerPlayer player, @Nullable Component name) {
         check(plugin, player, name, "set display names");
         if (put(DISPLAY, plugin, player.getUUID(), name)) player.refreshDisplayName();
     }
 
-    static void setPlayerListName(JavaPlugin plugin, ServerPlayer player, Component name) {
+    static void setPlayerListName(JavaPlugin plugin, ServerPlayer player, @Nullable Component name) {
         check(plugin, player, name, "set tab list names");
         if (put(LIST, plugin, player.getUUID(), name)) player.refreshTabListName();
     }
 
-    static void setNameTag(JavaPlugin plugin, ServerPlayer player, String tag) {
+    static void setNameTag(JavaPlugin plugin, ServerPlayer player, @Nullable String tag) {
         check(plugin, player, tag, "set name tags");
         if (tag != null) validate(tag);
         String real = player.getGameProfile().getName();
@@ -110,7 +118,7 @@ final class NetNames {
     }
 
     /** Resetting (a null value) is allowed from onDisable; setting needs an enabled plugin. */
-    private static void check(JavaPlugin plugin, ServerPlayer player, Object value, String what) {
+    private static void check(JavaPlugin plugin, ServerPlayer player, @Nullable Object value, String what) {
         NetPort.requireServerThread("DisplayNames");
         if (plugin == null || player == null) {
             throw new IllegalArgumentException("DisplayNames needs the plugin and the player; one was null");
@@ -121,7 +129,7 @@ final class NetNames {
     }
 
     /** Sets or clears the value; true if it changed. */
-    private static <T> boolean put(Map<UUID, Owned<T>> map, JavaPlugin plugin, UUID id, T value) {
+    private static <T> boolean put(Map<UUID, Owned<T>> map, JavaPlugin plugin, UUID id, @Nullable T value) {
         Owned<T> old = value == null ? map.remove(id) : map.put(id, new Owned<T>(plugin, value));
         return !Objects.equals(old == null ? null : old.value(), value);
     }

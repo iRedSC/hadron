@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.event.FiredBy;
+import org.jspecify.annotations.Nullable;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -13,9 +14,9 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  */
 @FiredBy(core = FULL)
 public class PlayerBedLeaveEvent extends PlayerEvent {
-    private final BlockPos bed;
+    private final @Nullable BlockPos bed;
 
-    public PlayerBedLeaveEvent(ServerPlayer player, BlockPos bed) {
+    public PlayerBedLeaveEvent(ServerPlayer player, @Nullable BlockPos bed) {
         super(player);
         this.bed = bed == null ? null : bed.immutable();
     }

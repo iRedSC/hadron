@@ -1,5 +1,8 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.checks.Nondeterministic;
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import java.util.function.Supplier;
@@ -109,8 +112,8 @@ public final class PluginHost implements PluginManager {
         }
 
         static final class Failed extends State {
-            final String why;
-            Failed(String why) {
+            final @Nullable String why;
+            Failed(@Nullable String why) {
                 this.why = why;
             }
         }
@@ -128,7 +131,7 @@ public final class PluginHost implements PluginManager {
     static final class Entry {
         final String name;
         File jar;
-        Stamp stamp;
+        @Nullable Stamp stamp;
         PluginDescription description;
         State state = new State.Stopped();
 
@@ -160,7 +163,7 @@ public final class PluginHost implements PluginManager {
         }
 
         @Override
-        public boolean equals(Object o) {
+        public boolean equals(@Nullable Object o) {
             return o instanceof Stamp && ((Stamp) o).modified == modified && ((Stamp) o).size == size;
         }
 
@@ -194,7 +197,7 @@ public final class PluginHost implements PluginManager {
     private int ticks;
     private boolean running;
     /** The plugin whose onLoad is running: the only time a plugin may register placeholders. */
-    private volatile PluginLoader loading;
+    private volatile @Nullable PluginLoader loading;
     private volatile boolean stopping;
     private boolean managing;
     private final Deque<Runnable> deferred = new ArrayDeque<Runnable>();
@@ -255,7 +258,7 @@ public final class PluginHost implements PluginManager {
     }
 
     /** A plugin's own event class by its full name, from whichever running plugin has it; null if none does. */
-    Class<?> pluginClass(String name) {
+    @Nullable Class<?> pluginClass(String name) {
         for (Entry e : entries.values()) {
             if (!(e.state instanceof State.Running running)) continue;
             try {
@@ -371,7 +374,7 @@ public final class PluginHost implements PluginManager {
     }
 
     /** Reads a jar into a new entry. @return the entry, or null if the jar was refused (and logged). */
-    private Entry adopt(File jar, Stamp stamp) {
+    private @Nullable Entry adopt(File jar, Stamp stamp) {
         PluginDescription description;
         try {
             description = describe(jar);
@@ -473,7 +476,7 @@ public final class PluginHost implements PluginManager {
         }
     }
 
-    private Entry entryFor(File jar) {
+    private @Nullable Entry entryFor(File jar) {
         for (Entry e : entries.values()) if (e.jar.equals(jar)) return e;
         return null;
     }
@@ -541,9 +544,9 @@ public final class PluginHost implements PluginManager {
                 fail(e, ex.getMessage(), null);
             }
         }
-        long start = System.nanoTime();
+        long start = logClock();
         enableInOrder(usable);
-        long ms = (System.nanoTime() - start) / 1000000;
+        long ms = (logClock() - start) / 1000000;
         for (Entry e : roots) {
             if (e.state instanceof State.Enabled) {
                 announce(green(e.description.getFullName() + " " + verb + " (" + ms + " ms)"));
@@ -798,26 +801,26 @@ public final class PluginHost implements PluginManager {
         PluginLoader loader = loaded.loader;
         State.Enabled running = new State.Enabled(loaded);
         e.state = running;
-        long start = System.nanoTime();
+        long start = logClock();
         String step = "enabling";
         try {
             loader.enable();
             step = "onEnable";
-            loader.plugin().onEnable();
+            loader.attached().onEnable();
             step = "registering its commands";
             for (PluginCommand c : loader.commands().values()) {
                 running.undo.push(commands.register(c, loader.logger()));
             }
             enabledOrder.add(e);
-            post(new PluginEnableEvent(loader.plugin()));
-            LOG.info("Enabled " + e.description.getFullName() + " in " + (System.nanoTime() - start) / 1000000 + " ms");
+            post(new PluginEnableEvent(loader.attached()));
+            LOG.info("Enabled " + e.description.getFullName() + " in " + (logClock() - start) / 1000000 + " ms");
         } catch (Throwable t) {
             abandon(e, running, t, step);
         }
     }
 
     /** Why a hard dependency isn't there to build on, or null when every one is loaded or running. */
-    private String missingDependency(Entry e) {
+    private @Nullable String missingDependency(Entry e) {
         String version = SharedConstants.getCurrentVersion().getName();
         if (!e.description.getMinecraft().equals(version)) {
             return "was built for Minecraft " + e.description.getMinecraft() + ", but this server runs " + version
@@ -911,7 +914,7 @@ public final class PluginHost implements PluginManager {
     private void teardown(Entry e, State.Running running, State next, boolean callOnDisable) {
         JavaPlugin plugin = running.loader.plugin();
         running.loader.beginUnload();
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ASYNC_GRACE_MILLIS);
+        long deadline = graceDeadline();
         removeEvents(running, deadline);
         if (plugin != null) {
             closeMenus(running.loader);
@@ -956,6 +959,19 @@ public final class PluginHost implements PluginManager {
         }
     }
 
+    /** Only for "Enabled X in N ms": people read it, nothing decides on it. */
+    @Nondeterministic(reason = "times a step only to print how long it took")
+    private static long logClock() {
+        return System.nanoTime();
+    }
+
+    /** When a disabling plugin's async tasks and off-thread handlers stop being waited for. */
+    @Nondeterministic(reason = "a grace period for work on other threads, which server ticks don't measure")
+    private static long graceDeadline() {
+        return System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ASYNC_GRACE_MILLIS);
+    }
+
+    @Nondeterministic(reason = "a grace period for work on other threads, which server ticks don't measure")
     private static long remainingGraceMillis(long deadline) {
         return Math.max(0, TimeUnit.NANOSECONDS.toMillis(deadline - System.nanoTime()));
     }
@@ -981,12 +997,12 @@ public final class PluginHost implements PluginManager {
         running.subscriptions.clear();
     }
 
-    private void fail(Entry e, String why, Throwable error) {
+    private void fail(Entry e, @Nullable String why, @Nullable Throwable error) {
         e.state = new State.Failed(why);
         report(e, why, error);
     }
 
-    private void report(Entry e, String why, Throwable error) {
+    private void report(Entry e, @Nullable String why, @Nullable Throwable error) {
         if (error != null && !(error instanceof PluginException)) {
             LOG.error(e.name + " didn't enable: " + why, error);
         } else {
@@ -1009,7 +1025,7 @@ public final class PluginHost implements PluginManager {
         return Collections.unmodifiableCollection(entries.values());
     }
 
-    Entry entry(String name) {
+    @Nullable Entry entry(String name) {
         return entries.get(name);
     }
 
@@ -1200,6 +1216,7 @@ public final class PluginHost implements PluginManager {
         DISABLE_HOOKS.add(java.util.Objects.requireNonNull(hook, "hook"));
     }
 
+    @StaticState(reason = "Hadron's own modules register these once when the mod loads; plugins never do")
     private static final java.util.List<java.util.function.Consumer<JavaPlugin>> DISABLE_HOOKS =
             new java.util.concurrent.CopyOnWriteArrayList<>();
 
@@ -1212,6 +1229,7 @@ public final class PluginHost implements PluginManager {
         BEFORE_DISABLE_HOOKS.add(java.util.Objects.requireNonNull(hook, "hook"));
     }
 
+    @StaticState(reason = "Hadron's own modules register these once when the mod loads; plugins never do")
     private static final java.util.List<java.util.function.ObjLongConsumer<JavaPlugin>> BEFORE_DISABLE_HOOKS =
             new java.util.concurrent.CopyOnWriteArrayList<>();
 
@@ -1242,7 +1260,7 @@ public final class PluginHost implements PluginManager {
 
     /** Loaded or enabled, as in Bukkit; null otherwise. */
     @Override
-    public JavaPlugin getPlugin(String name) {
+    public @Nullable JavaPlugin getPlugin(String name) {
         Entry e = entries.get(name);
         return e != null && e.state instanceof State.Running ? ((State.Running) e.state).loader.plugin() : null;
     }
@@ -1250,7 +1268,7 @@ public final class PluginHost implements PluginManager {
     @Override
     public List<JavaPlugin> getPlugins() {
         List<JavaPlugin> out = new ArrayList<JavaPlugin>();
-        for (Entry e : enabledOrder) out.add(((State.Enabled) e.state).loader.plugin());
+        for (Entry e : enabledOrder) out.add(((State.Enabled) e.state).loader.attached());
         return out;
     }
 

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
@@ -14,12 +15,17 @@ import net.neoforged.neoforge.common.util.FakePlayer;
 public final class EntityActors {
     private EntityActors() {}
 
+    /** The actor a bridge or Hadron pushed on this thread, or null when nothing did. */
+    public static @Nullable Actor current() {
+        return Actors.isEmpty() ? null : Actors.currentOr(Actor.Nature.INSTANCE);
+    }
+
     /**
      * The entity as an actor: a player, a fake player, or an entity carrying its remembered attribution. If a bridge
      * pushed this same entity with its own attribution (a turret firing for its owner), that actor wins. Cached.
      */
     public static Actor of(Entity entity) {
-        Actor top = Actors.currentOr(null);
+        Actor top = EntityActors.current();
         if (top != null && isSelf(top, entity)) return top;
         EntityState state = (EntityState) entity;
         Actor actor = state.hadron$actor();
@@ -45,7 +51,7 @@ public final class EntityActors {
     }
 
     /** Whether an actor is the entity itself, so an entity hurting itself by walking into lava reads as nature. */
-    public static boolean isSelf(Actor actor, Entity entity) {
+    public static boolean isSelf(Actor actor, @Nullable Entity entity) {
         return switch (actor) {
             case Actor.Player p -> p.player() == entity;
             case Actor.FakePlayer f -> f.fake() == entity;
@@ -72,7 +78,7 @@ public final class EntityActors {
 
     /** A living entity's hit in progress: the damage source while {@code hurt} runs, otherwise null. */
     public interface Hurting {
-        DamageSource hadron$hurting();
+        @Nullable DamageSource hadron$hurting();
     }
 
     /**

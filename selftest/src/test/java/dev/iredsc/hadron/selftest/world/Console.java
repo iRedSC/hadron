@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.selftest.world;
 
+import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.test.TestContext;
 import java.util.function.BooleanSupplier;
@@ -29,6 +30,7 @@ final class Console {
     }
 
     /** {@link TestContext#await}, sleeping briefly between ticks for work the server does on other threads. */
+    @Nondeterministic(reason = "yields wall time to work on other threads (chunk workers, async tasks) between ticks, which run faster than it")
     static void awaitSlowly(TestContext t, String what, BooleanSupplier condition, int ticks) {
         t.await(what, () -> {
             if (condition.getAsBoolean()) return true;
