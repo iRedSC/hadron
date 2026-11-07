@@ -30,7 +30,8 @@ import javax.inject.Inject;
 /**
  * Refuses the wall clock, sleeps and unseeded randomness where Hadron promises determinism: its {@code common} host
  * and tests. A test that sleeps or reads the clock passes or fails by how busy the machine is; Hadron's time is
- * server ticks and its randomness is seeded.
+ * server ticks and its randomness is seeded. It catches the common ways to read the clock, sleep or draw unseeded
+ * randomness, not every one.
  */
 @AutoService(BugChecker.class)
 @BugPattern(
@@ -65,6 +66,10 @@ public final class Determinism extends BugChecker
             staticMethod().onClass("java.time.Clock")
                     .namedAnyOf("systemUTC", "systemDefaultZone", "system", "tickSeconds", "tickMinutes", "tickMillis"),
             staticMethod().onClass("java.time.InstantSource").named("system"),
+            // The old clock: new Date() and a Calendar made for now.
+            constructor().forClass("java.util.Date").withNoParameters(),
+            constructor().forClass("java.util.GregorianCalendar").withNoParameters(),
+            staticMethod().onClass("java.util.Calendar").named("getInstance"),
             // now() and now(ZoneId) read the system clock; now(Clock) reads the clock it's given.
             Matchers.allOf(
                     staticMethod().onClassAny("java.time.Instant", "java.time.LocalDateTime", "java.time.LocalTime",
@@ -81,7 +86,22 @@ public final class Determinism extends BugChecker
             staticMethod().onClass("java.util.concurrent.ThreadLocalRandom").named("current"),
             staticMethod().onClass("net.minecraft.util.RandomSource").named("create").withNoParameters(),
             constructor().forClass("java.util.Random").withNoParameters(),
-            constructor().forClass("java.util.SplittableRandom").withNoParameters());
+            constructor().forClass("java.util.SplittableRandom").withNoParameters(),
+            // RandomGenerator.of(name) and a factory's create() seed themselves; create(seed) doesn't.
+            staticMethod().onClass("java.util.random.RandomGenerator").namedAnyOf("getDefault", "of"),
+            instanceMethod().onExactClass("java.util.random.RandomGeneratorFactory").named("create")
+                    .withNoParameters(),
+            Determinism::unseededAnonymous);
+
+    /** new Random() {}: an anonymous subclass calls the same unseeded constructor. */
+    private static boolean unseededAnonymous(ExpressionTree tree, VisitorState state) {
+        if (!(tree instanceof NewClassTree created) || created.getClassBody() == null
+                || !created.getArguments().isEmpty()) {
+            return false;
+        }
+        return state.getTypes().erasure(ASTHelpers.getType(created.getIdentifier())).tsym.getQualifiedName()
+                .contentEquals("java.util.Random");
+    }
 
     @Override
     public Description matchMethodInvocation(MethodInvocationTree tree, VisitorState state) {

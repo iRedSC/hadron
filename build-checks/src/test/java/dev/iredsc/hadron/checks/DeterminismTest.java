@@ -86,6 +86,52 @@ class DeterminismTest {
     }
 
     @Test
+    void refusesOldClocksDefaultGeneratorsAndAnonymousRandoms() {
+        helper.addSourceLines("com/example/MyTests.java",
+                "package com.example;",
+                "import java.util.*;",
+                "import java.util.random.*;",
+                "class MyTests {",
+                "  void old() {",
+                "    // BUG: Diagnostic contains: wall clock",
+                "    Date now = new Date();",
+                "    // BUG: Diagnostic contains: wall clock",
+                "    Calendar cal = Calendar.getInstance();",
+                "    // BUG: Diagnostic contains: wall clock",
+                "    Calendar utc = Calendar.getInstance(TimeZone.getTimeZone(\"UTC\"));",
+                "    // BUG: Diagnostic contains: wall clock",
+                "    Calendar greg = new GregorianCalendar();",
+                "    // BUG: Diagnostic contains: Pass a seed",
+                "    RandomGenerator g = RandomGenerator.getDefault();",
+                "    // BUG: Diagnostic contains: Pass a seed",
+                "    RandomGenerator named = RandomGenerator.of(\"L64X128MixRandom\");",
+                "    // BUG: Diagnostic contains: Pass a seed",
+                "    RandomGenerator made = RandomGeneratorFactory.getDefault().create();",
+                "    // BUG: Diagnostic contains: Pass a seed",
+                "    Random anon = new Random() {};",
+                "  }",
+                "}")
+                .doTest();
+    }
+
+    @Test
+    void acceptsFixedDatesAndSeededGenerators() {
+        helper.addSourceLines("com/example/MyTests.java",
+                "package com.example;",
+                "import java.util.*;",
+                "import java.util.random.*;",
+                "class MyTests {",
+                "  void fixed(long seed) {",
+                "    Date epoch = new Date(0L);",
+                "    Calendar greg = new GregorianCalendar(2026, Calendar.JANUARY, 1);",
+                "    RandomGenerator made = RandomGeneratorFactory.of(\"L64X128MixRandom\").create(seed);",
+                "    Random anon = new Random(seed) {};",
+                "  }",
+                "}")
+                .doTest();
+    }
+
+    @Test
     void acceptsFixedClocksAndSeededSources() {
         helper.addSourceLines("net/minecraft/util/RandomSource.java",
                         "package net.minecraft.util;",
