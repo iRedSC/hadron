@@ -27,6 +27,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.piston.PistonStructureResolver;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.material.PushReaction;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
@@ -138,12 +139,30 @@ final class BlockEvents {
         boolean pulls = sticky && !pulled.isAir() && (pulled.getPistonPushReaction() == PushReaction.NORMAL
                 || pulled.is(Blocks.PISTON) || pulled.is(Blocks.STICKY_PISTON));
         if (extend || pulls) {
-            PistonStructureResolver resolver = new PistonStructureResolver(level, pos, facing, extend);
-            if (resolver.resolve()) {
-                toPush = resolver.getToPush();
-                toDestroy = resolver.getToDestroy();
-            } else if (extend) {
-                return; // it can't push, so it won't move
+            // NeoForge asks before vanilla removes the head, but vanilla works out what a retract pulls only once the
+            // head is gone (a head can't be pushed, so the resolver would find nothing). Hide it from the resolver,
+            // in the chunk's data only, for as long as the resolver looks.
+            BlockPos headPos = pos.relative(facing);
+            BlockState headState = level.getBlockState(headPos);
+            LevelChunkSection section = !extend && headState.is(Blocks.PISTON_HEAD)
+                    ? level.getChunkAt(headPos).getSection(level.getSectionIndex(headPos.getY())) : null;
+            if (section != null) {
+                section.setBlockState(headPos.getX() & 15, headPos.getY() & 15, headPos.getZ() & 15,
+                        Blocks.AIR.defaultBlockState(), false);
+            }
+            try {
+                PistonStructureResolver resolver = new PistonStructureResolver(level, pos, facing, extend);
+                if (resolver.resolve()) {
+                    toPush = resolver.getToPush();
+                    toDestroy = resolver.getToDestroy();
+                } else if (extend) {
+                    return; // it can't push, so it won't move
+                }
+            } finally {
+                if (section != null) {
+                    section.setBlockState(headPos.getX() & 15, headPos.getY() & 15, headPos.getZ() & 15, headState,
+                            false);
+                }
             }
         }
         Direction moving = extend ? facing : facing.getOpposite();

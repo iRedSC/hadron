@@ -24,14 +24,16 @@ import org.spongepowered.asm.mixin.Mixin;
  */
 @Mixin(TntBlock.class)
 public abstract class TntBlockMixin {
-    /** Flint and steel or a fire charge: refused before the primed TNT spawns or the item loses durability. */
+    /** Flint and steel or a fire charge: refused before the primed TNT spawns or the item loses durability, and the
+     * item doesn't get a turn afterwards. */
     @WrapMethod(method = "useItemOn")
     private ItemInteractionResult hadron$light(ItemStack stack, BlockState state, Level level, BlockPos pos,
             Player player, InteractionHand hand, BlockHitResult hit, Operation<ItemInteractionResult> original) {
         if (level instanceof ServerLevel && (stack.is(Items.FLINT_AND_STEEL) || stack.is(Items.FIRE_CHARGE))
                 && BlockHooks.cancelIgnition(level, pos, state, player)) {
             BlockHooks.forgetIgnition();
-            return ItemInteractionResult.FAIL;
+            // Not FAIL: that lets the item act next, and flint and steel would light a fire on top of the TNT.
+            return ItemInteractionResult.CONSUME;
         }
         return original.call(stack, state, level, pos, player, hand, hit);
     }
