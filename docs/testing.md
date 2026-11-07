@@ -198,11 +198,11 @@ The blind agent never changes an assertion to match what it saw: it reports the 
 
 ## Regression replay
 
-Every bug Hadron has fixed should stay provably fixed, so every fix has a test that fails without it, and `./gradlew regressionReplay` checks that each still does. `regressions/regressions.toml` lists each fixed bug: a line saying what went wrong, the commit the fix landed in, the files it touched, and its guards, the tests that must fail with the fix undone (`{ test = "DropTests.aMinedBlockEntitysDataBeforeIsReadableInTheDropHandler", tier = "in-game" }`). Beside it, `regressions/<id>.patch` undoes that one fix against today's code.
+Every bug Hadron has fixed should stay provably fixed, so every fix has a test that fails without it, and `python3 scripts/regression_replay.py` checks that each still does. `regressions/regressions.toml` lists each fixed bug: a line saying what went wrong, the commit the fix landed in, the files it touched, and its guards, the tests that must fail with the fix undone (`{ test = "DropTests.aMinedBlockEntitysDataBeforeIsReadableInTheDropHandler", tier = "in-game" }`). Beside it, `regressions/<id>.patch` undoes that one fix against today's code.
 
 ```
-./gradlew regressionReplay                          # every entry; or python3 scripts/regression_replay.py
-./gradlew regressionReplay --only drop-event-block-entity-gone
+python3 scripts/regression_replay.py                 # every entry; --shard 2/6 for one of six equal shares
+python3 scripts/regression_replay.py --only drop-event-block-entity-gone
 python3 scripts/regression_replay.py list           # entries and guards, nothing run
 ```
 
