@@ -2,10 +2,13 @@ package dev.iredsc.hadron.api.event.inventory;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A player (or a fake player) is opening a menu on a block, entity or item, including remotely through a terminal.
@@ -14,6 +17,7 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
  * <p>Fired by core for every menu opened through {@code ServerPlayer.openMenu} and for horse, donkey and llama
  * inventories.
  */
+@FiredBy(core = FULL)
 public class InventoryOpenEvent extends InventoryEvent implements Cancellable {
     private final ServerPlayer viewer;
     private final AbstractContainerMenu menu;

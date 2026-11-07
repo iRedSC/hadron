@@ -1,12 +1,16 @@
 package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.server.level.ServerPlayer;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A player is about to be allowed to fly, or their fly or walk speed is about to change. Cancel to keep everything as
  * it was. Losing flight is {@link PlayerFlightRevokeEvent} instead.
  */
+@FiredBy(core = FULL)
 public class PlayerAbilitiesChangeEvent extends PlayerAbilitiesEvent implements Cancellable {
     private boolean cancelled;
 

@@ -2,14 +2,18 @@ package dev.iredsc.hadron.api.event.world;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A nether portal is about to be made. Cancel it and no portal block appears: a lit frame stays a frame (the fire
  * that lit it remains), and someone travelling to a world with no portal yet doesn't travel.
  */
+@FiredBy(core = FULL)
 public class PortalCreateEvent extends WorldEvent implements Cancellable {
     public enum CreateReason {
         /** A frame was lit: by fire, or a mod filling a frame. {@link #getArea()} is exactly the portal blocks. */

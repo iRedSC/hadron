@@ -2,16 +2,20 @@ package dev.iredsc.hadron.api.event.world;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Optional;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Explosion;
 import net.minecraft.world.phys.Vec3;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /**
  * An explosion is about to happen, before any block or entity is touched. Change its size or whether it starts
  * fires, or cancel it so nothing explodes at all. Which blocks and entities it then hits is {@link ExplosionEvent}.
  */
+@FiredBy(core = FULL)
 public class ExplosionPrimeEvent extends WorldEvent implements Cancellable {
     private final Explosion explosion;
     private float radius;

@@ -2,14 +2,18 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * An item entity has lain on the ground for its whole lifespan and is about to vanish. Cancel it and it stays for
  * another full lifespan (five minutes for most items). The actor is nature.
  */
+@FiredBy(core = FULL)
 public class ItemDespawnEvent extends ItemEvent implements Cancellable {
     private final ItemEntity entity;
     private boolean cancelled;

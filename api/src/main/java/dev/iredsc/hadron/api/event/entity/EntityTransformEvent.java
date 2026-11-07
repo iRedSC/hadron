@@ -2,9 +2,12 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A living entity is about to become another kind: a villager struck by lightning, a zombie drowning, a piglin in
@@ -14,6 +17,7 @@ import net.minecraft.world.entity.LivingEntity;
  * <p>A zombie killing a villager fires this before the game rolls whether the villager converts, so on normal
  * difficulty about half of these end with the villager simply dead.
  */
+@FiredBy(core = FULL)
 public class EntityTransformEvent extends EntityEvent implements Cancellable {
     private final EntityType<? extends LivingEntity> transformedType;
     private boolean cancelled;

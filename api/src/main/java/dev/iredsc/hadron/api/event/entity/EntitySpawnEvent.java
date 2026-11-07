@@ -2,9 +2,12 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Optional;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.MobSpawnType;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * An entity is entering the world for the first time: a mob spawning, an egg hatching, a baby being born, a summon, a
@@ -13,6 +16,7 @@ import net.minecraft.world.entity.MobSpawnType;
  * items, experience orbs and falling blocks, whose contents were already taken from somewhere: refusing them would
  * destroy it. Cancel it and the entity never appears; a spawn egg or item frame used by a player is not spent.
  */
+@FiredBy(core = FULL)
 public class EntitySpawnEvent extends EntityEvent implements Cancellable {
     private final MobSpawnType reason;
     private boolean cancelled;

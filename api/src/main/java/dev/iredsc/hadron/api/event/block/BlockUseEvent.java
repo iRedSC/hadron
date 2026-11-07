@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.block;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -11,6 +12,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /**
  * An actor is about to right-click or activate a block: open a chest, flip a lever, press a button, including through
  * a fake player or remotely through a linked terminal. Bukkit's {@code PlayerInteractEvent} on a block. Cancel it and
@@ -18,6 +21,7 @@ import net.minecraft.world.phys.BlockHitResult;
  *
  * <p>Fired once per hand the click tries, as vanilla tries the main hand and then the off hand.
  */
+@FiredBy(core = FULL)
 public class BlockUseEvent extends BlockEvent implements Cancellable {
     private final InteractionHand hand;
     private final ItemStack item;

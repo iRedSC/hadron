@@ -2,13 +2,17 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.world.entity.LivingEntity;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A living entity is about to heal: natural regeneration, a potion, a spell, a machine. The actor is the healer, or
  * {@link Actor.Nature} when the entity heals on its own. Cancel it and no health is restored. Absorption hearts are
  * not this event yet.
  */
+@FiredBy(core = FULL)
 public class EntityRegainHealthEvent extends EntityEvent implements Cancellable {
     private float amount;
     private boolean cancelled;

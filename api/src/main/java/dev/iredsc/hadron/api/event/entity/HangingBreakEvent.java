@@ -2,13 +2,17 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.world.entity.decoration.HangingEntity;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * An item frame or painting is being broken and dropped. Cancel it and it stays where it hangs. Taking the item out
  * of a frame is not this; it is the frame's inventory changing.
  */
+@FiredBy(core = FULL)
 public class HangingBreakEvent extends EntityEvent implements Cancellable {
     /** Why it is breaking. */
     public enum RemoveCause {

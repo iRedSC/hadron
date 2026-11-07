@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
@@ -9,11 +10,14 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.inventory.AnvilMenu;
 import net.minecraft.world.item.ItemStack;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /**
  * An anvil worked out what it would make from its inputs, and is about to show it. Nothing has been spent yet; taking
  * the result later fires {@link ItemEnchantEvent}, {@link ItemRepairEvent} or {@link ItemChangeEvent}. Set the result
  * or cost to change the offer. Cancel it and the anvil offers nothing.
  */
+@FiredBy(core = FULL)
 public class PrepareAnvilEvent extends ItemEvent implements Cancellable {
     private final ServerPlayer viewer;
     private final InventoryHolder holder;

@@ -32,6 +32,8 @@ jobs:
       # The council gate's own tests: they catch a change that breaks the gate by mistake. (A PR can edit these too;
       # what stops a PR loosening its own gate is that council.yml runs main's copy.)
       - run: python3 -m unittest discover -s .github/scripts
+      # The blind-test bundle rewrites docs by exact text, so a doc edit can break it; build it on every PR to know.
+      - run: ./gradlew contractBundle
       - name: Keep test reports
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

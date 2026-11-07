@@ -1,17 +1,21 @@
 package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemStack;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /**
  * A living entity is dying and its loot is being decided. Not cancellable: the death has happened. What drops is
  * editable: remove a stack from {@link #getDrops()} to destroy it, add one to drop it, and change
  * {@link #setDroppedExp the experience}. The actor is the killer, or {@link Actor.Nature} for a fall or the void.
  */
+@FiredBy(core = FULL)
 public class EntityDeathEvent extends EntityEvent {
     private final DamageSource source;
     private final List<ItemStack> drops;

@@ -1,15 +1,19 @@
 package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A mod's network message from this player is about to be handled: a keybind action, a GUI button, a gadget's mode
  * switch. The catch-all for things only the server sees; a bridge usually turns them into clearer events. Fired on
  * the server thread. Cancel it and the mod never handles the message.
  */
+@FiredBy(core = FULL)
 public class PlayerModPacketEvent extends PlayerEvent implements Cancellable {
     private final CustomPacketPayload payload;
     private boolean cancelled;

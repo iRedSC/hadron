@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.block;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -12,6 +13,8 @@ import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * A block was broken (or harvested in place) and its drops are about to appear: a player mining it, a machine, fake
@@ -28,6 +31,10 @@ import net.minecraft.world.level.block.state.BlockState;
  * mods break blocks with drops. An explosion's drops are not reported here; {@code ExplosionEvent} decides which
  * blocks an explosion breaks.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "every drop through `Block.dropResources` (player mining, `destroyBlock`, blocks losing support)",
+        bridges = "drops the mod spawns itself when it breaks or harvests a block, before spawning them; honour the "
+                + "edited list and experience")
 public class BlockDropItemEvent extends BlockEvent implements Cancellable {
     private final BlockEntity blockEntity;
     private final List<ItemEntity> items;

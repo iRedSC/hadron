@@ -43,10 +43,16 @@ object ContractDocs {
         "platform.md" to Rules(),
         "bridge-hooks.md" to Rules(
             replace = listOf(
-                // A note to Hadron's maintainers, not contract.
-                "Keep it current: whenever an event's Javadoc says bridges fire it, or core's coverage of an event " +
-                    "changes, update the tables here in the same change.\n\n" to "",
-            ),
+                // Notes to Hadron's maintainers about generating the tables (gradle/hadron-bridge-hooks.gradle.kts),
+                // not contract.
+                "The tables below are generated from the `@FiredBy` on each event class, which the build checks " +
+                    "against what core actually fires. To change a row, edit that annotation and run " +
+                    "`./gradlew bridgeHooks`.\n\n" to "",
+            ) + listOf("bridge-only", "core-partial").flatMap { block ->
+                listOf("<!-- generated: $block, from @FiredBy on each event class. Edit those and run ./gradlew " +
+                        "bridgeHooks; edits here are overwritten. -->\n" to "",
+                        "<!-- end generated: $block -->\n" to "")
+            },
         ),
         "testing.md" to Rules(
             // The harness's internals, Hadron's own suite, and how bundles are made: not what a test author needs.
@@ -63,10 +69,14 @@ object ContractDocs {
                 "./gradlew -t :examples:hello:hadronRerun       #" to "./gradlew -t hadronRerun       #",
                 "./gradlew :examples:hello:hadronWatchStop      #" to "./gradlew hadronWatchStop      #",
                 "in `neoforge/build/hadron-watch/run`" to "in `server/build/hadron-watch/run`",
-                "if Hadron's own sources changed since the server started, `hadronRerun` fails and says to restart " +
-                    "it, since the server still runs the old Hadron." to
-                    "if Hadron's jars in `libs/` changed since the server started, `hadronRerun` fails and says to " +
-                    "restart it, since the server still runs the old Hadron.",
+                "`hadronWatch` records a hash of every compiled class and resource of Hadron the server loads, and of " +
+                    "the build files that shape it. Each `hadronRerun` rebuilds Hadron and compares, so an edit, a " +
+                    "deleted file or a changed build setting since the server started fails the rerun, naming what " +
+                    "changed and saying to restart it. An edit that compiles to the same bytes (a comment) changes " +
+                    "nothing and is accepted." to
+                    "`hadronWatch` records a hash of Hadron's jars in `libs/` and of the build files that shape the " +
+                    "server. Each `hadronRerun` compares, so a changed jar or build setting since the server started " +
+                    "fails the rerun, naming what changed and saying to restart it.",
                 "- The run is wired into `examples/hello` and `selftest` with `apply(from = ...)`; other projects get " +
                     "it from the Gradle plugin.\n" to "",
                 "`coverageCheck` (part of `check`; `./gradlew :selftest:coverageCheck`) reads class files only, " +
@@ -214,6 +224,8 @@ object ContractDocs {
         once("\"neoforge/build/hadron-watch\"", "\"server/build/hadron-watch\"")
         once("\":neoforge:runHadronTest\")", "\":server:runHadronTest\")")
         once("\":neoforge:runHadronWatch\")", "\":server:runHadronWatch\")")
+        // Every other task path the runner names is the test server's, which is :server in a bundle; the two once()
+        // calls above guard that the runner still has the paths this rewrite is meant for.
         return text.replace(":neoforge:", ":server:")
     }
 }
@@ -270,7 +282,8 @@ val contractDocs = tasks.register("contractDocs") {
     }
 }
 
-// Hadron's jars as the bundle ships them: repacked without timestamps, so the same sources make the same bytes.
+// Hadron's jars as the bundle ships them: repacked without timestamps, so the same sources should make the same
+// bytes (not tested).
 fun repack(name: String, from: String, fileName: String) = tasks.register<Zip>(name) {
     dependsOn(from)
     from(zipTree(project(from.substringBeforeLast(':')).tasks.named<Jar>(from.substringAfterLast(':'))

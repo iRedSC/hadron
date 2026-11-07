@@ -52,6 +52,7 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **Self-tests**: Hadron's own in-game suite, in `selftest/`.
 - **Warm server**: a test server kept running by `hadronWatch`, so `hadronRerun` reruns a suite without a boot.
 - **`@Covers`**: what a test declares it proves. `coverageCheck` fails the build if any shipped event or public API method has none.
+- **`@FiredBy`**: on every event, who fires it: core on every path (`FULL`), core for vanilla's paths and bridges for their mods' (`PARTIAL`), or only bridges (`NONE`). `bridgeHooksCheck` holds it to what core constructs and generates [bridge-hooks.md](bridge-hooks.md)'s tables from it.
 - **Contract bundle**: the output of `contractBundle`: API stubs, the spec docs without implementation detail, and prebuilt jars, for writing tests blind.
 - **Blind test**: a test written from the contract bundle alone. Its author never edits an assertion to match what they observed.
 - **Triage**: a sighted agent's sorting of a blind test's failure into a Hadron bug, a test bug or a contract gap.

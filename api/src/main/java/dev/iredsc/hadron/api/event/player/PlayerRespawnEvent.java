@@ -1,14 +1,18 @@
 package dev.iredsc.hadron.api.event.player;
 
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /**
  * A player is about to respawn, after dying or leaving the End. Change where with {@link #setRespawnLocation}. Not
  * cancellable: a dead player has to come back somewhere.
  */
+@FiredBy(core = FULL)
 public class PlayerRespawnEvent extends PlayerEvent {
     private final boolean fromEndFight;
     private ServerLevel level;

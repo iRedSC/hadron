@@ -2,11 +2,14 @@ package dev.iredsc.hadron.api.event.block;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * Blocks are about to move to new spaces, taking their block entity data and scheduled ticks with them: a piston, a
@@ -16,6 +19,9 @@ import net.minecraft.world.level.block.state.BlockState;
  * the move passes through or lands in; {@link #getBlocks()} is every space whose contents change, including blocks
  * the move destroys. A protection plugin checks the swept space and each move's source and target.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "pistons, through its piston leaves",
+        bridges = "contraptions, ships and spatial transfers, as `StructureMoveEvent`")
 public class BlockMoveEvent extends BlockEvent implements Cancellable {
     /** One block moving from {@code from} to {@code to}; {@code state} is the block as it is before moving. */
     public record Move(BlockPos from, BlockPos to, BlockState state) {

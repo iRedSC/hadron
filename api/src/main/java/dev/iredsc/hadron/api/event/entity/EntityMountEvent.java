@@ -2,13 +2,17 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.world.entity.Entity;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * An entity is about to start riding another: a player boarding a boat or horse, a mob entering a minecart, a mod's
  * vehicle or a player carrying another. {@link #getEntity()} is the rider. Cancel it and nobody mounts.
  */
+@FiredBy(core = FULL)
 public class EntityMountEvent extends EntityEvent implements Cancellable {
     private final Entity mount;
     private boolean cancelled;

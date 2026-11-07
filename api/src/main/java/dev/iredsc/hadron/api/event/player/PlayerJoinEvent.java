@@ -1,13 +1,17 @@
 package dev.iredsc.hadron.api.event.player;
 
+import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A player has joined and is in the world. {@link #getJoinMessage()} is the "joined the game" line about to be
  * broadcast; change it with {@link #setJoinMessage}, or set null for none. It replaces vanilla's line, and is sent
  * once listeners finish.
  */
+@FiredBy(core = FULL)
 public class PlayerJoinEvent extends PlayerEvent {
     private Component joinMessage;
 

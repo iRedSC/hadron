@@ -53,7 +53,7 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 
 ## Catalog
 
-**Core** means fired at a vanilla chokepoint, so mods that go through vanilla are covered with no bridge. **Bridge** means only a bridge can fire it. All are cancellable unless marked *(after)*.
+**Core** means fired at a vanilla chokepoint, so mods that go through vanilla are covered with no bridge. **Bridge** means only a bridge can fire it. Where core's coverage stops and what bridges fire is in [bridge-hooks.md](bridge-hooks.md), generated from the code. All are cancellable unless marked *(after)*.
 
 ### Blocks: `BlockEvent`
 
@@ -64,7 +64,7 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 | `BlockChangeEvent` | a block's state or its block entity's data changes | `Level.setBlock`, chunk section writes |
 | ├ `BlockBreakEvent` | a block is removed by an actor | `destroyBlock`, player mining, `setBlock` to air with an actor |
 | ├ `BlockPlaceEvent` | a block or fluid source is placed by an actor | `BlockItem.place`, `setBlock` with an actor |
-| ├ `BlockMultiPlaceEvent` | several blocks at once (a door, a bed, a building gadget) | |
+| ├ `BlockMultiPlaceEvent` | several blocks at once (a door, a bed, a building gadget) | NeoForge's `EntityMultiPlaceEvent` |
 | ├ `BlockTransformEvent` | an actor changes a block into another (machine conversion, stripping a log, upgrading a chest in place) | `setBlock` with an actor |
 | ├ `BlockDataChangeEvent` | block entity data changes with the state unchanged: a spawner's mob, a drawer's lock, a terminal's binding, a name | bridge |
 | ├ `BlockBurnEvent`, `BlockIgniteEvent` | fire destroys or starts | `FireBlock` |
@@ -72,7 +72,7 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 | ├ `BlockSpreadEvent`, `BlockFormEvent`, `BlockFadeEvent`, `BlockGrowEvent`, `LeavesDecayEvent` | natural changes | the vanilla block's tick |
 | ├ `BlockFertilizeEvent` | bonemeal or a growth accelerator | `BoneMealItem` |
 | └ `StructureGrowEvent` | a tree or structure grows from one block | `TreeGrower` |
-| `BlockMoveEvent` | blocks relocate with their data and scheduled ticks; source to target mapping, and the space swept through | |
+| `BlockMoveEvent` | blocks relocate with their data and scheduled ticks; source to target mapping, and the space swept through | `PistonBaseBlock`, through its leaves |
 | ├ `BlockPistonExtendEvent`, `BlockPistonRetractEvent` | | `PistonBaseBlock` |
 | └ `StructureMoveEvent` | a contraption, ship or spatial transfer assembles, moves, rotates or disassembles; old and new transforms | bridge (Create, Valkyrien Skies, AE2 spatial IO) |
 | `BlockDropItemEvent` | a broken block's drops are about to appear; the item entities and experience are editable, and a cancel drops nothing | `Block.dropResources` (NeoForge's `BlockDropsEvent`), so player mining, `destroyBlock` and blocks losing their support |
@@ -101,15 +101,17 @@ Payload: the entity, its position, and what changed.
 | `EntityRegainHealthEvent` | healed, including absorption | `heal`, `setAbsorptionAmount` |
 | `EntityCombustEvent` | an entity is set on fire | `igniteForSeconds`, `setRemainingFireTicks` |
 | `EntityPotionEffectEvent` | a registered effect added, changed or removed | `addEffect`, `removeEffect` |
+| `EntityPotionEffectExpireEvent` *(after)* | an effect ran out | NeoForge's effect expiry |
 | `EntityStatusChangeEvent` | a restriction outside the effect registry: stunned, frozen, AI disabled, casting interrupted, held | `Mob.setNoAi`, bridges |
 | `EntityAttributeChangeEvent` | an attribute's base value or modifiers change; source of the modifier | not shipped yet: see "Not shipped yet" |
 | `EntityVelocityEvent` | an actor pushes, pulls or launches an entity; old and new velocity | `setDeltaMovement` while something other than the entity acts |
 | └ `EntityKnockbackEvent` | knockback from a hit or blast | `LivingEntity.knockback` |
 | `EntityMoveEvent` | an entity with an actor or controller (a player, a vehicle) crosses into another block | movement ticks, only when a listener's area is involved |
-| └ `PlayerMoveEvent` | | |
+| └ `PlayerMoveEvent` | | movement ticks |
 | `EntityTeleportEvent` | an entity moves other than by walking; cause, and everything travelling with it (passengers, pets, leashed mobs); the destination (world, position, facing) is editable | `teleportTo`, `changeDimension` |
 | `EntityTargetEvent` | a mob or turret picks a target | `setTarget` |
 | `EntityControlChangeEvent` | who controls an entity changes without mounting: charmed, enthralled, a drone linked to a monitor, a guard assigned; expiry is *(after)* | bridge |
+| `EntityControlExpireEvent` *(after)* | control ran out: a charm wore off, a drone's link timed out | bridge |
 | `EntityRelationshipChangeEvent` | reputation or a lasting relationship changes (villager gossip, an NPC's marriage) | not shipped yet: see "Not shipped yet" |
 | `EntityUseEvent` | an actor right-clicks an entity | `interact` |
 | `EntityMountEvent`, `EntityDismountEvent` | riding, including vehicles and a player carrying another | `startRiding`, `stopRiding` |
@@ -156,11 +158,11 @@ An inventory is identified by what holds it (a block, an entity, a player, an it
 | `InventoryOpenEvent` | an actor opens a menu on a block, entity or item, including remotely | `openMenu` |
 | `InventoryCloseEvent` *(after)* | | `closeContainer` |
 | `InventoryClickEvent` | what a player asked for inside an open menu | `AbstractContainerMenu.clicked` |
-| `InventoryChangeEvent` | the authoritative change to an inventory's slots, whatever caused it; before and after | `Container.setItem`, `Inventory.add`, `Slot.set`, bridges for item handlers |
+| `InventoryChangeEvent` | the authoritative change to an inventory's slots, whatever caused it; before and after | hoppers, hopper minecarts and droppers (as `InventoryMoveItemEvent`); bridges for everything else |
 | ├ `InventoryMoveItemEvent` | items move between two inventories: hoppers, pipes, export buses, a seagull taking food from a hand | `HopperBlockEntity`, item handler transfers |
-| ├ `InventoryGenerateEvent` | items appear with no source: a quest reward, an ore laser, a creative source | |
-| ├ `InventoryDestroyEvent` | items vanish with no destination: a void upgrade, a trash can, a matter condenser | |
-| └ `InventorySortEvent` | contents rearranged in place (Quark sorting) | |
+| ├ `InventoryGenerateEvent` | items appear with no source: a quest reward, an ore laser, a creative source | bridge |
+| ├ `InventoryDestroyEvent` | items vanish with no destination: a void upgrade, a trash can, a matter condenser | bridge |
+| └ `InventorySortEvent` | contents rearranged in place (Quark sorting) | bridge |
 
 ### Resources: `ResourceEvent`
 
@@ -168,9 +170,9 @@ Everything measured in amounts that isn't an item stack: energy, fluids in tanks
 
 | Event | What | Core chokepoint |
 |---|---|---|
-| `ResourceChangeEvent` | a holder's amount changes; old and new | core for currencies (every economy call); bridges for everything else |
-| ├ `ResourceProduceEvent` | created: a generator, a reactor's waste, a quest's currency reward | bridge |
-| ├ `ResourceConsumeEvent` | destroyed: a machine spending power, a spell's mana, a vein depleted | bridge |
+| `ResourceChangeEvent` | a holder's amount changes; old and new | core for currencies, through the produce and consume leaves; bridges for everything else |
+| ├ `ResourceProduceEvent` | created: a generator, a reactor's waste, a quest's currency reward | core for currency deposits; bridges for everything else |
+| ├ `ResourceConsumeEvent` | destroyed: a machine spending power, a spell's mana, a vein depleted | core for currency withdrawals; bridges for everything else |
 | └ `ResourceConvertEvent` | one resource into another in one step: fuel to heat to steam | bridge |
 | `ResourceTransferEvent` | an amount moves between holders: a cable, a pipe, a wireless charger reaching a player in another dimension, a payment | core for currency transfers; bridges for energy, fluids and mods' resources |
 
@@ -189,40 +191,41 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 | `TickAccelerateEvent` | an actor speeds up blocks or entities in an area; one event per accelerator per change, never per extra tick | bridge (Torcherino, time bottles) |
 | `ChunkLoadEvent`, `ChunkUnloadEvent` *(after)* | | `ChunkMap` |
 | `ChunkForceLoadEvent` | an actor keeps chunks loaded: a chunk loader, an anchor, a claim | `ServerChunkCache` tickets, `setChunkForced` |
-| `ChunkForceUnloadEvent` *(after)* | that actor releases them, including on expiry | |
+| `ChunkForceUnloadEvent` *(after)* | that actor releases them, including on expiry | `ServerChunkCache` tickets, `setChunkForced` |
 | `PortalCreateEvent` | | `PortalShape` |
 | `WorldLoadEvent`, `WorldUnloadEvent`, `WorldSaveEvent` *(after)* | | `MinecraftServer` |
 
 ### Players: `PlayerEvent` (always a player)
 
-| Event | What |
-|---|---|
-| `PlayerLoginEvent` | before join; deny with a message |
-| `PlayerJoinEvent`, `PlayerQuitEvent`, `PlayerKickEvent` | the join and quit lines are editable and replace vanilla's |
-| `PlayerChatEvent` | |
-| `PlayerRespawnEvent` | respawn location editable |
-| `PlayerChangedWorldEvent` *(after)* | |
-| `PlayerAbilitiesChangeEvent` | flight allowed or revoked (Flugel Tiara, a flight ritual), fly and walk speed; revocation is *(after)* |
-| `PlayerToggleSneakEvent`, `PlayerToggleSprintEvent`, `PlayerToggleFlightEvent` | |
-| `PlayerGameModeChangeEvent` | |
-| `PlayerExpChangeEvent`, `PlayerLevelChangeEvent` | vanilla experience only; mod skill points are resources |
-| `PlayerAdvancementDoneEvent` *(after)* | |
-| `PlayerSwapHandItemsEvent` | |
-| `PlayerBedEnterEvent`, `PlayerBedLeaveEvent` | |
-| `PlayerFishEvent` | each step of fishing with any rod whose bobber is a `FishingHook`: cast, bite, escape, reel-in; the catch and its experience editable. An `EntityEvent` about the bobber, so it carries the actor (the player or a fake player) |
-| `PlayerModPacketEvent` | a mod's network message from this player; payload id. The catch-all for keybind actions only the server sees |
+| Event | What | Core chokepoint |
+|---|---|---|
+| `PlayerLoginEvent` | before join; deny with a message | `ServerConfigurationPacketListenerImpl` |
+| `PlayerJoinEvent`, `PlayerQuitEvent`, `PlayerKickEvent` | the join and quit lines are editable and replace vanilla's | NeoForge's login and logout events, `ServerCommonPacketListenerImpl.disconnect` |
+| `PlayerChatEvent` | | NeoForge's `ServerChatEvent` |
+| `PlayerRespawnEvent` | respawn location editable | NeoForge's `PlayerRespawnPositionEvent` |
+| `PlayerChangedWorldEvent` *(after)* | | NeoForge's `PlayerChangedDimensionEvent` |
+| `PlayerAbilitiesChangeEvent` | flight allowed or revoked (Flugel Tiara, a flight ritual), fly and walk speed; revocation is *(after)* | `ServerPlayer.onUpdateAbilities` |
+| `PlayerFlightRevokeEvent` *(after)* | a player lost permission to fly; speeds changed at the same moment come with it | `ServerPlayer.onUpdateAbilities` |
+| `PlayerToggleSneakEvent`, `PlayerToggleSprintEvent`, `PlayerToggleFlightEvent` | | `handlePlayerCommand`, `handlePlayerAbilities` |
+| `PlayerGameModeChangeEvent` | | NeoForge's `PlayerChangeGameModeEvent` |
+| `PlayerExpChangeEvent`, `PlayerLevelChangeEvent` | vanilla experience only; mod skill points are resources | NeoForge's `PlayerXpEvent.XpChange`, the player's tick |
+| `PlayerAdvancementDoneEvent` *(after)* | | NeoForge's `AdvancementEarnEvent` |
+| `PlayerSwapHandItemsEvent` | | NeoForge's `LivingSwapItemsEvent.Hands` |
+| `PlayerBedEnterEvent`, `PlayerBedLeaveEvent` | | NeoForge's `CanPlayerSleepEvent`, `PlayerWakeUpEvent` |
+| `PlayerFishEvent` | each step of fishing with any rod whose bobber is a `FishingHook`: cast, bite, escape, reel-in; the catch and its experience editable. An `EntityEvent` about the bobber, so it carries the actor (the player or a fake player) | `catchingFish`, `retrieve`, bridges |
+| `PlayerModPacketEvent` | a mod's network message from this player; payload id. The catch-all for keybind actions only the server sees | NeoForge's `NetworkRegistry.handleModdedPayload` |
 
 ### Server: `ServerEvent`
 
-| Event | What |
-|---|---|
-| `ServerLoadEvent` *(after)* | once per start, after plugins enable |
-| `ServerListPingEvent` | a client's server list asks about the server; MOTD, shown player counts and the hover sample editable; not an action, so no actor |
-| `CommandExecuteEvent` | any command about to run, from a player, the console, a quest reward, a mod or each line of a datapack function; actor and authority |
-| `AccessControlChangeEvent` | a claim, team, party, alliance or trust list changes: boundaries, members, flags; who changed it |
-| `DataRevealEvent` | server data about a block, entity or inventory is about to be sent to a player who didn't open it (Jade, WTHIT, map radar); fields removable |
-| `PluginEnableEvent`, `PluginDisableEvent` *(after)* | |
-| `ServiceRegisterEvent`, `ServiceUnregisterEvent` *(after)* | a provider appeared or left |
+| Event | What | Core chokepoint |
+|---|---|---|
+| `ServerLoadEvent` *(after)* | once per start, after plugins enable | server started |
+| `ServerListPingEvent` | a client's server list asks about the server; MOTD, shown player counts and the hover sample editable; not an action, so no actor | status request |
+| `CommandExecuteEvent` | any command about to run, from a player, the console, a quest reward, a mod or each line of a datapack function; actor and authority | `Commands.performCommand`, function lines |
+| `AccessControlChangeEvent` | a claim, team, party, alliance or trust list changes: boundaries, members, flags; who changed it | bridge (claim and team mods) |
+| `DataRevealEvent` | server data about a block, entity or inventory is about to be sent to a player who didn't open it (Jade, WTHIT, map radar); fields removable | bridge (Jade, WTHIT) |
+| `PluginEnableEvent`, `PluginDisableEvent` *(after)* | | Hadron's plugin host |
+| `ServiceRegisterEvent`, `ServiceUnregisterEvent` *(after)* | a provider appeared or left | Hadron's services manager |
 
 ## Not shipped yet
 

@@ -1,12 +1,15 @@
 package dev.iredsc.hadron.api.event.block;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 
 /**
  * A block entity's data is about to change while its block state stays the same: a spawner's mob, a drawer's lock, a
@@ -16,6 +19,10 @@ import net.minecraft.world.level.block.state.BlockState;
  * A bridge fires it before its mod writes the data, with the data before and after both filled in, and skips the
  * write if it is cancelled.
  */
+@FiredBy(core = NONE,
+        bridges = "changes a block entity's data with the block state unchanged (a spawner's mob, a drawer lock, a "
+                + "terminal binding, a name)",
+        fillIn = "the block entity data before and after")
 public class BlockDataChangeEvent extends BlockChangeEvent {
     public BlockDataChangeEvent(ServerLevel level, BlockPos pos, BlockState state, CompoundTag before,
             CompoundTag after, Actor actor) {

@@ -2,12 +2,16 @@ package dev.iredsc.hadron.api.event.world;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.server.level.ServerLevel;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * The time of day is about to jump: everyone slept through the night ({@link Actor.Nature}), a command, or a mod.
  * Never fires for the clock's ordinary tick. Change how far it jumps, or cancel to leave the time alone.
  */
+@FiredBy(core = FULL)
 public class TimeSkipEvent extends WorldEvent implements Cancellable {
     private final long oldTime;
     private long skipAmount;

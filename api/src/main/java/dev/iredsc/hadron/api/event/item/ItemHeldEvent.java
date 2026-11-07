@@ -2,14 +2,18 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.server.level.ServerPlayer;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A player is about to change their selected hotbar slot. Replaces Bukkit's {@code PlayerItemHeldEvent}. Cancel it
  * and the selection stays; the player's client is moved back. Always a player, so {@link #getPlayer()} is never empty;
  * {@link #getUser()} returns them directly. {@link #getItem()} is the stack in the new slot (live; don't change it).
  */
+@FiredBy(core = FULL)
 public class ItemHeldEvent extends ItemEvent implements Cancellable {
     private final ServerPlayer user;
     private final int previousSlot;
