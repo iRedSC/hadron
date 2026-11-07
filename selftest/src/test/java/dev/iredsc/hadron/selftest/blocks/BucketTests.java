@@ -10,6 +10,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockChangeEvent;
 import dev.iredsc.hadron.api.event.block.BucketEmptyEvent;
 import dev.iredsc.hadron.api.event.block.BucketFillEvent;
+import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
@@ -18,6 +19,7 @@ import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.world.entity.animal.Cod;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -202,5 +204,45 @@ public final class BucketTests {
         t.assertTrue(dispenser.getItem(0).is(Items.BUCKET) && dispenser.getItem(0).getCount() == 1,
                 "the dispenser should still hold its one empty bucket, but holds " + dispenser.getItem(0));
         t.assertEquals(0, Fixtures.entities(t, ItemEntity.class, at, 3), "items thrown out of the dispenser");
+    }
+
+    // ---- Buckets holding a mob
+
+    /** Refuses every cod's spawn. */
+    private static void refuseCod(TestContext t) {
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntitySpawnEvent e) {
+                if (e.getEntity() instanceof Cod) e.setCancelled(true);
+            }
+        });
+    }
+
+    @HadronTest
+    @Covers(EntitySpawnEvent.class)
+    void refusedCodFromABucketPoursNoWaterAndKeepsTheBucket(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos at = t.pos(2, 0, 0);
+        aimDownAt(alice, at);
+        alice.hold(new ItemStack(Items.COD_BUCKET));
+        refuseCod(t);
+        alice.useItem();
+        t.tick(5);
+        t.assertBlock(at, Blocks.AIR);
+        t.assertHolding(alice, Items.COD_BUCKET, 1);
+        t.assertEquals(0, Fixtures.entities(t, Cod.class, at, 3), "cod released");
+    }
+
+    @HadronTest
+    @Covers(EntitySpawnEvent.class)
+    void refusedCodFromADispenserPoursNoWaterAndKeepsTheBucketInside(TestContext t) {
+        BlockPos at = t.pos(2, 0, 0);
+        DispenserBlockEntity dispenser = dispenser(t, at, Direction.EAST, new ItemStack(Items.COD_BUCKET));
+        refuseCod(t);
+        fire(t, at, Direction.EAST);
+        t.assertBlock(at.east(), Blocks.AIR);
+        t.assertTrue(dispenser.getItem(0).is(Items.COD_BUCKET), "the dispenser should still hold the cod bucket, "
+                + "but holds " + dispenser.getItem(0));
+        t.assertEquals(0, Fixtures.entities(t, Cod.class, at, 3), "cod released");
     }
 }
