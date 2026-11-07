@@ -425,17 +425,19 @@ val bridgeHooksFixtureCheck = tasks.register("bridgeHooksFixtureCheck") {
         val (events, problems) = HadronBridgeHooks.facts(HadronBridgeHooks.readClasses(listOf(dir.resolve("fixture/api"))),
                 HadronBridgeHooks.readClasses(listOf(dir.resolve("fixture/core"))))
         expect("events", problems, listOf("Outer.BareEvent has no @FiredBy", "FactoryEvent in api allocates FactoryEvent",
-                "two events are named SameEvent"))
+                "two events are named SameEvent", "AllocatedNoneEvent is marked core = NONE, but core fires it",
+                "UnfiredEvent is marked core = FULL, but nothing", "WideEvent is core = FULL, but bridges fire its subclasses"))
 
-        val rows = listOf("| `Outer.InnerEvent`, `FactoryEvent` | `Fire` |", "| `ParentEvent` | `CoreChildEvent` |",
-                "| `RefEvent` | `RefEvent::new` |", "| `SuperOnlyEvent`, `SameEvent` | Bridge (a mod) |")
+        val rows = listOf("| `Outer.InnerEvent`, `FactoryEvent`, `UnfiredEvent`, `WideEvent` | `Fire` |", "| `ParentEvent` | `CoreChildEvent` |",
+                "| `RefEvent` | `RefEvent::new` |", "| `SuperOnlyEvent`, `SameEvent`, `AllocatedNoneEvent`, `NarrowEvent` | Bridge (a mod) |")
         fun catalog(column: String, vararg rows: String) = "| Event | $column |\n|---|---|\n" + rows.joinToString("\n")
         expect("catalog", HadronBridgeHooks.catalogProblems(catalog("Core chokepoint", *rows.toTypedArray()), events), listOf())
         expect("renamed column", HadronBridgeHooks.catalogProblems(catalog("Chokepoint", *rows.toTypedArray()), events),
                 events.map { "lists ${it.name} outside" }.distinct())
         expect("wrong cells", HadronBridgeHooks.catalogProblems(catalog("Core chokepoint", rows[0], rows[3],
-                "| `ParentEvent` | BRIDGE |", "| `RefEvent` | |"), events),
-                listOf("ParentEvent is @FiredBy(core = FULL)", "RefEvent has an empty Core chokepoint cell"))
+                "| `ParentEvent` | BRIDGE |", "| `RefEvent` | |", "| `SuperOnlyEvent` | `Fire` |"), events),
+                listOf("ParentEvent is @FiredBy(core = FULL)", "RefEvent has an empty Core chokepoint cell",
+                        "SuperOnlyEvent is @FiredBy(core = NONE)"))
 
         val tables = HadronBridgeHooks.tables(events)
         val doc = tables.keys.joinToString("\n") { HadronBridgeHooks.begin(it) + "\n" + HadronBridgeHooks.end(it) }
