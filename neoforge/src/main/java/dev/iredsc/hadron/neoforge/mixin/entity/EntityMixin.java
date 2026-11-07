@@ -147,6 +147,8 @@ abstract class EntityMixin implements EntityState {
         Entity self = (Entity) (Object) this;
         EntityTeleports.Destination to = EntityTeleports.ask(self, level, x, y, z, yRot, xRot);
         if (to == null) return false;
+        // Sent to another level than asked: this method would leave the passengers behind, so it isn't used.
+        if (to.level() != level && to.crossesLevel(self)) return EntityTeleports.redirect(self, to);
         // Relative flags only shape the packet; the coordinates passed are absolute, so a new destination keeps them.
         return EntityTeleports.during(self, () -> original.call(to.level(), to.x(), to.y(), to.z(), relative,
                 to.yRot(), to.xRot()));

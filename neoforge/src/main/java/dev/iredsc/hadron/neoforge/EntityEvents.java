@@ -178,7 +178,7 @@ final class EntityEvents {
         }
         if (!Hooks.listens(EntityDismountEvent.class)) return;
         boolean forced = rider.isRemoved() || !rider.isAlive() || vehicle.isRemoved() || !vehicle.isAlive()
-                || EntityTeleports.inProgress();
+                || EntityTeleports.inProgress(rider, vehicle);
         if (Hooks.post(new EntityDismountEvent(rider, vehicle, forced, actor)).isCancelled() && !forced) {
             event.setCanceled(true);
         }

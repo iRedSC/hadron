@@ -18,6 +18,7 @@ import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Chicken;
@@ -121,6 +122,110 @@ public final class TeleportTests {
         t.assertEquals(pig, chicken.getVehicle(), "the chicken's vehicle");
         t.assertTrue(chicken.position().subtract(instead).horizontalDistance() < 0.5, "the chicken should have come along to "
                 + instead + ", but is at " + chicken.position());
+    }
+
+    /** A spot in the overworld's spawn chunks, which stay loaded, high enough to be clear of the terrain. */
+    private static Vec3 overworldSpot(TestContext t) {
+        BlockPos spawn = t.server().overworld().getSharedSpawnPos();
+        return new Vec3(spawn.getX() + 0.5, 300, spawn.getZ() + 0.5);
+    }
+
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aVehicleRedirectedToAnotherWorldTakesItsPassengerAlong(TestContext t) {
+        t.player("alice");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        Chicken chicken = spawn(t, EntityType.CHICKEN, t.pos(2, 0, 0));
+        t.assertTrue(chicken.startRiding(pig, true), "the chicken should get on the pig");
+        ServerLevel overworld = t.server().overworld();
+        Vec3 instead = overworldSpot(t);
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityTeleportEvent e) {
+                if (e.getEntity() == pig) e.setTo(overworld, instead);
+            }
+        });
+        console(t, "tp " + pig.getStringUUID() + " " + coords(center(t.pos(5, 0, -5))));
+        t.tick();
+        Entity arrived = overworld.getEntity(pig.getUUID());
+        try {
+            t.assertTrue(arrived instanceof Pig, "the pig should be in the overworld, but found " + arrived);
+            assertAt(t, instead, arrived, "the pig");
+            t.assertEquals(1, arrived.getPassengers().size(), "the pig's passengers in the overworld");
+            Entity rider = arrived.getPassengers().get(0);
+            t.assertEquals(chicken.getUUID(), rider.getUUID(), "the passenger should be the chicken");
+            t.assertTrue(t.level().getEntity(chicken.getUUID()) == null, "the chicken shouldn't be left behind");
+        } finally {
+            if (arrived != null) {
+                for (Entity e : List.copyOf(arrived.getPassengers())) e.discard();
+                arrived.discard();
+            }
+            Entity rider = overworld.getEntity(chicken.getUUID());
+            if (rider != null) rider.discard();
+        }
+    }
+
+    /**
+     * While one entity changes world, a listener there that teleports someone else starts a teleport of its own, which
+     * is asked about like any other.
+     */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aTeleportStartedDuringAnothersWorldChangeIsAskedAbout(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        ready(t);
+        Vec3 bobTo = center(t.pos(3, 0, 3));
+        List<Entity> asked = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityTeleportEvent e) {
+                asked.add(e.getEntity());
+                if (e.getEntity() == bob.player()) e.setCancelled(true);
+            }
+
+            @EventHandler
+            void on(dev.iredsc.hadron.api.event.player.PlayerChangedWorldEvent e) {
+                if (e.getPlayer() == alice.player()) bob.player().teleportTo(bobTo.x, bobTo.y, bobTo.z);
+            }
+        });
+        Vec3 bobFrom = bob.player().position();
+        Vec3 spot = overworldSpot(t);
+        alice.player().teleportTo(t.server().overworld(), spot.x, spot.y, spot.z, 0.0F, 0.0F);
+        t.tick();
+        t.assertEquals(List.of(alice.player(), bob.player()), asked, "the entities asked about");
+        assertAt(t, bobFrom, bob.player(), "bob, whose teleport was refused,");
+    }
+
+    /**
+     * An enderman's random teleport tries a spot and steps back when it doesn't fit there. That is one attempt: the
+     * step back is never asked about, so refusing other teleports can't strand it at a spot it doesn't fit.
+     */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void anEndermansFailedRandomTeleportStepsBackWithoutAnotherEvent(TestContext t) throws Exception {
+        t.player("alice");
+        var enderman = spawn(t, EntityType.ENDERMAN, t.pos(-3, 0, -3));
+        Vec3 from = enderman.position();
+        BlockPos target = t.pos(4, 0, 4);
+        t.level().setBlockAndUpdate(target.above(), net.minecraft.world.level.block.Blocks.STONE.defaultBlockState());
+        List<TeleportCause> causes = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityTeleportEvent e) {
+                if (e.getEntity() != enderman) return;
+                causes.add(e.getCause());
+                if (e.getCause() != TeleportCause.RANDOM_TELEPORT) e.setCancelled(true);
+            }
+        });
+        // EnderMan.teleport(x, y, z) is private; it is what its AI and its dodging call.
+        var teleport = net.minecraft.world.entity.monster.EnderMan.class.getDeclaredMethod("teleport", double.class,
+                double.class, double.class);
+        teleport.setAccessible(true);
+        Object moved = teleport.invoke(enderman, target.getX() + 0.5, (double) target.getY(), target.getZ() + 0.5);
+        t.assertEquals(false, moved, "whether the enderman found room at the target");
+        t.assertEquals(List.of(TeleportCause.RANDOM_TELEPORT), causes, "the EntityTeleportEvents for one attempt");
+        assertAt(t, from, enderman, "the enderman");
     }
 
     /** Alice throws a pearl ahead of her, down at the floor. */
