@@ -117,8 +117,23 @@ final class Trace {
                     + "BlockChangeEvent traces its subclasses too), a plugin event's full class name, a family ("
                     + String.join(", ", FAMILIES) + "), or all");
         }
-        Class<?> found = type;
-        return new Target(found.getSimpleName(), found::isAssignableFrom);
+        if (type.getClassLoader() == Event.class.getClassLoader()) {
+            Class<?> found = type;
+            return new Target(found.getSimpleName(), found::isAssignableFrom);
+        }
+        // A plugin's own event: matched by name, so the trace follows the plugin across reloads (each version has its
+        // own class) and never holds an unloaded version's class loader.
+        String name = type.getName();
+        return new Target(type.getSimpleName(), c -> named(c, name));
+    }
+
+    /** Whether the class, a superclass or an interface it implements has this name. */
+    private static boolean named(Class<?> c, String name) {
+        for (Class<?> k = c; k != null; k = k.getSuperclass()) {
+            if (k.getName().equals(name)) return true;
+            for (Class<?> i : k.getInterfaces()) if (named(i, name)) return true;
+        }
+        return false;
     }
 
     private static boolean inPackage(Class<?> c, String pkg) {

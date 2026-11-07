@@ -21,6 +21,7 @@ import java.util.jar.JarOutputStream;
  */
 public final class TestPlugins {
     private static final String STUB = StubPlugin.class.getName();
+    private static final String EVENT = StubEvent.class.getName();
     private static final Path JAR = writeJar();
 
     private TestPlugins() {}
@@ -35,6 +36,15 @@ public final class TestPlugins {
             return (JavaPlugin) loader.loadClass(STUB).getDeclaredConstructor().newInstance();
         } catch (ReflectiveOperationException | IOException e) {
             throw new AssertionError("Couldn't load the stub plugin " + name, e);
+        }
+    }
+
+    /** The plugin's own copy of {@link StubEvent}: a class only that plugin version's loader defines. */
+    public static Class<?> event(JavaPlugin plugin) {
+        try {
+            return loader(plugin).loadClass(EVENT);
+        } catch (ClassNotFoundException e) {
+            throw new AssertionError("The stub jar has no " + EVENT, e);
         }
     }
 
@@ -59,21 +69,25 @@ public final class TestPlugins {
 
         @Override
         protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
-            if (name.equals(STUB)) throw new ClassNotFoundException(name);
+            if (name.equals(STUB) || name.equals(EVENT)) throw new ClassNotFoundException(name);
             return super.loadClass(name, resolve);
         }
     }
 
     private static Path writeJar() {
-        String entry = STUB.replace('.', '/') + ".class";
-        try (InputStream in = TestPlugins.class.getClassLoader().getResourceAsStream(entry)) {
+        try {
             Path dir = Files.createTempDirectory("hadron-test-plugins");
             dir.toFile().deleteOnExit();
             Path jar = dir.resolve("stub.jar");
             try (JarOutputStream out = new JarOutputStream(Files.newOutputStream(jar))) {
-                out.putNextEntry(new JarEntry(entry));
-                in.transferTo(out);
-                out.closeEntry();
+                for (String name : List.of(STUB, EVENT)) {
+                    String entry = name.replace('.', '/') + ".class";
+                    try (InputStream in = TestPlugins.class.getClassLoader().getResourceAsStream(entry)) {
+                        out.putNextEntry(new JarEntry(entry));
+                        in.transferTo(out);
+                        out.closeEntry();
+                    }
+                }
             }
             jar.toFile().deleteOnExit();
             return jar;

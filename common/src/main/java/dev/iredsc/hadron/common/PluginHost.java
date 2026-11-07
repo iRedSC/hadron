@@ -640,12 +640,19 @@ public final class PluginHost implements PluginManager {
             Entry n = entries.get(need);
             if (n != null && n.state instanceof State.Running) deps.add(((State.Running) n.state).loader);
         }
+        File data;
+        try {
+            data = dataFolder(folder, e.name);
+        } catch (PluginException ex) {
+            fail(e, ex.getMessage(), null);
+            return;
+        }
         File copy = new File(loadedDir, e.name + "-" + (++copies) + ".jar");
         PluginLoader loader;
         try {
             loadedDir.mkdirs();
             Files.copy(e.jar.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            loader = new PluginLoader(d, e.jar, copy, new File(folder, e.name), server, deps, parent);
+            loader = new PluginLoader(d, e.jar, copy, data, server, deps, parent);
         } catch (IOException ex) {
             fail(e, "couldn't copy its jar to plugins/.loaded (" + ex.getMessage() + ")", ex);
             return;
@@ -757,16 +764,25 @@ public final class PluginHost implements PluginManager {
     /** Undoes a plugin that failed partway through loading or enabling. */
     private void abandon(Entry e, State.Running running, Throwable t) {
         Throwable cause = t instanceof InvocationTargetException && t.getCause() != null ? t.getCause() : t;
-        running.loader.beginUnload();
-        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ASYNC_GRACE_MILLIS);
-        removeEvents(running, deadline);
-        JavaPlugin plugin = running.loader.plugin();
-        if (plugin != null) scheduler.awaitAsync(plugin, remainingGraceMillis(deadline));
-        undoAll(running, e.name);
-        if (plugin != null) runDisableHooks(plugin);
-        if (enabledOrder.remove(e) && plugin != null) post(new PluginDisableEvent(plugin));
-        running.loader.dispose();
-        fail(e, cause instanceof PluginException ? cause.getMessage() : "threw " + cause, cause);
+        String why = cause instanceof PluginException ? cause.getMessage() : "threw " + cause;
+        teardown(e, running, new State.Failed(why), false);
+        report(e, why, cause);
+    }
+
+    /**
+     * {@code plugins/<name>/}, refused unless it is a folder of its own directly in {@code plugins/}: never the jar
+     * cache Hadron empties, the switched-off list, or a path out of {@code plugins/}. plugin.yml's name check already
+     * keeps such names out; this keeps the host safe whatever reaches it.
+     */
+    static File dataFolder(File plugins, String name) {
+        java.nio.file.Path root = plugins.toPath().toAbsolutePath().normalize();
+        java.nio.file.Path dir = root.resolve(name).normalize();
+        if (!root.equals(dir.getParent()) || name.equalsIgnoreCase(".loaded") || name.equalsIgnoreCase("disabled.txt")
+                || name.toLowerCase(java.util.Locale.ROOT).endsWith(".jar")) {
+            throw new PluginException("its name '" + name + "' can't be its data folder in plugins/. Rename it in "
+                    + "plugin.yml to start with a letter or digit, such as name: MyPlugin");
+        }
+        return dir.toFile();
     }
 
     /** Whether a mod jar has the class, which would shadow the plugin's own copy. */
@@ -779,29 +795,42 @@ public final class PluginHost implements PluginManager {
             if (!(e.state instanceof State.Failed) || next instanceof State.Off) e.state = next;
             return;
         }
-        State.Running running = (State.Running) e.state;
+        teardown(e, (State.Running) e.state, next, true);
+    }
+
+    /**
+     * Stops a running version, the one way a plugin stops whether it disables or fails to enable, so both undo the
+     * same things: its listeners, its menus, its background work, everything it registered, and its classes on the
+     * bus. The entry moves to {@code next} before anything is told, so a {@link PluginDisableEvent} listener already
+     * finds the plugin disabled and gone.
+     */
+    private void teardown(Entry e, State.Running running, State next, boolean callOnDisable) {
         JavaPlugin plugin = running.loader.plugin();
         running.loader.beginUnload();
         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ASYNC_GRACE_MILLIS);
         removeEvents(running, deadline);
-        if (running instanceof State.Enabled && plugin != null) {
+        if (plugin != null) {
             closeMenus(running.loader);
             int stillRunning = scheduler.awaitAsync(plugin, remainingGraceMillis(deadline));
             if (stillRunning > 0) {
                 LOG.warn(e.name + " still had " + stillRunning + " background task(s) running after "
-                        + ASYNC_GRACE_MILLIS / 1000 + "s; disabling it anyway");
+                        + ASYNC_GRACE_MILLIS / 1000 + "s; " + (callOnDisable ? "disabling" : "stopping") + " it anyway");
             }
-            try {
-                plugin.onDisable();
-            } catch (Throwable t) {
-                LOG.error(e.name + " threw while disabling", t);
+            if (callOnDisable && running instanceof State.Enabled) {
+                try {
+                    plugin.onDisable();
+                } catch (Throwable t) {
+                    LOG.error(e.name + " threw while disabling", t);
+                }
             }
         }
+        boolean wasEnabled = enabledOrder.remove(e);
+        e.state = next;
         undoAll(running, e.name);
         if (plugin != null) runDisableHooks(plugin);
-        if (enabledOrder.remove(e) && plugin != null) post(new PluginDisableEvent(plugin));
+        if (wasEnabled && plugin != null) post(new PluginDisableEvent(plugin));
         running.loader.dispose();
-        e.state = next;
+        events.forget(running.loader);
     }
 
     /**
@@ -848,6 +877,10 @@ public final class PluginHost implements PluginManager {
 
     private void fail(Entry e, String why, Throwable error) {
         e.state = new State.Failed(why);
+        report(e, why, error);
+    }
+
+    private void report(Entry e, String why, Throwable error) {
         if (error != null && !(error instanceof PluginException)) {
             LOG.error(e.name + " didn't enable: " + why, error);
         } else {
@@ -1104,8 +1137,14 @@ public final class PluginHost implements PluginManager {
     /** To the console and every online player who may manage plugins. */
     private void announce(Component message) {
         LOG.info(message.getString());
-        for (ServerPlayer p : minecraft.getPlayerList().getPlayers()) {
-            if (Permissions.has(p, MANAGE)) p.sendSystemMessage(message);
+        if (minecraft == null) return;
+        // Telling people never stops what is being told: a plugin's failure here can't halt a reload partway.
+        for (ServerPlayer p : List.copyOf(minecraft.getPlayerList().getPlayers())) {
+            try {
+                if (Permissions.has(p, MANAGE)) p.sendSystemMessage(message);
+            } catch (RuntimeException | LinkageError ex) {
+                LOG.error("Telling " + p.getGameProfile().getName() + " \"" + message.getString() + "\" failed", ex);
+            }
         }
     }
 
