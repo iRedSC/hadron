@@ -19,4 +19,8 @@ neoForge {
 
 dependencies {
     api(project(":api"))
+    // @WithMinecraft and MinecraftBootstrap, for fast tests run by ./gradlew test. compileOnly: a plugin's test
+    // build brings JUnit, and the in-game test server never loads them.
+    compileOnly(platform("org.junit:junit-bom:5.13.4"))
+    compileOnly("org.junit.jupiter:junit-jupiter-api")
 }

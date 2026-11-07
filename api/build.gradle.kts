@@ -21,3 +21,19 @@ dependencies {
     // Plugins' config.yml. Minecraft doesn't ship a YAML parser, so it rides inside Hadron's jar.
     api("org.yaml:snakeyaml:2.2")
 }
+
+// Fast tests: JUnit on the JVM, no server. ./gradlew :api:test. A class that needs Minecraft's registries carries
+// @WithMinecraft from test-api; the rest don't boot Minecraft at all.
+neoForge.addModdingDependenciesTo(sourceSets.test.get())
+
+dependencies {
+    testImplementation(platform("org.junit:junit-bom:5.13.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testImplementation(project(":test-api"))
+}
+
+tasks.test {
+    useJUnitPlatform()
+    testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+}
