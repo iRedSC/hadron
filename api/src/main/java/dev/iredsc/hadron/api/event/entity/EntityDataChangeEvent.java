@@ -41,6 +41,10 @@ public class EntityDataChangeEvent extends EntityEvent implements Cancellable {
             Actor actor) {
         super(entity, actor);
         this.kind = Objects.requireNonNull(kind, "kind; use an id in your mod's namespace, such as minecolonies:job");
+        if (kind.getNamespace().equals("hadron") || kind.getNamespace().equals("minecraft")) {
+            throw new IllegalArgumentException(kind + " isn't a mod's id: the kind names whose data it is, in your "
+                    + "mod's namespace, such as minecolonies:job");
+        }
         this.before = Objects.requireNonNull(before, "before; pass an empty CompoundTag when there was none").copy();
         this.after = Objects.requireNonNull(after, "after; pass an empty CompoundTag when it is being removed").copy();
     }

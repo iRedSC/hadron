@@ -84,7 +84,7 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 
 Fluid placed or drained without a bucket (a Refined Storage constructor, a hose pulley) is a `BlockPlaceEvent` or `BlockBreakEvent` plus a `ResourceTransferEvent` in one operation.
 
-A move between levels (a teleposer, AE2's spatial storage) fires as two `StructureMoveEvent`s in one operation: `ASSEMBLE` in the source level and `DISASSEMBLE` in the target, each listing its own level's spaces, with each move's `to` in the target level. The bridge fires both before changing anything, and moves nothing if either is cancelled.
+A move between levels (a teleposer, AE2's spatial storage) fires as two `StructureMoveEvent`s in one operation: `ASSEMBLE` in the source level and `DISASSEMBLE` in the target, each listing only its own level's spaces and no moves, so no position is ever read in the wrong level. The bridge fires both before changing anything, and moves nothing if either is cancelled.
 
 As in Bukkit, `BlockMultiPlaceEvent` extends `BlockPlaceEvent`, `BlockSpreadEvent` extends `BlockFormEvent` which extends `BlockGrowEvent`, and the bucket events extend `BlockChangeEvent`, so a listener for the broader event never misses the narrower one. `BlockFromToEvent.getPos()` is the block flowed into; `getFromPos()` is the source. An explosion's blocks are reported once, in `ExplosionEvent`'s editable list, not as one break event each.
 
@@ -243,8 +243,8 @@ Designed but not in `api`, because core can't yet fire them for every actor with
 ## Left out
 
 - **An event per spell school or damage type.** Damage, healing, effects, blocks, spawns and teleports already describe what spells do; the spell is on the operation.
-- **An event per tick.** A machine's job fires once with its whole cost, and its per-tick spending runs silent; drift with no job (heat settling, air leaking) is the holder's own state. Acceleration is one event per change. So hot loops don't fire thousands of events ([bridge-hooks](bridge-hooks.md#the-rule-for-firing)).
+- **An event per tick.** A machine's job fires its own event once, and its per-tick spending runs silent; drift with no job (heat settling, air leaking) is the holder's own state. Acceleration is one event per change. So hot loops don't fire thousands of events ([bridge-hooks](bridge-hooks.md#the-rule-for-firing)).
 - **Mod progression state** (Twilight Forest's conquered bosses, quest progress). It changes no world, player or item; plugins that need it use the bridge's extras.
 - **Client-only data** (local waypoints, minimap settings).
 - **Data tied to no place** (a computer's files, a mod's network database). Plugins guard it through the block or item that reaches it, and whatever it makes happen in the world fires its own events.
-- **Creatures stored outside items** (Cobblemon's party and PC). Moving, trading, releasing or evolving them in storage are the bridge's own events until a second official bridge needs the same ([promotion](bridges.md#promotion-when-bridges-events-become-core)). Capture into storage and release from it are core events, so every creature entering or leaving the world is seen.
+- **Creatures stored outside items** (Cobblemon's party and PC). Moving, trading, releasing or evolving them in storage are the bridge's own events until a second official bridge needs the same ([promotion](bridges.md#promotion-when-bridges-events-become-core)). Capture into storage (`EntityCaptureEvent`, once it ships) and release from it (`EntitySpawnEvent`) are core events, so every creature entering or leaving the world is seen.

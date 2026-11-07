@@ -45,17 +45,18 @@ public class BlockDataChangeEvent extends BlockChangeEvent {
     public BlockDataChangeEvent(ServerLevel level, BlockPos pos, BlockState state, CompoundTag before,
             CompoundTag after, Actor actor) {
         super(level, pos, state, List.of(BlockChange.withData(pos, state, state,
-                Objects.requireNonNull(before, "before; pass the block entity's data as it is now"),
-                Objects.requireNonNull(after, "after; pass the data as it will be"))), actor);
+                Objects.requireNonNull(before, "before; pass the block entity's data as it is now").copy(),
+                Objects.requireNonNull(after, "after; pass the data as it will be").copy())), actor);
         this.kind = BLOCK_ENTITY;
-        this.before = before.copy();
-        this.after = after.copy();
+        this.before = primary().getBeforeData().orElseThrow();
+        this.after = primary().getAfterData().orElseThrow();
     }
 
     /**
      * Data the mod keeps for these spaces in its own storage changes.
      *
-     * @param pos where it starts: the connector a wire is strung from, the machine that projects a field
+     * @param pos where it starts: the connector a wire is strung from, the machine that projects a field; also in
+     *     {@code covers}
      * @param kind whose data, in the mod's namespace: {@code immersiveengineering:wire}, {@code ad_astra:gravity}
      * @param covers every space the data covers: both connectors and each block the wire passes through, each cell
      *     of a field that changes
@@ -64,22 +65,31 @@ public class BlockDataChangeEvent extends BlockChangeEvent {
      */
     public BlockDataChangeEvent(ServerLevel level, BlockPos pos, ResourceLocation kind, List<BlockPos> covers,
             CompoundTag before, CompoundTag after, Actor actor) {
-        super(level, pos, level.getBlockState(pos), spaces(level, covers, kind), actor);
+        super(level, pos, level.getBlockState(pos), spaces(level, pos, covers, kind), actor);
         this.kind = kind;
         this.before = Objects.requireNonNull(before, "before; pass an empty CompoundTag when there was none").copy();
         this.after = Objects.requireNonNull(after, "after; pass an empty CompoundTag when it is being removed").copy();
     }
 
-    private static List<BlockChange> spaces(ServerLevel level, List<BlockPos> covers, ResourceLocation kind) {
+    private static List<BlockChange> spaces(ServerLevel level, BlockPos pos, List<BlockPos> covers,
+            ResourceLocation kind) {
         Objects.requireNonNull(kind, "kind; use an id in your mod's namespace, such as immersiveengineering:wire");
         if (kind.equals(BLOCK_ENTITY)) {
             throw new IllegalArgumentException("hadron:block_entity is for a block entity's own data: use the "
                     + "constructor that takes the block state and the block entity's data");
         }
+        if (kind.getNamespace().equals("hadron") || kind.getNamespace().equals("minecraft")) {
+            throw new IllegalArgumentException(kind + " isn't a mod's id: the kind names whose data it is, in your "
+                    + "mod's namespace, such as immersiveengineering:wire");
+        }
         Objects.requireNonNull(covers, "covers; list every space the data covers");
         if (covers.isEmpty()) {
             throw new IllegalArgumentException("covers is empty: list every space the data covers (both ends of a "
                     + "wire and each block it passes through, each cell of a field), so protection can check them");
+        }
+        if (!covers.contains(pos)) {
+            throw new IllegalArgumentException("covers doesn't include pos " + pos.toShortString() + ": the space "
+                    + "the data starts from is one it covers, so list it too");
         }
         return covers.stream().map(p -> BlockChange.unchanged(level, p, level.getBlockState(p))).toList();
     }
@@ -89,7 +99,10 @@ public class BlockDataChangeEvent extends BlockChangeEvent {
         return kind;
     }
 
-    /** A copy of the data before, in its owner's format. */
+    /**
+     * A copy of the data before, in its owner's format. For a mod's own data, {@link #getBlocks()} still holds each
+     * space's block entity data, which this change leaves as it is.
+     */
     public CompoundTag getBeforeData() {
         return before.copy();
     }

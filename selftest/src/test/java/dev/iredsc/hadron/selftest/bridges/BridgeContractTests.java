@@ -133,6 +133,17 @@ public final class BridgeContractTests {
         }
     }
 
+    /** Checks that building something is refused with a message saying the fix. */
+    private static void refuses(TestContext t, String fix, Runnable build) {
+        String said = "nothing";
+        try {
+            build.run();
+        } catch (IllegalArgumentException expected) {
+            said = expected.getMessage();
+        }
+        t.assertTrue(said.contains(fix), "should be refused, saying \"" + fix + "\", but said: " + said);
+    }
+
     private static <E extends Event> E only(TestContext t, List<E> seen, String what) {
         t.assertEquals(1, seen.size(), "the " + what + "s a listener received");
         return seen.get(0);
@@ -200,13 +211,12 @@ public final class BridgeContractTests {
         t.assertEquals("copper", e.getAfterData().getString("type"), "the data after, in the mod's format");
         t.assertTrue(e.getBeforeData().isEmpty(), "no wire before");
         t.assertTrue(refused && wires.isEmpty(), "a wire crossing a protected space should be refused");
-        boolean threw = false;
-        try {
-            new BlockDataChangeEvent(t.level(), from, wire, List.of(), new CompoundTag(), strung, machine(t, alice));
-        } catch (IllegalArgumentException expected) {
-            threw = expected.getMessage().contains("list every space");
-        }
-        t.assertTrue(threw, "a mod's data with no spaces should be refused, saying to list them");
+        refuses(t, "list every space", () -> new BlockDataChangeEvent(t.level(), from, wire, List.of(),
+                new CompoundTag(), strung, machine(t, alice)));
+        refuses(t, "list it too", () -> new BlockDataChangeEvent(t.level(), from, wire, List.of(to),
+                new CompoundTag(), strung, machine(t, alice)));
+        refuses(t, "isn't a mod's id", () -> new BlockDataChangeEvent(t.level(), from,
+                ResourceLocation.withDefaultNamespace("wire"), span, new CompoundTag(), strung, machine(t, alice)));
         t.assertEquals(BlockDataChangeEvent.BLOCK_ENTITY, new BlockDataChangeEvent(t.level(), from,
                 t.level().getBlockState(from), new CompoundTag(), new CompoundTag(), machine(t, alice)).getKind(),
                 "a block entity's own data");
@@ -240,6 +250,8 @@ public final class BridgeContractTests {
                 () -> stored[0] = farmer);
         t.assertTrue(refused, "callEvent should report the cancel to the bridge");
         t.assertEquals("builder", stored[0].getString("job"), "a refused change keeps the old job");
+        refuses(t, "isn't a mod's id", () -> new EntityDataChangeEvent(pig,
+                ResourceLocation.fromNamespaceAndPath("hadron", "job"), builder, farmer, machine(t, alice)));
     }
 
     @HadronTest
@@ -549,12 +561,13 @@ public final class BridgeContractTests {
                 () -> sent.add(data));
         t.assertEquals(1, sent.size(), "a withheld reveal sends nothing");
         t.assertEquals(Optional.of(pig), seen.get(1).getEntity(), "the entity revealed");
+        cancel[0] = false;
         ResourceHolder.Account bobs = ResourceHolder.Account.player(UUID.randomUUID()); // bob may be offline
-        fire(t, new Actor.Player(alice.player()), a -> new DataRevealEvent(alice.player(), bobs, data.copy()),
-                () -> sent.add(data));
+        fire(t, new Actor.Player(alice.player()), a -> fired[0] = new DataRevealEvent(alice.player(), bobs,
+                data.copy()), () -> sent.add(fired[0].getData()));
         t.assertEquals(Optional.of(bobs), seen.get(2).getAccount(), "the account revealed");
         t.assertEquals(Optional.empty(), seen.get(2).getLevel(), "an account has no world");
-        t.assertEquals(1, sent.size(), "a withheld account reveal sends nothing");
+        t.assertFalse(sent.get(1).contains("owner"), "the field a listener removed isn't sent for an account either");
     }
 
     @HadronTest

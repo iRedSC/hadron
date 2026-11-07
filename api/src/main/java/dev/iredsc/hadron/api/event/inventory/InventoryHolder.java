@@ -64,7 +64,7 @@ public sealed interface InventoryHolder {
     }
 
     /**
-     * One player's or team's own copy of the inventory at a block or entity, where each player who opens it sees
+     * One player's own copy of the inventory at a block or entity, where each player who opens it sees
      * different contents: a Lootr chest, a per-player reward crate. {@code at} is where it is, for protection;
      * {@code owner} is whose copy, so two players' copies are never mistaken for one inventory.
      */
@@ -75,7 +75,7 @@ public sealed interface InventoryHolder {
                 throw new IllegalArgumentException("A per-player copy belongs to a Block or an Entity, not " + at
                         + ": storage with no place, such as an ender chest, is Linked");
             }
-            Objects.requireNonNull(owner, "owner; pass the player's UUID, or the team's");
+            Objects.requireNonNull(owner, "owner; pass the UUID of the player whose copy it is");
         }
     }
 
