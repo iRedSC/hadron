@@ -1,4 +1,4 @@
-package dev.iredsc.hadron.neoforge;
+package dev.iredsc.hadron.harness;
 
 import dev.iredsc.hadron.api.Hadron;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;

@@ -23,7 +23,9 @@ jobs:
       - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
         with:
           cache-read-only: true
-      - run: ./gradlew build
+      # build runs check, and with it releaseJarCheck: the mod jar server owners get must hold no test code. Named
+      # here too, so the release can't lose it if check's wiring changes.
+      - run: ./gradlew build :neoforge:releaseJarCheck
       - run: ./gradlew :examples:hello:hadronTest
       - run: ./gradlew :selftest:hadronTest
       - name: Keep reports and server logs
