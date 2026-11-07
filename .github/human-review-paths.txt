@@ -1,0 +1,32 @@
+# Changes here are hard to undo, so a PR touching them needs the owner's `human-reviewed` label to merge
+# (.github/workflows/human-review.yml). Everything else merges on green CI. One glob per line; ** spans folders.
+# Add a path when a mistake there would lose players' data, slow every server, or let a change skip these checks.
+
+# The checks themselves: a PR could otherwise switch off what reviews it. Build files can drop coverageCheck, the
+# fast tests or a PIT threshold, so they count too.
+.github/**
+gradle/**
+**build.gradle.kts
+settings.gradle.kts
+gradle.properties
+
+# Saved data formats: a wrong change here loses players' data on every server that updates.
+api/src/main/java/dev/iredsc/hadron/api/data/**
+common/src/main/java/dev/iredsc/hadron/common/economy/JsonEconomyProvider.java
+neoforge/src/main/java/dev/iredsc/hadron/neoforge/Data*.java
+neoforge/src/main/java/dev/iredsc/hadron/neoforge/WorldsLevelData.java
+neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/data/**
+
+# Hot paths: these run millions of times a second, so a slow change slows every server.
+neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/LevelMixin.java
+neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/BlockStateBaseMixin.java
+neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/BoundTickingBlockEntityMixin.java
+neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/*/ServerLevelMixin.java
+neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/EntityVelocityMixin.java
+
+# Untrusted input: packets from clients, and the jars Hadron loads.
+neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/net/**
+common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java
+
+# Public API signatures: uncomment at the first release, when plugins start depending on them.
+# api/src/main/java/**
