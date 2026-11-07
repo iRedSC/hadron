@@ -1,32 +1,32 @@
 package dev.iredsc.hadron.api.event.block;
 
-import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.actor.Actor;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
-import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.block.state.BlockState;
 
-/** A player is placing a block. Cancel it and the block isn't placed. */
-public class BlockPlaceEvent extends BlockEvent implements Cancellable {
-    private final ServerPlayer player;
-    private boolean cancelled;
-
-    public BlockPlaceEvent(ServerLevel level, BlockPos pos, BlockState state, ServerPlayer player) {
-        super(level, pos, state);
-        this.player = player;
+/**
+ * A block or fluid source is about to be placed by an actor: a player, or a machine, fake player or mob. Cancel it
+ * and it isn't placed, and an item used to place it is given back. {@link #getState()} is the block being placed;
+ * {@link #getBefore()} is the block it replaces.
+ */
+public class BlockPlaceEvent extends BlockChangeEvent {
+    public BlockPlaceEvent(ServerLevel level, BlockPos pos, BlockState replaced, BlockState placed, Actor actor) {
+        this(level, BlockChange.of(level, pos, replaced, placed), actor);
     }
 
-    public ServerPlayer getPlayer() {
-        return player;
+    public BlockPlaceEvent(ServerLevel level, BlockChange change, Actor actor) {
+        super(level, change.getPos(), change.getAfter(), List.of(change), actor);
     }
 
-    @Override
-    public boolean isCancelled() {
-        return cancelled;
+    protected BlockPlaceEvent(ServerLevel level, BlockPos pos, BlockState placed, List<BlockChange> blocks,
+            Actor actor) {
+        super(level, pos, placed, blocks, actor);
     }
 
-    @Override
-    public void setCancelled(boolean cancel) {
-        this.cancelled = cancel;
+    /** The block that was in the space before; same as {@link #getBefore()}. */
+    public BlockState getBlockReplacedState() {
+        return getBefore();
     }
 }

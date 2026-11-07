@@ -1,10 +1,9 @@
 package dev.iredsc.hadron.api.event.server;
 
-import dev.iredsc.hadron.api.event.Event;
 import net.minecraft.server.MinecraftServer;
 
 /** Once per server start, after every plugin has enabled and the worlds are loaded. Never on a plugin reload. */
-public class ServerLoadEvent extends Event {
+public class ServerLoadEvent extends ServerEvent {
     private final MinecraftServer server;
 
     public ServerLoadEvent(MinecraftServer server) {

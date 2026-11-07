@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.api.event.server.ServiceRegisterEvent;
+import dev.iredsc.hadron.api.event.server.ServiceUnregisterEvent;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.ServicePriority;
 import dev.iredsc.hadron.api.plugin.ServicesManager;
@@ -32,7 +34,13 @@ final class Services implements ServicesManager {
     }
 
     @Override
-    public synchronized <T> void register(Class<T> service, T provider, JavaPlugin plugin, ServicePriority priority) {
+    public <T> void register(Class<T> service, T provider, JavaPlugin plugin, ServicePriority priority) {
+        add(service, provider, plugin, priority);
+        // Outside the lock, so a listener that looks services up can't deadlock against another thread.
+        host.post(new ServiceRegisterEvent(service, provider, plugin));
+    }
+
+    private synchronized <T> void add(Class<T> service, T provider, JavaPlugin plugin, ServicePriority priority) {
         if (!service.isInstance(provider)) {
             throw new IllegalArgumentException(provider + " doesn't implement " + service.getName());
         }
@@ -51,25 +59,36 @@ final class Services implements ServicesManager {
     }
 
     @Override
-    public synchronized void unregister(Object provider) {
-        removeWhere(provider, null);
+    public void unregister(Object provider) {
+        announce(removeWhere(provider, null));
     }
 
     @Override
-    public synchronized void unregisterAll(JavaPlugin plugin) {
-        removeWhere(null, plugin);
+    public void unregisterAll(JavaPlugin plugin) {
+        announce(removeWhere(null, plugin));
+    }
+
+    /** Outside the lock, so a listener that looks services up can't deadlock against another thread. */
+    private void announce(List<ServiceUnregisterEvent> removed) {
+        for (ServiceUnregisterEvent event : removed) host.post(event);
     }
 
     /** Also drops emptied services, whose interface may be a plugin's class that would keep its old loader alive. */
-    private void removeWhere(Object provider, JavaPlugin plugin) {
-        for (Iterator<List<Registration>> lists = byService.values().iterator(); lists.hasNext(); ) {
-            List<Registration> list = lists.next();
+    private synchronized List<ServiceUnregisterEvent> removeWhere(Object provider, JavaPlugin plugin) {
+        List<ServiceUnregisterEvent> removed = new ArrayList<ServiceUnregisterEvent>();
+        for (Iterator<Map.Entry<Class<?>, List<Registration>>> lists = byService.entrySet().iterator(); lists.hasNext(); ) {
+            Map.Entry<Class<?>, List<Registration>> entry = lists.next();
+            List<Registration> list = entry.getValue();
             for (Iterator<Registration> it = list.iterator(); it.hasNext(); ) {
                 Registration r = it.next();
-                if (r.provider == provider || r.plugin == plugin) it.remove();
+                if (r.provider == provider || r.plugin == plugin) {
+                    it.remove();
+                    removed.add(new ServiceUnregisterEvent(entry.getKey(), r.provider, r.plugin));
+                }
             }
             if (list.isEmpty()) lists.remove();
         }
+        return removed;
     }
 
     @Override

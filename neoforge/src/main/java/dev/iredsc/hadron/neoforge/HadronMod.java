@@ -35,7 +35,11 @@ public final class HadronMod {
         NeoForge.EVENT_BUS.addListener(HadronMod::stopped);
         // Last, so a plugin command taking over a mod's name replaces the mod's, not the other way round.
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, HadronMod::commands);
-        new NeoForgeEvents(() -> host).register();
+        Hooks.install(() -> host);
+        BlockEvents.register();
+        EntityEvents.register();
+        ItemEvents.register();
+        WorldEvents.register();
     }
 
     private static void aboutToStart(ServerAboutToStartEvent event) {
