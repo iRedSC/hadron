@@ -13,9 +13,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  * switch. The catch-all for things only the server sees; a bridge usually turns them into clearer events. Fired on
  * the server thread. Cancel it and the mod never handles the message.
  */
-@FiredBy(core = FULL,
-        coreSees = "every mod packet",
-        bridges = "nothing required; a bridge usually turns its mod's packets into clearer events")
+@FiredBy(core = FULL)
 public class PlayerModPacketEvent extends PlayerEvent implements Cancellable {
     private final CustomPacketPayload payload;
     private boolean cancelled;

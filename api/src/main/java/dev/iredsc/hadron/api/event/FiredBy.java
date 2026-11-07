@@ -27,15 +27,14 @@ public @interface FiredBy {
     Core core();
 
     /**
-     * What core fires it for, such as {@code "hoppers, droppers"}. Needed for {@link Core#PARTIAL}, and for
-     * {@link Core#FULL} when {@link #bridges()} says something; empty for {@link Core#NONE}.
+     * What core fires it for, such as {@code "hoppers, droppers"}. Needed for {@link Core#PARTIAL}; empty otherwise.
      */
     String coreSees() default "";
 
     /**
      * What a bridge fires it for. For {@link Core#NONE}, what the mod does ("changes a claim or trust list"); for
-     * {@link Core#PARTIAL}, the mod's paths core misses ("the mod's pipes and networks"). Needed for both; for
-     * {@link Core#FULL}, optional advice to bridges.
+     * {@link Core#PARTIAL}, the mod's paths core misses ("the mod's pipes and networks"). Needed for both; empty for
+     * {@link Core#FULL}.
      */
     String bridges() default "";
 
@@ -43,7 +42,7 @@ public @interface FiredBy {
     String fillIn() default "";
 
     enum Core {
-        /** Core fires it wherever it happens; a bridge only pushes the actor. */
+        /** Core fires it wherever it happens; a bridge only pushes the actor. Every subclass must be FULL too. */
         FULL,
         /** Core fires it for vanilla's paths; a bridge fires it for its mod's. */
         PARTIAL,

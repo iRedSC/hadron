@@ -1,7 +1,8 @@
 // bridgeHooks / bridgeHooksCheck: docs/bridge-hooks.md's tables come from the @FiredBy on each event class, and
 // bridgeHooksCheck (part of check) fails when the committed file differs. It also holds @FiredBy to the code: an
-// event marked core = NONE fails if core allocates it or a subclass, and one marked FULL or PARTIAL fails if core
-// never does. And docs/events.md's catalog must say "bridge" in the chokepoint column for exactly the NONE events.
+// event marked core = NONE fails if core allocates it or a subclass, one marked FULL or PARTIAL fails if core never
+// does, and a FULL one fails if a subclass isn't FULL. And docs/events.md's catalog must say "bridge" in the
+// chokepoint column for exactly the NONE events.
 // bridgeHooksFixtureCheck runs these checks on small compiled examples (src/bridgeHooksFixture) that must fail.
 // Reads class files only, like coverageCheck (gradle/hadron-coverage.gradle.kts), so it runs in milliseconds.
 //
@@ -219,9 +220,13 @@ object HadronBridgeHooks {
                     if (e.fillIn.isNotEmpty()) problems += "$n: fillIn is for core = NONE events; put what to fill in into bridges."
                 }
                 "FULL" -> {
-                    if (e.fillIn.isNotEmpty()) problems += "$n: fillIn is for core = NONE events; remove it."
-                    if (e.bridges.isNotEmpty() && e.coreSees.isEmpty()) problems += "$n is core = FULL with bridges " +
-                            "advice: say what core fires it for too (coreSees = \"...\"), as that row shows both."
+                    if (texts.any { it.isNotEmpty() }) problems += "$n is core = FULL, so bridges owe it nothing: " +
+                            "remove coreSees, bridges and fillIn, or mark it PARTIAL if some path needs a bridge."
+                    // A listener on X hears its subclasses, so X is only as covered as its least covered subclass.
+                    val less = events.filter { c.name in supers(it) && it.firedBy?.get("core") != "FULL" }
+                    if (less.isNotEmpty()) problems += "$n is core = FULL, but bridges fire its subclasses " +
+                            "${less.joinToString { simple(it.name) }}, so they fire $n too: mark it PARTIAL with " +
+                            "coreSees and bridges."
                 }
             }
             if (e.core != "NONE" && c.name !in fired) problems += "$n is marked core = ${e.core}, but nothing in common " +
@@ -249,7 +254,7 @@ object HadronBridgeHooks {
             "bridge-only" to listOf("| Event | Fire when the mod… | Must fill in |", "|---|---|---|") +
                     rows(events.filter { it.core == "NONE" }) { listOf(it.bridges, it.fillIn) },
             "core-partial" to listOf("| Event | Core sees | The bridge fires it for |", "|---|---|---|") +
-                    rows(events.filter { it.core != "NONE" && it.bridges.isNotEmpty() }) { listOf(it.coreSees, it.bridges) })
+                    rows(events.filter { it.core == "PARTIAL" }) { listOf(it.coreSees, it.bridges) })
 
     /** The doc with each generated block replaced; the text outside the markers is kept as it is. */
     fun render(doc: String, tables: Map<String, List<String>>): String {

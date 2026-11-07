@@ -52,8 +52,10 @@ Core fires these for vanilla's paths; the bridge covers its mod's.
 <!-- generated: core-partial, from @FiredBy on each event class. Edit those and run ./gradlew bridgeHooks; edits here are overwritten. -->
 | Event | Core sees | The bridge fires it for |
 |---|---|---|
+| `BlockChangeEvent` | every block state change, through `Level.setBlock` | block entity data changes, as `BlockDataChangeEvent`, and growth without bone meal, as `BlockFertilizeEvent` |
 | `BlockDropItemEvent` | every drop through `Block.dropResources` (player mining, `destroyBlock`, blocks losing support) | drops the mod spawns itself when it breaks or harvests a block, before spawning them; honour the edited list and experience |
 | `BlockFertilizeEvent` | bone meal | growth accelerators that grow without bone meal |
+| `BlockMoveEvent` | pistons, through its piston leaves | contraptions, ships and spatial transfers, as `StructureMoveEvent` |
 | `EntityStatusChangeEvent` | a mob's AI turned off or on | the mod's stuns, freezes, holds and interrupted casts, with its own status ids |
 | `EntityTargetEvent` | mobs | turret blocks |
 | `EntityVelocityEvent` | any velocity set while something other than the entity acts (commands, explosions, entities, machines, mods with an actor pushed); knockback as `EntityKnockbackEvent` | pushes the mod makes with nothing on the stack: push the actor instead, and core fires it |
@@ -78,7 +80,6 @@ Core fires these for vanilla's paths; the bridge covers its mod's.
 | `ResourceTransferEvent` | currency transfers between accounts | the mod's cables, pipes, wireless chargers and payments, with both holders and the amount actually accepted |
 | `ExplosionEvent` | `Level.explode` and `Explosion` | explosions the mod computes without vanilla's `Explosion` |
 | `PlayerFishEvent` | any rod whose bobber is a `FishingHook` | fishing that doesn't use a `FishingHook` (a mod's own bobber entity), at each step it has |
-| `PlayerModPacketEvent` | every mod packet | nothing required; a bridge usually turns its mod's packets into clearer events |
 <!-- end generated: core-partial -->
 
 ## Not shipped yet
