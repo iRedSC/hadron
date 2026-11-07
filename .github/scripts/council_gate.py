@@ -11,10 +11,11 @@ A passing review is a "## Council review" section in the PR description, as the 
     | --- | --- | --- |
     | GPT-6.1 Sol | 7/10 | 9/10 |
     | Claude Haiku 5.5 | 6 asked, 2 open | 6 asked, 0 open |
+    | Claude Haiku 4.5 | 3 misread, 1 open | 1 misread, 0 open |
     ...
 
-Every member in .github/council.toml needs a row. In its last round a deep reviewer must score at least min_score, and
-a question asker must have no question left open. The review counts only for the commit it names, so a push after it
+Every member in .github/council.toml needs a row. In its last round a deep reviewer must score at least min_score, a
+question asker must have no question left open, and an explainer no misreading left open. The review counts only for the commit it names, so a push after it
 needs a fresh round.
 
 Reads BASE and HEAD (commit SHAs) and PR_BODY from the environment. CI runs main's copy of this script, the path list
@@ -66,7 +67,7 @@ def changed_files(base: str, head: str) -> list[str]:
     return [name for name in result.stdout.split("\0") if name]
 
 
-ROLES = ("deep", "questions")
+ROLES = ("deep", "questions", "explain")
 
 
 def council() -> tuple[int, list[tuple[str, str]]]:
@@ -104,13 +105,20 @@ def review_problems(body: str, head: str, min_score: int, members: list[tuple[st
             elif float(score.group(1)) < min_score:
                 problems.append(f"{name} scored {last} in the last round; each deep reviewer needs at least "
                                 f"{min_score}/10.")
-        else:
+        elif role == "questions":
             asked = re.fullmatch(r"(\d+)\s+asked,\s*(\d+)\s+open", last)
             if not asked:
                 problems.append(f"{name}'s last round is \"{last}\", not \"<n> asked, <n> open\".")
             elif int(asked.group(2)) > 0:
                 problems.append(f"{name} still has {asked.group(2)} open question(s); answer each in the PR or change "
                                 "the code so it no longer applies, then rerun the round.")
+        else:
+            misread = re.fullmatch(r"(\d+)\s+misread,\s*(\d+)\s+open", last)
+            if not misread:
+                problems.append(f"{name}'s last round is \"{last}\", not \"<n> misread, <n> open\".")
+            elif int(misread.group(2)) > 0:
+                problems.append(f"{name}'s explanation still has {misread.group(2)} open misreading(s); fix the code a "
+                                "misreading came from, or answer in the PR why it's the model's own limit, then rerun.")
     return problems
 
 
@@ -141,7 +149,8 @@ def main() -> int:
         print(f"  {name}  (matches {glob})")
     problems = review_problems(os.environ.get("PR_BODY") or "", head, min_score, members)
     if not problems:
-        print(f"Passed: every deep reviewer scored at least {min_score}/10 and no question is open, on {head[:12]}.")
+        print(f"Passed: every deep reviewer scored at least {min_score}/10, and no question or misreading is open, on "
+              f"{head[:12]}.")
         return 0
     print()
     for problem in problems:
