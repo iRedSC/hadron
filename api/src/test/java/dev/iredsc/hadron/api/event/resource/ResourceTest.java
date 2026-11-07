@@ -48,7 +48,7 @@ class ResourceTest {
 
     @Covers(value = Resource.class, method = "currency")
     @ParameterizedTest
-    @ValueSource(strings = {"", "Coins", "a/b", "a b", "a:b"})
+    @ValueSource(strings = {"", "Coins", "a/b", "/coins", "a b", "a:b"})
     void anInvalidCurrencyNameIsRefusedWithAnExample(String name) {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class, () -> Resource.currency(name));
         assertTrue(e.getMessage().contains("\"coins\""), e.getMessage());
@@ -70,6 +70,7 @@ class ResourceTest {
         assertEquals(a, b);
         assertEquals(a.hashCode(), b.hashCode());
         assertNotEquals(a, Resource.ENERGY);
+        assertNotEquals(a.hashCode(), Resource.ENERGY.hashCode(), "different ids spread across hash buckets");
     }
 
     @Test

@@ -117,6 +117,31 @@ class EventBusTest {
     }
 
     @Test
+    void equalPrioritiesRunInTheOrderRegisteredAcrossEventClasses() {
+        subscribe(new Listener() {
+            @EventHandler
+            void on(Ping p) {
+                p.heard.add("ping 1");
+            }
+        });
+        subscribe(new Listener() {
+            @EventHandler
+            void on(LoudPing p) {
+                p.heard.add("loud 2");
+            }
+        });
+        subscribe(new Listener() {
+            @EventHandler
+            void on(Ping p) {
+                p.heard.add("ping 3");
+            }
+        });
+        LoudPing ping = new LoudPing();
+        bus.post(ping);
+        assertEquals(List.of("ping 1", "loud 2", "ping 3"), ping.heard);
+    }
+
+    @Test
     void aLaterRegisteredHigherPriorityStillRunsAfter() {
         subscribe(new Listener() {
             @EventHandler(priority = EventPriority.HIGH)
@@ -265,7 +290,30 @@ class EventBusTest {
         Ping ping = new Ping();
         bus.post(ping);
         assertEquals(List.of(), ping.heard);
+        assertFalse(bus.listens(Ping.class), "nothing hears it now, so a chokepoint can skip building it");
         subs.forEach(EventBus.Subscription::remove); // twice is fine
+    }
+
+    @Test
+    void removingOneHandlerKeepsTheOthersForTheSameClass() {
+        List<EventBus.Subscription> first = subscribe(new Listener() {
+            @EventHandler
+            void on(Ping p) {
+                p.heard.add("first");
+            }
+        });
+        subscribe(new Listener() {
+            @EventHandler
+            void on(Ping p) {
+                p.heard.add("second");
+            }
+        });
+        bus.post(new Ping());
+        first.forEach(EventBus.Subscription::remove);
+        Ping ping = new Ping();
+        bus.post(ping);
+        assertEquals(List.of("second"), ping.heard);
+        assertTrue(bus.listens(Ping.class));
     }
 
     @Test
@@ -455,6 +503,49 @@ class EventBusTest {
     }
 
     @Test
+    void awaitIdleReturnsAtOnceWhenNothingIsCalling() {
+        EventBus.Subscription sub = subscribe(new Listener() {
+            @EventHandler
+            void on(Ping p) {}
+        }).get(0);
+        long start = System.nanoTime();
+        assertTrue(sub.awaitIdle(start + TimeUnit.SECONDS.toNanos(30)));
+        assertTrue(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(10), "an idle handler must not wait out the deadline");
+    }
+
+    @Test
+    void awaitIdleWaitsUntilACallInProgressEnds() throws Exception {
+        CountDownLatch inside = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        EventBus.Subscription sub = subscribe(new Listener() {
+            @EventHandler
+            void slow(Ping p) throws InterruptedException {
+                inside.countDown();
+                release.await(10, TimeUnit.SECONDS);
+            }
+        }).get(0);
+        Thread poster = new Thread(() -> bus.post(new Ping()));
+        poster.start();
+        assertTrue(inside.await(10, TimeUnit.SECONDS));
+        Thread releaser = new Thread(() -> {
+            try {
+                Thread.sleep(500);
+            } catch (InterruptedException ignored) {
+                // released early is fine
+            }
+            release.countDown();
+        });
+        releaser.start();
+        long start = System.nanoTime();
+        assertTrue(sub.awaitIdle(start + TimeUnit.SECONDS.toNanos(30)),
+                "still inside when the wait began, so it must wait for the call to end");
+        assertTrue(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(10),
+                "the call ending must wake the wait, not the deadline");
+        poster.join();
+        releaser.join();
+    }
+
+    @Test
     void awaitIdleFromInsideTheHandlerDoesntWaitForItself() {
         List<EventBus.Subscription> subs = new ArrayList<>();
         List<Boolean> idle = new ArrayList<>();
@@ -466,5 +557,142 @@ class EventBusTest {
         }));
         bus.post(new Ping());
         assertEquals(List.of(true), idle);
+    }
+
+    // ---- observers (/hadron trace) ----
+
+    /** Records what an observer is told; hears one class and its subclasses. */
+    static class Watcher implements EventBus.Observer {
+        final Class<?> type;
+        final List<String> seen = new ArrayList<>();
+        Object state = "watched";
+
+        Watcher(Class<?> type) {
+            this.type = type;
+        }
+
+        @Override
+        public boolean hears(Class<?> asked) {
+            return type.isAssignableFrom(asked);
+        }
+
+        @Override
+        public Object before(Event event) {
+            seen.add("before " + event.getClass().getSimpleName());
+            return state;
+        }
+
+        @Override
+        public void after(Event event, Object state, String canceller) {
+            seen.add("after " + state + " " + canceller);
+        }
+    }
+
+    @Test
+    void anObserverHearsAnEventNoPluginListensTo() {
+        Watcher watcher = new Watcher(Ping.class);
+        assertFalse(bus.listens(Ping.class));
+        bus.observe(watcher);
+        assertTrue(bus.listens(Ping.class), "a chokepoint must build the event for the observer");
+        bus.post(new Ping());
+        assertEquals(List.of("before Ping", "after watched null"), watcher.seen);
+        assertFalse(bus.listens(EventBusTest.Unheard.class));
+    }
+
+    static class Unheard extends Event {}
+
+    @Test
+    void anObserverSeesTheHandlersRunAndWhoCancelled() {
+        subscribe(new Listener() {
+            @EventHandler(priority = EventPriority.LOW)
+            void cancel(Stoppable s) {
+                s.heard.add("cancel");
+                s.setCancelled(true);
+            }
+
+            @EventHandler(priority = EventPriority.HIGH)
+            void after(Stoppable s) {
+                s.heard.add("after");
+            }
+        });
+        Watcher watcher = new Watcher(Ping.class);
+        bus.observe(watcher);
+        Stoppable event = new Stoppable();
+        bus.post(event);
+        assertEquals(List.of("cancel", "after"), event.heard, "observing never changes which handlers run");
+        assertEquals("before Stoppable", watcher.seen.get(0));
+        assertTrue(watcher.seen.get(1).startsWith("after watched Test: ") && watcher.seen.get(1).endsWith(".cancel"),
+                watcher.seen.toString());
+    }
+
+    @Test
+    void aHandlerThatUncancelsClearsTheCanceller() {
+        subscribe(new Listener() {
+            @EventHandler(priority = EventPriority.LOW)
+            void cancel(Stoppable s) {
+                s.setCancelled(true);
+            }
+
+            @EventHandler(priority = EventPriority.HIGH)
+            void allow(Stoppable s) {
+                s.setCancelled(false);
+            }
+        });
+        Watcher watcher = new Watcher(Stoppable.class);
+        bus.observe(watcher);
+        bus.post(new Stoppable());
+        assertEquals(List.of("before Stoppable", "after watched null"), watcher.seen);
+    }
+
+    @Test
+    void anObserverReturningNullSkipsThatEvent() {
+        Watcher watcher = new Watcher(Ping.class);
+        watcher.state = null;
+        bus.observe(watcher);
+        bus.post(new Ping());
+        assertEquals(List.of("before Ping"), watcher.seen);
+    }
+
+    @Test
+    void aThrowingObserverCostsThePluginsNothing() {
+        subscribe(new Listener() {
+            @EventHandler
+            void on(Ping p) {
+                p.heard.add("handler");
+            }
+        });
+        bus.observe(new Watcher(Ping.class) {
+            @Override
+            public Object before(Event event) {
+                throw new IllegalStateException("observer bug");
+            }
+        });
+        Ping ping = new Ping();
+        bus.post(ping);
+        assertEquals(List.of("handler"), ping.heard);
+    }
+
+    @Test
+    void unobservingOneObserverKeepsTheOthers() {
+        Watcher gone = new Watcher(Ping.class);
+        Watcher kept = new Watcher(Ping.class);
+        bus.observe(gone);
+        bus.observe(kept);
+        bus.unobserve(gone);
+        bus.post(new Ping());
+        assertEquals(List.of(), gone.seen);
+        assertEquals(List.of("before Ping", "after watched null"), kept.seen);
+    }
+
+    @Test
+    void anUnobservedObserverHearsNothingMore() {
+        Watcher watcher = new Watcher(Ping.class);
+        bus.observe(watcher);
+        bus.post(new Ping());
+        bus.unobserve(watcher);
+        bus.unobserve(watcher); // twice is fine
+        assertFalse(bus.listens(Ping.class));
+        bus.post(new Ping());
+        assertEquals(2, watcher.seen.size(), watcher.seen.toString());
     }
 }

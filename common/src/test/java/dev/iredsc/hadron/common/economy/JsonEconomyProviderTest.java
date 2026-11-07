@@ -245,6 +245,25 @@ class JsonEconomyProviderTest {
     }
 
     @Test
+    void loadingAgainForgetsAccountsTheFileNoLongerHas() throws Exception {
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, "{\"accounts\": {\"" + ANN + "\": {\"money\": \"5.00\"}}}");
+        store.load();
+        Files.writeString(file, "{\"accounts\": {\"" + BO + "\": {\"money\": \"1.00\"}}}");
+        store.load();
+        assertFalse(store.hasAccount(ANN), "the file is the truth: what it lost, the store loses");
+        assertTrue(store.hasAccount(BO));
+    }
+
+    @Test
+    void aZeroBalanceInTheFileLoads() throws Exception {
+        Files.createDirectories(file.getParent());
+        Files.writeString(file, "{\"accounts\": {\"" + ANN + "\": {\"money\": \"0.00\"}}}");
+        store.load();
+        assertEquals(new BigDecimal("0.00"), store.getBalance(ANN, MONEY));
+    }
+
+    @Test
     void anOlderFileWithoutAFormatFieldStillLoads() throws Exception {
         Files.createDirectories(file.getParent());
         Files.writeString(file, "{\"accounts\": {\"" + ANN + "\": {\"gems\": \"4\"}}}");
@@ -261,6 +280,7 @@ class JsonEconomyProviderTest {
             daemon[0] = Thread.currentThread().isDaemon();
             ran.countDown();
         }, 0);
+        assertFalse(real.stopped(), "a running timer must take saves, or no change is ever written");
         assertTrue(ran.await(10, java.util.concurrent.TimeUnit.SECONDS));
         assertTrue(daemon[0], "a pending save must never keep the JVM alive");
         real.schedule(() -> {

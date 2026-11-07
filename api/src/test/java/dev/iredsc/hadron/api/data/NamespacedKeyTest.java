@@ -47,6 +47,16 @@ class NamespacedKeyTest {
     }
 
     @Test
+    void aSuggestionKeepsEveryAllowedCharacterAndReplacesTheRest() {
+        IllegalArgumentException key = assertThrows(IllegalArgumentException.class,
+                () -> new NamespacedKey("plugin", "Az09._-/~`{:"));
+        assertTrue(key.getMessage().contains("\"az09._-/____\""), key.getMessage());
+        IllegalArgumentException namespace = assertThrows(IllegalArgumentException.class,
+                () -> new NamespacedKey("Az09._-/~`{:", "key"));
+        assertTrue(namespace.getMessage().contains("\"az09._-_____\""), namespace.getMessage());
+    }
+
+    @Test
     void anEmptyKeySuggestsAPlaceholderName() {
         IllegalArgumentException e = assertThrows(IllegalArgumentException.class,
                 () -> new NamespacedKey("plugin", ""));
@@ -89,5 +99,6 @@ class NamespacedKeyTest {
         assertEquals(new NamespacedKey("a", "b").hashCode(), new NamespacedKey("a", "b").hashCode());
         assertNotEquals(new NamespacedKey("a", "b"), new NamespacedKey("b", "a"));
         assertNotEquals(new NamespacedKey("a", "bc"), new NamespacedKey("ab", "c"));
+        assertNotEquals(new NamespacedKey("a", "b").hashCode(), new NamespacedKey("a", "c").hashCode());
     }
 }
