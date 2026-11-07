@@ -9,7 +9,8 @@ last line. A bug fix also says which test failed before the fix. -->
 
 ## Risk
 
-<!-- Which paths in .github/human-review-paths.txt this touches, if any, and what breaks if it's wrong. -->
+<!-- Which paths in .github/council-paths.txt this touches, if any, and what breaks if it's wrong. Touching one
+needs a council review (say "council"), whose table goes at the end of this description. -->
 
 ## How to undo
 

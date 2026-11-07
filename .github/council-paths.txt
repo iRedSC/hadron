@@ -1,10 +1,13 @@
-# Changes here are hard to undo, so a PR touching them needs the owner's `human-reviewed` label to merge
-# (.github/workflows/human-review.yml). Everything else merges on green CI. One glob per line; ** spans folders.
+# Changes here are hard to undo, so a PR touching them needs a passing council review to merge
+# (.github/council.toml, .github/workflows/council.yml). Everything else merges on green CI. One glob per line; **
+# spans folders.
 # Add a path when a mistake there would lose players' data, slow every server, or let a change skip these checks.
 
 # The checks themselves: a PR could otherwise switch off what reviews it. Build files can drop coverageCheck, the
 # fast tests or a PIT threshold, so they count too.
 .github/**
+# The council's own instructions: weakening them weakens the review the gate trusts.
+.claude/skills/council/**
 gradle/**
 **build.gradle.kts
 settings.gradle.kts
