@@ -21,7 +21,6 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
-import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
@@ -36,33 +35,79 @@ import org.slf4j.LoggerFactory;
  */
 final class JsonEconomyProvider implements EconomyProvider {
     private static final Logger LOG = LoggerFactory.getLogger("Hadron");
-    private static final long SAVE_DELAY_SECONDS = 5;
+    static final long SAVE_DELAY_SECONDS = 5;
     private static final int FORMAT = 1;
 
     private final Path file;
     private final Path temp;
     /** Account to currency name to balance. */
     private final Map<UUID, Map<String, BigDecimal>> accounts = new HashMap<>();
-    private final ScheduledThreadPoolExecutor saver;
-    private ScheduledFuture<?> pending;
+    private final SaveTimer saver;
+    private boolean pending;
     private boolean dirty;
     private boolean closed;
     /** Why the file couldn't be loaded, or null when it loaded (or didn't exist yet). */
     private String broken;
 
+    /**
+     * When a save runs, {@link #SAVE_DELAY_SECONDS} after the first unsaved change. The real one is a daemon thread on
+     * the wall clock; a test passes its own and runs the saves itself, so nothing it checks depends on timing.
+     */
+    interface SaveTimer {
+        /** Runs the save after {@code delaySeconds}, on any thread, unless {@link #stop} comes first. */
+        void schedule(Runnable save, long delaySeconds);
+
+        /** Drops saves still waiting, waits for one already running, and accepts no more. */
+        void stop();
+
+        boolean stopped();
+
+        /** The wall clock, on one daemon thread. */
+        static SaveTimer background() {
+            ScheduledThreadPoolExecutor executor = new ScheduledThreadPoolExecutor(1, r -> {
+                Thread t = new Thread(r, "Hadron economy saver");
+                t.setDaemon(true);
+                return t;
+            });
+            executor.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+            return new SaveTimer() {
+                @Override
+                public void schedule(Runnable save, long delaySeconds) {
+                    executor.schedule(save, delaySeconds, TimeUnit.SECONDS);
+                }
+
+                @Override
+                public void stop() {
+                    executor.shutdown();
+                    try {
+                        // A save already running finishes; one only waiting is dropped.
+                        executor.awaitTermination(30, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+
+                @Override
+                public boolean stopped() {
+                    return executor.isShutdown();
+                }
+            };
+        }
+    }
+
     JsonEconomyProvider(Path file) {
+        this(file, SaveTimer.background());
+    }
+
+    JsonEconomyProvider(Path file, SaveTimer saver) {
         this.file = file;
         this.temp = file.resolveSibling(file.getFileName() + ".tmp");
-        this.saver = new ScheduledThreadPoolExecutor(1, r -> {
-            Thread t = new Thread(r, "Hadron economy saver");
-            t.setDaemon(true);
-            return t;
-        });
-        saver.setExecuteExistingDelayedTasksAfterShutdownPolicy(false);
+        this.saver = saver;
     }
 
     synchronized void load() {
         accounts.clear();
+        broken = null;
         if (!Files.exists(file)) return;
         try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
             JsonObject root = JsonParser.parseReader(reader).getAsJsonObject();
@@ -128,8 +173,9 @@ final class JsonEconomyProvider implements EconomyProvider {
 
     private void changed() {
         dirty = true;
-        if (pending == null && !saver.isShutdown()) {
-            pending = saver.schedule(this::save, SAVE_DELAY_SECONDS, TimeUnit.SECONDS);
+        if (!pending && !saver.stopped()) {
+            pending = true;
+            saver.schedule(this::save, SAVE_DELAY_SECONDS);
         }
     }
 
@@ -137,14 +183,9 @@ final class JsonEconomyProvider implements EconomyProvider {
     void close() {
         synchronized (this) {
             if (closed) return;
-            saver.shutdown();
         }
-        try {
-            // A save already running finishes; one only waiting is dropped, and done just below instead.
-            saver.awaitTermination(30, TimeUnit.SECONDS);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+        // Outside the lock: a save already running needs it to finish. One only waiting is done just below instead.
+        saver.stop();
         save();
         synchronized (this) {
             closed = true;
@@ -166,7 +207,7 @@ final class JsonEconomyProvider implements EconomyProvider {
     private void saveLocked() {
         String json;
         synchronized (this) {
-            pending = null;
+            pending = false;
             if (!dirty || broken != null) return;
             json = serialize();
             dirty = false;
@@ -176,7 +217,7 @@ final class JsonEconomyProvider implements EconomyProvider {
         } catch (IOException | RuntimeException e) {
             synchronized (this) {
                 dirty = true;
-                if (saver.isShutdown()) {
+                if (saver.stopped()) {
                     LOG.error("Economy: saving " + file + " at stop failed, so changes since the last save are lost", e);
                 } else {
                     LOG.error("Economy: saving " + file + " failed; trying again in " + SAVE_DELAY_SECONDS + "s", e);

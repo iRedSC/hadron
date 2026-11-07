@@ -61,8 +61,7 @@ public final class EconomyCore implements Economy {
         });
     }
 
-    private final PluginHost host;
-    private final MinecraftServer minecraft;
+    private final Host host;
     private final File folder;
     private final JsonEconomyProvider builtIn;
     /** By name, in registration order. Guarded by itself. */
@@ -86,12 +85,52 @@ public final class EconomyCore implements Economy {
         }
     }
 
+    /**
+     * What the economy asks of the running server. The real one is {@link #EconomyCore(PluginHost, MinecraftServer,
+     * File)}'s; the fast tests stand in their own, so every decision here runs without a server.
+     */
+    interface Host {
+        /** Loaded or enabled, and not unloading. */
+        boolean isAlive(JavaPlugin plugin);
+
+        /** Runs every handler that hears the event, on this thread. */
+        void post(ResourceEvent event);
+
+        /** The {@link EconomyProvider} a plugin registered as a service, or null for none. */
+        EconomyProvider registeredProvider();
+
+        boolean isOnline(UUID account);
+    }
+
     /** @param folder the server's {@code hadron/} folder, for {@code economy.yml} and {@code economy.json} */
     public EconomyCore(PluginHost host, MinecraftServer minecraft, File folder) {
+        this(new Host() {
+            @Override
+            public boolean isAlive(JavaPlugin plugin) {
+                return host.isAlive(plugin);
+            }
+
+            @Override
+            public void post(ResourceEvent event) {
+                host.post(event);
+            }
+
+            @Override
+            public EconomyProvider registeredProvider() {
+                return host.server().getServicesManager().load(EconomyProvider.class);
+            }
+
+            @Override
+            public boolean isOnline(UUID account) {
+                return minecraft.getPlayerList().getPlayer(account) != null;
+            }
+        }, folder, new JsonEconomyProvider(new File(folder, "economy.json").toPath()));
+    }
+
+    EconomyCore(Host host, File folder, JsonEconomyProvider builtIn) {
         this.host = host;
-        this.minecraft = minecraft;
         this.folder = folder;
-        this.builtIn = new JsonEconomyProvider(new File(folder, "economy.json").toPath());
+        this.builtIn = builtIn;
         currencies.put(Economy.MONEY.name(), new Registered(Economy.MONEY, null));
     }
 
@@ -158,7 +197,8 @@ public final class EconomyCore implements Economy {
         return currency;
     }
 
-    private void forget(JavaPlugin plugin) {
+    /** Drops every currency the plugin registered; runs as it disables. */
+    void forget(JavaPlugin plugin) {
         synchronized (currencies) {
             for (Iterator<Registered> it = currencies.values().iterator(); it.hasNext(); ) {
                 if (it.next().owner() == plugin) it.remove();
@@ -417,7 +457,7 @@ public final class EconomyCore implements Economy {
      * JSON file, so balances never split between two stores.
      */
     private EconomyProvider provider() {
-        EconomyProvider registered = host.server().getServicesManager().load(EconomyProvider.class);
+        EconomyProvider registered = host.registeredProvider();
         if (registered != null) {
             pluginProvider = registered.getClass().getName();
             return registered;
@@ -439,7 +479,7 @@ public final class EconomyCore implements Economy {
     }
 
     private boolean isOnline(UUID account) {
-        return minecraft.getPlayerList().getPlayer(account) != null;
+        return host.isOnline(account);
     }
 
     private BigDecimal balance(EconomyProvider provider, UUID account, Currency currency) {
