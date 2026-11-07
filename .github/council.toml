@@ -1,18 +1,19 @@
 # Who sits on the council and what passes. Read by the council skill (.claude/skills/council/SKILL.md) to start its
 # delegates and by the gate (.github/scripts/council_gate.py) to check the PR's "Council review" table, so the two
-# can't disagree. Two providers (Claude and Codex), a large and a small model from each.
+# can't disagree. Two providers (Claude and Codex): from each, a large model reviews deeply, a small one asks
+# questions and a small one at low effort explains.
 #
 # Three roles:
 # - "deep": reviews the change in full and scores it out of 10. Its last round must score at least min_score.
 # - "questions": a small model told to ask dumb questions about why the code was done this way. It doesn't score; it
-#   records "<asked> asked, <open> open", and passes when no question is left open (each answered in the PR, or the
-#   code changed so the question no longer applies).
-# - "explain": an old, small model that explains what changed and how it works, from the code alone. The author marks
+#   records "<asked> asked, <open> open", and passes when no question is left open, each settled in the skill's
+#   order (make it impossible to ask, rename, a checked comment, and a PR answer only for history or a choice).
+# - "explain": a small model, given only a snapshot of the code, that explains what changed and how it works. The author marks
 #   each place the explanation is wrong; it records "<misread> misread, <open> open", and passes when none is open:
 #   a misreading the code caused is fixed in the code, one from the model's own limits is answered in the PR.
 #
-# Options go to delegate_task as given: `effort` for Claude models that have it, `reasoningEffort` for Codex models,
-# `thinking` for Claude models whose only option is thinking on or off.
+# Each member's one option goes to delegate_task as given: `effort` for Claude models, `reasoningEffort` for Codex
+# models, `thinking` for a Claude model whose only option is thinking on or off. The gate refuses any other key.
 
 # Every deep reviewer's score in the last round must be at least this, out of 10.
 min_score = 8
@@ -46,12 +47,12 @@ model = "gpt-6.1-terra"
 reasoningEffort = "high"
 
 [[member]]
-name = "Claude Haiku 4.5"
+# The same model as the question asker, at low effort and with a different brief, so its name says which seat it is.
+name = "Claude Haiku 5.5 (explainer)"
 role = "explain"
 provider = "claudeAgent"
-model = "claude-haiku-4-5"
-# Haiku 4.5's only option is thinking, kept on.
-thinking = true
+model = "claude-haiku-5-5"
+effort = "low"
 
 [[member]]
 name = "GPT-6 Luna"

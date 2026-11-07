@@ -19,31 +19,48 @@ accepts a review only for the commit it names.
 ## Members
 
 Read `.github/council.toml`. Start one delegate per `[[member]]`, all in parallel, with `delegate_task` and that
-member's `provider`, `model` and its option (`effort`, `reasoningEffort` or `thinking`, passed as given; call
-`orchestrator_capabilities` first). If a member can't be started,
-say so and stop; never swap in a different model. Every delegate is read-only: it reads, runs builds and tests, and
-never edits, commits or pushes.
+member's `provider`, `model` and its one option (`effort`, `reasoningEffort` or `thinking`, passed as given; call
+`orchestrator_capabilities` first). Every member runs in every round, so the table's last column is one pass for all of
+them. If a member can't be started, say so and stop; never swap in a different model. The owner changes the seat in
+`council.toml`. Every delegate is read-only: it reads, runs builds and tests, and never edits, commits or pushes.
 
-Give every delegate: the PR number and URL, the head SHA, the diff command (`git diff origin/main...<sha>`), the
-worktree path to read, and what the change is for. Tell deep reviewers to read `AGENTS.md`, `docs/design.md` and
-`docs/coding-standards.md` ("How to review") first. Don't tell anyone the passing score: knowing the target inflates
-scores.
+Don't tell anyone the passing score: knowing the target inflates scores. Each role gets its own brief, below, with the
+placeholders filled in. Write the brief out; don't paraphrase the quoted parts.
 
-**Deep reviewers** (`role = "deep"`): review the whole change for correctness, broken promises in the docs, and what
-could appear to work while wrong. They may run tests. They report findings as `docs/coding-standards.md` asks
-(count first, file and line, worst first, no nits), then a score out of 10 for the change as it stands.
+**Deep reviewers** (`role = "deep"`) get the PR number and URL, the head SHA, the worktree path, the diff command
+(`git diff origin/main...<sha>`), what the change is for, and:
 
-**Question askers** (`role = "questions"`): tell them, in these words, to "ask dumb questions" about why the code was
-done this way. They are the newcomer who doesn't know the history: why this and not the obvious alternative, why
-this name, why this is here and not there, what happens if this is empty, why this test proves what its name says.
-Each question names a file and line. They don't score and don't propose fixes. A question that only has an answer
-in the author's head is the point.
+> Read AGENTS.md, docs/design.md and docs/coding-standards.md ("How to review") first. Review the whole change for
+> correctness, broken promises in the docs, and anything that could appear to work while wrong. You may run builds
+> and tests. Report findings as coding-standards.md asks: a count first, worst first, file and line, the concrete
+> failure, a suggested fix; no nits. Then `Score: N/10` on its own line.
 
-**Explainers** (`role = "explain"`): old, small models that know nothing of Hadron's history, as a plugin-writing agent
-won't. Give them only the diff command and the worktree, not what the change is for, and ask them to explain what
-changed and how it works, from the code alone: what each changed piece does, how they fit, and what happens when
-it runs. They don't judge or score. Their explanation tests whether the change is clear, and whether it does what the
-author believes it does.
+**Question askers** (`role = "questions"`) get the same context, and:
+
+> Ask dumb questions about why the code was done this way. You are the newcomer who doesn't know the history: why this
+> and not the obvious alternative, why this name, why this is here and not there, what happens if this is empty or
+> missing, why this proves what it says. Each question names a file and line. Don't score and don't propose fixes.
+
+From round 2 on, also give them the PR's "Council questions" section and add: "First, for each earlier question, say
+settled or open, and why." So a question stays open across rounds until its asker agrees it's settled. Ask each to end
+with `Tally: <asked> asked, <open> open`.
+
+**Explainers** (`role = "explain"`) stand in for a plugin-writing agent that knows nothing of Hadron, so they must not
+learn what the change is for. Give them a snapshot with no history, not the worktree:
+
+```bash
+dir=$(mktemp -d /tmp/council-explain-XXXX)
+git archive <head-sha> | tar -x -C "$dir"            # the code at the head, without .git, commit messages or the PR
+git diff origin/main...<head-sha> > "$dir.patch"     # what changed
+```
+
+and only:
+
+> In <dir> is a codebase, and <dir>.patch is a change to it. Don't run git or gh, and don't read anything outside
+> <dir> and <dir>.patch. From the code alone, explain what changed and how it works: what each changed piece does,
+> how the pieces fit, and what happens step by step when it runs or is used. Name files, functions and the exact
+> conditions. Don't judge, score or suggest changes. Where you're unsure, say what you think it does and that you're
+> unsure.
 
 ## After a round
 
@@ -52,35 +69,42 @@ Summarize the useful findings, disagreements and questions. Then for each:
 - **A finding you agree with:** fix it.
 - **A finding you disagree with:** say why in the PR, with evidence.
 - **A question:** settle it in this order, taking the first that fits:
-  1. **Make it impossible to ask**: a type, a check or a test that answers it for good.
+  1. **Make it impossible to ask**: a type, a check or a test that answers it for good. This fits questions about
+     behaviour ("what happens if this is empty?"), not about why a design was chosen.
   2. **Rename** so the answer is obvious from the code.
   3. **A comment**, only for a why the code can't show, and only after checking the comment is true against the code.
   4. **An answer in the PR** under "Council questions", when the question is about history or a choice, not the code.
 
   Don't answer a question with a comment that only restates it. A question is open until it is settled one of these
-  ways.
+  ways and its asker agrees.
 - **An explanation:** compare it with what the code really does, and list each place it's wrong under "Council
-  misreadings". A misreading the code caused (an unclear name, logic in a surprising place, a stale comment) is fixed
-  in the code, in the same order as a question. A misreading from the model's own limits is answered in the PR with
-  the reason. An explanation that matches what you believed but not what the code does is a bug in the code or in your
-  belief: find out which before going on. A misreading is open until fixed or answered.
+  misreadings", quoting the explanation. Counting misreadings is your judgement, not the explainer's, so the quotes let
+  anyone check it. A misreading the code caused (an unclear name, logic in a surprising place, a stale comment) is
+  fixed in the code, in the same order as a question. A misreading you put down to the model's own limits is answered
+  in the PR with the reason; if the next round's explainers misread the same thing, it was the code after all, and it's
+  fixed in the code. An explanation that matches what you believed but not what the code does is a bug in the code or
+  in your belief: find out which before going on. A misreading is open until fixed or answered.
 
-Commit, push, and start a fresh round on the new head. Each full pass is one round.
+Commit, push, and run the next pass on the new head.
 
 **Keep scope small.** Rounds must not grow the change. A good idea outside the PR's purpose goes in the PR as a
 follow-up, not into the code.
 
 ## Three rounds at most, then reconsider the architecture
 
-A council gets at most 3 rounds. Findings that keep coming are a sign the design is wrong, not that it needs one more
-patch.
+A council gets at most 3 rounds, and the gate refuses a table with more. Findings that keep coming are a sign the
+design is wrong, not that it needs one more patch.
 
 - **Before round 3**, look at what rounds 1 and 2 found. If the findings cluster on one mechanism (the same function,
   the same kind of check, fixes that each needed another fix), that mechanism is the problem: change its design so the
-  whole class of finding can't happen, rather than fixing the instances. Say in the PR which findings the redesign
-  removes and why.
-- **If round 3 doesn't pass, there is no round 4.** Stop changing code and reconsider the architecture:
-  1. List every finding across the three rounds, grouped by the part of the design it came from.
+  whole class of finding can't happen, rather than fixing the instances. A redesign within the PR's purpose is yours to
+  make; say in the PR which findings it removes and why. One that changes the purpose is the owner's call.
+- **A Confirm pass** may follow the last round, once, when that round's deep reviewers all passed and only questions
+  or misreadings were left. Settle them, push, and run the whole council again as "Confirm". It must pass with nothing
+  left to fix; anything it finds means the architecture gets reconsidered, below.
+- **If round 3 (or its Confirm pass) doesn't pass, there is no round 4.** Stop changing code and reconsider the
+  architecture:
+  1. List every finding across the rounds, grouped by the part of the design it came from.
   2. Name the root cause: the assumption or structure those findings share.
   3. Describe at least two different designs that would remove that root cause, with what each costs (size,
      speed, what it can't do) and which findings each makes impossible. One may be "don't build this".
@@ -91,10 +115,9 @@ patch.
 
 ## Recording it
 
-When the last round passes (every deep reviewer at or above `min_score`, no question or misreading open), put this
-section in the
-PR description, before the model and harness line at the end. Edit the description; don't post a comment. The
-`Reviewed commit` is the full head SHA the last round reviewed.
+When the last pass passes (every deep reviewer at or above `min_score`, no question or misreading open), put this
+section in the PR description, before the model and harness line at the end. Edit the description; don't post a
+comment. `Reviewed commit` is the full head SHA the last pass reviewed. `Rounds` counts the Round columns, not Confirm.
 
 ```markdown
 ## Council review
@@ -102,15 +125,17 @@ PR description, before the model and harness line at the end. Edit the descripti
 Reviewed commit: 0123456789abcdef0123456789abcdef01234567
 Rounds: 2
 
-| Delegate | Round 1 | Round 2 |
-| --- | --- | --- |
-| GPT-6.1 Sol | 7/10 | 9/10 |
-| Claude Opus 5.5 | 8/10 | 9/10 |
-| Claude Haiku 5.5 | 6 asked, 3 open | 7 asked, 0 open |
-| Claude Haiku 4.5 | 3 misread, 2 open | 1 misread, 0 open |
+| Delegate | Round 1 | Round 2 | Confirm |
+| --- | --- | --- | --- |
+| GPT-6.1 Sol | 7/10 | 9/10 | 9/10 |
+| Claude Opus 5.5 | 8/10 | 9/10 | 9/10 |
+| Claude Haiku 5.5 | 6 asked, 3 open | 7 asked, 1 open | 7 asked, 0 open |
+| Claude Haiku 5.5 (explainer) | 3 misread, 2 open | 1 misread, 1 open | 1 misread, 0 open |
 ```
 
-Names must match `council.toml`. A deep reviewer that gives no score is `no score`; never invent one. Write only what
-the delegates actually returned: this table is what the gate trusts in place of a person.
+Names must match `council.toml`, and every member has a result in every column. A deep reviewer that gives no score
+is `no score`; never invent one. Scores and questions are what the delegates returned; misreadings are your count
+from their explanations, with the quotes under "Council misreadings". This table is what the gate trusts in place of a
+person.
 
 If there is no PR, give the same results in the final reply.

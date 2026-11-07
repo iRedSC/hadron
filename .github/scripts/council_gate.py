@@ -7,15 +7,16 @@ A passing review is a "## Council review" section in the PR description, as the 
     Reviewed commit: <the PR's head SHA>
     Rounds: 2
 
-    | Delegate | Round 1 | Round 2 |
-    | --- | --- | --- |
-    | GPT-6.1 Sol | 7/10 | 9/10 |
-    | Claude Haiku 5.5 | 6 asked, 2 open | 6 asked, 0 open |
-    | Claude Haiku 4.5 | 3 misread, 1 open | 1 misread, 0 open |
+    | Delegate | Round 1 | Round 2 | Confirm |
+    | --- | --- | --- | --- |
+    | GPT-6.1 Sol | 7/10 | 9/10 | 9/10 |
+    | Claude Haiku 5.5 | 6 asked, 2 open | 6 asked, 1 open | 6 asked, 0 open |
+    | Claude Haiku 4.5 | 3 misread, 1 open | 1 misread, 1 open | 1 misread, 0 open |
     ...
 
-Every member in .github/council.toml needs a row. In its last round a deep reviewer must score at least min_score, a
-question asker must have no question left open, and an explainer no misreading left open. The review counts only for the commit it names, so a push after it
+Every member in .github/council.toml needs a row with a result in every column, and is judged on the last one: a deep
+reviewer must score at least min_score, a question asker must have no question left open, and an explainer no
+misreading left open. At most 3 rounds, then at most one Confirm pass. The review counts only for the commit it names, so a push after it
 needs a fresh round.
 
 Reads BASE and HEAD (commit SHAs) and PR_BODY from the environment. CI runs main's copy of this script, the path list
@@ -68,15 +69,50 @@ def changed_files(base: str, head: str) -> list[str]:
 
 
 ROLES = ("deep", "questions", "explain")
+# The one option each provider takes, as delegate_task names it. Haiku 4.5 takes `thinking` instead of `effort`.
+OPTIONS = ("effort", "reasoningEffort", "thinking")
+MAX_ROUNDS = 3
+CONFIRM = "Confirm"
 
 
-def council() -> tuple[int, list[tuple[str, str]]]:
-    config = tomllib.loads(COUNCIL_FILE.read_text())
-    return int(config["min_score"]), [(m["name"], m["role"]) for m in config["member"]]
+def council() -> dict:
+    return tomllib.loads(COUNCIL_FILE.read_text())
+
+
+def config_problems(config: dict) -> list[str]:
+    """Why .github/council.toml can't run a council; empty when it can."""
+    problems = []
+    if not isinstance(config.get("min_score"), int):
+        problems.append(f"{COUNCIL_FILE} needs min_score = <a whole number out of 10>.")
+    members = config.get("member", [])
+    for m in members:
+        name = m.get("name", "<no name>")
+        for key in ("name", "role", "provider", "model"):
+            if not m.get(key):
+                problems.append(f"{COUNCIL_FILE}: member {name} has no {key}.")
+        if m.get("role") and m["role"] not in ROLES:
+            problems.append(f"{COUNCIL_FILE}: {name} has role \"{m['role']}\"; roles are {', '.join(ROLES)}.")
+        unknown = sorted(set(m) - {"name", "role", "provider", "model", *OPTIONS})
+        if unknown:
+            problems.append(f"{COUNCIL_FILE}: {name} has {', '.join(unknown)}, which delegate_task wouldn't use; "
+                            f"its option is one of {', '.join(OPTIONS)}.")
+    names = [m.get("name") for m in members]
+    if len(set(names)) != len(names):
+        problems.append(f"{COUNCIL_FILE}: two members share a name, so their rows in the table can't be told apart.")
+    for role in ROLES:
+        if not any(m.get("role") == role for m in members):
+            problems.append(f"{COUNCIL_FILE} has no \"{role}\" member; a council needs at least one of each role "
+                            f"({', '.join(ROLES)}).")
+    return problems
 
 
 def review_problems(body: str, head: str, min_score: int, members: list[tuple[str, str]]) -> list[str]:
-    """Why the PR description's council review doesn't pass for this head commit; empty when it does."""
+    """Why the PR description's council review doesn't pass for this head commit; empty when it does.
+
+    The table's columns are rounds: "Round 1" up to "Round 3", then at most one "Confirm" pass (the whole council again
+    after settling only questions and misreadings). Every member is judged on the last column, so results from
+    different rounds can't pass together.
+    """
     section = re.search(r"^## Council review\s*$(.*?)(?=^## |\Z)", body, re.M | re.S)
     if not section:
         return ["The PR description has no \"## Council review\" section."]
@@ -88,48 +124,72 @@ def review_problems(body: str, head: str, min_score: int, members: list[tuple[st
     elif not head.startswith(commit.group(1)) or len(commit.group(1)) < 12:
         problems.append(f"The council reviewed {commit.group(1)}, but the PR's head is {head[:12]}: commits pushed "
                         "after the review need a fresh round (and at least 12 characters of the SHA).")
-    rows = {}
-    for line in text.splitlines():
-        cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) >= 2 and cells[0] and cells[0] != "Delegate" and not set(cells[0]) <= set("-: "):
-            rows[cells[0]] = cells[1:]
+    table = [[c.strip() for c in line.strip().strip("|").split("|")] for line in text.splitlines()
+             if line.strip().startswith("|")]
+    header = next((row for row in table if row and row[0] == "Delegate"), None)
+    if header is None:
+        return problems + ["The council review has no table with a \"Delegate\" header row."]
+    columns = header[1:]
+    rounds = [c for c in columns if c != CONFIRM]
+    if rounds != [f"Round {i}" for i in range(1, len(rounds) + 1)] or columns != rounds + [CONFIRM] * (
+            len(columns) - len(rounds)) or columns.count(CONFIRM) > 1 or not rounds:
+        problems.append(f"The table's columns are {columns}; they must be \"Round 1\" onwards, then at most one "
+                        f"\"{CONFIRM}\".")
+    if len(rounds) > MAX_ROUNDS:
+        problems.append(f"The council ran {len(rounds)} rounds; it gets at most {MAX_ROUNDS}. Past that, stop and "
+                        "reconsider the architecture (.claude/skills/council/SKILL.md, \"Three rounds at most\"), and "
+                        "start a new council from round 1 on the redesign.")
+    stated = re.search(r"^Rounds:\s*(\d+)\s*$", text, re.M)
+    if not stated or int(stated.group(1)) != len(rounds):
+        problems.append(f"The \"Rounds:\" line must say {len(rounds)}, the number of Round columns.")
+    rows = {row[0]: row[1:] for row in table if row and row[0] not in ("Delegate", "") and not set(row[0]) <= set("-: ")}
     for name, role in members:
         if name not in rows:
             problems.append(f"No row for council member \"{name}\" (names must match {COUNCIL_FILE}).")
             continue
-        last = rows[name][-1] if rows[name] else ""
+        if len(rows[name]) != len(columns):
+            problems.append(f"{name}'s row has {len(rows[name])} result(s) for {len(columns)} column(s): every member "
+                            "reports in every round, so the last column is the same pass for all of them.")
+            continue
+        last = rows[name][-1]
         if role == "deep":
             score = re.fullmatch(r"(\d+(?:\.\d+)?)\s*/\s*10", last)
             if not score:
-                problems.append(f"{name}'s last round is \"{last}\", not a score out of 10.")
+                problems.append(f"{name}'s last column is \"{last}\", not a score out of 10.")
             elif float(score.group(1)) < min_score:
-                problems.append(f"{name} scored {last} in the last round; each deep reviewer needs at least "
+                problems.append(f"{name} scored {last} in the last column; each deep reviewer needs at least "
                                 f"{min_score}/10.")
         elif role == "questions":
             asked = re.fullmatch(r"(\d+)\s+asked,\s*(\d+)\s+open", last)
             if not asked:
-                problems.append(f"{name}'s last round is \"{last}\", not \"<n> asked, <n> open\".")
+                problems.append(f"{name}'s last column is \"{last}\", not \"<n> asked, <n> open\".")
             elif int(asked.group(2)) > 0:
-                problems.append(f"{name} still has {asked.group(2)} open question(s); answer each in the PR or change "
-                                "the code so it no longer applies, then rerun the round.")
-        else:
+                problems.append(f"{name} still has {asked.group(2)} open question(s). Settle each in the skill's "
+                                "order (make it impossible to ask, rename, a checked comment, and a PR answer only for "
+                                "history or a choice), then rerun.")
+        elif role == "explain":
             misread = re.fullmatch(r"(\d+)\s+misread,\s*(\d+)\s+open", last)
             if not misread:
-                problems.append(f"{name}'s last round is \"{last}\", not \"<n> misread, <n> open\".")
+                problems.append(f"{name}'s last column is \"{last}\", not \"<n> misread, <n> open\".")
             elif int(misread.group(2)) > 0:
-                problems.append(f"{name}'s explanation still has {misread.group(2)} open misreading(s); fix the code a "
+                problems.append(f"{name}'s explanation still has {misread.group(2)} open misreading(s). Fix the code a "
                                 "misreading came from, or answer in the PR why it's the model's own limit, then rerun.")
+        else:
+            problems.append(f"{name} has role \"{role}\"; roles are {', '.join(ROLES)}.")
     return problems
 
 
 def main() -> int:
     base, head = os.environ["BASE"], os.environ["HEAD"]
     rules = patterns()
-    min_score, members = council()
-    roles = [role for _, role in members]
-    if any(role not in ROLES for role in roles) or "deep" not in roles or "questions" not in roles:
-        print(f"{COUNCIL_FILE} needs at least one \"deep\" and one \"questions\" member, and no other roles.")
+    config = council()
+    bad_config = config_problems(config)
+    if bad_config:
+        for problem in bad_config:
+            print(problem)
         return 1
+    min_score = config["min_score"]
+    members = [(m["name"], m["role"]) for m in config["member"]]
     # Globs are checked against the PR's tree, so a PR that renames a protected file away also kills its glob here.
     tracked = subprocess.run(
         ["git", "ls-tree", "-r", "--name-only", "-z", head], capture_output=True, text=True, check=True
@@ -149,8 +209,8 @@ def main() -> int:
         print(f"  {name}  (matches {glob})")
     problems = review_problems(os.environ.get("PR_BODY") or "", head, min_score, members)
     if not problems:
-        print(f"Passed: every deep reviewer scored at least {min_score}/10, and no question or misreading is open, on "
-              f"{head[:12]}.")
+        print(f"Passed: in the council's last pass every deep reviewer scored at least {min_score}/10, and no question "
+              f"or misreading is open, on {head[:12]}.")
         return 0
     print()
     for problem in problems:
