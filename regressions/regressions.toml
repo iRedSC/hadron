@@ -246,7 +246,7 @@ id = "settle-counts-chunk-loading"
 bug = "Settling counted chunk loading against its budget, failing a plain join on a strained machine."
 fix = "65c7f57"
 paths = [
-    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWorld.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWorld.java",
 ]
 unguarded = "Shows only under machine load: no deterministic test makes chunk loading outlast the budget."
 
@@ -328,7 +328,7 @@ id = "settle-gives-up-silently"
 bug = "Settling gave up silently after its budget or a silent network thread, so a negative assertion right after an action could pass early."
 fix = "c444c92"
 paths = [
-    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWorld.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWorld.java",
 ]
 guards = [
     { test = "SettleTests.anActionFailsWhenWorkKeepsArrivingWithoutATick", tier = "in-game" },
@@ -341,7 +341,7 @@ id = "test-filter-case-drops-load-failure"
 bug = "A test class that failed to load was dropped, and the run went green, when a method pattern named it in another case."
 fix = "2f29932"
 paths = [
-    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestFilter.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestFilter.java",
 ]
 guards = [
     { test = "TestFilterTest.aClassThatCouldNotLoadIsReportedWhenAMethodPatternNamesItInAnyCase", tier = "fast" },
@@ -363,7 +363,7 @@ id = "test-client-moved-too-quickly-loop"
 bug = "A test client answered every teleport at once, so after a long teleport it and the server corrected each other forever between ticks."
 fix = "002722c"
 paths = [
-    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestClient.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestClient.java",
 ]
 guards = [
     { test = "SettleTests.aLongTeleportSettlesWhereThePlayerWent", tier = "in-game" },
@@ -376,7 +376,7 @@ fix = "e5f139f"
 paths = [
     "gradle/hadron-test.gradle.kts",
     "gradle/hadron-test-server.gradle.kts",
-    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWatch.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWatch.java",
 ]
 unguarded = "Build scripts and the watch server's lifecycle: no test runs hadronWatch."
 

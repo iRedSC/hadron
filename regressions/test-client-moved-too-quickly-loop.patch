@@ -1,7 +1,7 @@
-diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestClient.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestClient.java
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestClient.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestClient.java
 index eb58ff9..c7d9fcc 100644
---- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestClient.java
-+++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestClient.java
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestClient.java
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestClient.java
 @@ -170,16 +170,6 @@ final class TestClient implements TestPlayer {
      private float clientYRot, clientXRot;
      /** Ticks since this client last sent its position; a vanilla client reminds the server every 20. */

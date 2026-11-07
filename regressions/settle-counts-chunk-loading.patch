@@ -1,7 +1,7 @@
-diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWorld.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWorld.java
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWorld.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWorld.java
 index 81c7ce1..eaffa7c 100644
---- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWorld.java
-+++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/TestWorld.java
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWorld.java
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWorld.java
 @@ -46,10 +46,7 @@ final class TestWorld implements TestContext {
      private static final int FLOOR_RADIUS = 8;
      private static final int JOIN_TICKS = 200;

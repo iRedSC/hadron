@@ -32,10 +32,10 @@ index 2a0271e..f0ef9b1 100644
      /** Subscribes every {@code @EventHandler} method; all or nothing. */
      List<Subscription> subscribe(Listener listener, String plugin, Logger log) {
 diff --git a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-index 644791c..807d3e5 100644
+index 5ce626b..aa424ca 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-@@ -640,19 +640,12 @@ public final class PluginHost implements PluginManager {
+@@ -675,19 +675,12 @@ public final class PluginHost implements PluginManager {
              Entry n = entries.get(need);
              if (n != null && n.state instanceof State.Running) deps.add(((State.Running) n.state).loader);
          }
@@ -56,15 +56,29 @@ index 644791c..807d3e5 100644
          } catch (IOException ex) {
              fail(e, "couldn't copy its jar to plugins/.loaded (" + ex.getMessage() + ")", ex);
              return;
-@@ -764,25 +757,16 @@ public final class PluginHost implements PluginManager {
-     /** Undoes a plugin that failed partway through loading or enabling. */
-     private void abandon(Entry e, State.Running running, Throwable t) {
-         Throwable cause = t instanceof InvocationTargetException && t.getCause() != null ? t.getCause() : t;
--        String why = cause instanceof PluginException ? cause.getMessage() : "threw " + cause;
+@@ -857,8 +850,16 @@ public final class PluginHost implements PluginManager {
+         String why = cause instanceof PluginException ? cause.getMessage()
+                 : step + " threw " + cause + pluginFrame(cause, running.loader) + ". Fix that there; the stack trace "
+                         + "is in the server log";
 -        teardown(e, running, new State.Failed(why), false);
 -        report(e, why, cause);
--    }
--
++        running.loader.beginUnload();
++        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ASYNC_GRACE_MILLIS);
++        removeEvents(running, deadline);
++        JavaPlugin plugin = running.loader.plugin();
++        if (plugin != null) scheduler.awaitAsync(plugin, remainingGraceMillis(deadline));
++        undoAll(running, e.name);
++        if (plugin != null) runDisableHooks(plugin);
++        if (enabledOrder.remove(e) && plugin != null) post(new PluginDisableEvent(plugin));
++        running.loader.dispose();
++        fail(e, why, cause);
+     }
+ 
+     /** " at File.java:line", the first frame in the plugin's own code, or "" when none of the trace is its. */
+@@ -873,22 +874,6 @@ public final class PluginHost implements PluginManager {
+         return "";
+     }
+ 
 -    /**
 -     * {@code plugins/<name>/}, refused unless it is a folder of its own directly in {@code plugins/}: never the jar
 -     * cache Hadron empties, the switched-off list, or a path out of {@code plugins/}. plugin.yml's name check already
@@ -79,20 +93,12 @@ index 644791c..807d3e5 100644
 -                    + "plugin.yml to start with a letter or digit, such as name: MyPlugin");
 -        }
 -        return dir.toFile();
-+        running.loader.beginUnload();
-+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ASYNC_GRACE_MILLIS);
-+        removeEvents(running, deadline);
-+        JavaPlugin plugin = running.loader.plugin();
-+        if (plugin != null) scheduler.awaitAsync(plugin, remainingGraceMillis(deadline));
-+        undoAll(running, e.name);
-+        if (plugin != null) runDisableHooks(plugin);
-+        if (enabledOrder.remove(e) && plugin != null) post(new PluginDisableEvent(plugin));
-+        running.loader.dispose();
-+        fail(e, cause instanceof PluginException ? cause.getMessage() : "threw " + cause, cause);
-     }
- 
+-    }
+-
      /** Whether a mod jar has the class, which would shadow the plugin's own copy. */
-@@ -795,43 +779,30 @@ public final class PluginHost implements PluginManager {
+     private boolean visibleToMods(String className) {
+         return parent.getResource(className.replace('.', '/') + ".class") != null;
+@@ -899,44 +884,31 @@ public final class PluginHost implements PluginManager {
              if (!(e.state instanceof State.Failed) || next instanceof State.Off) e.state = next;
              return;
          }
@@ -117,8 +123,9 @@ index 644791c..807d3e5 100644
              int stillRunning = scheduler.awaitAsync(plugin, remainingGraceMillis(deadline));
              if (stillRunning > 0) {
                  LOG.warn(e.name + " still had " + stillRunning + " background task(s) running after "
--                        + ASYNC_GRACE_MILLIS / 1000 + "s; " + (callOnDisable ? "disabling" : "stopping") + " it anyway");
-+                        + ASYNC_GRACE_MILLIS / 1000 + "s; disabling it anyway");
+-                        + ASYNC_GRACE_MILLIS / 1000 + "s; " + (callOnDisable ? "disabling" : "stopping") + " it anyway. "
++                        + ASYNC_GRACE_MILLIS / 1000 + "s; disabling it anyway. "
+                         + "A background task that loops should return once isEnabled() is false");
              }
              runBeforeDisableHooks(plugin, deadline);
 -            if (callOnDisable && running instanceof State.Enabled) {
@@ -145,7 +152,7 @@ index 644791c..807d3e5 100644
      }
  
      /**
-@@ -878,10 +849,6 @@ public final class PluginHost implements PluginManager {
+@@ -983,10 +955,6 @@ public final class PluginHost implements PluginManager {
  
      private void fail(Entry e, String why, Throwable error) {
          e.state = new State.Failed(why);
@@ -156,7 +163,7 @@ index 644791c..807d3e5 100644
          if (error != null && !(error instanceof PluginException)) {
              LOG.error(e.name + " didn't enable: " + why, error);
          } else {
-@@ -1160,14 +1127,8 @@ public final class PluginHost implements PluginManager {
+@@ -1265,14 +1233,8 @@ public final class PluginHost implements PluginManager {
      /** To the console and every online player who may manage plugins. */
      private void announce(Component message) {
          LOG.info(message.getString());
