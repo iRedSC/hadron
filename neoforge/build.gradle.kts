@@ -65,6 +65,19 @@ dependencies {
     "additionalRuntimeClasspath"("org.yaml:snakeyaml:2.2")
 }
 
+// Fast tests of the harness's decisions (which tests a filter picks): JUnit on the JVM, no server. They load only
+// the classes they name, none of which touch Minecraft, so they need no Minecraft on their classpath.
+dependencies {
+    testImplementation(platform("org.junit:junit-bom:5.13.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+}
+
+tasks.test {
+    useJUnitPlatform()
+    testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
+}
+
 // api and common ship inside the mod's own jar, so server owners install one file.
 tasks.jar {
     from(project(":api").sourceSets.main.get().output)
