@@ -10,18 +10,17 @@ import net.minecraft.world.item.ItemStack;
 
 /**
  * What holds an inventory: a block, an entity, an item inside another item, a frequency in linked storage, or one
- * player's own copy of a block's or entity's inventory. Never
- * where a player happens to be standing, so a chest opened through a remote terminal is still the chest. Sealed, so a
- * {@code switch} over it must handle every case:
+ * player's own copy of a block's or entity's inventory. Never where a player happens to be standing, so a chest opened
+ * through a remote terminal is still the chest. Sealed, so a {@code switch} over it must handle every case:
  *
  * <pre>{@code
  * switch (event.getHolder()) {
- *     case InventoryHolder.Block b -> ...   // b.level(), b.pos()
- *     case InventoryHolder.Entity e -> ...  // a player, a chest minecart, a horse, a villager
- *     case InventoryHolder.Item i -> ...    // a backpack, and i.outer() is what holds the backpack
- *     case InventoryHolder.Linked l -> ...  // an ender chest, an ender tank frequency
+ *     case InventoryHolder.Block b -> ...     // b.level(), b.pos()
+ *     case InventoryHolder.Entity e -> ...    // a player, a chest minecart, a horse, a villager
+ *     case InventoryHolder.Item i -> ...      // a backpack, and i.outer() is what holds the backpack
+ *     case InventoryHolder.Linked l -> ...    // an ender chest, an ender tank frequency
  *     case InventoryHolder.PerPlayer p -> ... // a Lootr chest's copy for p.owner(), at p.at()
- *     case InventoryHolder.Unknown u -> ... // a mod's inventory nothing identified
+ *     case InventoryHolder.Unknown u -> ...   // a mod's inventory nothing identified
  * }
  * }</pre>
  */

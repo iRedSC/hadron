@@ -124,3 +124,11 @@ Hadron ships lightweight plugins server owners expect: essentials-style commands
 8. Bundled plugins; pilot bridges (Mekanism, AE2, Superb Warfare); the client companion.
 9. Helpers for NPCs, bulk block edits and packets.
 10. A second Minecraft version: its rename table, the load-time link check, and the first port guide.
+
+### Open designs
+
+Each waits for the work that will show what it needs; a guess at it failed review ([#19](https://github.com/iRedSC/hadron/pull/19)).
+
+- **Running resource flows**, with the Mekanism pilot. A machine's per-tick power draw, a boiler turning heat to steam every tick, a cable feeding a running machine: are resource events a ledger a plugin can sum, and if so how are per-tick flows reported without firing thousands of events? Today the catalog says both "a machine spending power" is a `ResourceConsumeEvent` and "no event per fuel tick".
+- **A mod's own data at block spaces**, with the first official bridge for a mod that keeps it (Immersive Engineering's wires, Ad Astra's oxygen and gravity fields, waystone names). `BlockChange` describes a block whose state or block entity changes; a wire through air is neither, so reusing it marks every covered space unchanged. Needs its own shape, fired on the server thread, with every covered space loaded.
+- **Moves between levels**, with the AE2 pilot, whose spatial storage moves blocks into its own dimension. A `BlockEvent` holds one level, and splitting a move into one event per level lets one side pass while the other is refused, and hides the source from protection.

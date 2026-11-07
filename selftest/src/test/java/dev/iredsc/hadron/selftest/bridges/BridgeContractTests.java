@@ -195,69 +195,6 @@ public final class BridgeContractTests {
     }
 
     @HadronTest
-    @Covers(BlockDataChangeEvent.class)
-    void aModsOwnDataForBlockSpacesListsEverySpaceItCoversSoProtectionCanDenyIt(TestContext t) {
-        TestPlayer alice = t.player("alice");
-        BlockPos from = t.pos(1, 0, 0);
-        BlockPos to = t.pos(4, 0, 0);
-        List<BlockPos> span = List.of(from, t.pos(2, 0, 0), t.pos(3, 0, 0), to); // a wire and the air it crosses
-        ResourceLocation wire = ResourceLocation.fromNamespaceAndPath("immersiveengineering", "wire");
-        CompoundTag strung = new CompoundTag();
-        strung.putString("type", "copper");
-        Set<BlockPos> wires = new HashSet<>();
-        BlockPos claimed = t.pos(3, 0, 0);
-        t.registerEvents(new Listener() {
-            @EventHandler
-            void on(BlockEvent e) { // a region plugin: it has never heard of wires
-                if (!(e instanceof dev.iredsc.hadron.api.event.Cancellable c)) return;
-                for (BlockChange b : e.getBlocks()) if (b.getPos().equals(claimed)) c.setCancelled(true);
-            }
-        });
-        boolean[] cancel = {false};
-        List<BlockDataChangeEvent> seen = record(t, BlockDataChangeEvent.class, cancel);
-        boolean refused = fire(t, machine(t, alice), a -> new BlockDataChangeEvent(t.level(), from, wire, span,
-                new CompoundTag(), strung, a), () -> wires.add(from));
-        BlockDataChangeEvent e = only(t, seen, "BlockDataChangeEvent");
-        t.assertEquals(wire, e.getKind(), "whose data");
-        t.assertEquals(span, e.getBlocks().stream().map(BlockChange::getPos).toList(), "every space the wire covers");
-        t.assertFalse(e.getBlocks().stream().anyMatch(BlockChange::isChanged), "no block state changes");
-        t.assertEquals("copper", e.getAfterData().getString("type"), "the data after, in the mod's format");
-        strung.putString("type", "gold");
-        e.getAfterData().putString("type", "iron");
-        t.assertEquals("copper", e.getAfterData().getString("type"), "neither the bridge's tag nor a listener's copy "
-                + "should change the recorded data");
-        strung.putString("type", "copper");
-        t.assertTrue(e.getBeforeData().isEmpty(), "no wire before");
-        CompoundTag cut = strung.copy();
-        BlockDataChangeEvent removal = new BlockDataChangeEvent(t.level(), from, wire, span, cut, new CompoundTag(),
-                machine(t, alice));
-        cut.putString("type", "gold");
-        removal.getBeforeData().putString("type", "iron");
-        t.assertEquals("copper", removal.getBeforeData().getString("type"), "a removed wire's data before, kept from "
-                + "the bridge's tag and a listener's copy");
-        t.assertTrue(refused && wires.isEmpty(), "a wire crossing a protected space should be refused");
-        refuses(t, "list every space", () -> new BlockDataChangeEvent(t.level(), from, wire, List.of(),
-                new CompoundTag(), strung, machine(t, alice)));
-        refuses(t, "list it too", () -> new BlockDataChangeEvent(t.level(), from, wire, List.of(to),
-                new CompoundTag(), strung, machine(t, alice)));
-        BlockPos far = new BlockPos(1_000_000, 64, 1_000_000);
-        t.assertTrue(t.level().getChunkSource().getChunkNow(far.getX() >> 4, far.getZ() >> 4) == null, "the far space "
-                + "should be in an unloaded chunk");
-        refuses(t, "unloaded chunk", () -> new BlockDataChangeEvent(t.level(), from, wire, List.of(from, far),
-                new CompoundTag(), strung, machine(t, alice)));
-        t.assertTrue(t.level().getChunkSource().getChunkNow(far.getX() >> 4, far.getZ() >> 4) == null, "a refused "
-                + "event shouldn't have loaded the chunk");
-        refuses(t, "isn't a mod's id", () -> new BlockDataChangeEvent(t.level(), from,
-                ResourceLocation.withDefaultNamespace("wire"), span, new CompoundTag(), strung, machine(t, alice)));
-        t.assertEquals(List.of(from, to), new BlockDataChangeEvent(t.level(), from, wire, List.of(from, from, to),
-                new CompoundTag(), strung, machine(t, alice)).getBlocks().stream().map(BlockChange::getPos).toList(),
-                "a space listed twice appears once");
-        t.assertEquals(BlockDataChangeEvent.BLOCK_ENTITY, new BlockDataChangeEvent(t.level(), from,
-                t.level().getBlockState(from), new CompoundTag(), new CompoundTag(), machine(t, alice)).getKind(),
-                "a block entity's own data");
-    }
-
-    @HadronTest
     @Covers(EntityDataChangeEvent.class)
     void aModsLastingEntityDataIsAnEntityEventAndACancelKeepsIt(TestContext t) {
         TestPlayer alice = t.player("alice");

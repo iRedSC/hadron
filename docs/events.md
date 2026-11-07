@@ -66,7 +66,7 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 | ├ `BlockPlaceEvent` | a block or fluid source is placed by an actor | `BlockItem.place`, `setBlock` with an actor |
 | ├ `BlockMultiPlaceEvent` | several blocks at once (a door, a bed, a building gadget) | NeoForge's `EntityMultiPlaceEvent` |
 | ├ `BlockTransformEvent` | an actor changes a block into another (machine conversion, stripping a log, upgrading a chest in place) | `setBlock` with an actor |
-| ├ `BlockDataChangeEvent` | data at block spaces changes with their state unchanged: a block entity's (a spawner's mob, a drawer's lock, a name), or data a mod keeps for those spaces in its own storage (a wire and the spaces it crosses, an oxygen or gravity field, a waystone's name); a kind id says whose | bridge |
+| ├ `BlockDataChangeEvent` | block entity data changes with the state unchanged: a spawner's mob, a drawer's lock, a terminal's binding, a name | bridge |
 | ├ `BlockBurnEvent`, `BlockIgniteEvent` | fire destroys or starts | `FireBlock` |
 | ├ `BlockFromToEvent` | a fluid flows into a block | `FlowingFluid.spreadTo` |
 | ├ `BlockSpreadEvent`, `BlockFormEvent`, `BlockFadeEvent`, `BlockGrowEvent`, `LeavesDecayEvent` | natural changes | the vanilla block's tick |
@@ -172,8 +172,8 @@ Everything measured in amounts that isn't an item stack: energy, fluids in tanks
 | Event | What | Core chokepoint |
 |---|---|---|
 | `ResourceChangeEvent` | a holder's amount changes; old and new | core for currencies, through the produce and consume leaves; bridges for everything else |
-| ├ `ResourceProduceEvent` | created in one step: a reactor's waste, a spell conjuring water, a quest's currency reward | core for currency deposits; bridges for everything else |
-| ├ `ResourceConsumeEvent` | destroyed in one step: a spell's mana, a launch's fuel, a vein depleted; a machine's running power draw isn't reported ([bridge-hooks](bridge-hooks.md#the-rule-for-firing)) | core for currency withdrawals; bridges for everything else |
+| ├ `ResourceProduceEvent` | created: a generator, a reactor's waste, a quest's currency reward | core for currency deposits; bridges for everything else |
+| ├ `ResourceConsumeEvent` | destroyed: a machine spending power, a spell's mana, a vein depleted | core for currency withdrawals; bridges for everything else |
 | └ `ResourceConvertEvent` | one resource into another in one step: fuel to heat to steam | bridge |
 | `ResourceTransferEvent` | an amount moves between holders: a cable, a pipe, a wireless charger reaching a player in another dimension, a payment | core for currency transfers; bridges for energy, fluids and mods' resources |
 
@@ -236,13 +236,12 @@ Designed but not in `api`, because core can't yet fire them for every actor with
 - `EntityLeashEvent`, `EntityUnleashEvent`, `EntityShearEvent`, `ArmorStandManipulateEvent`: need hooks inside interface methods or per-path logic.
 - `EntityAttributeChangeEvent`, `EntityRelationshipChangeEvent`, `FoodLevelChangeEvent`: the vanilla classes that change don't know their entity.
 - `BiomeChangeEvent`: biome writes are too hot and scattered for one hook.
-- Moves between levels (a teleposer, AE2's spatial storage): a `BlockEvent` holds one level, and splitting a move into one event per level lets one side pass while the other is refused. Designed with the AE2 pilot, whose spatial storage moves blocks into its own dimension.
 - `ResourceTransferEvent` from the port's energy and fluid capabilities: no single point sees both ends; bridges fire it meanwhile.
 
 ## Left out
 
 - **An event per spell school or damage type.** Damage, healing, effects, blocks, spawns and teleports already describe what spells do; the spell is on the operation.
-- **An event per tick of a machine's job.** A machine's job fires its own event once, and its per-tick spending runs silent; drift with no job (heat settling, air leaking) is the holder's own state. Acceleration is one event per change. So a machine's job doesn't fire thousands of events ([bridge-hooks](bridge-hooks.md#the-rule-for-firing)).
+- **An event per fuel tick.** Burning internal fuel is a `ResourceConsumeEvent` when the reserve changes, and acceleration is one event per change, so hot loops don't fire thousands of events.
 - **Mod progression state** (Twilight Forest's conquered bosses, quest progress). It changes no world, player or item; plugins that need it use the bridge's extras.
 - **Client-only data** (local waypoints, minimap settings).
 - **Data tied to no place** (a computer's files, a mod's network database). Plugins guard it through the block or item that reaches it, and whatever it makes happen in the world fires its own events.
