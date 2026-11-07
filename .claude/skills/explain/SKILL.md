@@ -35,5 +35,5 @@ Compare each explanation with what the code does. For each place it's wrong:
   questions skill's order (impossible, rename, checked comment).
 - **The model's own limit**: say why in the PR under "Misreadings", quoting it.
 
-Also fix the P3 findings the council left. Commit, push, and list the explainers on the `Explained:` line. Then
-the final review (.claude/skills/council/SKILL.md).
+Also fix the P3 findings the council left. Commit, push, and note the explainers in the PR. Then the final review
+(.claude/skills/final-review/SKILL.md).

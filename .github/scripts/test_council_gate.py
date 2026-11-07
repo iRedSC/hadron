@@ -18,93 +18,40 @@ CONFIG = {
         {"name": "Final", "role": "final", "provider": "codex", "model": "m", "reasoningEffort": "high"},
     ],
 }
-ROUNDS = {"Deep A": ["5 found, top P1", "3 found, top P3"], "Deep B": ["4 found, top P2", "4 found, top P4"]}
 
 
-def record(rows=ROUNDS, questions="Asker", explained="Explainer", final=f"Final, {HEAD}, 2 found, top P4",
-           columns=None) -> str:
-    columns = columns or [f"Round {i}" for i in range(1, len(next(iter(rows.values()))) + 1)]
-    lines = ["## Council review", "", "Council commit: " + HEAD, f"Questions: {questions}",
-             f"Explained: {explained}"] + ([f"Final review: {final}"] if final else []) + [
-        "", "| Member | " + " | ".join(columns) + " |", "|" + " --- |" * (len(columns) + 1)]
-    lines += [f"| {name} | " + " | ".join(cells) + " |" for name, cells in rows.items()]
-    return "\n".join(lines) + "\n\n🤖 Generated"
+def line(name="Final", sha=HEAD, top="P4") -> str:
+    return f"Final review: {name}, {sha}, 2 found, top {top}"
 
 
-def problems(text: str, in_history: bool = True) -> list[str]:
-    return gate.review_problems(text, HEAD, CONFIG, in_history)
+def problems(body: str) -> list[str]:
+    return gate.review_problems(body, HEAD, CONFIG)
 
 
-class Record(unittest.TestCase):
-    def test_a_finished_review_passes(self):
-        self.assertEqual(problems(record()), [])
+class FinalReview(unittest.TestCase):
+    def test_a_passing_final_review_of_the_head_passes(self):
+        self.assertEqual(problems(f"Some text\n\n{line()}\n\n🤖 Generated"), [])
 
-    def test_no_section_fails(self):
-        self.assertTrue(problems("nothing here"))
+    def test_the_stop_level_itself_passes(self):
+        self.assertEqual(problems(line(top="P3")), [])
 
-    def test_a_council_commit_outside_the_history_fails(self):
-        self.assertTrue(problems(record(), in_history=False))
-
-    def test_a_last_round_above_the_stop_level_asks_for_another_round(self):
-        found = problems(record(dict(ROUNDS, **{"Deep B": ["4 found, top P2", "4 found, top P2"]})))
-        self.assertTrue(any("Round 3" in p for p in found), found)
-
-    def test_too_few_findings_fails(self):
-        self.assertTrue(problems(record(dict(ROUNDS, **{"Deep A": ["5 found, top P1", "2 found, top P4"]}))))
-
-    def test_not_converging_in_five_rounds_says_to_wait_for_the_owner(self):
-        rows = {name: ["3 found, top P1"] * 5 for name in ROUNDS}
-        found = problems(record(rows))
-        self.assertTrue(any("wait for the owner" in p for p in found), found)
-
-    def test_more_than_five_rounds_fails(self):
-        self.assertTrue(problems(record({name: ["3 found, top P4"] * 6 for name in ROUNDS})))
-
-    def test_a_member_missing_a_round_fails(self):
-        self.assertTrue(problems(record(dict(ROUNDS, **{"Deep B": ["4 found, top P4"]}),
-                                        columns=["Round 1", "Round 2"])))
-
-    def test_a_missing_member_fails(self):
-        self.assertTrue(problems(record({"Deep A": ROUNDS["Deep A"]})))
-
-    def test_a_malformed_cell_fails(self):
-        self.assertTrue(problems(record(dict(ROUNDS, **{"Deep A": ["5 found, top P1", "fine"]}))))
-
-    def test_a_second_row_for_one_member_fails(self):
-        text = record(dict(ROUNDS, **{"Deep A": ["5 found, top P1", "3 found, top P1"]}))
-        text = text.replace("| Deep B |", "| Deep A | 3 found, top P4 | 3 found, top P4 |\n| Deep B |", 1)
-        self.assertTrue(problems(text))
-
-    def test_a_second_table_further_down_doesnt_count(self):
-        text = record(dict(ROUNDS, **{"Deep A": ["5 found, top P1", "3 found, top P1"]}))
-        text = text.replace("\n\n🤖", "\n\n| Member | Round 1 | Round 2 |\n| --- | --- | --- |\n🤖")
-        self.assertTrue(problems(text))
-
-    def test_skipping_the_questions_pass_fails(self):
-        self.assertTrue(problems(record(questions="")))
-
-    def test_skipping_the_explain_pass_fails(self):
-        self.assertTrue(problems(record(explained="Someone else")))
+    def test_one_level_more_serious_than_the_stop_level_fails(self):
+        self.assertTrue(problems(line(top="P2")))
 
     def test_no_final_review_fails(self):
-        self.assertTrue(problems(record(final=None)))
+        self.assertTrue(problems("nothing here"))
 
     def test_a_final_review_of_another_commit_fails(self):
-        self.assertTrue(problems(record(final=f"Final, {'f' * 40}, 2 found, top P4")))
+        self.assertTrue(problems(line(sha="f" * 40)))
 
-    def test_a_final_review_that_found_something_serious_fails(self):
-        self.assertTrue(problems(record(final=f"Final, {HEAD}, 2 found, top P0")))
+    def test_a_short_sha_fails(self):
+        self.assertTrue(problems(line(sha=HEAD[:12])))
 
     def test_a_final_review_by_someone_else_fails(self):
-        self.assertTrue(problems(record(final=f"Deep A, {HEAD}, 2 found, top P4")))
+        self.assertTrue(problems(line(name="Deep A")))
 
-    def test_an_empty_list_line_doesnt_borrow_the_next_line(self):
-        text = record(questions="").replace("Questions: \n", "Questions:\nAsker\n")
-        self.assertTrue(problems(text))
-
-    def test_only_the_record_sections_council_commit_counts(self):
-        body = "Council commit: " + "f" * 40 + "\n\n" + record()
-        self.assertEqual(gate.council_commit(gate.record_section(body)), HEAD)
+    def test_a_stale_pass_beside_a_failing_pass_fails(self):
+        self.assertTrue(problems(line() + "\n" + line(top="P0")))
 
 
 class Config(unittest.TestCase):
@@ -139,6 +86,9 @@ class Config(unittest.TestCase):
 
     def test_a_bad_option_value_is_refused(self):
         self.assertTrue(self.changed(lambda c: c["member"][0].update(effort="ultra")))
+
+    def test_members_written_as_one_table_get_a_message_not_a_crash(self):
+        self.assertTrue(self.changed(lambda c: c.update(member={"name": "x"})))
 
     def test_a_member_without_a_name_is_refused(self):
         self.assertTrue(self.changed(lambda c: c["member"][1].pop("name")))

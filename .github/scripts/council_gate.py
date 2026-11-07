@@ -1,25 +1,17 @@
-"""Fails when a PR changes a path in .github/council-paths.txt without a finished council review.
+"""Fails when a PR changes a path in .github/council-paths.txt without a final review of its head.
 
-The record is a "## Council review" section in the PR description, written by the council skill:
+The record is one line in the PR description, written by the final-review skill (.claude/skills/final-review):
 
-    ## Council review
+    Final review: GPT-6.1 Sol (final), <the PR's full head SHA>, 2 found, top P4
 
-    Council commit: <the commit the last council round reviewed>
-    Questions: Claude Haiku 5.5, GPT-6.1 Terra
-    Explained: Claude Haiku 5.5 (explainer), GPT-6 Luna
-    Final review: GPT-6.1 Sol (final), <the PR's head>, 2 found, top P4
-
-    | Member | Round 1 | Round 2 |
-    | --- | --- | --- |
-    | GPT-6.1 Sol | 5 found, top P1 | 3 found, top P3 |
-    | Claude Opus 5.5 | 4 found, top P2 | 4 found, top P4 |
-
-It passes when every council member found at least min_findings issues in every round, the last round found nothing
-more serious than stop_at (P0 is the most serious), every question asker and explainer is listed, and the final
-reviewer's last pass, on the PR's head, found nothing more serious than stop_at either.
+It passes when there is exactly one such line, by the "final" member of .github/council.toml, naming the head, and
+its most serious finding is no worse than stop_at (P0 is the most serious). Whether a change also needed the full
+council (.claude/skills/council) is the author's judgement, recorded in the PR; the gate doesn't check it.
 
 Reads BASE and HEAD (commit SHAs) and PR_BODY from the environment. CI runs main's copy of this script, the path list
-and the member list against the PR, so a PR can't change what checks it.
+and the member list against the PR, so a PR can't change what checks it. Run locally with:
+    BASE=$(git merge-base origin/main HEAD) HEAD=$(git rev-parse HEAD) PR_BODY="$(gh pr view --json body -q .body)" \\
+        python3 .github/scripts/council_gate.py
 """
 
 import os
@@ -85,6 +77,8 @@ def config_problems(config: dict) -> list[str]:
     if config.get("stop_at") not in ("P0", "P1", "P2", "P3", "P4"):
         problems.append(f"{COUNCIL_FILE} needs stop_at = one of \"P0\" to \"P4\".")
     members = config.get("member", [])
+    if not isinstance(members, list) or not all(isinstance(m, dict) for m in members):
+        return problems + [f"{COUNCIL_FILE} lists members as [[member]] tables, one per member."]
     for m in members:
         name = m.get("name", "<no name>")
         if not isinstance(m.get("name"), str) or not m["name"].strip():
@@ -110,110 +104,23 @@ def config_problems(config: dict) -> list[str]:
     return problems
 
 
-def table(text: str) -> tuple[list[str], dict[str, list[str]], list[str]]:
-    """The round columns and each row's cells, from the one table under the "Member" header and its separator."""
-    lines = text.splitlines()
-    starts = [i for i, line in enumerate(lines) if re.match(r"^\s*\|\s*Member\s*\|", line)]
-    if len(starts) != 1:
-        return [], {}, ["The record needs exactly one table with a \"| Member |\" header."]
-    cells = lambda line: [c.strip() for c in line.strip().strip("|").split("|")]
-    block = []
-    for line in lines[starts[0] + 1:]:
-        if not line.strip().startswith("|"):
-            break
-        block.append(cells(line))
-    if not block or not all(set(c) <= set("-: ") for c in block[0]):
-        return [], {}, ["The table needs its \"| --- |\" separator row right below the header."]
-    rows, problems = {}, []
-    for row in block[1:]:
-        if row[0] in rows:
-            problems.append(f"\"{row[0]}\" has two rows in the table; keep one.")
-        rows[row[0]] = row[1:]
-    return cells(lines[starts[0]])[1:], rows, problems
+FINAL = re.compile(r"^Final review:[ \t]*(.+?),[ \t]*([0-9a-f]{40}),[ \t]*(\d+) found, top P([0-4])[ \t]*$", re.M)
 
 
-def record_section(body: str) -> str | None:
-    """The text of the PR description's "## Council review" section, or None when there isn't one."""
-    section = re.search(r"^## Council review\s*$(.*?)(?=^## |\Z)", body, re.M | re.S)
-    return section.group(1) if section else None
-
-
-def council_commit(text: str) -> str | None:
-    line = re.search(r"^Council commit:[ \t]*([0-9a-f]{12,40})[ \t]*$", text, re.M)
-    return line.group(1) if line else None
-
-
-def listed(text: str, label: str) -> list[str]:
-    # [ \t], not \s, so an empty line can't borrow the names on the next one.
-    line = re.search(rf"^{label}:[ \t]*([^\n]+)$", text, re.M)
-    return [name.strip() for name in line.group(1).split(",")] if line else []
-
-
-def review_problems(body: str, head: str, config: dict, council_in_history: bool) -> list[str]:
-    """Why the PR description's record doesn't pass for this head commit; empty when it does."""
-    text = record_section(body)
-    if text is None:
-        return ["The PR description has no \"## Council review\" section."]
-    members = {role: [m["name"] for m in config["member"] if m["role"] == role] for role in ROLES}
-    problems = []
-
-    if council_commit(text) is None:
-        problems.append("The record needs \"Council commit: <sha>\", at least 12 characters, naming the commit the "
-                        "last council round reviewed.")
-    elif not council_in_history:
-        problems.append("The council commit isn't in this PR's history: rebasing or force-pushing after the council "
-                        "needs a new council round on the rewritten commits.")
-
-    columns, rows, table_problems = table(text)
-    problems += table_problems
-    rounds = len(columns)
-    if columns != [f"Round {i}" for i in range(1, rounds + 1)] or not 1 <= rounds <= config["max_rounds"]:
-        problems.append(f"The table's columns are {columns}; they must be \"Round 1\" up to "
-                        f"\"Round {config['max_rounds']}\", in order.")
+def review_problems(body: str, head: str, config: dict) -> list[str]:
+    """Why the PR description's final review doesn't pass for this head commit; empty when it does."""
+    final = next(m["name"] for m in config["member"] if m["role"] == "final")
     stop = int(config["stop_at"][1])
-    last_tops = []
-    for name in members["council"]:
-        cells = rows.get(name)
-        if cells is None or len(cells) != rounds:
-            problems.append(f"Council member \"{name}\" needs a result in every round (names must match "
-                            f"{COUNCIL_FILE}).")
-            continue
-        for column, cell in zip(columns, cells):
-            m = re.fullmatch(r"(\d+) found, top P([0-4])", cell)
-            if not m:
-                problems.append(f"{name}'s {column} is \"{cell}\", not \"<n> found, top P<0-4>\".")
-            elif int(m.group(1)) < config["min_findings"]:
-                problems.append(f"{name} found {m.group(1)} issue(s) in {column}; each member must find at least "
-                                f"{config['min_findings']} per round.")
-            elif column == columns[-1]:
-                last_tops.append(int(m.group(2)))
-    if len(last_tops) == len(members["council"]) and any(top < stop for top in last_tops):
-        if rounds >= config["max_rounds"]:
-            problems.append(f"The council didn't converge in {config['max_rounds']} rounds. Stop changing code, write "
-                            "\"Architecture reconsidered\" in the PR (.claude/skills/council/SKILL.md), and wait for "
-                            "the owner.")
-        else:
-            problems.append(f"Round {rounds} still found something more serious than {config['stop_at']}: fix it "
-                            f"and run Round {rounds + 1}.")
-
-    for label, role in (("Questions", "questions"), ("Explained", "explain")):
-        missing = sorted(set(members[role]) - set(listed(text, label)))
-        if missing:
-            problems.append(f"\"{label}:\" must list {', '.join(missing)}: run the {role} pass "
-                            f"(.claude/skills/{role}/SKILL.md).")
-
-    final = re.search(r"^Final review:[ \t]*(.+?),[ \t]*([0-9a-f]{12,40}),[ \t]*(\d+) found, top P([0-4])[ \t]*$",
-                          text, re.M)
-    if not final or final.group(1) != members["final"][0] or not head.startswith(final.group(2)) \
-            or int(final.group(4)) < stop:
-        problems.append(f"{members['final'][0]}'s last pass must be on the head and find nothing more serious than "
-                        f"{config['stop_at']}: \"Final review: {members['final'][0]}, {head}, <n> found, top P<k>\" "
-                        "(.claude/skills/council/SKILL.md, \"Final review\").")
-    return problems
-
-
-def in_history(commit: str, head: str) -> bool:
-    return git("merge-base", "--is-ancestor", commit, head).returncode == 0
+    expected = (f"\"Final review: {final}, {head}, <n> found, top P<k>\", by .claude/skills/final-review/SKILL.md, "
+                f"with nothing more serious than {config['stop_at']}")
+    lines = FINAL.findall(body)
+    if len(lines) != 1:
+        # Two lines could leave a stale pass beside a failing one, so only one may stand.
+        return [f"The PR description needs exactly one final review line ({len(lines)} found): {expected}."]
+    name, sha, _, top = lines[0]
+    if name != final or sha != head or int(top) < stop:
+        return [f"The final review line must read {expected}; it reads \"{name}, {sha}, top P{top}\"."]
+    return []
 
 
 def main() -> int:
@@ -239,16 +146,14 @@ def main() -> int:
               "in a PR of its own first.")
         return 1
     if not hits:
-        print("No path here needs a council review.")
+        print("No path here needs a review.")
         return 0
-    print("This PR changes paths that need a council review:")
+    print("This PR changes paths that need a final review:")
     for name, glob in hits:
         print(f"  {name}  (matches {glob})")
-    body = os.environ.get("PR_BODY") or ""
-    commit = council_commit(record_section(body) or "")
-    problems = review_problems(body, head, config, bool(commit) and in_history(commit, head))
+    problems = review_problems(os.environ.get("PR_BODY") or "", head, config)
     if not problems:
-        print(f"Passed: the council converged and every pass ran, for {head[:12]}.")
+        print(f"Passed: the final review found nothing more serious than {config['stop_at']} on {head[:12]}.")
         return 0
     print("\n".join(f"  {p}" for p in problems))
     return 1

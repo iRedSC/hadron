@@ -29,5 +29,5 @@ Settle every question, taking the first that fits:
 3. **A comment**, only for a why the code can't show, and only after checking it's true against the code.
 4. **An answer in the PR** under "Questions answered", for history or a choice.
 
-Never answer with a comment that only restates the question. Then commit, push, and record the askers on the
-`Questions:` line of the PR's "Council review" section (.claude/skills/council/SKILL.md).
+Never answer with a comment that only restates the question. Then commit, push, and go on to the council's rounds
+(.claude/skills/council/SKILL.md).

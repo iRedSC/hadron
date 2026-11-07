@@ -14,7 +14,8 @@ A rule that a build check could enforce doesn't belong here. Write the check ins
 
 ### Priority
 
-Give each finding the highest level whose test it meets. The council stops once a round finds nothing above P3.
+Give each finding the highest level whose test it meets. A council round, and the final review, pass once nothing
+is more serious than `stop_at` in `.github/council.toml`.
 
 | Priority | Test | Examples |
 |---|---|---|

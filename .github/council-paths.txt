@@ -10,6 +10,7 @@
 .claude/skills/council/**
 .claude/skills/questions/**
 .claude/skills/explain/**
+.claude/skills/final-review/**
 # The priority table there decides when the council stops.
 docs/coding-standards.md
 gradle/**
