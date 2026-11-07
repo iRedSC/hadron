@@ -76,6 +76,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.pattern.BlockPattern;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.FlowingFluid;
 import net.minecraft.world.level.material.FluidState;
@@ -142,6 +143,21 @@ public final class BlockHooks {
         int ticks;
         int forming;
         Actor fertilizer;
+        /**
+         * A container's emptying a command put off until its replacement is decided (see {@link #deferClear}), and
+         * where; null when none is waiting.
+         */
+        Runnable deferredClear;
+        LevelAccessor deferredClearLevel;
+        long deferredClearPos = NO_POS;
+        /** Inside {@link #patternBuild}: true while one runs on this thread. */
+        boolean building;
+        /** The build's blocks as they were, once allowed; null before then or if it was refused. */
+        List<BlockSnapshot> built;
+        Entity builtCreature;
+        Actors.Scope buildOperation;
+        /** Putting a refused build's blocks back, whose placing would otherwise find the pattern and build again. */
+        boolean unbuilding;
         int lastUser = -1;
         long lastUsePos = NO_POS;
         long lastUseTime;
@@ -447,6 +463,23 @@ public final class BlockHooks {
             return false;
         }
         Context ctx = CONTEXT.get();
+        if (ctx.deferredClear == null) return decideSetBlock(ctx, level, server, pos, after);
+        // A command emptying a container before replacing it: decided first, so a refusal keeps the contents and a
+        // listener sees them. Taken off the context before deciding, so a handler's own changes can't run it.
+        Runnable clear = null;
+        if (ctx.deferredClearLevel == level && ctx.deferredClearPos == pos.asLong()) {
+            clear = ctx.deferredClear;
+            ctx.deferredClear = null;
+            ctx.deferredClearLevel = null;
+            ctx.deferredClearPos = NO_POS;
+        }
+        boolean cancelled = decideSetBlock(ctx, level, server, pos, after);
+        if (clear != null && !cancelled) clear.run();
+        return cancelled;
+    }
+
+    private static boolean decideSetBlock(Context ctx, Level level, ServerLevel server, BlockPos pos,
+            BlockState after) {
         if (ctx.decidedPos == pos.asLong() && ctx.decidedLevel == level) {
             boolean refuse = ctx.decidedCancelled && ctx.decidedTime == level.getGameTime();
             ctx.decidedLevel = null;
@@ -487,6 +520,130 @@ public final class BlockHooks {
         BlockChangeEvent event = Hooks.post(build(kind, server, BlockChange.of(server, pos, before, after), source,
                 who));
         return event.isCancelled();
+    }
+
+    /**
+     * {@code Clearable.tryClear} where vanilla empties a container before replacing it ({@code /setblock},
+     * {@code /fill}, {@code /clone}, structure placement), so its contents don't spill. The emptying waits for the
+     * replacing {@code setBlock} at that position and happens only if that change is allowed: a refused replace keeps
+     * the contents, and its event can read them. Anywhere but a live server level, it empties at once.
+     */
+    public static void deferClear(LevelAccessor level, Object blockEntity, Runnable clear) {
+        if (!(level instanceof ServerLevel server) || !(blockEntity instanceof BlockEntity entity)
+                || server.captureBlockSnapshots || server.restoringBlockSnapshots) {
+            clear.run();
+            return;
+        }
+        Context ctx = CONTEXT.get();
+        Runnable stale = ctx.deferredClear;
+        ctx.deferredClear = null; // one whose setBlock never came: empty it as vanilla would have
+        if (stale != null) stale.run();
+        ctx.deferredClear = clear;
+        ctx.deferredClearLevel = server;
+        ctx.deferredClearPos = entity.getBlockPos().asLong();
+    }
+
+    /** As {@link #deferClear}, for a block entity in the level it belongs to. */
+    public static void deferClear(Object blockEntity, Runnable clear) {
+        deferClear(blockEntity instanceof BlockEntity entity ? entity.getLevel() : null, blockEntity, clear);
+    }
+
+    /**
+     * A golem or the wither being built from a pattern of blocks: the blocks are consumed and the creature spawns,
+     * and that is one operation. {@link #cancelPatternBuild} asks about every block before any is cleared; if the
+     * creature's spawn is then refused, every block is put back. Wraps the whole build, so whatever the build did is
+     * settled when it returns.
+     */
+    public static void patternBuild(Level level, Runnable work) {
+        if (!(level instanceof ServerLevel)) {
+            work.run();
+            return;
+        }
+        Context ctx = CONTEXT.get();
+        boolean outerBuilding = ctx.building;
+        List<BlockSnapshot> outerBuilt = ctx.built;
+        Entity outerCreature = ctx.builtCreature;
+        Actors.Scope outerOperation = ctx.buildOperation;
+        ctx.building = true;
+        ctx.built = null;
+        ctx.builtCreature = null;
+        ctx.buildOperation = null;
+        try {
+            work.run();
+            List<BlockSnapshot> built = ctx.built;
+            if (built != null) {
+                unsuppress();
+                ctx.built = null;
+                if (!ctx.builtCreature.isAddedToLevel()) {
+                    ctx.unbuilding = true;
+                    try {
+                        restore(level, built);
+                    } finally {
+                        ctx.unbuilding = false;
+                    }
+                }
+            }
+        } finally {
+            if (ctx.built != null) unsuppress(); // the build threw after it was allowed
+            if (ctx.buildOperation != null) ctx.buildOperation.close();
+            ctx.building = outerBuilding;
+            ctx.built = outerBuilt;
+            ctx.builtCreature = outerCreature;
+            ctx.buildOperation = outerOperation;
+        }
+    }
+
+    /**
+     * A pattern build is about to clear its blocks to make {@code creature}. Each block's removal is asked about now,
+     * before any is cleared, as the change the generic hook would report; true when one was refused, and then nothing
+     * is cleared and nothing spawns. Allowed, the clearing that follows is not asked about again.
+     */
+    public static boolean cancelPatternBuild(Level level, BlockPattern.BlockPatternMatch match, Entity creature) {
+        if (!(level instanceof ServerLevel server)) return false;
+        Context ctx = CONTEXT.get();
+        if (ctx.unbuilding) return true;
+        List<BlockSnapshot> blocks = new ArrayList<>();
+        for (int i = 0; i < match.getWidth(); i++) {
+            for (int j = 0; j < match.getHeight(); j++) {
+                BlockPos pos = match.getBlock(i, j, 0).getPos();
+                if (!server.getBlockState(pos).isAir()) blocks.add(BlockSnapshot.create(server.dimension(), server, pos));
+            }
+        }
+        Actor actor = currentOr(null);
+        if (actor != null && ctx.suppressed <= ctx.suppressedFloor) {
+            if (ctx.building && ctx.buildOperation == null) {
+                ctx.buildOperation = dev.iredsc.hadron.api.actor.Operation.begin(actor);
+            }
+            BlockState air = Blocks.AIR.defaultBlockState();
+            for (BlockSnapshot block : blocks) {
+                BlockState before = block.getState();
+                Kind kind = actorKind(before, air);
+                if (kind == null || !Hooks.listens(type(kind))) continue;
+                if (Hooks.post(build(kind, server, BlockChange.of(server, block.getPos(), before, air), NO_POS, actor))
+                        .isCancelled()) {
+                    return true;
+                }
+            }
+        }
+        if (ctx.building) {
+            ctx.built = blocks;
+            ctx.builtCreature = creature;
+            suppress();
+        }
+        return false;
+    }
+
+    /** Puts blocks back as they were, data included, without reporting it as a new change. */
+    private static void restore(Level level, List<BlockSnapshot> snapshots) {
+        boolean restoring = level.restoringBlockSnapshots;
+        level.restoringBlockSnapshots = true;
+        try {
+            for (BlockSnapshot snapshot : Lists.reverse(snapshots)) {
+                snapshot.restoreToLocation(level, snapshot.getPos(), Block.UPDATE_ALL);
+            }
+        } finally {
+            level.restoringBlockSnapshots = restoring;
+        }
     }
 
     /**
@@ -685,7 +842,8 @@ public final class BlockHooks {
             }
             suppressAt(level, target);
             try {
-                return work.get();
+                // A mob bucket whose mob is refused takes its water back, and stays in the dispenser.
+                return EntitySpawnRefunds.dispensing(stack, work);
             } finally {
                 restoreSuppressAt();
             }
