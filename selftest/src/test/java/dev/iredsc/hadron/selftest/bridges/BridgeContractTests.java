@@ -173,6 +173,9 @@ public final class BridgeContractTests {
         t.assertEquals("secret", e.getBlocks().get(0).getAfterData().orElseThrow().getString("Lock"),
                 "a listener's copies shouldn't change the block's data");
         t.assertEquals("secret", e.getAfterData().getString("Lock"), "the event and its block agree");
+        after.putString("Lock", "changed"); // the bridge reusing its tag after firing
+        t.assertEquals("secret", e.getAfterData().getString("Lock"), "the bridge's tag shouldn't change the event");
+        after.putString("Lock", "secret");
         t.assertFalse(e.getBeforeData().contains("Lock"), "the data before");
         t.assertTrue(e.getActingPlayer().orElse(null) == alice.player(), "the machine's owner is the acting player");
         t.assertTrue(chest.saveWithoutMetadata(t.level().registryAccess()).contains("Lock"), "the uncancelled change");
@@ -234,6 +237,9 @@ public final class BridgeContractTests {
                 + "event shouldn't have loaded the chunk");
         refuses(t, "isn't a mod's id", () -> new BlockDataChangeEvent(t.level(), from,
                 ResourceLocation.withDefaultNamespace("wire"), span, new CompoundTag(), strung, machine(t, alice)));
+        t.assertEquals(List.of(from, to), new BlockDataChangeEvent(t.level(), from, wire, List.of(from, from, to),
+                new CompoundTag(), strung, machine(t, alice)).getBlocks().stream().map(BlockChange::getPos).toList(),
+                "a space listed twice appears once");
         t.assertEquals(BlockDataChangeEvent.BLOCK_ENTITY, new BlockDataChangeEvent(t.level(), from,
                 t.level().getBlockState(from), new CompoundTag(), new CompoundTag(), machine(t, alice)).getKind(),
                 "a block entity's own data");
@@ -261,6 +267,9 @@ public final class BridgeContractTests {
         t.assertEquals("builder", e.getAfterData().getString("job"), "the data after");
         e.getAfterData().putString("job", "miner");
         t.assertEquals("builder", e.getAfterData().getString("job"), "a listener's copy shouldn't change the data");
+        builder.putString("job", "changed"); // the bridge reusing its tag after firing
+        t.assertEquals("builder", e.getAfterData().getString("job"), "the bridge's tag shouldn't change the event");
+        builder.putString("job", "builder");
         t.assertTrue(e.getBeforeData().isEmpty(), "the data before");
         cancel[0] = true;
         CompoundTag farmer = new CompoundTag();
@@ -482,6 +491,9 @@ public final class BridgeContractTests {
         t.assertEquals(Optional.of(chest), new InventoryHolder.Item(alices, loot).place(), "and a backpack inside it");
         t.assertEquals(Optional.empty(), new InventoryHolder.Linked(InventoryHolder.Linked.ENDER_CHEST,
                 alice.uuid().toString()).place(), "an ender chest has no place");
+        t.assertEquals(Optional.of(InventoryHolder.Unknown.INSTANCE), new InventoryHolder.Item(
+                InventoryHolder.Unknown.INSTANCE, loot).place(), "a backpack nothing identified is Unknown, for "
+                + "protection to deny, never no place");
         String refused = "";
         try {
             new InventoryHolder.PerPlayer(new InventoryHolder.Linked(InventoryHolder.Linked.ENDER_CHEST,

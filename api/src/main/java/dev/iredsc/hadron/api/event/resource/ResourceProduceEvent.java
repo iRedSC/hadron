@@ -7,8 +7,8 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * A resource is about to be made from nothing into a holder in one step: a burned fuel item's energy, a reactor's
- * waste, a quest's currency reward. A generator's per-tick output during a job isn't reported. Cancel it and nothing is made, and the fuel or cost behind it is refunded. Who fires it: see
- * {@link ResourceEvent}.
+ * waste, a quest's currency reward. A generator's per-tick output during a job isn't reported. Cancel it and
+ * nothing is made, and the fuel or cost behind it is refunded. Who fires it: see {@link ResourceEvent}.
  */
 @FiredBy(core = PARTIAL,
         coreSees = "currency deposits",

@@ -29,8 +29,9 @@ public sealed interface InventoryHolder {
     /**
      * Where the inventory is, for protection: the block or entity itself, the place a per-player copy belongs to, or
      * whatever holds the item a backpack is in. Check this rather than matching {@link Block} alone, so a Lootr chest
-     * or a backpack in a chest is protected too. Empty for an ender chest, whose contents are its player's wherever
-     * it is opened, and for {@link Unknown}, which protection denies on its own: check for it first.
+     * or a backpack in a chest is protected too. {@link Unknown} when nothing identified where it is, even through
+     * a backpack, which protection denies as belonging to nobody it trusts. Empty only for storage with no place:
+     * an ender chest, whose contents are its player's wherever it is opened.
      */
     default Optional<InventoryHolder> place() {
         return switch (this) {
@@ -39,7 +40,7 @@ public sealed interface InventoryHolder {
             case Item i -> i.outer().place();
             case PerPlayer p -> Optional.of(p.at());
             case Linked l -> Optional.empty();
-            case Unknown u -> Optional.empty();
+            case Unknown u -> Optional.of(u);
         };
     }
 
