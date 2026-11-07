@@ -48,8 +48,8 @@ public class BlockDataChangeEvent extends BlockChangeEvent {
                 Objects.requireNonNull(before, "before; pass the block entity's data as it is now").copy(),
                 Objects.requireNonNull(after, "after; pass the data as it will be").copy())), actor);
         this.kind = BLOCK_ENTITY;
-        this.before = primary().getBeforeData().orElseThrow();
-        this.after = primary().getAfterData().orElseThrow();
+        this.before = null; // held once, in the BlockChange
+        this.after = null;
     }
 
     /**
@@ -59,13 +59,13 @@ public class BlockDataChangeEvent extends BlockChangeEvent {
      *     {@code covers}
      * @param kind whose data, in the mod's namespace: {@code immersiveengineering:wire}, {@code ad_astra:gravity}
      * @param covers every space the data covers: both connectors and each block the wire passes through, each cell
-     *     of a field that changes
+     *     of a field that changes; all in loaded chunks, since a plugin must see each one
      * @param before the data as it is now, in the mod's format; an empty tag when there was none
      * @param after the data as it will be; an empty tag when it is being removed
      */
     public BlockDataChangeEvent(ServerLevel level, BlockPos pos, ResourceLocation kind, List<BlockPos> covers,
             CompoundTag before, CompoundTag after, Actor actor) {
-        super(level, pos, level.getBlockState(pos), spaces(level, pos, covers, kind), actor);
+        super(level, pos, loadedState(level, pos), spaces(level, pos, covers, kind), actor);
         this.kind = kind;
         this.before = Objects.requireNonNull(before, "before; pass an empty CompoundTag when there was none").copy();
         this.after = Objects.requireNonNull(after, "after; pass an empty CompoundTag when it is being removed").copy();
@@ -91,7 +91,15 @@ public class BlockDataChangeEvent extends BlockChangeEvent {
             throw new IllegalArgumentException("covers doesn't include pos " + pos.toShortString() + ": the space "
                     + "the data starts from is one it covers, so list it too");
         }
-        return covers.stream().map(p -> BlockChange.unchanged(level, p, level.getBlockState(p))).toList();
+        return covers.stream().distinct().map(p -> BlockChange.unchanged(level, p, loadedState(level, p))).toList();
+    }
+
+    private static BlockState loadedState(ServerLevel level, BlockPos p) {
+        if (!level.hasChunkAt(p)) {
+            throw new IllegalArgumentException(p.toShortString() + " is in an unloaded chunk: load it before firing, "
+                    + "since protection must see every space the data covers, and reading it here would load it unseen");
+        }
+        return level.getBlockState(p);
     }
 
     /** Whose data this is: {@link #BLOCK_ENTITY}, or an id in the mod's namespace. */
@@ -104,11 +112,11 @@ public class BlockDataChangeEvent extends BlockChangeEvent {
      * space's block entity data, which this change leaves as it is.
      */
     public CompoundTag getBeforeData() {
-        return before.copy();
+        return before == null ? primary().getBeforeData().orElseThrow() : before.copy();
     }
 
     /** A copy of the data after, in its owner's format. */
     public CompoundTag getAfterData() {
-        return after.copy();
+        return after == null ? primary().getAfterData().orElseThrow() : after.copy();
     }
 }

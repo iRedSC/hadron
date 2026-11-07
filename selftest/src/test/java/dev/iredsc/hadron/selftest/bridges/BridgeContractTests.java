@@ -43,6 +43,7 @@ import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.item.ItemStack;
@@ -168,6 +169,11 @@ public final class BridgeContractTests {
                 apply);
         BlockDataChangeEvent e = (BlockDataChangeEvent) only(t, changes, "BlockChangeEvent");
         t.assertEquals("secret", e.getAfterData().getString("Lock"), "the data after");
+        e.getAfterData().putString("Lock", "other");
+        e.getBlocks().get(0).getAfterData().orElseThrow().putString("Lock", "other");
+        t.assertEquals("secret", e.getBlocks().get(0).getAfterData().orElseThrow().getString("Lock"),
+                "a listener's copies shouldn't change the block's data");
+        t.assertEquals("secret", e.getAfterData().getString("Lock"), "the event and its block agree");
         t.assertFalse(e.getBeforeData().contains("Lock"), "the data before");
         t.assertTrue(e.getActingPlayer().orElse(null) == alice.player(), "the machine's owner is the acting player");
         t.assertTrue(chest.saveWithoutMetadata(t.level().registryAccess()).contains("Lock"), "the uncancelled change");
@@ -209,6 +215,11 @@ public final class BridgeContractTests {
         t.assertEquals(span, e.getBlocks().stream().map(BlockChange::getPos).toList(), "every space the wire covers");
         t.assertFalse(e.getBlocks().stream().anyMatch(BlockChange::isChanged), "no block state changes");
         t.assertEquals("copper", e.getAfterData().getString("type"), "the data after, in the mod's format");
+        strung.putString("type", "gold");
+        e.getAfterData().putString("type", "iron");
+        t.assertEquals("copper", e.getAfterData().getString("type"), "neither the bridge's tag nor a listener's copy "
+                + "should change the recorded data");
+        strung.putString("type", "copper");
         t.assertTrue(e.getBeforeData().isEmpty(), "no wire before");
         t.assertTrue(refused && wires.isEmpty(), "a wire crossing a protected space should be refused");
         refuses(t, "list every space", () -> new BlockDataChangeEvent(t.level(), from, wire, List.of(),
@@ -242,6 +253,8 @@ public final class BridgeContractTests {
         t.assertTrue(e.getEntity() == pig, "the entity");
         t.assertEquals(job, e.getKind(), "whose data");
         t.assertEquals("builder", e.getAfterData().getString("job"), "the data after");
+        e.getAfterData().putString("job", "miner");
+        t.assertEquals("builder", e.getAfterData().getString("job"), "a listener's copy shouldn't change the data");
         t.assertTrue(e.getBeforeData().isEmpty(), "the data before");
         cancel[0] = true;
         CompoundTag farmer = new CompoundTag();
@@ -358,6 +371,56 @@ public final class BridgeContractTests {
         t.assertBlock(to, Blocks.OAK_PLANKS);
     }
 
+    @HadronTest
+    @Covers(StructureMoveEvent.class)
+    void aMoveBetweenLevelsIsTwoStructureMovesEachInItsOwnLevel(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ServerLevel nether = t.server().getLevel(net.minecraft.world.level.Level.NETHER);
+        BlockPos from = t.pos(1, 0, 0);
+        BlockPos to = new BlockPos(0, 64, 0);
+        nether.getChunk(to); // a teleposer's target is loaded before it fires
+        nether.setBlockAndUpdate(to, Blocks.AIR.defaultBlockState());
+        t.setBlock(from, Blocks.OAK_PLANKS);
+        BlockState planks = t.getBlock(from);
+        boolean[] cancel = {false};
+        List<StructureMoveEvent> seen = record(t, StructureMoveEvent.class, new boolean[] {false});
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockEvent e) { // a claim in the nether, checked by each space's own level
+                if (e.getLevel() == nether && e instanceof dev.iredsc.hadron.api.event.Cancellable c && cancel[0]) {
+                    c.setCancelled(true);
+                }
+            }
+        });
+        Runnable teleport = () -> {
+            try (Actors.Scope scope = Actors.push(machine(t, alice))) {
+                Actor a = Actors.currentOr(Actor.Unknown.INSTANCE);
+                var manager = t.plugin().getServer().getPluginManager();
+                boolean out = manager.callEvent(new StructureMoveEvent(t.level(), from, planks,
+                        StructureMoveEvent.Phase.ASSEMBLE, new Matrix4d(), new Matrix4d(), List.of(), List.of(),
+                        List.of(BlockChange.of(t.level(), from, planks, Blocks.AIR.defaultBlockState())), a));
+                boolean in = manager.callEvent(new StructureMoveEvent(nether, to, Blocks.AIR.defaultBlockState(),
+                        StructureMoveEvent.Phase.DISASSEMBLE, new Matrix4d(), new Matrix4d(), List.of(), List.of(to),
+                        List.of(BlockChange.of(nether, to, nether.getBlockState(to), planks)), a));
+                if (out || in) return; // either refused: nothing moves
+                nether.setBlockAndUpdate(to, planks);
+                t.setBlock(from, Blocks.AIR);
+            }
+        };
+        cancel[0] = true;
+        teleport.run();
+        t.assertBlock(from, Blocks.OAK_PLANKS);
+        t.assertTrue(nether.getBlockState(to).isAir(), "a move refused at its target should leave the target empty");
+        t.assertEquals(List.of(t.level(), nether), seen.stream().map(BlockEvent::getLevel).toList(),
+                "one event in each level");
+        t.assertTrue(seen.stream().allMatch(e -> e.getMoves().isEmpty()), "no moves, so no position in the wrong level");
+        cancel[0] = false;
+        teleport.run();
+        t.assertBlock(from, Blocks.AIR);
+        t.assertTrue(nether.getBlockState(to).is(Blocks.OAK_PLANKS), "an allowed move lands in the nether");
+        nether.setBlockAndUpdate(to, Blocks.AIR.defaultBlockState());
+    }
+
     // ---- Entities
 
     @HadronTest
@@ -438,6 +501,7 @@ public final class BridgeContractTests {
 
     @HadronTest
     @Covers(InventoryGenerateEvent.class)
+    @Covers(value = InventoryHolder.class, method = "place")
     void eachPlayersCopyOfALootChestIsItsOwnInventoryAtTheChest(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -458,6 +522,10 @@ public final class BridgeContractTests {
         InventoryHolder.PerPlayer copy = (InventoryHolder.PerPlayer) e.getChanges().get(0).holder();
         t.assertEquals(chest, copy.at(), "where the copy is, for protection");
         t.assertEquals(alice.uuid(), copy.owner(), "whose copy");
+        t.assertEquals(Optional.of(chest), alices.place(), "a claim check finds the copy's chest");
+        t.assertEquals(Optional.of(chest), new InventoryHolder.Item(alices, loot).place(), "and a backpack inside it");
+        t.assertEquals(Optional.empty(), new InventoryHolder.Linked(InventoryHolder.Linked.ENDER_CHEST,
+                alice.uuid().toString()).place(), "an ender chest has no place");
         String refused = "";
         try {
             new InventoryHolder.PerPlayer(new InventoryHolder.Linked(InventoryHolder.Linked.ENDER_CHEST,

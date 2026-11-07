@@ -174,8 +174,8 @@ Everything measured in amounts that isn't an item stack: energy, fluids in tanks
 | Event | What | Core chokepoint |
 |---|---|---|
 | `ResourceChangeEvent` | a holder's amount changes; old and new | core for currencies, through the produce and consume leaves; bridges for everything else |
-| ├ `ResourceProduceEvent` | created: a generator, a reactor's waste, a quest's currency reward | core for currency deposits; bridges for everything else |
-| ├ `ResourceConsumeEvent` | destroyed: a machine spending power, a spell's mana, a vein depleted | core for currency withdrawals; bridges for everything else |
+| ├ `ResourceProduceEvent` | created in one step: a reactor's waste, a burned fuel item's energy, a quest's currency reward | core for currency deposits; bridges for everything else |
+| ├ `ResourceConsumeEvent` | destroyed in one step: a spell's mana, a launch's fuel, a vein depleted; a machine's running power draw isn't reported ([bridge-hooks](bridge-hooks.md#the-rule-for-firing)) | core for currency withdrawals; bridges for everything else |
 | └ `ResourceConvertEvent` | one resource into another in one step: fuel to heat to steam | bridge |
 | `ResourceTransferEvent` | an amount moves between holders: a cable, a pipe, a wireless charger reaching a player in another dimension, a payment | core for currency transfers; bridges for energy, fluids and mods' resources |
 

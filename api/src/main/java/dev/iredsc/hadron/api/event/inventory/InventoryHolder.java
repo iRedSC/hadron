@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.inventory;
 
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
@@ -25,6 +26,22 @@ import net.minecraft.world.item.ItemStack;
  * }</pre>
  */
 public sealed interface InventoryHolder {
+    /**
+     * Where the inventory is, for protection: the block or entity itself, the place a per-player copy belongs to, or
+     * whatever holds the item a backpack is in. Empty for storage with no place (an ender chest) or nothing known.
+     * Check this rather than matching {@link Block} alone, so a Lootr chest or a backpack in a chest is protected too.
+     */
+    default Optional<InventoryHolder> place() {
+        return switch (this) {
+            case Block b -> Optional.of(b);
+            case Entity e -> Optional.of(e);
+            case Item i -> i.outer().place();
+            case PerPlayer p -> Optional.of(p.at());
+            case Linked l -> Optional.empty();
+            case Unknown u -> Optional.empty();
+        };
+    }
+
     /** A block's inventory: a chest, a furnace, a machine. A crafting table or anvil's grid counts as its block's. */
     record Block(ServerLevel level, BlockPos pos) implements InventoryHolder {
         public Block {
