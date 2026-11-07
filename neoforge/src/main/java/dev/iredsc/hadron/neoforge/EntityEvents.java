@@ -272,7 +272,8 @@ final class EntityEvents {
         lastUsed = target;
         lastHand = event.getHand();
         lastTick = tick;
-        lastCancelled = Hooks.post(new EntityUseEvent(target, event.getHand(), event.getItemStack(),
+        // A copy: the use that follows spends or replaces the held stack, and the event says what was in the hand.
+        lastCancelled = Hooks.post(new EntityUseEvent(target, event.getHand(), event.getItemStack().copy(),
                 EntityActors.of(player))).isCancelled();
         return lastCancelled;
     }

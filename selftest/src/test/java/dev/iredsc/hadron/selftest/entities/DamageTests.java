@@ -1,0 +1,314 @@
+package dev.iredsc.hadron.selftest.entities;
+
+import static dev.iredsc.hadron.selftest.entities.Fixtures.assertEntityFor;
+import static dev.iredsc.hadron.selftest.entities.Fixtures.assertPlayer;
+import static dev.iredsc.hadron.selftest.entities.Fixtures.horizontalSpeed;
+import static dev.iredsc.hadron.selftest.entities.Fixtures.near;
+import static dev.iredsc.hadron.selftest.entities.Fixtures.spawn;
+
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventHandler;
+import dev.iredsc.hadron.api.event.Listener;
+import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
+import dev.iredsc.hadron.api.event.entity.EntityDeathEvent;
+import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
+import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
+import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.TestContext;
+import dev.iredsc.hadron.test.TestPlayer;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+import java.util.UUID;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.animal.Wolf;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.projectile.Arrow;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+
+/** EntityDamageEvent, EntityKnockbackEvent, EntityDeathEvent and ProjectileHitEvent, and who a hit is remembered as. */
+public final class DamageTests {
+    @HadronTest
+    void aPlayersHitIsThePlayersWithTheirWeapon(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        alice.hold(new ItemStack(Items.IRON_SWORD));
+        List<EntityDamageEvent> events = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDamageEvent e) {
+                if (e.getEntity() == pig) events.add(e);
+            }
+        });
+        t.tick(10);
+        alice.attack(pig);
+        t.assertEquals(1, events.size(), "the number of EntityDamageEvents for the pig");
+        EntityDamageEvent e = events.get(0);
+        assertPlayer(t, e.getActor(), alice, "A sword hit");
+        t.assertEquals(Optional.of(alice.player()), e.getDamager(), "the damager");
+        t.assertTrue(e.getWeapon().map(w -> w.is(Items.IRON_SWORD)).orElse(false),
+                "the weapon should be the iron sword, but was " + e.getWeapon());
+    }
+
+    @HadronTest
+    void aCancelledHitLeavesTheVictimUnhurtUnmovedAndTheSwordUnworn(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        alice.hold(new ItemStack(Items.IRON_SWORD));
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDamageEvent e) {
+                if (e.getEntity() == pig) e.setCancelled(true);
+            }
+        });
+        t.tick(10);
+        alice.attack(pig);
+        t.assertEquals(pig.getMaxHealth(), pig.getHealth(), "the pig's health");
+        t.assertEquals(0.0, horizontalSpeed(pig), "the pig's horizontal speed (knockback)");
+        t.assertEquals(0, alice.player().getMainHandItem().getDamageValue(), "the sword's damage");
+    }
+
+    @HadronTest
+    void aHitsKnockbackIsTheAttackersAndPushesTheVictim(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        List<EntityKnockbackEvent> events = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityKnockbackEvent e) {
+                if (e.getEntity() == pig) events.add(e);
+            }
+        });
+        t.tick(10);
+        alice.attack(pig);
+        t.assertEquals(1, events.size(), "the number of EntityKnockbackEvents for the pig");
+        assertPlayer(t, events.get(0).getActor(), alice, "A hit's knockback");
+        t.assertTrue(horizontalSpeed(pig) > 0.1, "the pig should be knocked back, but its horizontal speed is "
+                + horizontalSpeed(pig));
+    }
+
+    @HadronTest
+    void zeroKnockbackLeavesTheVictimInPlaceButHurt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityKnockbackEvent e) {
+                if (e.getEntity() == pig) e.setStrength(0);
+            }
+        });
+        t.tick(10);
+        alice.attack(pig);
+        t.assertEquals(0.0, horizontalSpeed(pig), "the pig's horizontal speed");
+        t.assertEquals(pig.getMaxHealth() - 1, pig.getHealth(), "the pig's health after a fist");
+    }
+
+    @HadronTest
+    void strongerKnockbackPushesFurther(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        Pig other = spawn(t, EntityType.PIG, t.pos(-2, 0, 0));
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityKnockbackEvent e) {
+                if (e.getEntity() == pig) e.setStrength(e.getStrength() * 4);
+            }
+        });
+        t.tick(10);
+        alice.attack(other);
+        t.tick(10);
+        alice.attack(pig);
+        t.assertTrue(horizontalSpeed(pig) > horizontalSpeed(other) * 2, "four times the knockback should push the pig "
+                + "much faster than an ordinary hit, but its speed is " + horizontalSpeed(pig) + " against "
+                + horizontalSpeed(other));
+    }
+
+    @HadronTest
+    void changedDropsAndExperienceAreWhatTheMobLeaves(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        pig.setHealth(1);
+        List<EntityDeathEvent> events = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDeathEvent e) {
+                if (e.getEntity() != pig) return;
+                events.add(e);
+                e.getDrops().clear();
+                e.getDrops().add(new ItemStack(Items.DIAMOND, 2));
+                e.setDroppedExp(37);
+            }
+        });
+        t.tick(10);
+        alice.attack(pig);
+        t.assertEquals(1, events.size(), "the number of EntityDeathEvents for the pig");
+        assertPlayer(t, events.get(0).getActor(), alice, "Killing the pig");
+        int diamonds = 0;
+        int other = 0;
+        for (ItemEntity item : near(t, ItemEntity.class)) {
+            if (item.getItem().is(Items.DIAMOND)) diamonds += item.getItem().getCount();
+            else other += item.getItem().getCount();
+        }
+        t.assertEquals(2, diamonds, "the diamonds dropped");
+        t.assertEquals(0, other, "the other items dropped (the pork should be gone)");
+        int exp = near(t, ExperienceOrb.class).stream().mapToInt(ExperienceOrb::getValue).sum();
+        t.assertEquals(37, exp, "the experience dropped");
+    }
+
+    /** A slow arrow from {@code alice} toward the pig, three-quarters of a second in flight. */
+    private static Arrow slowArrowAt(TestContext t, TestPlayer alice, Pig pig) {
+        Arrow arrow = new Arrow(t.level(), alice.player(), new ItemStack(Items.ARROW), null);
+        arrow.moveTo(pig.getX(), pig.getY() + 0.45, pig.getZ() - 6, 0.0F, 0.0F);
+        arrow.setNoGravity(true);
+        arrow.shoot(0, 0, 1, 0.4F, 0.0F);
+        return arrow;
+    }
+
+    @HadronTest
+    void anArrowsHitIsItsShootersAfterTicksInFlight(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(3, 0, 4));
+        List<Actor> actors = new ArrayList<>();
+        List<ProjectileHitEvent> hits = new ArrayList<>();
+        int[] hitAt = {-1};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDamageEvent e) {
+                if (e.getEntity() != pig) return;
+                actors.add(e.getActor());
+                hitAt[0] = t.ticksSpent();
+            }
+
+            @EventHandler
+            void on(ProjectileHitEvent e) {
+                if (e.getHitEntity().orElse(null) == pig) hits.add(e);
+            }
+        });
+        Arrow arrow = slowArrowAt(t, alice, pig);
+        int launched = t.ticksSpent();
+        t.level().addFreshEntity(arrow);
+        t.await("the arrow to hit the pig", () -> !actors.isEmpty(), 60);
+        t.assertTrue(hitAt[0] - launched >= 5, "the arrow should have flown for a while, but hit after "
+                + (hitAt[0] - launched) + " ticks");
+        assertEntityFor(t, actors.get(0), arrow, alice.uuid(), "The arrow's hit");
+        t.assertEquals(1, hits.size(), "the number of ProjectileHitEvents on the pig");
+        assertEntityFor(t, hits.get(0).getActor(), arrow, alice.uuid(), "The ProjectileHitEvent");
+        t.assertEquals(Optional.of(arrow), hits.get(0).getProjectile(), "the projectile that hit");
+    }
+
+    @HadronTest
+    void aCancelledArrowHitLeavesTheTargetUnhurt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(3, 0, 4));
+        int[] asked = {0};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(ProjectileHitEvent e) {
+                if (e.getHitEntity().orElse(null) == pig) {
+                    asked[0]++;
+                    e.setCancelled(true);
+                }
+            }
+        });
+        t.level().addFreshEntity(slowArrowAt(t, alice, pig));
+        t.await("the arrow to reach the pig", () -> asked[0] > 0, 60);
+        t.tick(5);
+        t.assertEquals(pig.getMaxHealth(), pig.getHealth(), "the pig's health");
+    }
+
+    @HadronTest
+    void anArrowStillAnswersToItsShooterAfterTheyLeave(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        UUID aliceId = alice.uuid();
+        Pig pig = spawn(t, EntityType.PIG, t.pos(3, 0, 4));
+        List<EntityDamageEvent> events = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDamageEvent e) {
+                if (e.getEntity() == pig) events.add(e);
+            }
+        });
+        Arrow arrow = slowArrowAt(t, alice, pig);
+        t.level().addFreshEntity(arrow);
+        t.player("bob"); // keeps the world ticking once alice leaves
+        alice.disconnect();
+        t.await("the arrow to hit the pig", () -> !events.isEmpty(), 60);
+        assertEntityFor(t, events.get(0).getActor(), arrow, aliceId, "The arrow's hit after its shooter left");
+        t.assertEquals(Optional.empty(), events.get(0).getActingPlayer(), "the acting player (alice is offline)");
+    }
+
+    @HadronTest
+    void anArrowRemembersItsShooterThroughASave(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        UUID aliceId = alice.uuid();
+        Pig pig = spawn(t, EntityType.PIG, t.pos(3, 0, 4));
+        List<Actor> actors = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDamageEvent e) {
+                if (e.getEntity() == pig) actors.add(e.getActor());
+            }
+        });
+        CompoundTag saved = new CompoundTag();
+        t.assertTrue(slowArrowAt(t, alice, pig).save(saved), "the arrow should save");
+        t.player("bob"); // keeps the world ticking once alice leaves
+        alice.disconnect(); // so only what the arrow saved can name her
+        Entity loaded = EntityType.loadEntityRecursive(saved, t.level(), e -> e);
+        t.assertTrue(loaded instanceof Arrow, "the saved arrow should load as an arrow, but loaded " + loaded);
+        t.level().addFreshEntity(loaded);
+        t.await("the reloaded arrow to hit the pig", () -> !actors.isEmpty(), 60);
+        assertEntityFor(t, actors.get(0), loaded, aliceId, "The reloaded arrow's hit");
+    }
+
+    @HadronTest
+    void aTamedWolfsBiteIsItsOwners(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Wolf wolf = spawn(t, EntityType.WOLF, t.pos(2, 0, 2));
+        Pig pig = spawn(t, EntityType.PIG, t.pos(3, 0, 2));
+        t.tick(); // the wolf ticks once untamed, so a cached actor from before taming would show
+        wolf.tame(alice.player());
+        List<Actor> actors = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDamageEvent e) {
+                if (e.getEntity() == pig) actors.add(e.getActor());
+            }
+        });
+        t.tick();
+        wolf.doHurtTarget(pig);
+        t.assertEquals(1, actors.size(), "the number of EntityDamageEvents for the pig");
+        assertEntityFor(t, actors.get(0), wolf, alice.uuid(), "The tamed wolf's bite");
+    }
+
+    @HadronTest
+    void aReloadedWolfStillAnswersToItsOwner(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        UUID aliceId = alice.uuid();
+        Wolf wolf = spawn(t, EntityType.WOLF, t.pos(2, 0, 2));
+        Pig pig = spawn(t, EntityType.PIG, t.pos(3, 0, 2));
+        wolf.tame(alice.player());
+        CompoundTag saved = new CompoundTag();
+        wolf.save(saved);
+        wolf.discard();
+        alice.disconnect();
+        Entity loaded = EntityType.loadEntityRecursive(saved, t.level(), e -> e);
+        t.assertTrue(loaded instanceof Wolf, "the saved wolf should load as a wolf, but loaded " + loaded);
+        t.level().addFreshEntity(loaded);
+        List<Actor> actors = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDamageEvent e) {
+                if (e.getEntity() == pig) actors.add(e.getActor());
+            }
+        });
+        t.tick();
+        ((Wolf) loaded).doHurtTarget(pig);
+        t.assertEquals(1, actors.size(), "the number of EntityDamageEvents for the pig");
+        assertEntityFor(t, actors.get(0), loaded, aliceId, "The reloaded wolf's bite");
+    }
+}
