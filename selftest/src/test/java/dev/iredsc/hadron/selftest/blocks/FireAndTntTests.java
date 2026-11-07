@@ -14,6 +14,7 @@ import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
 import dev.iredsc.hadron.api.event.block.BlockBurnEvent;
 import dev.iredsc.hadron.api.event.block.BlockChangeEvent;
 import dev.iredsc.hadron.api.event.block.BlockIgniteEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -36,6 +37,7 @@ public final class FireAndTntTests {
     // ---- Flint and steel on a block
 
     @HadronTest
+    @Covers(BlockIgniteEvent.class)
     void flintAndSteelLightingFireIsOneIgniteByThePlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos floor = t.pos(1, -1, 0);
@@ -55,6 +57,7 @@ public final class FireAndTntTests {
     }
 
     @HadronTest
+    @Covers(BlockIgniteEvent.class)
     void cancelledIgniteLeavesNoFireAndTheFlintUnworn(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos floor = t.pos(1, -1, 0);
@@ -85,6 +88,7 @@ public final class FireAndTntTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(BlockBurnEvent.class)
     void fireBurningABlockIsABurnByNature(TestContext t) {
         List<BlockBurnEvent> burns = new ArrayList<>();
         t.registerEvents(new Listener() {
@@ -107,6 +111,7 @@ public final class FireAndTntTests {
     }
 
     @HadronTest(timeout = 1500)
+    @Covers(BlockIgniteEvent.class)
     void fireSpreadingIsAnIgniteByNature(TestContext t) {
         // Fire on netherrack never goes out; the wool ring around it gives the air beside the fire something to catch.
         clearWeather(t);
@@ -137,6 +142,7 @@ public final class FireAndTntTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(BlockBurnEvent.class)
     void cancelledBurnKeepsEveryBlock(TestContext t) {
         List<BlockBurnEvent> burns = new ArrayList<>();
         t.registerEvents(new Listener() {
@@ -168,6 +174,7 @@ public final class FireAndTntTests {
     }
 
     @HadronTest
+    @Covers(BlockBreakEvent.class)
     void lightingTntIsOneBreakByThePlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos tnt = t.pos(2, 0, 0);
@@ -182,6 +189,7 @@ public final class FireAndTntTests {
     }
 
     @HadronTest
+    @Covers(BlockBreakEvent.class)
     void cancelledTntLightingLeavesTheTntUnprimedAndTheFlintUnworn(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos tnt = t.pos(2, 0, 0);
@@ -209,6 +217,7 @@ public final class FireAndTntTests {
     }
 
     @HadronTest
+    @Covers(BlockBreakEvent.class)
     void aDispenserLightingTntIsOneBreakByTheMachine(TestContext t) {
         BlockPos at = t.pos(2, 0, 0);
         t.setBlock(at.east(), Blocks.TNT);
@@ -226,6 +235,7 @@ public final class FireAndTntTests {
     }
 
     @HadronTest
+    @Covers(BlockBreakEvent.class)
     void cancelledDispenserTntLightingPrimesNothingAndWearsNothing(TestContext t) {
         BlockPos at = t.pos(2, 0, 0);
         t.setBlock(at.east(), Blocks.TNT);

@@ -23,7 +23,7 @@ import net.minecraft.network.chat.Style;
 /**
  * {@code /plugins} (and {@code /pl}) lists every plugin, colored by state; hover for why, click for details.
  * {@code /hadron reload [plugin]}, {@code /hadron enable|disable|info <plugin>} manage them. Reloading by hand is
- * rarely needed: a changed jar reloads by itself.
+ * rarely needed: a changed jar reloads by itself. {@code /hadron trace} shows events as they fire ({@link Trace}).
  */
 final class HadronCommand {
     private static final SimpleCommandExceptionType NOT_RUNNING =
@@ -39,23 +39,86 @@ final class HadronCommand {
                 .requires(s -> Permissions.has(s, PluginHost.LIST))
                 .executes(ctx -> list(ctx, hosts)));
         dispatcher.register(Commands.literal("pl").requires(list.getRequirement()).executes(ctx -> list(ctx, hosts)));
+        java.util.function.Predicate<CommandSourceStack> manage = s -> Permissions.has(s, PluginHost.MANAGE);
         dispatcher.register(Commands.literal("hadron")
-                .requires(s -> Permissions.has(s, PluginHost.MANAGE))
+                .requires(s -> manage.test(s) || Permissions.has(s, PluginHost.TRACE))
                 .executes(ctx -> list(ctx, hosts))
-                .then(Commands.literal("reload")
+                .then(trace(hosts))
+                .then(Commands.literal("reload").requires(manage)
                         .executes(ctx -> {
                             host(hosts).reloadAll();
                             return console(ctx) ? list(ctx, hosts) : 1;
                         })
                         .then(named(hosts, (host, e) -> host.reload(e))))
-                .then(Commands.literal("enable").then(named(hosts, PluginHost::switchOn)))
-                .then(Commands.literal("disable").then(named(hosts, PluginHost::switchOff)))
-                .then(Commands.literal("info").then(Commands.argument("plugin", StringArgumentType.word())
+                .then(Commands.literal("enable").requires(manage).then(named(hosts, PluginHost::switchOn)))
+                .then(Commands.literal("disable").requires(manage).then(named(hosts, PluginHost::switchOff)))
+                .then(Commands.literal("info").requires(manage).then(Commands.argument("plugin", StringArgumentType.word())
                         .suggests((ctx, b) -> SharedSuggestionProvider.suggest(names(hosts), b))
                         .executes(ctx -> {
                             info(ctx.getSource(), entry(ctx, hosts));
                             return 1;
                         }))));
+    }
+
+    /**
+     * {@code /hadron trace <event|family|all> [by <who>] [in <world>] [near <blocks>]}, {@code /hadron trace off},
+     * and {@code /hadron trace} for what is being traced.
+     */
+    private static ArgumentBuilder<CommandSourceStack, ?> trace(Supplier<PluginHost> hosts) {
+        return Commands.literal("trace")
+                .requires(s -> Permissions.has(s, PluginHost.TRACE))
+                .executes(ctx -> {
+                    host(hosts).trace().status(ctx.getSource());
+                    return 1;
+                })
+                .then(Commands.literal("off").executes(ctx -> {
+                    if (!host(hosts).trace().stop(ctx.getSource())) {
+                        ctx.getSource().sendSystemMessage(Component.literal("Not tracing").withStyle(
+                                ChatFormatting.GRAY));
+                    }
+                    return 1;
+                }))
+                .then(Commands.argument("events", StringArgumentType.word())
+                        .suggests((ctx, b) -> {
+                            PluginHost host = hosts.get();
+                            return SharedSuggestionProvider.suggest(host == null ? Trace.suggestions(java.util.Set.of())
+                                    : Trace.suggestions(host.seenEvents()), b);
+                        })
+                        .executes(ctx -> startTrace(ctx, hosts, ""))
+                        .then(Commands.argument("filters", StringArgumentType.greedyString())
+                                .suggests((ctx, b) -> SharedSuggestionProvider.suggest(filterWords(ctx, b.getRemaining()), b))
+                                .executes(ctx -> startTrace(ctx, hosts, StringArgumentType.getString(ctx, "filters")))));
+    }
+
+    private static int startTrace(CommandContext<CommandSourceStack> ctx, Supplier<PluginHost> hosts, String filters)
+            throws CommandSyntaxException {
+        PluginHost host = host(hosts);
+        String what = StringArgumentType.getString(ctx, "events");
+        Trace.Target target = Trace.target(what, host.seenEvents(), host::pluginClass);
+        String command = what + (filters.isBlank() ? "" : " " + filters.trim());
+        host.trace().start(ctx.getSource(), command, target, Trace.filters(filters, ctx.getSource()));
+        return 1;
+    }
+
+    /** Whole suggestions for the filter text typed so far: the next keyword, or values for the last one. */
+    private static java.util.List<String> filterWords(CommandContext<CommandSourceStack> ctx, String typed) {
+        String done = typed.contains(" ") ? typed.substring(0, typed.lastIndexOf(' ') + 1) : "";
+        String[] words = done.isBlank() ? new String[0] : done.trim().split("\\s+");
+        java.util.List<String> next = new java.util.ArrayList<>();
+        if (words.length % 2 == 0) {
+            next.addAll(java.util.List.of("by", "in", "near"));
+        } else {
+            switch (words[words.length - 1]) {
+                case "by" -> {
+                    next.addAll(Trace.KINDS);
+                    next.addAll(java.util.Arrays.asList(ctx.getSource().getServer().getPlayerNames()));
+                }
+                case "in" -> next.addAll(Trace.worlds(ctx.getSource().getServer()));
+                case "near" -> next.addAll(java.util.List.of("8", "16", "32"));
+                default -> {}
+            }
+        }
+        return next.stream().map(w -> done + w).toList();
     }
 
     private interface Action {

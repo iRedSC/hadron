@@ -11,6 +11,7 @@ import dev.iredsc.hadron.api.event.block.BlockChangeEvent;
 import dev.iredsc.hadron.api.event.block.BlockMultiPlaceEvent;
 import dev.iredsc.hadron.api.event.block.BlockPlaceEvent;
 import dev.iredsc.hadron.api.event.block.BlockTransformEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -45,6 +46,7 @@ public final class BreakPlaceTests {
     // ---- Breaking
 
     @HadronTest
+    @Covers(BlockBreakEvent.class)
     void aPlayersBreakIsOneBlockChangeAndItsABreak(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos dirt = t.pos(1, 0, 0);
@@ -56,6 +58,7 @@ public final class BreakPlaceTests {
     }
 
     @HadronTest
+    @Covers(BlockBreakEvent.class)
     void consoleSetblockToAirIsABreakByTheServer(TestContext t) {
         BlockPos stone = t.pos(2, 0, 0);
         t.setBlock(stone, Blocks.STONE);
@@ -68,6 +71,7 @@ public final class BreakPlaceTests {
     }
 
     @HadronTest
+    @Covers(BlockBreakEvent.class)
     void cancelledConsoleSetblockKeepsTheBlock(TestContext t) {
         BlockPos stone = t.pos(2, 0, 0);
         t.setBlock(stone, Blocks.STONE);
@@ -84,6 +88,7 @@ public final class BreakPlaceTests {
     // ---- Placing
 
     @HadronTest
+    @Covers(BlockPlaceEvent.class)
     void consoleSetblockIsAPlaceByTheServer(TestContext t) {
         BlockPos at = t.pos(2, 0, 0);
         List<BlockChangeEvent> seen = recordChanges(t);
@@ -95,6 +100,7 @@ public final class BreakPlaceTests {
     }
 
     @HadronTest
+    @Covers(BlockPlaceEvent.class)
     void aPlayersPlaceIsOnePlaceByThatPlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(1, 0, 0);
@@ -108,6 +114,7 @@ public final class BreakPlaceTests {
     }
 
     @HadronTest
+    @Covers(BlockPlaceEvent.class)
     void cancelledPlaceLeavesAirAndKeepsTheItem(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(1, 0, 0);
@@ -125,6 +132,7 @@ public final class BreakPlaceTests {
     }
 
     @HadronTest
+    @Covers(BlockMultiPlaceEvent.class)
     void placingADoorIsOneMultiPlaceOfBothHalves(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(1, 0, 0);
@@ -140,6 +148,7 @@ public final class BreakPlaceTests {
     }
 
     @HadronTest
+    @Covers(BlockMultiPlaceEvent.class)
     void cancelledDoorPlaceLeavesNeitherHalfAndKeepsTheDoor(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(1, 0, 0);
@@ -160,6 +169,7 @@ public final class BreakPlaceTests {
     // ---- Transforming and changing
 
     @HadronTest
+    @Covers(BlockTransformEvent.class)
     void strippingALogIsOneTransformByThePlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos log = t.pos(1, 0, 0);
@@ -173,6 +183,7 @@ public final class BreakPlaceTests {
     }
 
     @HadronTest
+    @Covers(BlockTransformEvent.class)
     void cancelledStripKeepsTheLogAndTheAxesDurability(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos log = t.pos(1, 0, 0);
@@ -195,6 +206,7 @@ public final class BreakPlaceTests {
     }
 
     @HadronTest
+    @Covers(BlockChangeEvent.class)
     void flippingALeverIsOneBlockChangeByThePlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(1, 0, 0);
@@ -208,6 +220,7 @@ public final class BreakPlaceTests {
     }
 
     @HadronTest
+    @Covers(BlockChangeEvent.class)
     void cancelledLeverFlipLeavesItOff(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(1, 0, 0);

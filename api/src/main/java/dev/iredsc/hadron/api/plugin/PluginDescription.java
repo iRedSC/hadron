@@ -174,6 +174,12 @@ public final class PluginDescription {
     private static String optional(Map<?, ?> yaml, String key, String fallback) {
         Object value = yaml.get(key);
         if (value == null) return fallback;
+        // YAML reads an unquoted 1.10 as the number 1.1 before Hadron sees it, so a version could change silently.
+        if (value instanceof Number n && (key.equals("version") || key.equals("minecraft"))) {
+            throw new PluginException("plugin.yml '" + key + "' must be quoted: unquoted, YAML reads it as the number "
+                    + n + ", so a version like 1.10 would become 1.1. Write " + key + ": \"" + n + "\" with the exact "
+                    + "version you mean between the quotes");
+        }
         if (value instanceof Map || value instanceof List) {
             throw new PluginException("plugin.yml '" + key + "' must be a single value");
         }

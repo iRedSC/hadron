@@ -13,6 +13,7 @@ import dev.iredsc.hadron.api.event.inventory.InventoryCloseEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.inventory.InventoryMoveItemEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -35,6 +36,7 @@ public final class InventoryTests {
     }
 
     @HadronTest
+    @Covers(InventoryOpenEvent.class)
     void cancelledOpenKeepsTheChestClosed(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos pos = t.pos(1, 0, 0);
@@ -58,6 +60,7 @@ public final class InventoryTests {
     }
 
     @HadronTest
+    @Covers(InventoryCloseEvent.class)
     void closingAChestFiresCloseWithItsHolder(TestContext t) {
         // The harness has no close-window packet yet; this closes it as the server's packet handler does.
         TestPlayer alice = t.player("alice");
@@ -79,6 +82,7 @@ public final class InventoryTests {
     }
 
     @HadronTest
+    @Covers(InventoryClickEvent.class)
     void cancelledClickMovesNothing(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos pos = t.pos(1, 0, 0);
@@ -107,6 +111,7 @@ public final class InventoryTests {
     }
 
     @HadronTest
+    @Covers(InventoryMoveItemEvent.class)
     void cancelledHopperPullLeavesTheItemsInTheChestAndNamesTheHopper(TestContext t) {
         dev.iredsc.hadron.selftest.items.Support.watch(t);
         BlockPos hopperPos = t.pos(4, 0, 0);
@@ -133,6 +138,7 @@ public final class InventoryTests {
     }
 
     @HadronTest
+    @Covers(InventoryMoveItemEvent.class)
     void aHopperMoveIsHeardAsAnInventoryChange(TestContext t) {
         dev.iredsc.hadron.selftest.items.Support.watch(t);
         BlockPos hopperPos = t.pos(4, 0, 0);

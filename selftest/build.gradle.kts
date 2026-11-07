@@ -27,3 +27,14 @@ tasks.processResources {
 }
 
 apply(from = rootProject.file("gradle/hadron-test.gradle.kts"))
+
+// coverageCheck (part of check): every shipped event and public API method needs a test that says it covers it with
+// @Covers. Reads Hadron's api classes and these tests, plus api's and common's own JUnit tests, without a server.
+extra["hadronCoverage.api"] = project(":api").layout.buildDirectory.dir("classes/java/main")
+extra["hadronCoverage.tests"] = listOf(
+    layout.buildDirectory.dir("classes/java/test"),
+    project(":api").layout.buildDirectory.dir("classes/java/test"),
+    project(":common").layout.buildDirectory.dir("classes/java/test"),
+)
+extra["hadronCoverage.dependsOn"] = listOf(":api:classes", "testClasses", ":api:testClasses", ":common:testClasses")
+apply(from = rootProject.file("gradle/hadron-coverage.gradle.kts"))

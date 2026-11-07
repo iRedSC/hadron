@@ -15,6 +15,7 @@ import dev.iredsc.hadron.api.event.block.BlockGrowEvent;
 import dev.iredsc.hadron.api.event.block.BlockSpreadEvent;
 import dev.iredsc.hadron.api.event.block.LeavesDecayEvent;
 import dev.iredsc.hadron.api.event.block.StructureGrowEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -36,6 +37,7 @@ public final class NaturalTests {
     // ---- Fluids
 
     @HadronTest
+    @Covers(BlockFromToEvent.class)
     void waterFlowingIsFromToByNature(TestContext t) {
         BlockPos source = t.pos(2, 0, 2);
         Fixtures.awaitTicking(t, source);
@@ -57,6 +59,7 @@ public final class NaturalTests {
     }
 
     @HadronTest
+    @Covers(BlockFromToEvent.class)
     void cancelledFlowMovesNoWater(TestContext t) {
         BlockPos source = t.pos(2, 0, 2);
         Fixtures.awaitTicking(t, source);
@@ -75,6 +78,7 @@ public final class NaturalTests {
     }
 
     @HadronTest
+    @Covers(BlockFormEvent.class)
     void lavaMeetingWaterIsAFormByNature(TestContext t) {
         BlockPos water = t.pos(2, 0, 2);
         BlockPos lava = water.east();
@@ -95,6 +99,7 @@ public final class NaturalTests {
     }
 
     @HadronTest
+    @Covers(BlockFormEvent.class)
     void cancelledFormLeavesTheLava(TestContext t) {
         BlockPos water = t.pos(2, 0, 2);
         BlockPos lava = water.east();
@@ -121,6 +126,7 @@ public final class NaturalTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(BlockSpreadEvent.class)
     void grassSpreadingToDirtIsASpreadByNature(TestContext t) {
         t.player("alice");
         BlockPos grass = grassBesideDirt(t);
@@ -140,6 +146,7 @@ public final class NaturalTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(BlockSpreadEvent.class)
     void cancelledSpreadLeavesTheDirt(TestContext t) {
         t.player("alice");
         BlockPos grass = grassBesideDirt(t);
@@ -156,6 +163,7 @@ public final class NaturalTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(BlockFadeEvent.class)
     void grassDyingUnderABlockIsAFadeByNature(TestContext t) {
         t.player("alice");
         BlockPos grass = t.pos(2, 0, 2);
@@ -176,6 +184,7 @@ public final class NaturalTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(BlockFadeEvent.class)
     void cancelledFadeKeepsTheGrass(TestContext t) {
         t.player("alice");
         BlockPos grass = t.pos(2, 0, 2);
@@ -202,6 +211,7 @@ public final class NaturalTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(BlockGrowEvent.class)
     void cactusGrowingIsGrowByNature(TestContext t) {
         t.player("alice");
         BlockPos cactus = cactus(t);
@@ -221,6 +231,7 @@ public final class NaturalTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(BlockGrowEvent.class)
     void cancelledGrowKeepsTheCactusAsItWas(TestContext t) {
         t.player("alice");
         BlockPos cactus = cactus(t);
@@ -241,6 +252,7 @@ public final class NaturalTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(LeavesDecayEvent.class)
     void leavesDecayingIsLeavesDecayByNature(TestContext t) {
         t.player("alice");
         BlockPos leaves = t.pos(3, 0, 3);
@@ -264,6 +276,7 @@ public final class NaturalTests {
     }
 
     @HadronTest(timeout = 900)
+    @Covers(LeavesDecayEvent.class)
     void cancelledDecayKeepsTheLeaves(TestContext t) {
         t.player("alice");
         BlockPos leaves = t.pos(3, 0, 3);
@@ -292,6 +305,7 @@ public final class NaturalTests {
     }
 
     @HadronTest
+    @Covers(BlockFertilizeEvent.class)
     void boneMealIsOneFertilizeByThePlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos crop = wheat(t);
@@ -315,6 +329,7 @@ public final class NaturalTests {
     }
 
     @HadronTest
+    @Covers(BlockFertilizeEvent.class)
     void cancelledFertilizeKeepsTheCropAndTheBoneMeal(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos crop = wheat(t);
@@ -340,6 +355,7 @@ public final class NaturalTests {
     }
 
     @HadronTest
+    @Covers(StructureGrowEvent.class)
     void aTreeFromBoneMealIsOneStructureGrowByThePlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos sapling = sapling(t);
@@ -363,6 +379,7 @@ public final class NaturalTests {
     }
 
     @HadronTest
+    @Covers(StructureGrowEvent.class)
     void cancelledStructureGrowLeavesTheSaplingAndNoTree(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos sapling = sapling(t);

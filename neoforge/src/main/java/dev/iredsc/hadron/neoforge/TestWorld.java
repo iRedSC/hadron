@@ -11,6 +11,7 @@ import dev.iredsc.hadron.api.world.WorldCreator;
 import dev.iredsc.hadron.api.world.WorldGenerator;
 import dev.iredsc.hadron.api.world.Worlds;
 import dev.iredsc.hadron.test.TestContext;
+import dev.iredsc.hadron.test.TestModPacket;
 import dev.iredsc.hadron.test.TestPlayer;
 import io.netty.channel.Channel;
 import java.io.IOException;
@@ -66,6 +67,7 @@ final class TestWorld implements TestContext {
         this.test = test;
         this.timeout = timeout;
         this.key = ResourceLocation.fromNamespaceAndPath("hadrontest", "test" + index);
+        TestMod.forget();
         this.level = Worlds.create(new WorldCreator(key).generator(WorldGenerator.voidWorld()).spawn(ORIGIN)
                 .keepSpawnLoaded(true));
         for (int x = -FLOOR_RADIUS; x <= FLOOR_RADIUS; x++) {
@@ -156,14 +158,34 @@ final class TestWorld implements TestContext {
 
     @Override
     public TestPlayer player(String name) {
+        return join(name, false);
+    }
+
+    @Override
+    public TestPlayer moddedPlayer(String name) {
+        return join(name, true);
+    }
+
+    @Override
+    public List<TestModPacket.Handled> modPacketsHandled() {
+        return TestMod.handled();
+    }
+
+    private TestPlayer join(String name, boolean modded) {
         TestClient existing = players.get(name);
-        if (existing != null) return existing;
+        if (existing != null) {
+            if (existing.modded() == modded) return existing;
+            throw new AssertionError(name + " already joined this test as " + (existing.modded()
+                    ? "a modded client, with t.moddedPlayer" : "an unmodded client, with t.player")
+                    + "; a client can't change its mods while online. Use t." + (existing.modded() ? "moddedPlayer"
+                    : "player") + "(\"" + name + "\") throughout the test, or another name.");
+        }
         requireIdle("join a player");
         if (!net.minecraft.util.StringUtil.isValidPlayerName(name)) {
             throw new AssertionError("\"" + name + "\" isn't a valid player name: use 3 to 16 letters, digits or _, "
                     + "like \"alice\".");
         }
-        TestClient client = TestClient.connect(server, this, address, name);
+        TestClient client = TestClient.connect(server, this, address, name, modded);
         players.put(name, client);
         ServerPlayer joined = null;
         for (int waited = 0; joined == null; waited++) {
@@ -336,6 +358,7 @@ final class TestWorld implements TestContext {
             resetBalances(c, problems);
             forget(c.uuid(), problems);
         }
+        TestMod.forget();
         try {
             Worlds.delete(key);
         } catch (RuntimeException e) {

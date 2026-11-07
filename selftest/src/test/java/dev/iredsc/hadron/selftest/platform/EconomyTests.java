@@ -6,17 +6,26 @@ import dev.iredsc.hadron.api.economy.EconomyResult;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.resource.ResourceTransferEvent;
+import dev.iredsc.hadron.api.plugin.JavaPlugin;
+import dev.iredsc.hadron.api.plugin.Server;
+import dev.iredsc.hadron.api.plugin.ServicesManager;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.math.BigDecimal;
 import java.util.UUID;
-
 /** The economy as plugins use it: currencies, the default, refusals, accounts and the service lookup. */
 public final class EconomyTests {
     private static final Currency GEMS = new Currency("gems", "gem", "gems", 0);
 
     @HadronTest
+    @Covers(value = Economy.class, method = "get")
+    @Covers(value = Economy.class, method = "registerCurrency")
+    @Covers(value = Economy.class, method = "getCurrency")
+    @Covers(value = Economy.class, method = "deposit")
+    @Covers(value = Economy.class, method = "withdraw")
+    @Covers(value = Economy.class, method = "getBalance")
     void eachCurrencyKeepsItsOwnBalance(TestContext t) {
         TestPlayer alice = t.player("alice");
         Economy economy = Economy.get();
@@ -30,6 +39,9 @@ public final class EconomyTests {
     }
 
     @HadronTest
+    @Covers(value = Economy.class, method = "getDefaultCurrency")
+    @Covers(value = Economy.class, method = "deposit")
+    @Covers(value = Economy.class, method = "getBalance")
     void callsWithoutACurrencyUseTheDefaultMoney(TestContext t) {
         TestPlayer alice = t.player("alice");
         Economy economy = Economy.get();
@@ -41,6 +53,8 @@ public final class EconomyTests {
     }
 
     @HadronTest
+    @Covers(value = Economy.class, method = "withdraw")
+    @Covers(value = EconomyResult.NotEnoughMoney.class, method = "missing")
     void overdrawingIsRefusedAndChangesNothing(TestContext t) {
         TestPlayer alice = t.player("alice");
         Economy economy = Economy.get();
@@ -53,6 +67,8 @@ public final class EconomyTests {
     }
 
     @HadronTest
+    @Covers(ResourceTransferEvent.class)
+    @Covers(value = Economy.class, method = "transfer")
     void aListenerRefusingATransferLeavesBothBalances(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -74,6 +90,8 @@ public final class EconomyTests {
     }
 
     @HadronTest
+    @Covers(value = Economy.class, method = "hasAccount")
+    @Covers(value = Economy.class, method = "deposit")
     void joiningCreatesAnAccountThatOutlivesTheSession(TestContext t) {
         TestPlayer alice = t.player("alice");
         UUID id = alice.uuid();
@@ -87,6 +105,9 @@ public final class EconomyTests {
     }
 
     @HadronTest
+    @Covers(value = JavaPlugin.class, method = "getServer")
+    @Covers(value = Server.class, method = "getServicesManager")
+    @Covers(value = ServicesManager.class, method = "load")
     void theServicesManagerHandsOutTheSameEconomy(TestContext t) {
         Economy loaded = t.plugin().getServer().getServicesManager().load(Economy.class);
         t.assertTrue(loaded != null, "getServicesManager().load(Economy.class) should return the economy, not null");

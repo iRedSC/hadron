@@ -70,6 +70,8 @@ public final class PluginHost implements PluginManager {
     public static final Node MANAGE = Node.declare("hadron.manage", Default.OPS,
             "Reload, enable and disable plugins, and hear when one reloads or fails");
     public static final Node LIST = Node.declare("hadron.plugins", Default.EVERYONE, "See /plugins");
+    public static final Node TRACE = Node.declare("hadron.trace", Default.OPS,
+            "Watch events fire live with /hadron trace: who did it, and what plugins made of it");
     private static final int POLL_TICKS = 20;
     /** How long disabling waits for a plugin's async runs in progress; the server thread stalls at most this long. */
     private static final long ASYNC_GRACE_MILLIS = 5000;
@@ -179,6 +181,7 @@ public final class PluginHost implements PluginManager {
     private final dev.iredsc.hadron.common.economy.EconomyCore economy;
     private final Platform platform;
     private final EventBus events = new EventBus();
+    private final Trace trace;
     private final Commands commands;
     private final Map<String, Entry> entries = new TreeMap<String, Entry>(String.CASE_INSENSITIVE_ORDER);
     private final List<Entry> enabledOrder = new ArrayList<Entry>();
@@ -211,6 +214,7 @@ public final class PluginHost implements PluginManager {
         this.services = new Services(this);
         this.commands = new Commands(minecraft);
         this.economy = new dev.iredsc.hadron.common.economy.EconomyCore(this, minecraft, new File(serverDir, "hadron"));
+        this.trace = new Trace(events, minecraft);
         readOff();
     }
 
@@ -239,6 +243,28 @@ public final class PluginHost implements PluginManager {
 
     Commands commands() {
         return commands;
+    }
+
+    Trace trace() {
+        return trace;
+    }
+
+    /** Every event class asked about since start, for {@code /hadron trace} names. */
+    java.util.Set<Class<?>> seenEvents() {
+        return events.seen();
+    }
+
+    /** A plugin's own event class by its full name, from whichever running plugin has it; null if none does. */
+    Class<?> pluginClass(String name) {
+        for (Entry e : entries.values()) {
+            if (!(e.state instanceof State.Running running)) continue;
+            try {
+                return Class.forName(name, false, running.loader);
+            } catch (ClassNotFoundException | LinkageError ignored) {
+                // not this plugin's
+            }
+        }
+        return null;
     }
 
     // ---- Lifecycle, driven by Hadron ----
@@ -278,6 +304,7 @@ public final class PluginHost implements PluginManager {
     /** End of every server tick. */
     public void tick() {
         scheduler.tick();
+        trace.tick();
         if (!running || ++ticks % POLL_TICKS != 0) return;
         manage(new Runnable() {
             @Override
@@ -315,6 +342,7 @@ public final class PluginHost implements PluginManager {
     public void stop() {
         running = false;
         stopping = true;
+        trace.stopAll();
         manage(new Runnable() {
             @Override
             public void run() {

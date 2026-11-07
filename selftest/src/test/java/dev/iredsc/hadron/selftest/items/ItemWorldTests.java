@@ -15,6 +15,7 @@ import dev.iredsc.hadron.api.event.item.ItemDespawnEvent;
 import dev.iredsc.hadron.api.event.item.ItemDropEvent;
 import dev.iredsc.hadron.api.event.item.ItemMergeEvent;
 import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -38,6 +39,7 @@ public final class ItemWorldTests {
     private static final int OFFHAND_INVENTORY_SLOT = 40;
 
     @HadronTest
+    @Covers(ItemDropEvent.class)
     void refusedDropFromTheHandStaysInTheHandAndNothingDrops(TestContext t) {
         TestPlayer alice = t.player("alice");
         alice.hold(new ItemStack(Items.DIRT, 5));
@@ -62,6 +64,7 @@ public final class ItemWorldTests {
     }
 
     @HadronTest
+    @Covers(ItemDropEvent.class)
     void refusedDropFromTheCursorGoesBackIntoTheInventory(TestContext t) {
         TestPlayer alice = t.player("alice");
         alice.hold(new ItemStack(Items.DIRT, 5));
@@ -82,6 +85,7 @@ public final class ItemWorldTests {
     }
 
     @HadronTest
+    @Covers(ItemDropEvent.class)
     void refusedDropFromTheCursorWithAFullInventoryStaysOnTheCursor(TestContext t) {
         TestPlayer alice = t.player("alice");
         for (int i = 0; i < 36; i++) alice.player().getInventory().setItem(i, new ItemStack(Items.STONE, 64));
@@ -104,6 +108,7 @@ public final class ItemWorldTests {
     }
 
     @HadronTest
+    @Covers(ItemDropEvent.class)
     void refusedDropperDropStaysInTheDropperAttributedToTheMachine(TestContext t) {
         Support.watch(t);
         BlockPos dropper = t.pos(2, 0, 0);
@@ -128,6 +133,7 @@ public final class ItemWorldTests {
     }
 
     @HadronTest
+    @Covers(ItemPickupEvent.class)
     void refusedPickupLeavesTheItemOnTheGround(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<ItemPickupEvent> heard = new ArrayList<>();
@@ -160,6 +166,7 @@ public final class ItemWorldTests {
     }
 
     @HadronTest
+    @Covers(ItemPickupEvent.class)
     void refusedHopperPickupLeavesTheItemAndNamesTheHopper(TestContext t) {
         Support.watch(t);
         BlockPos hopper = t.pos(4, 0, 0);
@@ -184,6 +191,7 @@ public final class ItemWorldTests {
     }
 
     @HadronTest
+    @Covers(ItemDespawnEvent.class)
     void refusedDespawnKeepsTheItemByNature(TestContext t) {
         Support.watch(t);
         List<ItemDespawnEvent> heard = new ArrayList<>();
@@ -213,6 +221,7 @@ public final class ItemWorldTests {
     }
 
     @HadronTest
+    @Covers(ItemMergeEvent.class)
     void refusedMergeKeepsBothStacksApart(TestContext t) {
         Support.watch(t);
         List<ItemMergeEvent> heard = new ArrayList<>();

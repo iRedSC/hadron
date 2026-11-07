@@ -46,7 +46,9 @@ import net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket;
 import net.minecraft.network.protocol.common.ServerboundKeepAlivePacket;
 import net.minecraft.network.protocol.common.ServerboundPongPacket;
 import net.minecraft.network.protocol.common.ServerboundResourcePackPacket;
+import net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket;
 import net.minecraft.network.protocol.common.custom.BrandPayload;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.network.protocol.configuration.ClientboundFinishConfigurationPacket;
 import net.minecraft.network.protocol.configuration.ClientboundSelectKnownPacks;
 import net.minecraft.network.protocol.configuration.ConfigurationProtocols;
@@ -103,12 +105,31 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
+import dev.iredsc.hadron.neoforge.mixin.world.NetworkRegistryAccessor;
+import java.util.Collection;
+import net.minecraft.core.Registry;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
 import net.neoforged.neoforge.network.connection.ConnectionType;
+import net.neoforged.neoforge.network.payload.KnownRegistryDataMapsPayload;
+import net.neoforged.neoforge.network.payload.KnownRegistryDataMapsReplyPayload;
+import net.neoforged.neoforge.network.payload.ModdedNetworkPayload;
+import net.neoforged.neoforge.network.payload.ModdedNetworkQueryPayload;
+import net.neoforged.neoforge.network.registration.NetworkPayloadSetup;
+import net.neoforged.neoforge.network.registration.NetworkRegistry;
 
 /**
  * A test player's client: a vanilla client's side of an in-memory connection, with no game attached. It answers
  * what the server needs answered to log in and stay connected (the login, the configuration phase, keep-alives,
  * teleport confirmations, chunk batches) the way a vanilla client does, and records everything else.
+ *
+ * <p>A modded client ({@code t.moddedPlayer}) is a NeoForge client with the server's own mods instead: it answers
+ * NeoForge's channel query ({@link ModdedNetworkQueryPayload}) with every channel the server registered, as a real
+ * client with the same mod list does, which makes the connection a NeoForge one. The server then negotiates the
+ * channels, sends the result ({@link ModdedNetworkPayload}, kept here so {@link #sendModPacket} knows what the server
+ * accepts) and runs NeoForge's configuration tasks; of those, a memory connection gets only config syncing (nothing to
+ * answer) and the data map handshake, answered as knowing every data map offered. Mods' own configuration tasks still
+ * get no answer.
  *
  * <p>Packets arrive on the connection's netty thread and are recorded there; {@link TestWorld#settle} waits for them,
  * so the test, on the server thread, reads a complete picture.
@@ -125,6 +146,10 @@ final class TestClient implements TestPlayer {
     private final String name;
     private final UUID uuid;
     private final Connection connection;
+    /** A NeoForge client with the server's mods, rather than a vanilla one. */
+    private final boolean modded;
+    /** The channels the server agreed on with a modded client; null until it says. */
+    private volatile NetworkPayloadSetup channels;
     private volatile Phase phase = Phase.LOGIN;
     private volatile String disconnectReason = "";
     private volatile Throwable failure;
@@ -150,8 +175,9 @@ final class TestClient implements TestPlayer {
     private final Listener configuration = new Listener(ConnectionProtocol.CONFIGURATION);
     private final Listener game = new Listener(ConnectionProtocol.PLAY);
 
-    private TestClient(MinecraftServer server, TestWorld world, String name) {
+    private TestClient(MinecraftServer server, TestWorld world, String name, boolean modded) {
         this.server = server;
+        this.modded = modded;
         this.world = world;
         this.name = name;
         this.uuid = UUIDUtil.createOfflinePlayerUUID(name);
@@ -159,8 +185,9 @@ final class TestClient implements TestPlayer {
     }
 
     /** Opens the connection and sends the login start; the rest of the login happens as the server ticks. */
-    static TestClient connect(MinecraftServer server, TestWorld world, SocketAddress address, String name) {
-        TestClient client = new TestClient(server, world, name);
+    static TestClient connect(MinecraftServer server, TestWorld world, SocketAddress address, String name,
+            boolean modded) {
+        TestClient client = new TestClient(server, world, name, modded);
         Connection connection = client.connection;
         new Bootstrap().group(Connection.LOCAL_WORKER_GROUP.get()).handler(new ChannelInitializer<Channel>() {
             @Override
@@ -184,6 +211,10 @@ final class TestClient implements TestPlayer {
 
     Connection connection() {
         return connection;
+    }
+
+    boolean modded() {
+        return modded;
     }
 
     /** Set once the server has placed them in the world. */
@@ -458,6 +489,27 @@ final class TestClient implements TestPlayer {
     }
 
     @Override
+    public void sendModPacket(CustomPacketPayload payload) {
+        ResourceLocation id = payload.type().id();
+        if (!modded) {
+            throw new AssertionError(name + " joined as an unmodded client, which has no mod channels to send " + id
+                    + " on. Join them as a modded client instead: t.moddedPlayer(\"" + name + "\").");
+        }
+        NetworkPayloadSetup agreed = channels;
+        if (agreed == null || agreed.getChannel(ConnectionProtocol.PLAY, id) == null) {
+            throw new AssertionError("No mod on this server registered a play channel " + id + ", so the server "
+                    + "would disconnect " + name + " for sending it. Send a payload a mod registers in "
+                    + "RegisterPayloadHandlersEvent, or Hadron's test mod's: new TestModPacket(\"hi\").");
+        }
+        if (NetworkRegistry.getCodec(id, ConnectionProtocol.PLAY, PacketFlow.SERVERBOUND) == null) {
+            throw new AssertionError(id + " is a channel the server sends on, not one a client sends; the server "
+                    + "would refuse it from " + name + ". Send a payload its mod registers with playToServer or "
+                    + "playBidirectional.");
+        }
+        send(new ServerboundCustomPayloadPacket(payload), "send a mod packet");
+    }
+
+    @Override
     public void disconnect() {
         world.requireIdle("disconnect");
         if (phase == Phase.GONE) return;
@@ -671,19 +723,26 @@ final class TestClient implements TestPlayer {
                 connection.setupInboundProtocol((ProtocolInfo) ConfigurationProtocols.CLIENTBOUND, configuration);
                 connection.send(ServerboundLoginAcknowledgedPacket.INSTANCE);
                 connection.setupOutboundProtocol(ConfigurationProtocols.SERVERBOUND);
-                connection.send(new ServerboundCustomPayloadPacket(new BrandPayload("vanilla")));
-                connection.send(new ServerboundClientInformationPacket(ClientInformation.createDefault()));
+                connection.send(new ServerboundCustomPayloadPacket(new BrandPayload(modded ? "neoforge" : "vanilla")));
+                // What a real client sends with its options untouched: unlike vanilla's server-side default, a client allows
+                // server listings unless the player turns it off, so the server list's sample shows test players.
+                connection.send(new ServerboundClientInformationPacket(new ClientInformation("en_us", 12,
+                        net.minecraft.world.entity.player.ChatVisiblity.FULL, true, 0x7F,
+                        net.minecraft.world.entity.player.Player.DEFAULT_MAIN_HAND, false, true)));
                 phase = Phase.CONFIGURATION;
             }
             // Claims every pack the server offers, so it sends no registry contents it doesn't have to.
             case ClientboundSelectKnownPacks p -> connection.send(new ServerboundSelectKnownPacks(p.knownPacks()));
+            case ClientboundCustomPayloadPacket p -> answerPayload(p.payload());
             case ClientboundFinishConfigurationPacket p -> {
                 RegistryAccess registries = server.registryAccess();
+                // As the server encodes for this connection: NeoForge's play encoding for a modded client.
+                ConnectionType type = modded ? ConnectionType.NEOFORGE : ConnectionType.OTHER;
                 connection.setupInboundProtocol((ProtocolInfo) GameProtocols.CLIENTBOUND_TEMPLATE.bind(
-                        RegistryFriendlyByteBuf.decorator(registries, ConnectionType.OTHER)), game);
+                        RegistryFriendlyByteBuf.decorator(registries, type)), game);
                 connection.send(ServerboundFinishConfigurationPacket.INSTANCE);
                 connection.setupOutboundProtocol(
-                        GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(registries, ConnectionType.OTHER)));
+                        GameProtocols.SERVERBOUND_TEMPLATE.bind(RegistryFriendlyByteBuf.decorator(registries, type)));
                 phase = Phase.PLAY;
             }
             case ClientboundStartConfigurationPacket p -> {
@@ -710,6 +769,27 @@ final class TestClient implements TestPlayer {
                 connection.send(new ServerboundMovePlayerPacket.PosRot(x, y, z, yRot, xRot, false));
             }
             case ClientboundChunkBatchFinishedPacket p -> connection.send(new ServerboundChunkBatchReceivedPacket(64f));
+            default -> {}
+        }
+    }
+
+    /**
+     * What a NeoForge client answers of NeoForge's own messages; a vanilla client answers none, and neither answers a
+     * mod's. The query comes before the server's ping 0, so the answer reaches it before the pong that makes the server
+     * decide what kind of client this is.
+     */
+    private void answerPayload(CustomPacketPayload payload) {
+        if (!modded) return;
+        switch (payload) {
+            case ModdedNetworkQueryPayload q -> connection.send(new ServerboundCustomPayloadPacket(
+                    ModdedNetworkQueryPayload.fromRegistry(NetworkRegistryAccessor.hadron$payloadRegistrations())));
+            case ModdedNetworkPayload p -> channels = p.setup();
+            case KnownRegistryDataMapsPayload p -> {
+                Map<ResourceKey<? extends Registry<?>>, Collection<ResourceLocation>> known = new HashMap<>();
+                p.dataMaps().forEach((registry, maps) ->
+                        known.put(registry, maps.stream().map(KnownRegistryDataMapsPayload.KnownDataMap::id).toList()));
+                connection.send(new ServerboundCustomPayloadPacket(new KnownRegistryDataMapsReplyPayload(known)));
+            }
             default -> {}
         }
     }

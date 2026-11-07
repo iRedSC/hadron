@@ -57,6 +57,22 @@ public interface TestContext {
      */
     TestPlayer player(String name);
 
+    /**
+     * The player with this name, joining them first as a NeoForge client with the same mods as the server: in the
+     * configuration phase their client claims every network channel the server's mods registered, as a client with
+     * the same mod list does, so they can {@link TestPlayer#sendModPacket send mod packets}. Otherwise as
+     * {@link #player}; {@code player} joins an unmodded client, as most tests want.
+     *
+     * @throws AssertionError if they already joined this test as an unmodded client, or the server refused them
+     */
+    TestPlayer moddedPlayer(String name);
+
+    /**
+     * Every {@link TestModPacket} the test mod's handler ran for during this test, oldest first. A packet a listener
+     * cancelled never reaches it.
+     */
+    List<TestModPacket.Handled> modPacketsHandled();
+
     /** Every player this test joined, in the order they joined. */
     List<TestPlayer> players();
 

@@ -6,6 +6,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.player.PlayerChatEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -20,10 +21,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
-
 /** Hadron's core events, driven by a real player's packets: cancels undo fully, changes apply, actors are right. */
 public final class EventTests {
     @HadronTest
+    @Covers(BlockBreakEvent.class)
     void cancelledBreakKeepsTheBlockAndTheToolsDurability(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos stone = t.pos(1, 0, 0);
@@ -44,6 +45,7 @@ public final class EventTests {
     }
 
     @HadronTest
+    @Covers(BlockBreakEvent.class)
     void uncancelledBreakRemovesTheBlockAndWearsTheTool(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos stone = t.pos(1, 0, 0);
@@ -55,6 +57,7 @@ public final class EventTests {
     }
 
     @HadronTest
+    @Covers(EntityDamageEvent.class)
     void changedDamageIsTheDamageDealt(TestContext t) {
         TestPlayer alice = t.player("alice");
         Pig pig = EntityType.PIG.create(t.level());
@@ -74,6 +77,7 @@ public final class EventTests {
     }
 
     @HadronTest
+    @Covers(PlayerChatEvent.class)
     void changedChatReachesTheOtherPlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -89,6 +93,7 @@ public final class EventTests {
     }
 
     @HadronTest
+    @Covers(PlayerChatEvent.class)
     void cancelledChatReachesNobody(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -104,6 +109,7 @@ public final class EventTests {
     }
 
     @HadronTest
+    @Covers(BlockBreakEvent.class)
     void aPlayersBreakIsAttributedToThatPlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos dirt = t.pos(0, 0, 1);

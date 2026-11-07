@@ -7,6 +7,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockChangeEvent;
 import dev.iredsc.hadron.api.event.block.BlockUseEvent;
 import dev.iredsc.hadron.api.event.block.SignChangeEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -40,6 +41,7 @@ public final class UseAndSignTests {
     }
 
     @HadronTest
+    @Covers(BlockUseEvent.class)
     void usingABlockEmptyHandedIsOneUseByThePlayer(TestContext t) {
         // Vanilla asks the block twice (with the item, then without); a plugin must hear it once.
         TestPlayer alice = t.player("alice");
@@ -53,6 +55,7 @@ public final class UseAndSignTests {
     }
 
     @HadronTest
+    @Covers(BlockUseEvent.class)
     void usingABlockWithAnItemIsOneUse(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(1, 0, 0);
@@ -67,6 +70,7 @@ public final class UseAndSignTests {
     }
 
     @HadronTest
+    @Covers(BlockUseEvent.class)
     void cancelledUseLeavesTheLeverOffAndChangesNothing(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(1, 0, 0);
@@ -111,6 +115,7 @@ public final class UseAndSignTests {
     }
 
     @HadronTest
+    @Covers(SignChangeEvent.class)
     void writingASignIsASignChangeByThePlayer(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(1, 0, 0);
@@ -131,6 +136,7 @@ public final class UseAndSignTests {
     }
 
     @HadronTest
+    @Covers(SignChangeEvent.class)
     void changedSignLinesAreWhatTheSignShows(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(1, 0, 0);
@@ -147,6 +153,7 @@ public final class UseAndSignTests {
     }
 
     @HadronTest
+    @Covers(SignChangeEvent.class)
     void cancelledSignChangeLeavesTheSignBlank(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos at = t.pos(1, 0, 0);

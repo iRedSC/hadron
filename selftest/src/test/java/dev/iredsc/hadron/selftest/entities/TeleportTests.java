@@ -11,6 +11,7 @@ import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -37,6 +38,7 @@ public final class TeleportTests {
     }
 
     @HadronTest
+    @Covers(EntityTeleportEvent.class)
     void aConsoleTeleportIsTheServersCommand(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -60,6 +62,7 @@ public final class TeleportTests {
     }
 
     @HadronTest
+    @Covers(EntityTeleportEvent.class)
     void aCancelledTeleportLeavesThePlayerWhereTheyWere(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -76,6 +79,7 @@ public final class TeleportTests {
     }
 
     @HadronTest
+    @Covers(EntityTeleportEvent.class)
     void redirectedTeleportLandsAtTheNewDestination(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -92,6 +96,7 @@ public final class TeleportTests {
     }
 
     @HadronTest
+    @Covers(EntityTeleportEvent.class)
     void aRedirectedVehicleTakesItsPassengerAlong(TestContext t) {
         t.player("alice"); // entities only tick, and commands only find them, near a player
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
@@ -127,6 +132,7 @@ public final class TeleportTests {
     }
 
     @HadronTest
+    @Covers(EntityTeleportEvent.class)
     void anEnderPearlTeleportIsTheThrowers(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -149,6 +155,7 @@ public final class TeleportTests {
     }
 
     @HadronTest
+    @Covers(EntityTeleportEvent.class)
     void aCancelledPearlLeavesTheThrowerInPlaceAndUnhurt(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);
@@ -170,6 +177,7 @@ public final class TeleportTests {
     }
 
     @HadronTest
+    @Covers(EntityTeleportEvent.class)
     void aRedirectedPearlLandsAtTheNewDestination(TestContext t) {
         TestPlayer alice = t.player("alice");
         ready(t);

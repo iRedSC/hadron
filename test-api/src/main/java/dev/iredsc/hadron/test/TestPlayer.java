@@ -5,6 +5,7 @@ import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.inventory.ClickType;
@@ -116,6 +117,16 @@ public interface TestPlayer {
 
     /** Picks a hotbar slot, 0 to 8. */
     void selectSlot(int slot);
+
+    /**
+     * Sends a mod's network message to the server, as the mod's client side would: the server decodes it and hands it
+     * to the mod's handler, firing {@code PlayerModPacketEvent} first. Use {@link TestModPacket} for a mod of your
+     * own, or a real mod's payload record.
+     *
+     * @throws AssertionError if they joined as an unmodded client (join them with {@code t.moddedPlayer}), or no mod
+     *     on the server registered that payload as one a client sends in play
+     */
+    void sendModPacket(CustomPacketPayload payload);
 
     /** Leaves the server, as closing the game does. The test ends any player still online for you. */
     void disconnect();

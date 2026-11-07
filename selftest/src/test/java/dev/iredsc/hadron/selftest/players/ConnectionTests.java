@@ -8,6 +8,7 @@ import dev.iredsc.hadron.api.event.player.PlayerJoinEvent;
 import dev.iredsc.hadron.api.event.player.PlayerKickEvent;
 import dev.iredsc.hadron.api.event.player.PlayerLoginEvent;
 import dev.iredsc.hadron.api.event.player.PlayerQuitEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -16,6 +17,7 @@ import net.minecraft.network.chat.Component;
 /** Logging in, joining, quitting and being kicked: refusals hold, and the lines others see are the event's. */
 public final class ConnectionTests {
     @HadronTest
+    @Covers(PlayerLoginEvent.class)
     void aDeniedLoginKeepsThePlayerOutWithTheReason(TestContext t) {
         t.registerEvents(new Listener() {
             @EventHandler
@@ -37,6 +39,7 @@ public final class ConnectionTests {
     }
 
     @HadronTest
+    @Covers(PlayerJoinEvent.class)
     void aChangedJoinLineIsWhatOthersSee(TestContext t) {
         TestPlayer bob = t.player("bob");
         t.registerEvents(new Listener() {
@@ -54,6 +57,7 @@ public final class ConnectionTests {
     }
 
     @HadronTest
+    @Covers(PlayerJoinEvent.class)
     void aRemovedJoinLineIsNeverSent(TestContext t) {
         TestPlayer bob = t.player("bob");
         t.registerEvents(new Listener() {
@@ -68,6 +72,7 @@ public final class ConnectionTests {
     }
 
     @HadronTest
+    @Covers(PlayerJoinEvent.class)
     void anUnchangedJoinLineIsVanillasOnce(TestContext t) {
         TestPlayer bob = t.player("bob");
         int[] heard = {0};
@@ -85,6 +90,7 @@ public final class ConnectionTests {
     }
 
     @HadronTest
+    @Covers(PlayerQuitEvent.class)
     void aChangedQuitLineIsWhatOthersSee(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -101,6 +107,7 @@ public final class ConnectionTests {
     }
 
     @HadronTest
+    @Covers(PlayerKickEvent.class)
     void aChangedKickReasonIsWhatTheKickedPlayerSees(TestContext t) {
         TestPlayer alice = t.player("alice");
         t.registerEvents(new Listener() {
@@ -119,6 +126,7 @@ public final class ConnectionTests {
     }
 
     @HadronTest
+    @Covers(PlayerKickEvent.class)
     void aCancelledKickKeepsThePlayerOnline(TestContext t) {
         TestPlayer alice = t.player("alice");
         t.registerEvents(new Listener() {

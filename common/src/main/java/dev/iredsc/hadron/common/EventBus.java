@@ -11,16 +11,19 @@ import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Hadron's own events, the same on every loader. A handler for an event class hears that class and all its
@@ -28,6 +31,7 @@ import org.slf4j.Logger;
  * {@link #post} may be called from any thread, and runs each handler on the calling one.
  */
 final class EventBus {
+    private static final Logger OBSERVER_LOG = LoggerFactory.getLogger("Hadron");
     /** One handler method, removable. */
     static final class Subscription {
         final Listener listener;
@@ -119,6 +123,33 @@ final class EventBus {
     private static final Comparator<Subscription> ORDER = Comparator
             .comparing((Subscription s) -> s.priority).thenComparingLong(s -> s.order);
     private static final Subscription[] NONE = new Subscription[0];
+    private static final Observer[] NO_OBSERVERS = new Observer[0];
+    private static final Baked EMPTY = new Baked(NONE, NO_OBSERVERS);
+
+    /**
+     * Watches events after every plugin handled them, without being a plugin listener: what {@code /hadron trace}
+     * uses. Never sees an event it doesn't {@link #hears}, and costs nothing while none is added.
+     */
+    interface Observer {
+        /** Asked once per event class each time the bus rebakes; true makes {@link #listens} true for it too. */
+        boolean hears(Class<?> type);
+
+        /** Before any handler runs. Whatever it returns comes back to {@link #after}; null skips this event. */
+        Object before(Event event);
+
+        /**
+         * After every handler. {@code canceller} names the last handler that cancelled the event ("plugin:
+         * Class.method"), or is null if no handler did.
+         */
+        void after(Event event, Object state, String canceller);
+    }
+
+    /** Every handler and observer that hears one concrete event class. */
+    private record Baked(Subscription[] handlers, Observer[] observers) {
+        boolean any() {
+            return handlers.length > 0 || observers.length > 0;
+        }
+    }
 
     /** By the event class each handler takes. Guarded by this. */
     private final Map<Class<?>, List<Subscription>> byType = new LinkedHashMap<>();
@@ -126,8 +157,32 @@ final class EventBus {
      * Every handler that hears a concrete event class, sorted. Replaced whole after any change, so reads never lock:
      * a bake racing a change lands in the map being thrown away.
      */
-    private volatile Map<Class<?>, Subscription[]> baked = new ConcurrentHashMap<>();
+    private volatile Map<Class<?>, Baked> baked = new ConcurrentHashMap<>();
     private final AtomicLong registered = new AtomicLong();
+    /** Guarded by this; replaced whole. */
+    private Observer[] observers = NO_OBSERVERS;
+    /** Every event class the bus has been asked about, for {@code /hadron trace} to suggest and resolve names. */
+    private final Set<Class<?>> seen = ConcurrentHashMap.newKeySet();
+
+    /** Adds an observer; the events it hears are built and posted from now on, even with no plugin listening. */
+    synchronized void observe(Observer observer) {
+        Observer[] next = Arrays.copyOf(observers, observers.length + 1);
+        next[observers.length] = observer;
+        observers = next;
+        baked = new ConcurrentHashMap<>();
+    }
+
+    synchronized void unobserve(Observer observer) {
+        List<Observer> next = new ArrayList<>(Arrays.asList(observers));
+        if (!next.remove(observer)) return;
+        observers = next.isEmpty() ? NO_OBSERVERS : next.toArray(NO_OBSERVERS);
+        baked = new ConcurrentHashMap<>();
+    }
+
+    /** Every event class asked about or posted since the server started. */
+    Set<Class<?>> seen() {
+        return Collections.unmodifiableSet(seen);
+    }
 
     /** Subscribes every {@code @EventHandler} method; all or nothing. */
     List<Subscription> subscribe(Listener listener, String plugin, Logger log) {
@@ -154,7 +209,41 @@ final class EventBus {
 
     /** Runs every handler that hears the event. */
     void post(Event event) {
-        for (Subscription s : handlers(event.getClass())) s.call(event);
+        Baked b = handlers(event.getClass());
+        if (b.observers.length == 0) {
+            for (Subscription s : b.handlers) s.call(event);
+            return;
+        }
+        observed(event, b);
+    }
+
+    /** {@link #post} while an observer hears this class: the same handler calls, watched. */
+    private static void observed(Event event, Baked b) {
+        Object[] states = new Object[b.observers.length];
+        boolean anyone = false;
+        for (int i = 0; i < states.length; i++) {
+            Observer o = b.observers[i];
+            states[i] = guard(() -> o.before(event));
+            anyone |= states[i] != null;
+        }
+        Cancellable c = anyone && event instanceof Cancellable x ? x : null;
+        String canceller = null;
+        for (Subscription s : b.handlers) {
+            boolean was = c != null && c.isCancelled();
+            s.call(event);
+            if (c != null && !was && c.isCancelled()) canceller = s.where;
+            else if (c != null && was && !c.isCancelled()) canceller = null;
+        }
+        for (int i = 0; i < states.length; i++) {
+            if (states[i] == null) continue;
+            Observer o = b.observers[i];
+            Object state = states[i];
+            String by = canceller;
+            guard(() -> {
+                o.after(event, state, by);
+                return null;
+            });
+        }
     }
 
     /**
@@ -162,12 +251,12 @@ final class EventBus {
      * times asks this before building the event.
      */
     boolean listens(Class<?> type) {
-        return handlers(type).length > 0;
+        return handlers(type).any();
     }
 
-    private Subscription[] handlers(Class<?> type) {
-        Map<Class<?>, Subscription[]> current = baked;
-        Subscription[] found = current.get(type);
+    private Baked handlers(Class<?> type) {
+        Map<Class<?>, Baked> current = baked;
+        Baked found = current.get(type);
         if (found == null) {
             found = bake(type);
             current.putIfAbsent(type, found);
@@ -175,14 +264,27 @@ final class EventBus {
         return found;
     }
 
-    private synchronized Subscription[] bake(Class<?> type) {
+    private synchronized Baked bake(Class<?> type) {
+        seen.add(type);
         List<Subscription> out = new ArrayList<>();
         for (Map.Entry<Class<?>, List<Subscription>> e : byType.entrySet()) {
             if (e.getKey().isAssignableFrom(type)) out.addAll(e.getValue());
         }
-        if (out.isEmpty()) return NONE;
+        List<Observer> watching = new ArrayList<>();
+        for (Observer o : observers) if (guard(() -> o.hears(type)) == Boolean.TRUE) watching.add(o);
+        if (out.isEmpty() && watching.isEmpty()) return EMPTY;
         out.sort(ORDER);
-        return out.toArray(NONE);
+        return new Baked(out.toArray(NONE), watching.isEmpty() ? NO_OBSERVERS : watching.toArray(NO_OBSERVERS));
+    }
+
+    /** An observer's bug never costs plugins their event. */
+    private static <T> T guard(java.util.function.Supplier<T> run) {
+        try {
+            return run.get();
+        } catch (RuntimeException e) {
+            OBSERVER_LOG.error("An event observer (/hadron trace) threw; the event went on without it", e);
+            return null;
+        }
     }
 
     /** Each signature once, the most derived: everything declared up the class chain, any visibility. */
