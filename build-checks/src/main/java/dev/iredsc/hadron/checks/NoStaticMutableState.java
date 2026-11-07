@@ -4,13 +4,16 @@ import static com.google.errorprone.BugPattern.SeverityLevel.ERROR;
 
 import com.google.auto.service.AutoService;
 import com.google.errorprone.BugPattern;
+import com.google.errorprone.ErrorProneFlags;
 import com.google.errorprone.VisitorState;
 import com.google.errorprone.bugpatterns.BugChecker;
 import com.google.errorprone.bugpatterns.BugChecker.VariableTreeMatcher;
 import com.google.errorprone.matchers.Description;
 import com.google.errorprone.util.ASTHelpers;
 import com.sun.source.tree.ExpressionTree;
+import com.sun.source.tree.LiteralTree;
 import com.sun.source.tree.MethodInvocationTree;
+import com.sun.source.tree.NewArrayTree;
 import com.sun.source.tree.VariableTree;
 import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Attribute;
@@ -19,6 +22,7 @@ import com.sun.tools.javac.code.Symbol.MethodSymbol;
 import com.sun.tools.javac.code.Symbol.VarSymbol;
 import com.sun.tools.javac.code.Type;
 import java.util.List;
+import javax.inject.Inject;
 import java.util.Set;
 import javax.lang.model.element.ElementKind;
 
@@ -35,7 +39,20 @@ import javax.lang.model.element.ElementKind;
         suppressionAnnotations = {})
 public final class NoStaticMutableState extends BugChecker implements VariableTreeMatcher {
     static final String EXEMPTION = "dev.iredsc.hadron.checks.StaticState";
-    private static final String HADRON = "dev.iredsc.hadron";
+    /** Set only for Hadron's own modules, which may grant a reasoned exemption; plugins can't. */
+    static final String ALLOW_EXEMPTIONS = "Hadron:AllowExemptions";
+
+    private final boolean exemptions;
+
+    /** For ServiceLoader, which finds the check; Error Prone itself makes it with its flags, below. */
+    public NoStaticMutableState() {
+        this(ErrorProneFlags.empty());
+    }
+
+    @Inject
+    public NoStaticMutableState(ErrorProneFlags flags) {
+        exemptions = flags.getBoolean(ALLOW_EXEMPTIONS).orElse(false);
+    }
 
     /** Types whose instances change after they're built, unless the initializer is one of {@link #IMMUTABLE}. */
     private static final List<String> MUTABLE = List.of(
@@ -72,7 +89,7 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
 
         Attribute.Compound exemption = exemption(sym);
         if (exemption != null) {
-            if (!isHadron(sym)) {
+            if (!exemptions) {
                 return describe(tree, "@StaticState is only for Hadron's own code. A plugin keeps state on its "
                         + "plugin instance (a field of the class extending JavaPlugin) or in PersistentData, so a "
                         + "reload starts clean; remove @StaticState and move the field there.");
@@ -89,7 +106,7 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
                 + "it only shows several reloads later. Keep it in a field of the plugin instance (or an object the "
                 + "plugin owns), or in PersistentData if it must survive restarts. A constant is fine as static "
                 + "final with an immutable value: List.of(...), Set.of(...), Map.of(...), a record, a String or a "
-                + "primitive." + (isHadron(sym) ? " In Hadron's own code, if it must be static, annotate it "
+                + "primitive." + (exemptions ? " In Hadron's own code, if it must be static, annotate it "
                 + "@StaticState(reason = \"...\") saying what clears it." : ""));
     }
 
@@ -98,7 +115,9 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
         if ((sym.flags() & Flags.ENUM) != 0) return null;
         if ((sym.flags() & Flags.FINAL) == 0) return "isn't final, so it can be reassigned";
         Type type = sym.type;
-        if (type instanceof Type.ArrayType) return "holds an array, whose elements can be changed";
+        if (type instanceof Type.ArrayType) {
+            return emptyArray(init) ? null : "holds an array, whose elements can be changed";
+        }
         for (String name : MUTABLE) {
             Type mutable = state.getTypeFromString(name);
             if (mutable != null && ASTHelpers.isSubtype(type, mutable, state)) {
@@ -107,6 +126,14 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
             }
         }
         return null;
+    }
+
+    /** new T[0] or {}: an array with no elements has nothing to change. */
+    private static boolean emptyArray(ExpressionTree init) {
+        if (!(init instanceof NewArrayTree array)) return false;
+        if (array.getInitializers() != null) return array.getInitializers().isEmpty();
+        return array.getDimensions().size() == 1 && array.getDimensions().get(0) instanceof LiteralTree size
+                && Integer.valueOf(0).equals(size.getValue());
     }
 
     /** Whether the field's type or initializer guarantees an unmodifiable collection. */
@@ -133,16 +160,6 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
 
     private Description describe(VariableTree tree, String message) {
         return buildDescription(tree).setMessage(message).build();
-    }
-
-    static boolean isHadron(Symbol sym) {
-        String pkg = packageOf(sym);
-        return pkg.equals(HADRON) || pkg.startsWith(HADRON + ".");
-    }
-
-    static String packageOf(Symbol sym) {
-        Symbol.PackageSymbol pkg = sym.packge();
-        return pkg == null ? "" : pkg.getQualifiedName().toString();
     }
 
     static Attribute.Compound exemption(Symbol sym) {

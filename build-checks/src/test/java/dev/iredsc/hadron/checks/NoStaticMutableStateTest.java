@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 
 class NoStaticMutableStateTest {
     private final CompilationTestHelper helper = CompilationTestHelper.newInstance(NoStaticMutableState.class, getClass());
+    /** As Hadron's own modules compile: a reasoned exemption is allowed. */
+    private final CompilationTestHelper hadron = CompilationTestHelper.newInstance(NoStaticMutableState.class, getClass())
+            .setArgs("-XepOpt:Hadron:AllowExemptions=true");
 
     @Test
     void refusesStaticStateInAPlugin() {
@@ -26,6 +29,8 @@ class NoStaticMutableStateTest {
                 "  static final Set<String> MODES = EnumSet.noneOf(Thread.State.class).isEmpty() ? new HashSet<>() : Set.of();",
                 "  // BUG: Diagnostic contains: holds an array",
                 "  static final String[] WORDS = {\"a\", \"b\"};",
+                "  // BUG: Diagnostic contains: holds an array",
+                "  static final String[] SLOTS = new String[4];",
                 "  // BUG: Diagnostic contains: holds a AtomicInteger",
                 "  static final AtomicInteger COUNT = new AtomicInteger();",
                 "  // BUG: Diagnostic contains: keeps state on its plugin instance",
@@ -53,6 +58,8 @@ class NoStaticMutableStateTest {
                 "  static final List<String> UPPER = WORDS.stream().map(String::toUpperCase).toList();",
                 "  static final Spot SPAWN = new Spot(0, 0);",
                 "  static final Pattern NAME = Pattern.compile(\"[a-z]+\");",
+                "  static final String[] NO_WORDS = new String[0];",
+                "  static final int[] NO_NUMBERS = {};",
                 "  private final Map<UUID, Integer> scores = new HashMap<>();",
                 "  private int joins;",
                 "}")
@@ -61,7 +68,7 @@ class NoStaticMutableStateTest {
 
     @Test
     void hadronsOwnCodeMayExemptAFieldWithAReason() {
-        helper.addSourceLines("dev/iredsc/hadron/neoforge/Hooks.java",
+        hadron.addSourceLines("dev/iredsc/hadron/neoforge/Hooks.java",
                 "package dev.iredsc.hadron.neoforge;",
                 "import dev.iredsc.hadron.checks.StaticState;",
                 "class Hooks {",
