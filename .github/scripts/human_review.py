@@ -1,6 +1,7 @@
 """Fails when a PR changes a path in .github/human-review-paths.txt and lacks the human-reviewed label.
 
-Reads BASE and HEAD (commit SHAs) and REVIEWED ("true" or "false") from the environment.
+Reads BASE and HEAD (commit SHAs) and REVIEWED ("true" or "false") from the environment. CI runs main's copy of this
+script and path list against the PR's diff, so a PR can't change what checks it.
 Run locally with: BASE=origin/main HEAD=HEAD REVIEWED=false python3 .github/scripts/human_review.py
 """
 
@@ -36,17 +37,23 @@ def patterns() -> list[tuple[str, re.Pattern[str]]]:
 
 
 def changed_files(base: str, head: str) -> list[str]:
+    # --no-renames lists a moved file under both its old and new path, so moving a file out of a protected folder
+    # still counts as touching it.
     result = subprocess.run(
-        ["git", "diff", "--name-only", f"{base}...{head}"], capture_output=True, text=True, check=True
+        ["git", "diff", "--no-renames", "--name-only", "-z", f"{base}...{head}"],
+        capture_output=True, text=True, check=True,
     )
-    return [name for name in result.stdout.splitlines() if name]
+    return [name for name in result.stdout.split("\0") if name]
 
 
 def main() -> int:
     base, head = os.environ["BASE"], os.environ["HEAD"]
     reviewed = os.environ.get("REVIEWED") == "true"
     rules = patterns()
-    tracked = subprocess.run(["git", "ls-files"], capture_output=True, text=True, check=True).stdout.split()
+    # Globs are checked against the PR's tree, so a PR that renames a protected file away also kills its glob here.
+    tracked = subprocess.run(
+        ["git", "ls-tree", "-r", "--name-only", "-z", head], capture_output=True, text=True, check=True
+    ).stdout.split("\0")
     dead = [glob for glob, rx in rules if not any(rx.match(name) for name in tracked)]
     if dead:
         print(f"{PATHS_FILE} has globs that match no file, so they protect nothing. Fix or delete them:")

@@ -2,8 +2,13 @@
 # (.github/workflows/human-review.yml). Everything else merges on green CI. One glob per line; ** spans folders.
 # Add a path when a mistake there would lose players' data, slow every server, or let a change skip these checks.
 
-# The checks themselves: a PR could otherwise switch off what reviews it.
+# The checks themselves: a PR could otherwise switch off what reviews it. Build files can drop coverageCheck, the
+# fast tests or a PIT threshold, so they count too.
 .github/**
+gradle/**
+**build.gradle.kts
+settings.gradle.kts
+gradle.properties
 
 # Saved data formats: a wrong change here loses players' data on every server that updates.
 api/src/main/java/dev/iredsc/hadron/api/data/**
