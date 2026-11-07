@@ -15,5 +15,11 @@ rootProject.name = "hadron"
 // neoforge: the NeoForge port. The only part rewritten for another loader.
 include("api", "common", "neoforge")
 
+// test-api: what a plugin's tests compile against (@HadronTest, TestContext, TestPlayer), vanilla only like api.
+include("test-api")
+
 // A plugin built the way plugin authors will, used to try the host on a real server.
 include("examples:hello")
+
+// Hadron's own tests: a plugin whose src/test/java checks Hadron's events and APIs with the harness plugin authors use.
+include("selftest")

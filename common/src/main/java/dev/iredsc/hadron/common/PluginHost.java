@@ -865,6 +865,31 @@ public final class PluginHost implements PluginManager {
         });
     }
 
+    /**
+     * For the test runner: only {@code keep} (and what it needs) runs while its tests do; every plugin named in
+     * {@code others} is disabled, with whatever depends on it, so one suite's listeners can't change another's
+     * results. {@code keep} is started again if an earlier suite's turn disabled it. Not saved: nothing outlives the run.
+     */
+    public void isolateForTest(String keep, java.util.Collection<String> others) {
+        manage(new Runnable() {
+            @Override
+            public void run() {
+                Set<Entry> stop = new LinkedHashSet<Entry>();
+                for (String name : others) {
+                    Entry e = entries.get(name);
+                    if (e != null && !name.equals(keep)) stop.add(e);
+                }
+                Entry kept = entries.get(keep);
+                Set<Entry> affected = dependents(stop);
+                affected.remove(kept);
+                disableAll(affected);
+                if (kept != null && !(kept.state instanceof State.Running)) {
+                    restart(Collections.singleton(kept), "under test");
+                }
+            }
+        });
+    }
+
     void switchOff(final Entry e) {
         manage(new Runnable() {
             @Override

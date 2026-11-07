@@ -25,12 +25,22 @@ neoForge {
             server()
             programArgument("--nogui")
         }
+        // Test mode: a fresh server in build/hadron-test/run that runs the staged suites' @HadronTests and stops.
+        // Plugins don't start it directly; their hadronTest task stages a suite and depends on this.
+        register("hadronTest") {
+            server()
+            programArgument("--nogui")
+            gameDirectory = layout.buildDirectory.dir("hadron-test/run")
+            systemProperty("hadron.test.report", layout.buildDirectory.file("hadron-test/report.txt").get().asFile.absolutePath)
+            disableIdeRun()
+        }
     }
 
     mods {
         register("hadron") {
             sourceSet(project(":api").sourceSets.main.get())
             sourceSet(project(":common").sourceSets.main.get())
+            sourceSet(project(":test-api").sourceSets.main.get())
             sourceSet(sourceSets.main.get())
         }
     }
@@ -38,6 +48,7 @@ neoForge {
 
 dependencies {
     implementation(project(":common"))
+    implementation(project(":test-api"))
     // plugin.yml and plugins' config.yml. Minecraft doesn't ship a YAML parser, so it rides inside Hadron's jar.
     // One version everywhere: the same one api compiles against and dev runs use.
     jarJar("org.yaml:snakeyaml") { version { strictly("[2.2,3)"); prefer("2.2") } }
@@ -49,6 +60,7 @@ dependencies {
 tasks.jar {
     from(project(":api").sourceSets.main.get().output)
     from(project(":common").sourceSets.main.get().output)
+    from(project(":test-api").sourceSets.main.get().output)
 }
 
 val generateModMetadata = tasks.register<ProcessResources>("generateModMetadata") {
@@ -91,3 +103,46 @@ val prepareDevServer = tasks.register("prepareDevServer") {
     }
 }
 tasks.named("runServer") { dependsOn(prepareDevServer) }
+
+// The test server starts from nothing every run: no world, no plugins but the staged suites, nothing listening on the
+// dev server's ports (the game port is any free one, RCON and query are off), and no watchdog, since a test holds the
+// server thread for the whole run. Suites are moved in, not copied, so a suite staged once runs once.
+val hadronTestDir = layout.buildDirectory.dir("hadron-test")
+tasks.named<JavaExec>("runHadronTest") {
+    description = "Runs the @HadronTests of every staged plugin suite; use a plugin's hadronTest task instead."
+    // Each suite's hadronTest task reads the report and fails the build; a failed run still writes one.
+    isIgnoreExitValue = true
+    // Stage first, whichever projects asked for tests in this build.
+    mustRunAfter(provider { rootProject.subprojects.mapNotNull { it.tasks.findByName("hadronTestStage") } })
+    val root = hadronTestDir.get().asFile
+    doFirst {
+        val run = root.resolve("run")
+        run.deleteRecursively()
+        root.resolve("report.txt").delete()
+        val plugins = run.resolve("plugins")
+        plugins.mkdirs()
+        root.resolve("suites").listFiles { f -> f.name.endsWith(".jar") }?.forEach { jar ->
+            jar.copyTo(plugins.resolve(jar.name), overwrite = true)
+            jar.delete()
+        }
+        run.resolve("eula.txt").writeText("eula=true\n")
+        run.resolve("server.properties").writeText(
+            """
+            online-mode=false
+            server-ip=127.0.0.1
+            server-port=0
+            enable-rcon=false
+            enable-query=false
+            level-type=minecraft\:flat
+            generate-structures=false
+            spawn-protection=0
+            max-tick-time=-1
+            view-distance=4
+            simulation-distance=4
+            enforce-secure-profile=false
+            sync-chunk-writes=false
+            max-players=100
+            """.trimIndent() + "\n"
+        )
+    }
+}

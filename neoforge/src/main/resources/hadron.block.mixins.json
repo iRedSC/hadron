@@ -8,6 +8,7 @@
     "BoneMealItemMixin",
     "BoundTickingBlockEntityMixin",
     "BucketItemMixin",
+    "CommonHooksPlaceMixin",
     "DispenserBlockMixin",
     "ExplosionMixin",
     "FireBlockMixin",
@@ -19,11 +20,14 @@
     "MushroomBlockMixin",
     "PistonBaseBlockAccessor",
     "PistonBaseBlockMixin",
+    "PistonStructureResolverMixin",
     "ServerLevelMixin",
     "ServerPlayerGameModeMixin",
     "SignBlockEntityMixin",
     "TntBlockMixin",
     "TreeGrowerMixin"
   ],
-  "injectors": { "defaultRequire": 1 }
+  "injectors": {
+    "defaultRequire": 1
+  }
 }

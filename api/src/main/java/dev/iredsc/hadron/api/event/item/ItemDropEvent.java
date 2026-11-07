@@ -15,8 +15,8 @@ import net.minecraft.world.phys.Vec3;
  *
  * <ul>
  *   <li>players and fake players, on every path: the drop key, dragging out of a menu, a menu closing with an item on
- *       the cursor, creative drops. Cancelled, the item goes back into the player's inventory; if the inventory has
- *       no room for it, it drops anyway rather than vanish.
+ *       the cursor, creative drops. Cancelled, the item goes back into the player's inventory, or onto the cursor it
+ *       was thrown from when the inventory has no room; with room in neither, it drops anyway rather than vanish.
  *   <li>dispensers and droppers spitting an item out. Cancelled, it stays in the dispenser.
  *   <li>mobs throwing an item: an allay delivering, a villager sharing food or gifting a hero, a piglin bartering.
  *       Cancelled, the item goes into the mob's own inventory; what doesn't fit is thrown anyway rather than vanish.

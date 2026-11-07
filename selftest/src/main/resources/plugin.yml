@@ -1,0 +1,5 @@
+name: HadronSelfTest
+version: ${version}
+minecraft: ${minecraft}
+main: dev.iredsc.hadron.selftest.SelfTestPlugin
+description: Hadron's own tests; holds nothing but them.

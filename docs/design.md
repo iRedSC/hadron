@@ -75,7 +75,7 @@ The agent is working in the user's folder, not this repo. So everything it needs
 2. **Setup.** A new project is three files: `settings.gradle.kts`, a `build.gradle.kts` applying the Hadron Gradle plugin, and the main class. The Gradle plugin owns versions, the `plugin.yml` check and the dev server. Java 21 is the one prerequisite the agent must check for, since the Gradle wrapper needs a JVM to start.
 3. **Writing.** Names match Bukkit's wherever the meaning matches, so the agent's first guess compiles. The API sources and docs ship in the sources jar, so the agent reads the real API instead of remembering a different one.
 4. **Checking.** `./gradlew build` fails on every mistake that would only show at runtime, with a message that says the fix: a loader class in a write-once plugin, a missing main class, a command missing from `plugin.yml`, a node under a reserved root.
-5. **Testing.** `./gradlew hadronTest` runs the plugin in a headless server with scripted fake players and reports pass or fail. The agent proves the plugin works before claiming it does.
+5. **Testing.** `./gradlew hadronTest` runs the plugin in a headless server with scripted players and reports pass or fail. The agent proves the plugin works before claiming it does ([testing.md](testing.md)).
 6. **Trying it.** `./gradlew runServer` starts a dev server with the plugin loaded and reloads it on every build. Client MCP lets the agent join that server and play through the feature.
 7. **Delivering.** The build ends by printing the jar's path and the one step for the user: put it in the server's `plugins/` folder, with Hadron installed.
 
@@ -102,5 +102,5 @@ Hadron ships lightweight plugins server owners expect: essentials-style commands
 4. The actor stack and the events in [events.md](events.md) at their chokepoints, with a benchmark for the chokepoint cost; then the coverage report ([bridges.md](bridges.md)).
 5. Gradle plugin and project template, with the build checks.
 6. The skill, written against what exists, then tested by asking fresh agents for real plugins and fixing whatever they trip on.
-7. Headless test runner.
+7. ~~Headless test runner~~: done ([testing.md](testing.md)). `hadronTest` for `examples/hello` and `selftest`; moves into the Gradle plugin with step 5.
 8. Bundled plugins; pilot bridges (Mekanism, AE2, Superb Warfare); the client companion.

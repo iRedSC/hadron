@@ -138,12 +138,22 @@ final class BlockEvents {
         boolean pulls = sticky && !pulled.isAir() && (pulled.getPistonPushReaction() == PushReaction.NORMAL
                 || pulled.is(Blocks.PISTON) || pulled.is(Blocks.STICKY_PISTON));
         if (extend || pulls) {
-            PistonStructureResolver resolver = new PistonStructureResolver(level, pos, facing, extend);
-            if (resolver.resolve()) {
-                toPush = resolver.getToPush();
-                toDestroy = resolver.getToDestroy();
-            } else if (extend) {
-                return; // it can't push, so it won't move
+            // NeoForge asks before vanilla removes the head, but vanilla works out what a retract pulls only once the
+            // head is gone (a head can't be pushed, so the resolver would find nothing). The resolver is shown air
+            // where the head is, for as long as it looks; the world itself is never touched.
+            BlockPos headPos = pos.relative(facing);
+            boolean hide = !extend && level.getBlockState(headPos).is(Blocks.PISTON_HEAD);
+            if (hide) BlockHooks.pistonHiddenHead = headPos;
+            try {
+                PistonStructureResolver resolver = new PistonStructureResolver(level, pos, facing, extend);
+                if (resolver.resolve()) {
+                    toPush = resolver.getToPush();
+                    toDestroy = resolver.getToDestroy();
+                } else if (extend) {
+                    return; // it can't push, so it won't move
+                }
+            } finally {
+                if (hide) BlockHooks.pistonHiddenHead = null;
             }
         }
         Direction moving = extend ? facing : facing.getOpposite();

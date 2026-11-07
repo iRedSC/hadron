@@ -37,4 +37,24 @@ abstract class AbstractContainerMenuMixin {
         }
         return original.call(menu, player, slotId);
     }
+
+    /**
+     * Throwing the cursor out of the window drops the cursor's own stack, then empties the cursor. A refused throw
+     * that the inventory has no room for is kept for that emptying, which puts it back on the cursor instead.
+     */
+    @Inject(method = "doClick", at = @At("HEAD"))
+    private void hadron$clickStarts(int slotId, int button, ClickType type, Player player, CallbackInfo ci) {
+        if (player instanceof ServerPlayer) ItemHooks.clickStarts((AbstractContainerMenu) (Object) this);
+    }
+
+    @Inject(method = "doClick", at = @At("RETURN"))
+    private void hadron$clickEnds(int slotId, int button, ClickType type, Player player, CallbackInfo ci) {
+        if (player instanceof ServerPlayer) ItemHooks.clickEnds((AbstractContainerMenu) (Object) this);
+    }
+
+    @WrapOperation(method = "doClick", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/inventory/AbstractContainerMenu;setCarried(Lnet/minecraft/world/item/ItemStack;)V"))
+    private void hadron$keepCursor(AbstractContainerMenu menu, ItemStack stack, Operation<Void> original) {
+        original.call(menu, ItemHooks.carried(menu, stack));
+    }
 }

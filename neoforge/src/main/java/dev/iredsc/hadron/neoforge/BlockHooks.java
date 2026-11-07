@@ -69,6 +69,7 @@ import net.minecraft.world.level.block.NetherWartBlock;
 import net.minecraft.world.level.block.SnifferEggBlock;
 import net.minecraft.world.level.block.SpreadingSnowyDirtBlock;
 import net.minecraft.world.level.block.SugarCaneBlock;
+import net.minecraft.world.level.block.TntBlock;
 import net.minecraft.world.level.block.TurtleEggBlock;
 import net.minecraft.world.level.block.VineBlock;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -101,6 +102,12 @@ public final class BlockHooks {
     private static final long NO_POS = Long.MIN_VALUE;
 
     private BlockHooks() {}
+
+    /**
+     * A retracting piston's head, which {@code PistonStructureResolver} is shown as air while Hadron asks what the
+     * piston will pull (vanilla resolves only after removing it). Server thread only; null otherwise.
+     */
+    public static BlockPos pistonHiddenHead;
 
     /** What the current thread is doing to blocks. Reused, so entering and leaving a tick allocates nothing. */
     private static final class Context {
@@ -650,8 +657,9 @@ public final class BlockHooks {
     }
 
     /**
-     * A dispenser firing: it is the actor while it does, as a machine at its position. A bucket it fills or empties
-     * is asked about before anything happens, so a cancelled one stays in the dispenser instead of being thrown out.
+     * A dispenser firing: it is the actor while it does, as a machine at its position. A bucket it fills or empties,
+     * or TNT it lights, is asked about before anything happens, so a cancelled one stays in the dispenser instead of
+     * being thrown out, and cancelled TNT is never primed (vanilla primes it before removing the block).
      */
     public static ItemStack dispense(BlockSource source, ItemStack stack, Supplier<ItemStack> work) {
         ServerLevel level = source.level();
@@ -663,6 +671,13 @@ public final class BlockHooks {
             boolean fill = stack.is(Items.BUCKET) && state.getBlock() instanceof BucketPickup
                     && (level.getFluidState(target).isSource() || state.getBlock() instanceof PowderSnowBlock);
             boolean empty = stack.getItem() instanceof BucketItem bucket && bucket.content != Fluids.EMPTY;
+            if (stack.is(Items.FLINT_AND_STEEL) && state.getBlock() instanceof TntBlock) {
+                if (cancelIgnition(level, target, state, null)) {
+                    forgetIgnition();
+                    return stack;
+                }
+                return EntitySpawnRefunds.dispensing(stack, work); // the removal obeys the decision just made
+            }
             if (!fill && !empty) return EntitySpawnRefunds.dispensing(stack, work);
             if (fill ? cancelBucketFill(null, level, target, state, stack, null)
                     : cancelBucketEmpty((BucketItem) stack.getItem(), null, level, target, null, stack)) {
