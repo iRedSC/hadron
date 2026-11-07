@@ -71,11 +71,15 @@ final class WorldsManager implements Worlds.Backend {
 
     private record Open(ServerLevel level, BorderChangeListener border) {}
 
-    /** Unloaded but not yet closed: closing waits for the end of the tick, outside every level's tick. */
+    /**
+     * Unloaded but not yet closed: closing waits for the end of the tick, outside every level's tick. A world whose
+     * close failed stays here, {@code failed} set, so nothing opens or deletes its files while they may be open.
+     */
     private static final class Closing {
         final ServerLevel level;
         final boolean save;
         boolean delete;
+        @Nullable Throwable failed;
 
         Closing(ServerLevel level, boolean save, boolean delete) {
             this.level = level;
@@ -95,15 +99,36 @@ final class WorldsManager implements Worlds.Backend {
                 .toAbsolutePath().normalize());
     }
 
-    /** At startup, before plugins enable: every world that was loaded when the server last stopped. */
+    /**
+     * At startup, before plugins enable: finishes deleting what was deleted before a crash or a failed removal, then
+     * loads every world that was loaded when the server last stopped.
+     */
     void restore() {
+        for (ResourceLocation key : store.deleting()) {
+            try {
+                WorldCreator.checkedKey(key);
+                ResourceKey<Level> dimension = dimension(key);
+                if (heldByModOrDatapack(dimension)) {
+                    LOG.error("Hadron didn't finish deleting world {}: a mod or datapack now has a dimension with that "
+                            + "id, using the same folder, so it was kept. Remove \"{}\" from \"deleting\" in {} once "
+                            + "you're sure the folder is the mod's", key, key, store.file());
+                    continue;
+                }
+                deleteFolder(dimension);
+                store.deleted(key);
+                LOG.info("Hadron finished deleting world {}", key);
+            } catch (IOException | RuntimeException e) {
+                LOG.error("Hadron still couldn't delete world {}'s folder: {}. Remove it by hand; until then the id "
+                        + "can't be used for a new world", key, e.getMessage(), e);
+            }
+        }
         for (Definition d : store.all()) {
             if (!d.loaded()) continue;
             try {
                 WorldCreator.checkedKey(d.key());
                 ResourceKey<Level> dimension = dimension(d.key());
                 refuseTaken(dimension);
-                open(d);
+                open(d, false);
                 LOG.info("Hadron loaded created world {}", d.key());
             } catch (RuntimeException e) {
                 LOG.error("Hadron couldn't load created world {}: {}. It stays saved; fix the cause and restart, or "
@@ -127,17 +152,22 @@ final class WorldsManager implements Worlds.Backend {
         ResourceKey<Level> dimension = dimension(key);
         refuseTaken(dimension);
         refuseClosing(dimension);
+        if (store.isDeleting(key)) finishDeleting(dimension);
         WorldGenerator generator = creator.generator()
                 .orElseGet(() -> WorldsGenerators.defaultFor(creator.type(), key));
         long seed = creator.seed().orElseGet(() -> ThreadLocalRandom.current().nextLong());
         return open(new Definition(key, creator.type(), generator, seed, creator.spawn().orElse(null), 0,
-                creator.keepSpawnLoaded(), true));
+                creator.keepSpawnLoaded(), true), true);
     }
 
     @Override
     public ServerLevel load(ResourceLocation key) {
         onServerThread("load");
         Definition saved = store.get(key);
+        if (saved == null && store.isDeleting(key)) {
+            throw new IllegalArgumentException("World " + key + " was deleted; create a new one with "
+                    + "Worlds.create(new WorldCreator(" + quoted(key) + "))");
+        }
         if (saved == null) {
             throw new IllegalArgumentException("Hadron never created a world " + key + "; create it with "
                     + "Worlds.create(new WorldCreator(" + quoted(key) + "))");
@@ -152,7 +182,7 @@ final class WorldsManager implements Worlds.Backend {
         if (loaded != null) return loaded.level();
         refuseTaken(dimension);
         refuseClosing(dimension);
-        return open(saved);
+        return open(saved, false);
     }
 
     @Override
@@ -191,6 +221,9 @@ final class WorldsManager implements Worlds.Backend {
             throw new IllegalArgumentException("Can't move players out of " + dimension.location() + " into "
                     + to.dimension().location() + ": pick another loaded world");
         }
+        // Saved first: if the file can't be written, nothing has happened yet.
+        Definition definition = store.get(dimension.location());
+        store.put(definition.withLoaded(false));
         // Players are asked to leave like any teleport, so listeners may send them somewhere else; anyone a listener
         // kept here is moved anyway, without events, since a world being unloaded can't keep anyone in it.
         ServerLevel target = to;
@@ -203,14 +236,16 @@ final class WorldsManager implements Worlds.Backend {
                     player.getXRot()));
         }
         if (!level.players().isEmpty()) {
+            try {
+                store.put(definition);
+            } catch (IllegalStateException e) {
+                LOG.error("Hadron couldn't mark world {} loaded again; after a restart it stays unloaded until "
+                        + "Worlds.load", dimension.location(), e);
+            }
             throw new IllegalStateException("Couldn't move every player out of " + dimension.location() + ", so it "
                     + "stays loaded: " + level.players().stream().map(p -> p.getGameProfile().getName()).toList());
         }
-        server.forgeGetWorldMap().remove(dimension);
-        server.markWorldsDirty();
-        server.overworld().getWorldBorder().removeListener(loaded.border());
-        open.remove(dimension);
-        store.put(store.get(dimension.location()).withLoaded(false));
+        unpublish(dimension, loaded);
         closing.put(dimension, new Closing(level, save, false));
         // While the server runs, a world closes at the end of the tick, never inside its own tick or a chunk task.
         if (!server.isRunning()) finishClosing();
@@ -220,22 +255,54 @@ final class WorldsManager implements Worlds.Backend {
     public void delete(ResourceLocation key) {
         onServerThread("delete");
         ResourceKey<Level> dimension = dimension(key);
-        if (store.get(key) == null) throw notOurs(dimension, "delete");
+        if (store.get(key) == null && !store.isDeleting(key)) throw notOurs(dimension, "delete");
+        // The folder is the dimension's, whoever loads it: never erase a mod's or datapack's world.
+        if (heldByModOrDatapack(dimension)) {
+            throw new IllegalStateException("World " + key + " can't be deleted: a mod or datapack now has a dimension "
+                    + "with this id, which uses the same folder. Remove that dimension from the mod or datapack first, "
+                    + "or keep the world (Worlds.created() still lists it)");
+        }
+        Closing failed = closing.get(dimension);
+        if (failed != null && failed.failed != null) throw failedToClose(dimension, failed);
+        if (store.get(key) == null) {
+            // Deleted before, and its folder stayed: try again, unless it is still closing (it goes then).
+            if (failed == null) finishDeleting(dimension);
+            return;
+        }
         Open loaded = open.get(dimension);
         if (loaded != null) unload(loaded.level(), false, null, null);
-        store.remove(key);
+        // Remembered as deleting before anything is removed, so a crash or an error resumes instead of leaving an
+        // untracked folder that a new world of this id would open with another seed.
+        store.markDeleting(key);
         Closing pending = closing.get(dimension);
         if (pending != null) {
             pending.delete = true;
             if (!server.isRunning()) finishClosing();
         } else {
-            deleteFolder(dimension);
+            finishDeleting(dimension);
         }
+    }
+
+    /** Removes a deleted world's folder and stops remembering it. @throws IllegalStateException if it can't. */
+    private void finishDeleting(ResourceKey<Level> dimension) {
+        try {
+            deleteFolder(dimension);
+        } catch (IOException e) {
+            throw new IllegalStateException("World " + dimension.location() + " was deleted, but Hadron couldn't remove "
+                    + "its folder " + folderOf(dimension) + " (" + e + "). Remove it by hand, or make it writable; "
+                    + "until then the id can't be used for a new world. Hadron tries again on every start and on "
+                    + "Worlds.create or Worlds.delete of this id", e);
+        }
+        store.deleted(dimension.location());
     }
 
     // ---- Building and closing ----
 
-    private ServerLevel open(Definition d) {
+    /**
+     * Builds, saves and announces a world, all or nothing: if any step throws, the world is taken out again, closed at
+     * the end of the tick, and for a new one ({@code fresh}) forgotten and its folder removed.
+     */
+    private ServerLevel open(Definition d, boolean fresh) {
         ResourceKey<Level> dimension = dimension(d.key());
         Holder<DimensionType> type = WorldsGenerators.dimensionType(server, d.type());
         ChunkGenerator generator = WorldsGenerators.build(server, d.generator());
@@ -244,7 +311,14 @@ final class WorldsManager implements Worlds.Backend {
         WorldsLevelData data = new WorldsLevelData(server.getWorldData(), server.getWorldData().overworldData(),
                 firstSpawn, d.angle(), (pos, angle) -> {
                     Definition current = store.get(d.key());
-                    if (current != null) store.put(current.withSpawn(pos, angle));
+                    if (current == null) return;
+                    try {
+                        store.put(current.withSpawn(pos, angle));
+                    } catch (IllegalStateException e) {
+                        // The world itself is safe: only where players spawn after a restart is lost.
+                        LOG.error("Hadron couldn't save world {}'s new spawn; after a restart it is back at the last "
+                                + "saved one", d.key(), e);
+                    }
                 });
         // Before the constructor: ChunkMap builds the generator's random state from getSeed while it runs.
         WorldsHooks.putSeed(dimension, d.seed());
@@ -257,6 +331,13 @@ final class WorldsManager implements Worlds.Backend {
             WorldsHooks.removeSeed(dimension);
             throw new IllegalStateException("Couldn't build world " + d.key() + ": " + e, e);
         }
+        try {
+            store.put(d.withLoaded(true));
+        } catch (IllegalStateException e) {
+            // Never announced or ticked: closed at once, and a new world's empty folder goes with it.
+            closeUnannounced(dimension, level, fresh);
+            throw e;
+        }
         server.forgeGetWorldMap().put(dimension, level);
         server.markWorldsDirty();
         // As vanilla's nether and end: the border follows the overworld's.
@@ -264,8 +345,22 @@ final class WorldsManager implements Worlds.Backend {
         BorderChangeListener border = new BorderChangeListener.DelegateBorderChangeListener(level.getWorldBorder());
         overworld.getWorldBorder().addListener(border);
         level.getWorldBorder().applySettings(overworld.getWorldBorder().createSettings());
-        open.put(dimension, new Open(level, border));
-        store.put(d.withLoaded(true));
+        Open opened = new Open(level, border);
+        open.put(dimension, opened);
+        try {
+            announce(level, data, d);
+        } catch (RuntimeException e) {
+            undoOpen(dimension, opened, d, fresh);
+            throw new IllegalStateException("World " + d.key() + " couldn't finish loading (" + e + "), so it was "
+                    + (fresh ? "removed again" : "unloaded again, without saving") + ". A mod's or plugin's world "
+                    + "load listener is the usual cause; fix it, then call Worlds." + (fresh ? "create" : "load")
+                    + " on a later tick", e);
+        }
+        return level;
+    }
+
+    /** The steps after a world is in the server's map: the load event, forced chunks, spawn. */
+    private void announce(ServerLevel level, WorldsLevelData data, Definition d) {
         NeoForge.EVENT_BUS.post(new LevelEvent.Load(level));
         // As vanilla does for every level at startup: chunks forced before the unload or restart are forced again.
         net.minecraft.world.level.ForcedChunksSavedData forced = level.getDataStorage()
@@ -286,7 +381,62 @@ final class WorldsManager implements Worlds.Backend {
             int radius = server.getGameRules().getInt(GameRules.RULE_SPAWN_CHUNK_RADIUS) + 1;
             if (radius > 1) level.getChunkSource().addRegionTicket(TicketType.START, new ChunkPos(spawn), radius, Unit.INSTANCE);
         }
-        return level;
+    }
+
+    /** Takes a loaded world out of the server; closing is up to the caller. */
+    private void unpublish(ResourceKey<Level> dimension, Open loaded) {
+        server.forgeGetWorldMap().remove(dimension);
+        server.markWorldsDirty();
+        server.overworld().getWorldBorder().removeListener(loaded.border());
+        open.remove(dimension);
+    }
+
+    /** A world that failed after it was published: out of the server, its definition put back, closed at tick end. */
+    private void undoOpen(ResourceKey<Level> dimension, Open opened, Definition d, boolean fresh) {
+        ServerLevel level = opened.level();
+        // A listener may have sent someone in already.
+        ServerLevel overworld = server.overworld();
+        Vec3 spawn = Vec3.atBottomCenterOf(overworld.getSharedSpawnPos());
+        for (ServerPlayer player : List.copyOf(level.players())) {
+            EntityTeleports.quietly(() -> player.teleportTo(overworld, spawn.x, spawn.y, spawn.z, player.getYRot(),
+                    player.getXRot()));
+        }
+        unpublish(dimension, opened);
+        boolean delete = false;
+        try {
+            if (fresh) {
+                store.markDeleting(d.key());
+                delete = true;
+            } else {
+                store.put(d.withLoaded(false));
+            }
+        } catch (IllegalStateException e) {
+            LOG.error("Hadron couldn't save that world {} failed to load", d.key(), e);
+        }
+        // Mods that heard it load hear it unload, as for any world.
+        closing.put(dimension, new Closing(level, false, delete));
+        if (!server.isRunning()) finishClosing();
+    }
+
+    private void closeUnannounced(ResourceKey<Level> dimension, ServerLevel level, boolean fresh) {
+        level.noSave = true;
+        WorldsHooks.setDiscarding(true);
+        try {
+            level.close();
+        } catch (IOException | RuntimeException e) {
+            LOG.error("Hadron couldn't close world {} after failing to save it", dimension.location(), e);
+            return; // its files may be open: leave the folder alone
+        } finally {
+            WorldsHooks.setDiscarding(false);
+            WorldsHooks.removeSeed(dimension);
+        }
+        if (!fresh) return;
+        try {
+            deleteFolder(dimension);
+        } catch (IOException e) {
+            LOG.error("Hadron couldn't remove the empty folder of world {}, which was never saved; remove {} by hand",
+                    dimension.location(), folderOf(dimension), e);
+        }
     }
 
     /** A spot to stand: the surface, or for a world with a ceiling (the nether) the first open floor below it. */
@@ -323,45 +473,66 @@ final class WorldsManager implements Worlds.Backend {
         for (var entry : pending) {
             ResourceKey<Level> dimension = entry.getKey();
             Closing c = entry.getValue();
+            if (c.failed != null) continue;
             ServerLevel level = c.level;
-            try {
-                if (c.save) {
-                    level.save(null, true, false);
-                } else {
-                    level.noSave = true;
-                }
-                NeoForge.EVENT_BUS.post(new LevelEvent.Unload(level));
-                WorldsHooks.setDiscarding(!c.save);
+            // Each step on its own: a mod's broken listener or a failed save must never skip the close, or the
+            // world's files stay open under the next copy.
+            if (c.save) {
                 try {
-                    level.close();
-                } finally {
-                    WorldsHooks.setDiscarding(false);
+                    level.save(null, true, false);
+                } catch (RuntimeException e) {
+                    LOG.error("Hadron couldn't save world {} while unloading it; it closes with what was saved before",
+                            dimension.location(), e);
                 }
-            } catch (IOException | RuntimeException e) {
-                LOG.error("Hadron hit an error closing world {}", dimension.location(), e);
-            } finally {
-                WorldsHooks.removeSeed(dimension);
+            } else {
+                level.noSave = true;
             }
-            if (c.delete) deleteFolder(dimension);
+            try {
+                NeoForge.EVENT_BUS.post(new LevelEvent.Unload(level));
+            } catch (RuntimeException e) {
+                LOG.error("A listener for the unload of world {} threw; Hadron closes the world anyway",
+                        dimension.location(), e);
+            }
+            WorldsHooks.setDiscarding(!c.save);
+            try {
+                level.close();
+            } catch (IOException | RuntimeException e) {
+                c.failed = e;
+                LOG.error("Hadron couldn't close world {}, so its files may still be open; it can't be loaded or "
+                        + "deleted again until the server restarts", dimension.location(), e);
+                continue;
+            } finally {
+                WorldsHooks.setDiscarding(false);
+            }
+            WorldsHooks.removeSeed(dimension);
             closing.remove(dimension, c);
+            if (c.delete) {
+                try {
+                    finishDeleting(dimension);
+                } catch (IllegalStateException e) {
+                    LOG.error(e.getMessage(), e);
+                }
+            }
         }
     }
 
-    private void deleteFolder(ResourceKey<Level> dimension) {
+    private Path folderOf(ResourceKey<Level> dimension) {
+        return ((MinecraftServerAccessor) server).hadron$storageSource().getDimensionPath(dimension).toAbsolutePath()
+                .normalize();
+    }
+
+    /** @throws IOException if any of it is left */
+    private void deleteFolder(ResourceKey<Level> dimension) throws IOException {
         LevelStorageSource.LevelStorageAccess storage = ((MinecraftServerAccessor) server).hadron$storageSource();
         Path root = storage.getLevelPath(LevelResource.ROOT).toAbsolutePath().normalize();
-        Path folder = storage.getDimensionPath(dimension).toAbsolutePath().normalize();
+        Path folder = folderOf(dimension);
         // getDimensionPath is the save's root for the overworld; only ever remove something under dimensions/.
         if (!folder.startsWith(root.resolve("dimensions")) || folder.equals(root.resolve("dimensions"))) {
-            LOG.error("Hadron refused to delete {}: it isn't a created world's folder", folder);
-            return;
+            throw new IOException("Hadron refused to delete " + folder + ": it isn't a created world's folder");
         }
         if (!Files.exists(folder)) return;
         try (Stream<Path> walk = Files.walk(folder)) {
             for (Path p : walk.sorted(Comparator.reverseOrder()).toList()) Files.delete(p);
-        } catch (IOException e) {
-            LOG.error("Hadron deleted world {} but couldn't remove all of {}; delete what's left by hand",
-                    dimension.location(), folder, e);
         }
     }
 
@@ -379,16 +550,29 @@ final class WorldsManager implements Worlds.Backend {
             throw new IllegalArgumentException("minecraft:overworld is the server's main world; give the new world "
                     + "your own id, like myplugin:" + "world");
         }
-        boolean registered = server.registryAccess().registryOrThrow(Registries.LEVEL_STEM)
-                .containsKey(dimension.location());
-        if (registered || (server.getLevel(dimension) != null && !open.containsKey(dimension))) {
+        if (heldByModOrDatapack(dimension)) {
             throw new IllegalArgumentException(dimension.location() + " is already a dimension of a mod or datapack; "
                     + "give the new world another id, or reach that dimension with Worlds.get(" + quoted(dimension.location()) + ")");
         }
     }
 
+    /** A dimension of a mod or datapack (registered, or loaded but not by Hadron) has this id, and its folder. */
+    private boolean heldByModOrDatapack(ResourceKey<Level> dimension) {
+        boolean registered = server.registryAccess().registryOrThrow(Registries.LEVEL_STEM)
+                .containsKey(dimension.location());
+        return registered || (server.getLevel(dimension) != null && !open.containsKey(dimension));
+    }
+
+    private static IllegalStateException failedToClose(ResourceKey<Level> dimension, Closing c) {
+        return new IllegalStateException("World " + dimension.location() + " couldn't be closed when it was unloaded ("
+                + c.failed + "), so its files may still be open; it can't be loaded or deleted until the server "
+                + "restarts");
+    }
+
     private void refuseClosing(ResourceKey<Level> dimension) {
-        if (closing.containsKey(dimension)) {
+        Closing c = closing.get(dimension);
+        if (c != null && c.failed != null) throw failedToClose(dimension, c);
+        if (c != null) {
             throw new IllegalStateException("World " + dimension.location() + " was unloaded this tick and closes at "
                     + "the end of it; load it again from a task on the next tick: "
                     + "Hadron.getScheduler().runTask(plugin, () -> ...)");

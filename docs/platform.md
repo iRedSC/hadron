@@ -27,8 +27,8 @@ Vault's `Economy`, with several currencies.
 
 ProtocolLib's interception, and Bukkit's `hidePlayer`, for vanish, nametags, tab lists, NPCs and anticheat.
 
-- **Packet events** for every vanilla packet in and out, carrying Minecraft's own packet classes: cancel one, or replace it with another. Outgoing packets can be changed per player, which is how nametags and fake entities work.
-- **Visibility:** a player or entity hidden from a viewer is never sent to them at all: not spawned, out of the tab list and command suggestions, its sounds and interactions dropped. `hideFromAll` hides someone from everyone, including players who join later, and keeps them out of `/list` and the server list's count and sample. Chat, join, quit and death lines aren't hidden automatically; a vanish plugin blanks them through their events.
+- **Packet events** for every vanilla packet in and out, carrying Minecraft's own packet classes: cancel one, or replace it with another of the same class (for another kind, cancel it and send yours). Outgoing packets can be changed per player, which is how nametags and fake entities work.
+- **Visibility:** a player or entity hidden from a viewer is never sent to them at all: not spawned, out of the tab list and command suggestions, its sounds and interactions dropped, and left out of what entities the viewer does see send (a boat's riders, a leash's holder, who dealt damage, who shot an arrow). `hideFromAll` hides someone from everyone, including players who join later, and keeps them out of `/list` and the server list's count and sample. Chat, join, quit and death lines aren't hidden automatically; a vanish plugin blanks them through their events.
 - **Display names:** a player's name in chat, death messages and the tab list can be set per server, for nicknames. The name above the head (`setNameTag`) rewrites the player's profile name for other viewers, so their clients also suggest the nickname in commands and below-name scores stop showing; for plain decoration, use vanilla scoreboard team prefixes instead.
 - Packet handlers run on the network thread; the API says so and offers a way to hop to the server thread, since most Minecraft state can't be touched there.
 
@@ -37,7 +37,7 @@ ProtocolLib's interception, and Bukkit's `hidePlayer`, for vanish, nametags, tab
 Bukkit's `WorldCreator` and `createWorld`, for Multiverse.
 
 - **Create** a world from a dimension type the server has (overworld, nether, end, or a datapack's or mod's) and a generator: a copy of an existing dimension's, flat, void, or a noise settings id, with its own seed.
-- **Load, unload and delete** while the server runs (`Worlds.load` brings back a created world that is unloaded; `Worlds.created()` lists them all). Players in a world being unloaded are moved out first. Unloading without saving discards the changes. Time, weather and game rules follow the overworld; spawn is per world.
+- **Load, unload and delete** while the server runs (`Worlds.load` brings back a created world that is unloaded; `Worlds.created()` lists them all). Players in a world being unloaded are moved out first. Unloading without saving discards the changes. Every step is all or nothing: a world that can't be saved or finish loading is refused and leaves nothing behind, and a deleted world's id can't be reused until its folder is really gone, so a new world never opens over old chunks. Time, weather and game rules follow the overworld; spawn is per world.
 - **Created worlds come back on restart:** Hadron saves each world's definition and recreates it before plugins enable, so a plugin can rely on its worlds existing in `onEnable`.
 - **Vanilla clients can join them**, with no client mod: a created world is an ordinary dimension to the client, and commands suggest it even to players who joined before it was created.
 - A world belongs to the server, not to the plugin that made it: disabling the plugin doesn't unload it.

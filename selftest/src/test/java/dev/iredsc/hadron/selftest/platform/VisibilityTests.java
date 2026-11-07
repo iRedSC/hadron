@@ -6,11 +6,20 @@ import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import net.minecraft.core.BlockPos;
+import java.util.Arrays;
+import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
+import net.minecraft.network.protocol.game.ClientboundDamageEventPacket;
+import net.minecraft.network.protocol.game.ClientboundSetEntityLinkPacket;
+import net.minecraft.network.protocol.game.ClientboundSetPassengersPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.projectile.Arrow;
+import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 /** Hiding entities and players from two real clients: spawning, tab list, /list, sounds and interactions. */
 public final class VisibilityTests {
     private static Pig pig(TestContext t, BlockPos pos) {
@@ -120,5 +129,58 @@ public final class VisibilityTests {
         bob.attack(pig);
         t.assertTrue(pig.getHealth() < pig.getMaxHealth(), "once shown, bob's attack should hurt the pig; without "
                 + "that this test proves nothing");
+    }
+
+    @HadronTest
+    @Covers(value = Visibility.class, method = "hidePlayer")
+    void aHiddenPlayerIsLeftOutOfVisibleEntitiesRidersLeashesDamageAndArrows(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        Visibility.hidePlayer(t.plugin(), bob.player(), alice.player());
+        Boat boat = EntityType.BOAT.create(t.level());
+        BlockPos at = t.pos(2, 1, 0);
+        boat.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0, 0);
+        t.level().addFreshEntity(boat);
+        Pig pig = pig(t, t.pos(-2, 1, 0));
+        t.level().addFreshEntity(pig);
+        t.await("bob's client to be sent the boat and the pig", () -> bob.isShown(boat) && bob.isShown(pig), 60);
+        bob.clearReceived();
+        alice.clearReceived();
+        t.assertTrue(alice.player().startRiding(boat, true), "alice should get into the boat");
+        pig.setLeashedTo(alice.player(), true);
+        pig.hurt(t.level().damageSources().playerAttack(alice.player()), 1);
+        Arrow arrow = new Arrow(t.level(), alice.player(), new ItemStack(Items.ARROW), null);
+        arrow.moveTo(at.getX() + 0.5, at.getY() + 3, at.getZ() + 0.5, 0, 0);
+        t.level().addFreshEntity(arrow);
+        t.await("both clients to be sent the arrow", () -> bob.isShown(arrow) && alice.isShown(arrow), 20);
+        t.tick(2);
+        int aliceId = alice.player().getId();
+        t.assertTrue(alice.received(ClientboundSetPassengersPacket.class).stream()
+                .anyMatch(p -> Arrays.stream(p.getPassengers()).anyMatch(id -> id == aliceId)), "alice's own client "
+                + "should be told she rides the boat; without that this test proves nothing");
+        for (ClientboundSetPassengersPacket p : bob.received(ClientboundSetPassengersPacket.class)) {
+            t.assertFalse(Arrays.stream(p.getPassengers()).anyMatch(id -> id == aliceId), "bob was told hidden "
+                    + "alice rides the boat: passengers " + Arrays.toString(p.getPassengers()));
+        }
+        for (ClientboundSetEntityLinkPacket p : bob.received(ClientboundSetEntityLinkPacket.class)) {
+            t.assertFalse(p.getDestId() == aliceId, "bob was told the pig is leashed to hidden alice");
+        }
+        for (ClientboundDamageEventPacket p : bob.received(ClientboundDamageEventPacket.class)) {
+            t.assertFalse(p.sourceCauseId() == aliceId || p.sourceDirectId() == aliceId, "bob was told hidden "
+                    + "alice hurt the pig");
+        }
+        t.assertTrue(alice.received(ClientboundDamageEventPacket.class).stream()
+                .anyMatch(p -> p.sourceCauseId() == aliceId), "alice's own client should be told she hurt the pig; "
+                + "without that this test proves nothing");
+        int arrowId = arrow.getId();
+        for (ClientboundAddEntityPacket p : bob.received(ClientboundAddEntityPacket.class)) {
+            t.assertFalse(p.getId() == arrowId && p.getData() == aliceId, "bob was told hidden alice shot the arrow");
+        }
+        t.assertTrue(alice.received(ClientboundAddEntityPacket.class).stream()
+                .anyMatch(p -> p.getId() == arrowId && p.getData() == aliceId), "alice's own client should be told "
+                + "she shot the arrow; without that this test proves nothing");
+        t.assertTrue(alice.received(ClientboundSetEntityLinkPacket.class).stream()
+                .anyMatch(p -> p.getDestId() == aliceId), "alice's own client should be told she holds the leash; "
+                + "without that this test proves nothing");
     }
 }
