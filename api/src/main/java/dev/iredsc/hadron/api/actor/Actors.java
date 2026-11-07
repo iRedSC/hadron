@@ -29,6 +29,7 @@ import org.slf4j.LoggerFactory;
  */
 public final class Actors {
     private static final Logger LOG = LoggerFactory.getLogger("Hadron");
+    @StaticState(reason = "each thread's open actor scopes; every scope pops itself when it closes, so a thread's stack is empty between operations, and Hadron is never reloaded")
     private static final ThreadLocal<Stack> STACK = ThreadLocal.withInitial(Stack::new);
     @StaticState(reason = "the port installs its world-saved memory when the mod loads; Hadron itself is never reloaded")
     private static volatile Memory memory = new Memory.Transient();

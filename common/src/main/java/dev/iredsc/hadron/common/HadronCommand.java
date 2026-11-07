@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.checks.StaticState;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.ArgumentBuilder;
@@ -26,8 +27,10 @@ import net.minecraft.network.chat.Style;
  * rarely needed: a changed jar reloads by itself. {@code /hadron trace} shows events as they fire ({@link Trace}).
  */
 final class HadronCommand {
+    @StaticState(reason = "Brigadier's exception type, holding only its fixed message")
     private static final SimpleCommandExceptionType NOT_RUNNING =
             new SimpleCommandExceptionType(Component.literal("No server is running plugins yet"));
+    @StaticState(reason = "Brigadier's exception type, holding only a stateless message function")
     private static final DynamicCommandExceptionType NO_SUCH = new DynamicCommandExceptionType(
             name -> Component.literal("No plugin named " + name + ". See /plugins"));
 

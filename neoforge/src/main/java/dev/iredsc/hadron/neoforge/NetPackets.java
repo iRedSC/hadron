@@ -32,7 +32,9 @@ final class NetPackets {
     @StaticState(reason = "a sequence ordering handlers registered at one priority; it only needs to grow")
     private static long registered;
 
+    @StaticState(reason = "packet handlers by direction; the disable hook (remove) drops a plugin's")
     static final Side OUT = new Side(true);
+    @StaticState(reason = "packet handlers by direction; the disable hook (remove) drops a plugin's")
     static final Side IN = new Side(false);
 
     static final class Handler implements PacketRegistration {
@@ -140,6 +142,7 @@ final class NetPackets {
     @StaticState(reason = "each plugin's in-flight handler count, removed in its disable hook")
     private static final ConcurrentHashMap<JavaPlugin, int[]> RUNNING = new ConcurrentHashMap<>();
     /** The plugin whose handler this thread is inside, so a handler that disables its own plugin doesn't wait on itself. */
+    @StaticState(reason = "the plugin whose handler this thread is running, restored in a finally when the handler returns")
     private static final ThreadLocal<JavaPlugin> INSIDE = new ThreadLocal<>();
 
     /**

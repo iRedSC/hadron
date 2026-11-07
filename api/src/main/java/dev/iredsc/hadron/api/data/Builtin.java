@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.data;
 
+import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import java.util.function.Function;
 import java.util.function.Predicate;
@@ -20,6 +21,7 @@ import net.minecraft.nbt.StringTag;
 import net.minecraft.nbt.Tag;
 
 /** The primitive types, each written as one NBT tag. This layout is Hadron's promise: it never changes. */
+@StaticState(reason = "every field is final, and the functions it holds are stateless lambdas and method references")
 final class Builtin<P, C> implements PersistentDataType<P, C> {
     static final Builtin<Byte, Byte> BYTE = simple("BYTE", Byte.class, Tag.TAG_BYTE, ByteTag::valueOf,
             t -> ((NumericTag) t).getAsByte());

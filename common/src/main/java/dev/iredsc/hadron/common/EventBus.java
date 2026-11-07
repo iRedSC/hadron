@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.checks.StaticState;
 import dev.iredsc.hadron.checks.Nondeterministic;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.Cancellable;
@@ -124,10 +125,12 @@ final class EventBus {
         }
     }
 
+    @StaticState(reason = "a comparator made of stateless lambdas")
     private static final Comparator<Subscription> ORDER = Comparator
             .comparing((Subscription s) -> s.priority).thenComparingLong(s -> s.order);
     private static final Subscription[] NONE = new Subscription[0];
     private static final Observer[] NO_OBSERVERS = new Observer[0];
+    @StaticState(reason = "two empty arrays, which have nothing to change")
     private static final Baked EMPTY = new Baked(NONE, NO_OBSERVERS);
 
     /**

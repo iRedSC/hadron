@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import com.mojang.brigadier.exceptions.CommandSyntaxException;
 import com.mojang.brigadier.exceptions.SimpleCommandExceptionType;
@@ -158,6 +159,7 @@ final class Trace {
     /** Narrows a trace to one actor, a world, or a radius around where it was started. All must match. */
     record Filters(@Nullable String byKind, @Nullable UUID byPlayer, @Nullable String byName,
             @Nullable ResourceKey<Level> world, @Nullable ServerLevel nearLevel, @Nullable Vec3 nearPos, double radius) {
+        @StaticState(reason = "every component null or zero, so it holds no world or level")
         static final Filters NONE = new Filters(null, null, null, null, null, null, 0);
 
         boolean none() {
@@ -585,6 +587,7 @@ final class Trace {
     /** A property a plugin can set: {@code setDamage} with its {@code getDamage}. */
     private record Prop(String name, Method getter) {}
 
+    @StaticState(reason = "getters found by reflection, derived from the class alone and stored on it, so an entry never goes stale and goes with its class loader")
     private static final ClassValue<Prop[]> PROPS = new ClassValue<>() {
         @Override
         protected Prop[] computeValue(Class<?> type) {

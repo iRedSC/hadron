@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.data;
 
+import dev.iredsc.hadron.checks.StaticState;
 import java.util.Objects;
 import java.util.function.Function;
 
@@ -46,6 +47,7 @@ public interface PersistentDataType<P, C> {
     PersistentDataType<PersistentDataContainer[], PersistentDataContainer[]> TAG_CONTAINER_ARRAY =
             Builtin.TAG_CONTAINER_ARRAY;
     /** Lists: {@code LIST.strings()}, {@code LIST.integers()}, ..., {@code LIST.listTypeFrom(type)}. */
+    @StaticState(reason = "its fields are final list types over the built-in types, which never change")
     ListPersistentDataTypeProvider LIST = new ListPersistentDataTypeProvider();
 
     Class<P> getPrimitiveType();

@@ -182,6 +182,7 @@ public final class BlockHooks {
         }
     }
 
+    @StaticState(reason = "each thread's suppression and decided-change bookkeeping; every suppress is paired with an unsuppress, and a decision is consumed by its removal or expires with its game tick")
     private static final ThreadLocal<Context> CONTEXT = ThreadLocal.withInitial(Context::new);
 
     // ---------------------------------------------------------------------------------------------------------------
