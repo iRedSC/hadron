@@ -1,13 +1,15 @@
 package dev.iredsc.hadron.api.event.inventory;
 
 import java.util.Objects;
+import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 
 /**
- * What holds an inventory: a block, an entity, an item inside another item, or a frequency in linked storage. Never
+ * What holds an inventory: a block, an entity, an item inside another item, a frequency in linked storage, or one
+ * player's own copy of a block's or entity's inventory. Never
  * where a player happens to be standing, so a chest opened through a remote terminal is still the chest. Sealed, so a
  * {@code switch} over it must handle every case:
  *
@@ -17,6 +19,7 @@ import net.minecraft.world.item.ItemStack;
  *     case InventoryHolder.Entity e -> ...  // a player, a chest minecart, a horse, a villager
  *     case InventoryHolder.Item i -> ...    // a backpack, and i.outer() is what holds the backpack
  *     case InventoryHolder.Linked l -> ...  // an ender chest, an ender tank frequency
+ *     case InventoryHolder.PerPlayer p -> ... // a Lootr chest's copy for p.owner(), at p.at()
  *     case InventoryHolder.Unknown u -> ... // a mod's inventory nothing identified
  * }
  * }</pre>
@@ -57,6 +60,22 @@ public sealed interface InventoryHolder {
         public Linked {
             Objects.requireNonNull(network, "network");
             Objects.requireNonNull(frequency, "frequency");
+        }
+    }
+
+    /**
+     * One player's or team's own copy of the inventory at a block or entity, where each player who opens it sees
+     * different contents: a Lootr chest, a per-player reward crate. {@code at} is where it is, for protection;
+     * {@code owner} is whose copy, so two players' copies are never mistaken for one inventory.
+     */
+    record PerPlayer(InventoryHolder at, UUID owner) implements InventoryHolder {
+        public PerPlayer {
+            Objects.requireNonNull(at, "at; pass the Block or Entity holder the copy belongs to");
+            if (!(at instanceof Block) && !(at instanceof Entity)) {
+                throw new IllegalArgumentException("A per-player copy belongs to a Block or an Entity, not " + at
+                        + ": storage with no place, such as an ender chest, is Linked");
+            }
+            Objects.requireNonNull(owner, "owner; pass the player's UUID, or the team's");
         }
     }
 

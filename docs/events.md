@@ -66,7 +66,7 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 | ├ `BlockPlaceEvent` | a block or fluid source is placed by an actor | `BlockItem.place`, `setBlock` with an actor |
 | ├ `BlockMultiPlaceEvent` | several blocks at once (a door, a bed, a building gadget) | NeoForge's `EntityMultiPlaceEvent` |
 | ├ `BlockTransformEvent` | an actor changes a block into another (machine conversion, stripping a log, upgrading a chest in place) | `setBlock` with an actor |
-| ├ `BlockDataChangeEvent` | block entity data changes with the state unchanged: a spawner's mob, a drawer's lock, a terminal's binding, a name | bridge |
+| ├ `BlockDataChangeEvent` | data at block spaces changes with their state unchanged: a block entity's (a spawner's mob, a drawer's lock, a name), or data a mod keeps for those spaces in its own storage (a wire and the spaces it crosses, an oxygen or gravity field, a waystone's name); a kind id says whose | bridge |
 | ├ `BlockBurnEvent`, `BlockIgniteEvent` | fire destroys or starts | `FireBlock` |
 | ├ `BlockFromToEvent` | a fluid flows into a block | `FlowingFluid.spreadTo` |
 | ├ `BlockSpreadEvent`, `BlockFormEvent`, `BlockFadeEvent`, `BlockGrowEvent`, `LeavesDecayEvent` | natural changes | the vanilla block's tick |
@@ -84,11 +84,13 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 
 Fluid placed or drained without a bucket (a Refined Storage constructor, a hose pulley) is a `BlockPlaceEvent` or `BlockBreakEvent` plus a `ResourceTransferEvent` in one operation.
 
+A move between levels (a teleposer, AE2's spatial storage) fires as two `StructureMoveEvent`s in one operation: `ASSEMBLE` in the source level and `DISASSEMBLE` in the target, each listing its own level's spaces, with each move's `to` in the target level. The bridge fires both before changing anything, and moves nothing if either is cancelled.
+
 As in Bukkit, `BlockMultiPlaceEvent` extends `BlockPlaceEvent`, `BlockSpreadEvent` extends `BlockFormEvent` which extends `BlockGrowEvent`, and the bucket events extend `BlockChangeEvent`, so a listener for the broader event never misses the narrower one. `BlockFromToEvent.getPos()` is the block flowed into; `getFromPos()` is the source. An explosion's blocks are reported once, in `ExplosionEvent`'s editable list, not as one break event each.
 
 ### Entities: `EntityEvent`
 
-Payload: the entity, its position, and what changed.
+Payload: the entity and its position; each leaf adds what changed. A bridge whose change no leaf fits fires `EntityDataChangeEvent`.
 
 | Event | What | Core chokepoint |
 |---|---|---|
@@ -112,6 +114,7 @@ Payload: the entity, its position, and what changed.
 | `EntityTargetEvent` | a mob or turret picks a target | `setTarget` |
 | `EntityControlChangeEvent` | who controls an entity changes without mounting: charmed, enthralled, a drone linked to a monitor, a guard assigned; expiry is *(after)* | bridge |
 | `EntityControlExpireEvent` *(after)* | control ran out: a charm wore off, a drone's link timed out | bridge |
+| `EntityDataChangeEvent` | lasting data a mod keeps on an entity changes and no leaf above describes it: a colonist's job, a familiar's upgrades, a player's spell anchor; a kind id says whose | bridge |
 | `EntityRelationshipChangeEvent` | reputation or a lasting relationship changes (villager gossip, an NPC's marriage) | not shipped yet: see "Not shipped yet" |
 | `EntityUseEvent` | an actor right-clicks an entity | `interact` |
 | `EntityMountEvent`, `EntityDismountEvent` | riding, including vehicles and a player carrying another | `startRiding`, `stopRiding` |
@@ -151,7 +154,7 @@ Payload: the entity, its position, and what changed.
 
 ### Containers: `InventoryEvent`
 
-An inventory is identified by what holds it (a block, an entity, a player, an item inside another item, a frequency in linked storage), not by where a player is standing.
+An inventory is identified by what holds it (a block, an entity, a player, an item inside another item, a frequency in linked storage, or one player's own copy of a block's or entity's inventory, such as a Lootr chest), not by where a player is standing.
 
 | Event | What | Core chokepoint |
 |---|---|---|
@@ -223,7 +226,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 | `ServerListPingEvent` | a client's server list asks about the server; MOTD, shown player counts and the hover sample editable; not an action, so no actor | status request |
 | `CommandExecuteEvent` | any command about to run, from a player, the console, a quest reward, a mod or each line of a datapack function; actor and authority | `Commands.performCommand`, function lines |
 | `AccessControlChangeEvent` | a claim, team, party, alliance or trust list changes: boundaries, members, flags; who changed it | bridge (claim and team mods) |
-| `DataRevealEvent` | server data about a block, entity or inventory is about to be sent to a player who didn't open it (Jade, WTHIT, map radar); fields removable | bridge (Jade, WTHIT) |
+| `DataRevealEvent` | server data about a block, entity, inventory or account is about to be sent to a player who didn't open it (Jade, WTHIT, map radar, a sigil reading another player's network); fields removable | bridge (Jade, WTHIT) |
 | `PluginEnableEvent`, `PluginDisableEvent` *(after)* | | Hadron's plugin host |
 | `ServiceRegisterEvent`, `ServiceUnregisterEvent` *(after)* | a provider appeared or left | Hadron's services manager |
 
@@ -231,7 +234,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 
 Designed but not in `api`, because core can't yet fire them for every actor without breaking rule 7 or making a cancel unsafe. A plugin can't listen for them, so none of them can look like coverage.
 
-- `EntityRemoveEvent`, `EntityCaptureEvent`: cancelling at `Entity.remove` can duplicate (a cancelled arrow pickup); each cause needs its own hook.
+- `EntityRemoveEvent`, `EntityCaptureEvent`: cancelling at `Entity.remove` can duplicate (a cancelled arrow pickup); each cause needs its own hook. First to ship ([design](design.md#order-of-work)). Removal by expiry (a timed summon, a temporary portal) will be *(after)*, so a cancel can't make it permanent.
 - `EntityLeashEvent`, `EntityUnleashEvent`, `EntityShearEvent`, `ArmorStandManipulateEvent`: need hooks inside interface methods or per-path logic.
 - `EntityAttributeChangeEvent`, `EntityRelationshipChangeEvent`, `FoodLevelChangeEvent`: the vanilla classes that change don't know their entity.
 - `BiomeChangeEvent`: biome writes are too hot and scattered for one hook.
@@ -240,6 +243,8 @@ Designed but not in `api`, because core can't yet fire them for every actor with
 ## Left out
 
 - **An event per spell school or damage type.** Damage, healing, effects, blocks, spawns and teleports already describe what spells do; the spell is on the operation.
-- **An event per fuel tick.** Burning internal fuel is a `ResourceConsumeEvent` when the reserve changes, and acceleration is one event per change, so hot loops don't fire thousands of events.
+- **An event per tick.** A machine's job fires once with its whole cost, and its per-tick spending runs silent; drift with no job (heat settling, air leaking) is the holder's own state. Acceleration is one event per change. So hot loops don't fire thousands of events ([bridge-hooks](bridge-hooks.md#the-rule-for-firing)).
 - **Mod progression state** (Twilight Forest's conquered bosses, quest progress). It changes no world, player or item; plugins that need it use the bridge's extras.
 - **Client-only data** (local waypoints, minimap settings).
+- **Data tied to no place** (a computer's files, a mod's network database). Plugins guard it through the block or item that reaches it, and whatever it makes happen in the world fires its own events.
+- **Creatures stored outside items** (Cobblemon's party and PC). Moving, trading, releasing or evolving them in storage are the bridge's own events until a second official bridge needs the same ([promotion](bridges.md#promotion-when-bridges-events-become-core)). Capture into storage and release from it are core events, so every creature entering or leaving the world is seen.

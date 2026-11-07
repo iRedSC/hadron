@@ -16,6 +16,7 @@ import dev.iredsc.hadron.api.event.block.BlockRedstoneEvent;
 import dev.iredsc.hadron.api.event.block.StructureMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityControlChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityControlExpireEvent;
+import dev.iredsc.hadron.api.event.entity.EntityDataChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryDestroyEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryGenerateEvent;
@@ -41,6 +42,7 @@ import java.util.Set;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.item.ItemStack;
@@ -166,6 +168,78 @@ public final class BridgeContractTests {
         t.assertTrue(refused, "callEvent should report the cancel to the bridge");
         t.assertTrue(chest.saveWithoutMetadata(t.level().registryAccess()).contains("Lock"), "a cancelled data change "
                 + "should leave the lock");
+    }
+
+    @HadronTest
+    @Covers(BlockDataChangeEvent.class)
+    void aModsOwnDataForBlockSpacesListsEverySpaceItCoversSoProtectionCanDenyIt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos from = t.pos(1, 0, 0);
+        BlockPos to = t.pos(4, 0, 0);
+        List<BlockPos> span = List.of(from, t.pos(2, 0, 0), t.pos(3, 0, 0), to); // a wire and the air it crosses
+        ResourceLocation wire = ResourceLocation.fromNamespaceAndPath("immersiveengineering", "wire");
+        CompoundTag strung = new CompoundTag();
+        strung.putString("type", "copper");
+        Set<BlockPos> wires = new HashSet<>();
+        BlockPos claimed = t.pos(3, 0, 0);
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockEvent e) { // a region plugin: it has never heard of wires
+                if (!(e instanceof dev.iredsc.hadron.api.event.Cancellable c)) return;
+                for (BlockChange b : e.getBlocks()) if (b.getPos().equals(claimed)) c.setCancelled(true);
+            }
+        });
+        boolean[] cancel = {false};
+        List<BlockDataChangeEvent> seen = record(t, BlockDataChangeEvent.class, cancel);
+        boolean refused = fire(t, machine(t, alice), a -> new BlockDataChangeEvent(t.level(), from, wire, span,
+                new CompoundTag(), strung, a), () -> wires.add(from));
+        BlockDataChangeEvent e = only(t, seen, "BlockDataChangeEvent");
+        t.assertEquals(wire, e.getKind(), "whose data");
+        t.assertEquals(span, e.getBlocks().stream().map(BlockChange::getPos).toList(), "every space the wire covers");
+        t.assertFalse(e.getBlocks().stream().anyMatch(BlockChange::isChanged), "no block state changes");
+        t.assertEquals("copper", e.getAfterData().getString("type"), "the data after, in the mod's format");
+        t.assertTrue(e.getBeforeData().isEmpty(), "no wire before");
+        t.assertTrue(refused && wires.isEmpty(), "a wire crossing a protected space should be refused");
+        boolean threw = false;
+        try {
+            new BlockDataChangeEvent(t.level(), from, wire, List.of(), new CompoundTag(), strung, machine(t, alice));
+        } catch (IllegalArgumentException expected) {
+            threw = expected.getMessage().contains("list every space");
+        }
+        t.assertTrue(threw, "a mod's data with no spaces should be refused, saying to list them");
+        t.assertEquals(BlockDataChangeEvent.BLOCK_ENTITY, new BlockDataChangeEvent(t.level(), from,
+                t.level().getBlockState(from), new CompoundTag(), new CompoundTag(), machine(t, alice)).getKind(),
+                "a block entity's own data");
+    }
+
+    @HadronTest
+    @Covers(EntityDataChangeEvent.class)
+    void aModsLastingEntityDataIsAnEntityEventAndACancelKeepsIt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Pig pig = EntityType.PIG.create(t.level());
+        pig.moveTo(t.pos(2, 0, 2).getX() + 0.5, t.pos(2, 0, 2).getY(), t.pos(2, 0, 2).getZ() + 0.5);
+        t.level().addFreshEntity(pig);
+        ResourceLocation job = ResourceLocation.fromNamespaceAndPath("minecolonies", "job");
+        CompoundTag builder = new CompoundTag();
+        builder.putString("job", "builder");
+        CompoundTag[] stored = {new CompoundTag()};
+        boolean[] cancel = {false};
+        List<dev.iredsc.hadron.api.event.entity.EntityEvent> seen = record(t,
+                dev.iredsc.hadron.api.event.entity.EntityEvent.class, cancel);
+        fire(t, machine(t, alice), a -> new EntityDataChangeEvent(pig, job, stored[0], builder, a),
+                () -> stored[0] = builder);
+        EntityDataChangeEvent e = (EntityDataChangeEvent) only(t, seen, "EntityEvent");
+        t.assertTrue(e.getEntity() == pig, "the entity");
+        t.assertEquals(job, e.getKind(), "whose data");
+        t.assertEquals("builder", e.getAfterData().getString("job"), "the data after");
+        t.assertTrue(e.getBeforeData().isEmpty(), "the data before");
+        cancel[0] = true;
+        CompoundTag farmer = new CompoundTag();
+        farmer.putString("job", "farmer");
+        boolean refused = fire(t, machine(t, alice), a -> new EntityDataChangeEvent(pig, job, builder, farmer, a),
+                () -> stored[0] = farmer);
+        t.assertTrue(refused, "callEvent should report the cancel to the bridge");
+        t.assertEquals("builder", stored[0].getString("job"), "a refused change keeps the old job");
     }
 
     @HadronTest
@@ -350,6 +424,39 @@ public final class BridgeContractTests {
         t.assertTrue(chest.getItem(1).is(Items.IRON_INGOT), "the sort's result in slot 1");
     }
 
+    @HadronTest
+    @Covers(InventoryGenerateEvent.class)
+    void eachPlayersCopyOfALootChestIsItsOwnInventoryAtTheChest(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        BlockPos pos = t.pos(1, 0, 0);
+        t.setBlock(pos, Blocks.CHEST);
+        InventoryHolder chest = new InventoryHolder.Block(t.level(), pos);
+        InventoryHolder alices = new InventoryHolder.PerPlayer(chest, alice.uuid());
+        InventoryHolder bobs = new InventoryHolder.PerPlayer(chest, bob.uuid());
+        boolean[] cancel = {false};
+        List<InventoryChangeEvent> seen = record(t, InventoryChangeEvent.class, cancel);
+        ItemStack loot = new ItemStack(Items.DIAMOND);
+        fire(t, machine(t, alice), a -> new InventoryGenerateEvent(List.of(
+                new InventoryChangeEvent.Change(alices, 0, ItemStack.EMPTY, loot),
+                new InventoryChangeEvent.Change(bobs, 0, ItemStack.EMPTY, loot)), a), () -> {});
+        InventoryChangeEvent e = only(t, seen, "InventoryChangeEvent");
+        t.assertEquals(Set.of(alices, bobs), e.getHolders(), "two copies, never mistaken for one inventory");
+        t.assertEquals(1, e.getChanges(alices).size(), "alice's copy's own changes");
+        InventoryHolder.PerPlayer copy = (InventoryHolder.PerPlayer) e.getChanges().get(0).holder();
+        t.assertEquals(chest, copy.at(), "where the copy is, for protection");
+        t.assertEquals(alice.uuid(), copy.owner(), "whose copy");
+        String refused = "";
+        try {
+            new InventoryHolder.PerPlayer(new InventoryHolder.Linked(InventoryHolder.Linked.ENDER_CHEST,
+                    alice.uuid().toString()), alice.uuid());
+        } catch (IllegalArgumentException expected) {
+            refused = expected.getMessage();
+        }
+        t.assertTrue(refused.contains("is Linked"), "a copy of storage with no place should be refused, naming "
+                + "Linked, but said: " + refused);
+    }
+
     // ---- Resources
 
     @HadronTest
@@ -431,7 +538,7 @@ public final class BridgeContractTests {
         fire(t, new Actor.Player(alice.player()), a -> fired[0] = new DataRevealEvent(alice.player(), t.level(), pos,
                 data.copy()), () -> sent.add(fired[0].getData()));
         DataRevealEvent e = only(t, seen, "DataRevealEvent");
-        t.assertTrue(e.getViewer() == alice.player() && e.getLevel() == t.level(), "the viewer and world");
+        t.assertTrue(e.getViewer() == alice.player() && e.getLevel().orElse(null) == t.level(), "the viewer and world");
         t.assertEquals(Optional.of(pos), e.getBlockPos(), "the block revealed");
         t.assertEquals(Optional.empty(), e.getEntity(), "no entity for a block reveal");
         t.assertFalse(sent.get(0).contains("owner"), "the field a listener removed isn't sent");
@@ -442,6 +549,12 @@ public final class BridgeContractTests {
                 () -> sent.add(data));
         t.assertEquals(1, sent.size(), "a withheld reveal sends nothing");
         t.assertEquals(Optional.of(pig), seen.get(1).getEntity(), "the entity revealed");
+        ResourceHolder.Account bobs = ResourceHolder.Account.player(UUID.randomUUID()); // bob may be offline
+        fire(t, new Actor.Player(alice.player()), a -> new DataRevealEvent(alice.player(), bobs, data.copy()),
+                () -> sent.add(data));
+        t.assertEquals(Optional.of(bobs), seen.get(2).getAccount(), "the account revealed");
+        t.assertEquals(Optional.empty(), seen.get(2).getLevel(), "an account has no world");
+        t.assertEquals(1, sent.size(), "a withheld account reveal sends nothing");
     }
 
     @HadronTest
