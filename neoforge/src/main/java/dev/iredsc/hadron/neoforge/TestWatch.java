@@ -51,7 +51,8 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
  *   <li>{@code reports/NNNN/report.txt} and {@code .json}, one pair per rerun, the last {@value #KEEP_REPORTS} kept;
  *       {@code report.txt} and {@code report.json} in {@code <dir>} are the latest.</li>
  *   <li>{@code watch.properties}: the server's {@code pid} and when it {@code started}, there while it runs.</li>
- *   <li>{@code stop}: asks the server to stop.</li>
+ *   <li>{@code last-run.properties}: the latest run's answer, kept for the life of the server.</li>
+ *   <li>{@code stop}: asks the server to stop; the server exits 0 only then.</li>
  * </ul>
  *
  * <p>A rerun starts each suite as a cold run would: the old plugin is unloaded, its data folder deleted, the
@@ -86,6 +87,8 @@ final class TestWatch {
     private final TestRunner runner;
     private final Shared shared;
     private State state = State.WAITING;
+    /** Whether hadronWatchStop asked it to stop, the only stop that exits 0. */
+    private volatile boolean stopAsked;
     private volatile Current current;
     private int ticks;
     private int runs;
@@ -109,8 +112,10 @@ final class TestWatch {
             if (active != null) active.tick();
         });
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> {
+            // 0 only when asked to stop: a crash or a test stopping the server must fail hadronWatch, not end it green.
+            boolean asked = active != null && active.stopAsked;
             if (active != null) active.stopped();
-            TestRunner.exitLater(0);
+            TestRunner.exitLater(asked ? 0 : 1);
         });
     }
 
@@ -138,6 +143,7 @@ final class TestWatch {
         File stop = new File(dir, "stop");
         if (stop.exists()) {
             stop.delete();
+            stopAsked = true;
             TestRunner.LOG.info("Stopping the Hadron test server, as asked");
             server.halt(false);
             return;
@@ -279,6 +285,8 @@ final class TestWatch {
         answer.setProperty("report", text.getAbsolutePath());
         answer.setProperty("json", TestReport.jsonFile(text).getAbsolutePath());
         write(new File(done, c.request().token() + ".properties"), answer);
+        // Never pruned: hadronWatch reads it as proof the server finished a run.
+        write(new File(dir, "last-run.properties"), answer);
         TestRunner.LOG.info("\n{}\nRerun {} report: {} and {}", c.report().render(), c.run(), text,
                 TestReport.jsonFile(text));
     }

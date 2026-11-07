@@ -204,8 +204,12 @@ object ContractDocs {
         }
         once("val suiteJar = project.path.removePrefix(\":\").replace(':', '-') + \".jar\"",
                 "val suiteJar = \"contract-tests.jar\"")
-        once("rootProject.files(listOf(\"api\", \"common\", \"test-api\", \"neoforge\").map { \"\$it/src/main\" })",
+        // "Hadron as the server loads it" is the bundle's jars, built by nothing, shaped by the bundle's own build.
+        once("rootProject.files(hadronModules.flatMap { listOf(\"\$it/build/classes/java/main\", \"\$it/build/resources/main\") })",
                 "rootProject.files(\"libs\")")
+        once("val hadronBuiltBy = hadronModules.map { \":\$it:classes\" }", "val hadronBuiltBy = emptyList<String>()")
+        once("\"gradle/hadron-test-server.gradle.kts\") + hadronModules.map { \"\$it/build.gradle.kts\" }",
+                "\"gradle/hadron-test-server.gradle.kts\", \"server/build.gradle.kts\")")
         once("\"neoforge/build/hadron-test\"", "\"server/build/hadron-test\"")
         once("\"neoforge/build/hadron-watch\"", "\"server/build/hadron-watch\"")
         once("\":neoforge:runHadronTest\")", "\":server:runHadronTest\")")
