@@ -204,8 +204,12 @@ object ContractDocs {
         }
         once("val suiteJar = project.path.removePrefix(\":\").replace(':', '-') + \".jar\"",
                 "val suiteJar = \"contract-tests.jar\"")
-        once("rootProject.files(listOf(\"api\", \"common\", \"test-api\", \"neoforge\").map { \"\$it/src/main\" })",
+        // "Hadron as the server loads it" is the bundle's jars, built by nothing, shaped by the bundle's own build.
+        once("rootProject.files(hadronModules.flatMap { listOf(\"\$it/build/classes/java/main\", \"\$it/build/resources/main\") })",
                 "rootProject.files(\"libs\")")
+        once("val hadronBuiltBy = hadronModules.map { \":\$it:classes\" }", "val hadronBuiltBy = emptyList<String>()")
+        once("\"gradle/hadron-test-server.gradle.kts\") + hadronModules.map { \"\$it/build.gradle.kts\" }",
+                "\"gradle/hadron-test-server.gradle.kts\", \"server/build.gradle.kts\")")
         once("\"neoforge/build/hadron-test\"", "\"server/build/hadron-test\"")
         once("\"neoforge/build/hadron-watch\"", "\"server/build/hadron-watch\"")
         once("\":neoforge:runHadronTest\")", "\":server:runHadronTest\")")
@@ -266,24 +270,6 @@ val contractDocs = tasks.register("contractDocs") {
     }
 }
 
-val contractLeakCheck = tasks.register<Exec>("contractLeakCheck") {
-    description = "Fails if the contract holds a body, a private member, an implementation class, or stripped docs text."
-    dependsOn(contractStubs, contractDocs)
-    val script = file("gradle/contract/ContractLeakCheck.java")
-    val contract = parts.get().dir("contract").asFile
-    val extra = files("gradle/contract/README.md", "gradle/contract/tests/src")
-    val marker = parts.get().file("rules/leak-check.ok").asFile
-    inputs.file(script)
-    inputs.dir(contract)
-    inputs.files(extra)
-    inputs.files(implNames, forbidden)
-    outputs.file(marker)
-    executable(java21.get().executablePath.asFile)
-    args(javacInternals + listOf(script.path, contract.path, implNames.get().asFile.path, forbidden.get().asFile.path)
-            + extra.files.map { it.path })
-    doLast { marker.writeText("clean\n") }
-}
-
 // Hadron's jars as the bundle ships them: repacked without timestamps, so the same sources make the same bytes.
 fun repack(name: String, from: String, fileName: String) = tasks.register<Zip>(name) {
     dependsOn(from)
@@ -317,11 +303,14 @@ val readmeTokens = mapOf(
     "MINECRAFT_VERSION" to providers.gradleProperty("minecraft_version").get(),
 )
 
-tasks.register<Sync>("contractBundle") {
-    group = "verification"
-    description = "Writes build/contract/: Hadron's contract and a test project on its real jars, for blind tests."
-    dependsOn(contractLeakCheck)
-    into(layout.buildDirectory.dir("contract"))
+// The whole bundle is assembled here first and checked as it will ship, so nothing reaches build/contract unscanned:
+// a file added to the test project, or a build script naming an implementation class, fails the check like a stub.
+val bundleStage = parts.map { it.dir("bundle") }
+
+val contractAssemble = tasks.register<Sync>("contractAssemble") {
+    description = "Assembles the bundle where contractLeakCheck reads it, before anything reaches build/contract."
+    dependsOn(contractStubs, contractDocs)
+    into(bundleStage)
     from("gradle/contract/README.md") {
         filter<org.apache.tools.ant.filters.ReplaceTokens>("tokens" to readmeTokens)
     }
@@ -337,6 +326,31 @@ tasks.register<Sync>("contractBundle") {
         from(files(apiJar, testApiJar, modJar)) { into("libs") }
     }
     inputs.properties(readmeTokens)
+}
+
+val contractLeakCheck = tasks.register<Exec>("contractLeakCheck") {
+    description = "Fails if the bundle holds a body, a private member, an implementation class, or stripped docs text."
+    dependsOn(contractAssemble)
+    val script = file("gradle/contract/ContractLeakCheck.java")
+    val bundle = bundleStage.get().asFile
+    val marker = parts.get().file("rules/leak-check.ok").asFile
+    inputs.file(script)
+    inputs.dir(bundle)
+    inputs.files(implNames, forbidden)
+    outputs.file(marker)
+    executable(java21.get().executablePath.asFile)
+    // The contract by its strict rules; everything else in the bundle scanned for names.
+    args(javacInternals + listOf(script.path, bundle.resolve("contract").path, implNames.get().asFile.path,
+            forbidden.get().asFile.path, bundle.resolve("README.md").path, bundle.resolve("tests").path))
+    doLast { marker.writeText("clean\n") }
+}
+
+tasks.register<Sync>("contractBundle") {
+    group = "verification"
+    description = "Writes build/contract/: Hadron's contract and a test project on its real jars, for blind tests."
+    dependsOn(contractLeakCheck)
+    into(layout.buildDirectory.dir("contract"))
+    from(bundleStage)
     doLast {
         logger.lifecycle("Contract bundle: ${destinationDir}\n  Copy it anywhere; the blind agent starts at its README.md.")
     }

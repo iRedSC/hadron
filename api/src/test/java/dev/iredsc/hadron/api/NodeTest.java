@@ -99,6 +99,7 @@ class NodeTest {
     @Covers(value = Node.class, method = "declare")
     @Covers(value = Node.class, method = "get")
     @Covers(value = Node.class, method = "all")
+    @Covers(value = Node.class, method = "toString")
     @Test
     void aDeclaredNodeIsFoundByIdAndListed() {
         String id = id();

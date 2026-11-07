@@ -26,6 +26,10 @@ tasks.processResources {
     filesMatching("plugin.yml") { expand(props) }
 }
 
+// src/test holds only in-game tests, which hadronTest runs on a server; their Hadron types are compile-only here,
+// so the JVM can't load them. Hadron's fast tests live in api's and common's src/test.
+tasks.test { enabled = false }
+
 apply(from = rootProject.file("gradle/hadron-test.gradle.kts"))
 
 // coverageCheck (part of check): every shipped event and public API method needs a test that says it covers it with

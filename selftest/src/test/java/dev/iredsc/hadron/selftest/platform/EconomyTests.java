@@ -14,6 +14,7 @@ import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.math.BigDecimal;
+import net.minecraft.core.UUIDUtil;
 import java.util.UUID;
 /** The economy as plugins use it: currencies, the default, refusals, accounts and the service lookup. */
 public final class EconomyTests {
@@ -93,15 +94,20 @@ public final class EconomyTests {
     @Covers(value = Economy.class, method = "hasAccount")
     @Covers(value = Economy.class, method = "deposit")
     void joiningCreatesAnAccountThatOutlivesTheSession(TestContext t) {
-        TestPlayer alice = t.player("alice");
-        UUID id = alice.uuid();
-        alice.disconnect();
-        t.tick(2);
+        // A name no earlier test, or earlier rerun on a warm server, has used: accounts outlive tests, so only a
+        // name proven to have none shows the account comes from joining.
+        String name = "new" + Long.toString(System.nanoTime() & 0xFF_FFFF_FFFFL, 36);
+        UUID id = UUIDUtil.createOfflinePlayerUUID(name);
         Economy economy = Economy.get();
-        t.assertTrue(economy.hasAccount(id), "alice should have an account once she has joined, even offline");
+        t.assertFalse(economy.hasAccount(id), name + " has never joined, so should have no account yet");
+        TestPlayer newcomer = t.player(name);
+        t.assertEquals(id, newcomer.uuid(), name + "'s UUID (offline mode's, from the name)");
+        newcomer.disconnect();
+        t.tick(2);
+        t.assertTrue(economy.hasAccount(id), name + " should have an account once they have joined, even offline");
         t.assertFalse(economy.hasAccount(UUID.randomUUID()), "a stranger should have no account");
         EconomyResult paid = economy.deposit(id, Economy.MONEY, new BigDecimal("1"));
-        t.assertTrue(paid instanceof EconomyResult.Done, "paying offline alice should work, but was " + paid);
+        t.assertTrue(paid instanceof EconomyResult.Done, "paying offline " + name + " should work, but was " + paid);
     }
 
     @HadronTest
