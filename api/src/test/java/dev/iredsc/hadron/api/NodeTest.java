@@ -72,6 +72,11 @@ class NodeTest {
         }
 
         @Override
+        public boolean alive() {
+            return true;
+        }
+
+        @Override
         public PluginCommand command(String name) {
             return null;
         }

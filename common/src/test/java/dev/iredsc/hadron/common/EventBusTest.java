@@ -695,4 +695,21 @@ class EventBusTest {
         bus.post(new Ping());
         assertEquals(2, watcher.seen.size(), watcher.seen.toString());
     }
+
+    @Test
+    void aForgottenPluginsEventClassesAreNoLongerRemembered() throws Exception {
+        dev.iredsc.hadron.api.plugin.JavaPlugin gone = TestPlugins.create("Gone", null);
+        dev.iredsc.hadron.api.plugin.JavaPlugin kept = TestPlugins.create("Kept", null);
+        Class<?> goneType = TestPlugins.event(gone);
+        Class<?> keptType = TestPlugins.event(kept);
+        bus.post((Event) goneType.getConstructor().newInstance());
+        bus.post((Event) keptType.getConstructor().newInstance());
+        bus.post(new Ping());
+        assertTrue(bus.seen().contains(goneType) && bus.seen().contains(keptType));
+
+        bus.forget(gone.getClass().getClassLoader());
+        assertFalse(bus.seen().contains(goneType), "an unloaded version's class would keep its loader alive");
+        assertTrue(bus.seen().contains(keptType) && bus.seen().contains(Ping.class), "only that loader's classes go");
+        assertFalse(bus.listens(Ping.class), "the bus still works after forgetting");
+    }
 }

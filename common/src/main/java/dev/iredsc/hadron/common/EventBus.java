@@ -161,7 +161,10 @@ final class EventBus {
     private final AtomicLong registered = new AtomicLong();
     /** Guarded by this; replaced whole. */
     private Observer[] observers = NO_OBSERVERS;
-    /** Every event class the bus has been asked about, for {@code /hadron trace} to suggest and resolve names. */
+    /**
+     * Every event class the bus has been asked about, for {@code /hadron trace} to suggest and resolve names. A plugin's
+     * classes leave with the plugin ({@link #forget}).
+     */
     private final Set<Class<?>> seen = ConcurrentHashMap.newKeySet();
 
     /** Adds an observer; the events it hears are built and posted from now on, even with no plugin listening. */
@@ -182,6 +185,15 @@ final class EventBus {
     /** Every event class asked about or posted since the server started. */
     Set<Class<?>> seen() {
         return Collections.unmodifiableSet(seen);
+    }
+
+    /**
+     * Drops every event class an unloaded plugin version defined, so the bus doesn't keep its class loader alive: the
+     * host calls this as each version is disposed. A class posted again later is simply seen again.
+     */
+    synchronized void forget(ClassLoader loader) {
+        seen.removeIf(c -> c.getClassLoader() == loader);
+        baked = new ConcurrentHashMap<>();
     }
 
     /** Subscribes every {@code @EventHandler} method; all or nothing. */

@@ -137,7 +137,8 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
         return this.server == server;
     }
 
-    boolean alive() {
+    @Override
+    public boolean alive() {
         return phase == Phase.LOADED || phase == Phase.ENABLED;
     }
 
