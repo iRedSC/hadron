@@ -816,6 +816,7 @@ public final class PluginHost implements PluginManager {
                 LOG.warn(e.name + " still had " + stillRunning + " background task(s) running after "
                         + ASYNC_GRACE_MILLIS / 1000 + "s; " + (callOnDisable ? "disabling" : "stopping") + " it anyway");
             }
+            runBeforeDisableHooks(plugin, deadline);
             if (callOnDisable && running instanceof State.Enabled) {
                 try {
                     plugin.onDisable();
@@ -1096,6 +1097,28 @@ public final class PluginHost implements PluginManager {
 
     private static final java.util.List<java.util.function.Consumer<JavaPlugin>> DISABLE_HOOKS =
             new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    /**
+     * Hadron's modules that call plugin code off the server thread (packet handlers) wait here for those calls to
+     * finish, so none overlaps the plugin's onDisable. Each hook runs once the plugin no longer counts as enabled and
+     * before onDisable, with the milliseconds left of the disable grace period; it must return by then.
+     */
+    public static void beforePluginDisable(java.util.function.ObjLongConsumer<JavaPlugin> hook) {
+        BEFORE_DISABLE_HOOKS.add(java.util.Objects.requireNonNull(hook, "hook"));
+    }
+
+    private static final java.util.List<java.util.function.ObjLongConsumer<JavaPlugin>> BEFORE_DISABLE_HOOKS =
+            new java.util.concurrent.CopyOnWriteArrayList<>();
+
+    private void runBeforeDisableHooks(JavaPlugin plugin, long deadline) {
+        for (java.util.function.ObjLongConsumer<JavaPlugin> hook : BEFORE_DISABLE_HOOKS) {
+            try {
+                hook.accept(plugin, remainingGraceMillis(deadline));
+            } catch (Throwable t) {
+                LOG.error("Waiting for " + plugin.getName() + "'s calls in progress failed", t);
+            }
+        }
+    }
 
     private void runDisableHooks(JavaPlugin plugin) {
         for (java.util.function.Consumer<JavaPlugin> hook : DISABLE_HOOKS) {

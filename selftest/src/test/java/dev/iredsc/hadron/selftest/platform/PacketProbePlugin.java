@@ -14,6 +14,7 @@ import net.minecraft.server.level.ServerPlayer;
  */
 public final class PacketProbePlugin extends JavaPlugin {
     static final String LOG = "hadron.selftest.packetProbe";
+    static final long SLOW_MILLIS = 300;
     private volatile boolean closed;
 
     @SuppressWarnings("unchecked")
@@ -26,7 +27,22 @@ public final class PacketProbePlugin extends JavaPlugin {
     public void onEnable() {
         Packets.onSend(this, ClientboundSystemChatPacket.class, e -> {
             String text = e.getPacket().content().getString();
-            if (text.startsWith("probe")) log((closed ? "handled after onDisable: " : "handled: ") + text);
+            if (text.equals("probe slow")) {
+                // Sent from a test thread: still running when the server thread starts disabling the probe.
+                log("slow started");
+                try {
+                    // Stay inside the call until the disable has begun (the probe stops counting as enabled before
+                    // its onDisable), then a little longer: without a wait, onDisable runs meanwhile.
+                    long until = System.nanoTime() + 10_000_000_000L;
+                    while (isEnabled() && System.nanoTime() < until) Thread.sleep(5);
+                    Thread.sleep(SLOW_MILLIS);
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                }
+                log(closed ? "slow finished after onDisable" : "slow finished before onDisable");
+            } else if (text.startsWith("probe")) {
+                log((closed ? "handled after onDisable: " : "handled: ") + text);
+            }
         });
     }
 

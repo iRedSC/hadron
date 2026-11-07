@@ -305,4 +305,37 @@ public final class NamesAndPacketsTests {
             if (data.isDirectory()) data.delete();
         }
     }
+
+    @HadronTest(timeout = 700)
+    @Covers(value = Packets.class, method = "onSend")
+    void aPacketHandlerAlreadyRunningFinishesBeforeItsPluginsOnDisable(TestContext t) throws Exception {
+        TestPlayer bob = t.player("bob");
+        List<Object> log = new CopyOnWriteArrayList<>();
+        System.getProperties().put(PacketProbePlugin.LOG, log);
+        PluginManager plugins = t.plugin().getServer().getPluginManager();
+        File jar = new File(t.plugin().getServer().getPluginsFolder(), "selftest-packet-probe.jar");
+        Thread sender = null;
+        try {
+            writeProbeJar(jar, t.server().getServerVersion());
+            t.await("Hadron to enable the probe", () -> plugins.isPluginEnabled("SelfTestPacketProbe"), 300);
+            // Sending off the server thread runs the handler there, as packets on a network thread do.
+            sender = new Thread(() -> bob.player().connection.send(
+                    new ClientboundSystemChatPacket(Component.literal("probe slow"), false)), "selftest-slow-send");
+            sender.start();
+            long until = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+            while (!log.contains("slow started") && System.nanoTime() < until) Thread.onSpinWait();
+            t.assertTrue(log.contains("slow started"), "the probe's handler started on the sending thread");
+            Files.delete(jar.toPath());
+            t.await("Hadron to disable the probe", () -> !plugins.isPluginEnabled("SelfTestPacketProbe"), 300);
+            sender.join(5000);
+            t.assertEquals(List.of("slow started", "slow finished before onDisable"), log,
+                    "a handler call already running when the probe began disabling must finish before its onDisable");
+        } finally {
+            if (sender != null) sender.join(5000);
+            Files.deleteIfExists(jar.toPath());
+            System.getProperties().remove(PacketProbePlugin.LOG);
+            File data = new File(t.plugin().getServer().getPluginsFolder(), "SelfTestPacketProbe");
+            if (data.isDirectory()) data.delete();
+        }
+    }
 }
