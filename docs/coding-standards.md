@@ -63,7 +63,7 @@ A test must be able to fail. Reject:
 
 ## Growing this file
 
-After each merged PR, look at every fix made during its review, its test runs or its triage, and ask which check would have caught it first. A bug fix also needs a test that fails without the fix, so the bug can't return unnoticed. In order of preference:
+After each merged PR, look at every fix made during its review, its test runs or its triage, and ask which check would have caught it first. A bug fix also needs a test that fails without the fix, so the bug can't return unnoticed. It adds its entry to `regressions/regressions.toml`, with the patch that undoes it, so `regressionReplay` proves that test still fails without the fix ([testing.md](testing.md), "Regression replay"). In order of preference:
 
 1. **A type or API that can't be misused.** Then the mistake can't be written.
 2. **A build check** (like `coverageCheck` or the `plugin.yml` checks) that fails and says the fix.

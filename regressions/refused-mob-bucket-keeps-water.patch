@@ -1,0 +1,58 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/BucketItemMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/BucketItemMixin.java
+index 122855d..b8ea37c 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/BucketItemMixin.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/BucketItemMixin.java
+@@ -5,7 +5,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+ import com.llamalad7.mixinextras.sugar.Local;
+ import dev.iredsc.hadron.neoforge.BlockHooks;
+-import dev.iredsc.hadron.neoforge.EntitySpawnRefunds;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.world.InteractionHand;
+ import net.minecraft.world.entity.player.Player;
+@@ -28,7 +27,6 @@ public abstract class BucketItemMixin {
+         if (BlockHooks.cancelBucketEmpty((BucketItem) (Object) this, player, level, pos, hit, container)) {
+             return false;
+         }
+-        EntitySpawnRefunds.pouring((BucketItem) (Object) this, level, pos);
+         BlockHooks.suppressAt(level, pos);
+         try {
+             return original.call(player, level, pos, hit, container);
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/MobBucketItemMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/MobBucketItemMixin.java
+deleted file mode 100644
+index 5a38414..0000000
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/MobBucketItemMixin.java
++++ /dev/null
+@@ -1,20 +0,0 @@
+-package dev.iredsc.hadron.neoforge.mixin.block;
+-
+-import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+-import dev.iredsc.hadron.neoforge.EntitySpawnRefunds;
+-import net.minecraft.core.BlockPos;
+-import net.minecraft.world.entity.player.Player;
+-import net.minecraft.world.item.ItemStack;
+-import net.minecraft.world.item.MobBucketItem;
+-import net.minecraft.world.level.Level;
+-import org.spongepowered.asm.mixin.Mixin;
+-
+-/** A mob bucket's release is one action with its pour: a refused mob takes its water back with it. */
+-@Mixin(MobBucketItem.class)
+-public abstract class MobBucketItemMixin {
+-    @WrapMethod(method = "checkExtraContent")
+-    private void hadron$release(Player player, Level level, ItemStack stack, BlockPos pos, Operation<Void> original) {
+-        EntitySpawnRefunds.releasing(level, pos, () -> original.call(player, level, stack, pos));
+-    }
+-}
+diff --git a/neoforge/src/main/resources/hadron.block.mixins.json b/neoforge/src/main/resources/hadron.block.mixins.json
+index 9915335..9981318 100644
+--- a/neoforge/src/main/resources/hadron.block.mixins.json
++++ b/neoforge/src/main/resources/hadron.block.mixins.json
+@@ -20,7 +20,6 @@
+     "LeavesBlockMixin",
+     "LevelMixin",
+     "LiquidBlockMixin",
+-    "MobBucketItemMixin",
+     "MushroomBlockMixin",
+     "PistonBaseBlockAccessor",
+     "PistonBaseBlockMixin",

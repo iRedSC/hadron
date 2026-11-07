@@ -1,0 +1,12 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/BlockEvents.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/BlockEvents.java
+index 5ba6113..7b4e336 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/BlockEvents.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/BlockEvents.java
+@@ -143,7 +143,6 @@ final class BlockEvents {
+             // where the head is, for as long as it looks; the world itself is never touched.
+             BlockPos headPos = pos.relative(facing);
+             boolean hide = !extend && level.getBlockState(headPos).is(Blocks.PISTON_HEAD);
+-            if (hide) BlockHooks.pistonHiddenHead = headPos;
+             try {
+                 PistonStructureResolver resolver = new PistonStructureResolver(level, pos, facing, extend);
+                 if (resolver.resolve()) {

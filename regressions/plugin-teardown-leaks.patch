@@ -1,0 +1,212 @@
+diff --git a/common/src/main/java/dev/iredsc/hadron/common/EventBus.java b/common/src/main/java/dev/iredsc/hadron/common/EventBus.java
+index 2a0271e..f0ef9b1 100644
+--- a/common/src/main/java/dev/iredsc/hadron/common/EventBus.java
++++ b/common/src/main/java/dev/iredsc/hadron/common/EventBus.java
+@@ -161,10 +161,7 @@ final class EventBus {
+     private final AtomicLong registered = new AtomicLong();
+     /** Guarded by this; replaced whole. */
+     private Observer[] observers = NO_OBSERVERS;
+-    /**
+-     * Every event class the bus has been asked about, for {@code /hadron trace} to suggest and resolve names. A plugin's
+-     * classes leave with the plugin ({@link #forget}).
+-     */
++    /** Every event class the bus has been asked about, for {@code /hadron trace} to suggest and resolve names. */
+     private final Set<Class<?>> seen = ConcurrentHashMap.newKeySet();
+ 
+     /** Adds an observer; the events it hears are built and posted from now on, even with no plugin listening. */
+@@ -187,14 +184,8 @@ final class EventBus {
+         return Collections.unmodifiableSet(seen);
+     }
+ 
+-    /**
+-     * Drops every event class an unloaded plugin version defined, so the bus doesn't keep its class loader alive: the
+-     * host calls this as each version is disposed. A class posted again later is simply seen again.
+-     */
+-    synchronized void forget(ClassLoader loader) {
+-        seen.removeIf(c -> c.getClassLoader() == loader);
+-        baked = new ConcurrentHashMap<>();
+-    }
++    /** Kept for the tests to call: before the fix, the bus never forgot a plugin's classes. */
++    synchronized void forget(ClassLoader loader) {}
+ 
+     /** Subscribes every {@code @EventHandler} method; all or nothing. */
+     List<Subscription> subscribe(Listener listener, String plugin, Logger log) {
+diff --git a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
+index 5ce626b..aa424ca 100644
+--- a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
++++ b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
+@@ -675,19 +675,12 @@ public final class PluginHost implements PluginManager {
+             Entry n = entries.get(need);
+             if (n != null && n.state instanceof State.Running) deps.add(((State.Running) n.state).loader);
+         }
+-        File data;
+-        try {
+-            data = dataFolder(folder, e.name);
+-        } catch (PluginException ex) {
+-            fail(e, ex.getMessage(), null);
+-            return;
+-        }
+         File copy = new File(loadedDir, e.name + "-" + (++copies) + ".jar");
+         PluginLoader loader;
+         try {
+             loadedDir.mkdirs();
+             Files.copy(e.jar.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING);
+-            loader = new PluginLoader(d, e.jar, copy, data, server, deps, parent);
++            loader = new PluginLoader(d, e.jar, copy, new File(folder, e.name), server, deps, parent);
+         } catch (IOException ex) {
+             fail(e, "couldn't copy its jar to plugins/.loaded (" + ex.getMessage() + ")", ex);
+             return;
+@@ -857,8 +850,16 @@ public final class PluginHost implements PluginManager {
+         String why = cause instanceof PluginException ? cause.getMessage()
+                 : step + " threw " + cause + pluginFrame(cause, running.loader) + ". Fix that there; the stack trace "
+                         + "is in the server log";
+-        teardown(e, running, new State.Failed(why), false);
+-        report(e, why, cause);
++        running.loader.beginUnload();
++        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ASYNC_GRACE_MILLIS);
++        removeEvents(running, deadline);
++        JavaPlugin plugin = running.loader.plugin();
++        if (plugin != null) scheduler.awaitAsync(plugin, remainingGraceMillis(deadline));
++        undoAll(running, e.name);
++        if (plugin != null) runDisableHooks(plugin);
++        if (enabledOrder.remove(e) && plugin != null) post(new PluginDisableEvent(plugin));
++        running.loader.dispose();
++        fail(e, why, cause);
+     }
+ 
+     /** " at File.java:line", the first frame in the plugin's own code, or "" when none of the trace is its. */
+@@ -873,22 +874,6 @@ public final class PluginHost implements PluginManager {
+         return "";
+     }
+ 
+-    /**
+-     * {@code plugins/<name>/}, refused unless it is a folder of its own directly in {@code plugins/}: never the jar
+-     * cache Hadron empties, the switched-off list, or a path out of {@code plugins/}. plugin.yml's name check already
+-     * keeps such names out; this keeps the host safe whatever reaches it.
+-     */
+-    static File dataFolder(File plugins, String name) {
+-        java.nio.file.Path root = plugins.toPath().toAbsolutePath().normalize();
+-        java.nio.file.Path dir = root.resolve(name).normalize();
+-        if (!root.equals(dir.getParent()) || name.equalsIgnoreCase(".loaded") || name.equalsIgnoreCase("disabled.txt")
+-                || name.toLowerCase(java.util.Locale.ROOT).endsWith(".jar")) {
+-            throw new PluginException("its name '" + name + "' can't be its data folder in plugins/. Rename it in "
+-                    + "plugin.yml to start with a letter or digit, such as name: MyPlugin");
+-        }
+-        return dir.toFile();
+-    }
+-
+     /** Whether a mod jar has the class, which would shadow the plugin's own copy. */
+     private boolean visibleToMods(String className) {
+         return parent.getResource(className.replace('.', '/') + ".class") != null;
+@@ -899,44 +884,31 @@ public final class PluginHost implements PluginManager {
+             if (!(e.state instanceof State.Failed) || next instanceof State.Off) e.state = next;
+             return;
+         }
+-        teardown(e, (State.Running) e.state, next, true);
+-    }
+-
+-    /**
+-     * Stops a running version, the one way a plugin stops whether it disables or fails to enable, so both undo the
+-     * same things: its listeners, its menus, its background work, everything it registered, and its classes on the
+-     * bus. The entry moves to {@code next} before anything is told, so a {@link PluginDisableEvent} listener already
+-     * finds the plugin disabled and gone.
+-     */
+-    private void teardown(Entry e, State.Running running, State next, boolean callOnDisable) {
++        State.Running running = (State.Running) e.state;
+         JavaPlugin plugin = running.loader.plugin();
+         running.loader.beginUnload();
+         long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(ASYNC_GRACE_MILLIS);
+         removeEvents(running, deadline);
+-        if (plugin != null) {
++        if (running instanceof State.Enabled && plugin != null) {
+             closeMenus(running.loader);
+             int stillRunning = scheduler.awaitAsync(plugin, remainingGraceMillis(deadline));
+             if (stillRunning > 0) {
+                 LOG.warn(e.name + " still had " + stillRunning + " background task(s) running after "
+-                        + ASYNC_GRACE_MILLIS / 1000 + "s; " + (callOnDisable ? "disabling" : "stopping") + " it anyway. "
++                        + ASYNC_GRACE_MILLIS / 1000 + "s; disabling it anyway. "
+                         + "A background task that loops should return once isEnabled() is false");
+             }
+             runBeforeDisableHooks(plugin, deadline);
+-            if (callOnDisable && running instanceof State.Enabled) {
+-                try {
+-                    plugin.onDisable();
+-                } catch (Throwable t) {
+-                    LOG.error(e.name + " threw while disabling", t);
+-                }
++            try {
++                plugin.onDisable();
++            } catch (Throwable t) {
++                LOG.error(e.name + " threw while disabling", t);
+             }
+         }
+-        boolean wasEnabled = enabledOrder.remove(e);
+-        e.state = next;
+         undoAll(running, e.name);
+         if (plugin != null) runDisableHooks(plugin);
+-        if (wasEnabled && plugin != null) post(new PluginDisableEvent(plugin));
++        if (enabledOrder.remove(e) && plugin != null) post(new PluginDisableEvent(plugin));
+         running.loader.dispose();
+-        events.forget(running.loader);
++        e.state = next;
+     }
+ 
+     /**
+@@ -983,10 +955,6 @@ public final class PluginHost implements PluginManager {
+ 
+     private void fail(Entry e, String why, Throwable error) {
+         e.state = new State.Failed(why);
+-        report(e, why, error);
+-    }
+-
+-    private void report(Entry e, String why, Throwable error) {
+         if (error != null && !(error instanceof PluginException)) {
+             LOG.error(e.name + " didn't enable: " + why, error);
+         } else {
+@@ -1265,14 +1233,8 @@ public final class PluginHost implements PluginManager {
+     /** To the console and every online player who may manage plugins. */
+     private void announce(Component message) {
+         LOG.info(message.getString());
+-        if (minecraft == null) return;
+-        // Telling people never stops what is being told: a plugin's failure here can't halt a reload partway.
+-        for (ServerPlayer p : List.copyOf(minecraft.getPlayerList().getPlayers())) {
+-            try {
+-                if (Permissions.has(p, MANAGE)) p.sendSystemMessage(message);
+-            } catch (RuntimeException | LinkageError ex) {
+-                LOG.error("Telling " + p.getGameProfile().getName() + " \"" + message.getString() + "\" failed", ex);
+-            }
++        for (ServerPlayer p : minecraft.getPlayerList().getPlayers()) {
++            if (Permissions.has(p, MANAGE)) p.sendSystemMessage(message);
+         }
+     }
+ 
+diff --git a/common/src/main/java/dev/iredsc/hadron/common/Trace.java b/common/src/main/java/dev/iredsc/hadron/common/Trace.java
+index 9ad3bec..e49ef43 100644
+--- a/common/src/main/java/dev/iredsc/hadron/common/Trace.java
++++ b/common/src/main/java/dev/iredsc/hadron/common/Trace.java
+@@ -117,23 +117,8 @@ final class Trace {
+                     + "BlockChangeEvent traces its subclasses too), a plugin event's full class name, a family ("
+                     + String.join(", ", FAMILIES) + "), or all");
+         }
+-        if (type.getClassLoader() == Event.class.getClassLoader()) {
+-            Class<?> found = type;
+-            return new Target(found.getSimpleName(), found::isAssignableFrom);
+-        }
+-        // A plugin's own event: matched by name, so the trace follows the plugin across reloads (each version has its
+-        // own class) and never holds an unloaded version's class loader.
+-        String name = type.getName();
+-        return new Target(type.getSimpleName(), c -> named(c, name));
+-    }
+-
+-    /** Whether the class, a superclass or an interface it implements has this name. */
+-    private static boolean named(Class<?> c, String name) {
+-        for (Class<?> k = c; k != null; k = k.getSuperclass()) {
+-            if (k.getName().equals(name)) return true;
+-            for (Class<?> i : k.getInterfaces()) if (named(i, name)) return true;
+-        }
+-        return false;
++        Class<?> found = type;
++        return new Target(found.getSimpleName(), found::isAssignableFrom);
+     }
+ 
+     private static boolean inPackage(Class<?> c, String pkg) {

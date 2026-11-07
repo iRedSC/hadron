@@ -1,0 +1,14 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java
+index a4b3924..cb2de1c 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java
+@@ -272,8 +272,7 @@ final class EntityEvents {
+         lastUsed = target;
+         lastHand = event.getHand();
+         lastTick = tick;
+-        // A copy: the use that follows spends or replaces the held stack, and the event says what was in the hand.
+-        lastCancelled = Hooks.post(new EntityUseEvent(target, event.getHand(), event.getItemStack().copy(),
++        lastCancelled = Hooks.post(new EntityUseEvent(target, event.getHand(), event.getItemStack(),
+                 EntityActors.of(player))).isCancelled();
+         return lastCancelled;
+     }

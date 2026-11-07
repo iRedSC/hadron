@@ -1,0 +1,126 @@
+diff --git a/gradle/contract/ContractLeakCheck.java b/gradle/contract/ContractLeakCheck.java
+index 005003b..230100f 100644
+--- a/gradle/contract/ContractLeakCheck.java
++++ b/gradle/contract/ContractLeakCheck.java
+@@ -51,12 +51,6 @@ public final class ContractLeakCheck {
+     static final Set<String> BOXED = Set.of("Byte", "Short", "Integer", "Long", "Float", "Double", "Character");
+     /** English uses of a word that is also an implementation class name; reviewed, exact phrases only. */
+     static final List<String> ENGLISH = List.of("Platform APIs");
+-    /**
+-     * The only binary files the bundle's test project may hold, relative to it: Hadron's jars, which are its real
+-     * implementation by design, and Gradle's wrapper. Anything else that isn't text fails the check.
+-     */
+-    static final Set<String> SHIPPED_BINARIES = Set.of("libs/hadron.jar", "libs/hadron-test.jar", "libs/hadron-api.jar",
+-            "libs/hadron-test-api.jar", "gradle/wrapper/gradle-wrapper.jar");
+ 
+     final List<String> problems = new ArrayList<>();
+     String file;
+@@ -73,24 +67,10 @@ public final class ContractLeakCheck {
+                 .map(l -> l.split("\t", 2)).toList();
+         ContractLeakCheck check = new ContractLeakCheck();
+         check.run(root, implNames, forbidden);
+-        // Everything else in the bundle (the README, the test project and its build files): no implementation names.
++        // What else the blind agent reads (the README, the example tests): no implementation names there either.
+         for (int i = 3; i < args.length; i++) {
+-            Path base = Path.of(args[i]);
+-            try (Stream<Path> walk = Files.walk(base)) {
+-                for (Path p : walk.filter(Files::isRegularFile).sorted().toList()) {
+-                    String rel = (Files.isDirectory(base) ? base.relativize(p) : p.getFileName()).toString()
+-                            .replace('\\', '/');
+-                    if (SHIPPED_BINARIES.contains(rel)) continue;
+-                    String text;
+-                    try {
+-                        text = Files.readString(p);
+-                    } catch (java.nio.charset.MalformedInputException e) {
+-                        check.problems.add(p + ": isn't UTF-8 text, so it can't be checked for leaks. Leave it out of "
+-                                + "the bundle, or, if it is reviewed, add it to SHIPPED_BINARIES in ContractLeakCheck.");
+-                        continue;
+-                    }
+-                    check.scan(p.toString(), text);
+-                }
++            try (Stream<Path> walk = Files.walk(Path.of(args[i]))) {
++                for (Path p : walk.filter(Files::isRegularFile).sorted().toList()) check.scan(p.toString(), Files.readString(p));
+             }
+         }
+         if (!check.problems.isEmpty()) {
+diff --git a/gradle/hadron-contract.gradle.kts b/gradle/hadron-contract.gradle.kts
+index 3f1940a..77f225c 100644
+--- a/gradle/hadron-contract.gradle.kts
++++ b/gradle/hadron-contract.gradle.kts
+@@ -286,6 +286,24 @@ val contractDocs = tasks.register("contractDocs") {
+     }
+ }
+ 
++val contractLeakCheck = tasks.register<Exec>("contractLeakCheck") {
++    description = "Fails if the contract holds a body, a private member, an implementation class, or stripped docs text."
++    dependsOn(contractStubs, contractDocs)
++    val script = file("gradle/contract/ContractLeakCheck.java")
++    val contract = parts.get().dir("contract").asFile
++    val extra = files("gradle/contract/README.md", "gradle/contract/tests/src")
++    val marker = parts.get().file("rules/leak-check.ok").asFile
++    inputs.file(script)
++    inputs.dir(contract)
++    inputs.files(extra)
++    inputs.files(implNames, forbidden)
++    outputs.file(marker)
++    executable(java21.get().executablePath.asFile)
++    args(javacInternals + listOf(script.path, contract.path, implNames.get().asFile.path, forbidden.get().asFile.path)
++            + extra.files.map { it.path })
++    doLast { marker.writeText("clean\n") }
++}
++
+ // Hadron's jars as the bundle ships them: repacked without timestamps, so the same sources should make the same
+ // bytes (not tested).
+ fun repack(name: String, from: String, fileName: String) = tasks.register<Zip>(name) {
+@@ -321,14 +339,11 @@ val readmeTokens = mapOf(
+     "MINECRAFT_VERSION" to providers.gradleProperty("minecraft_version").get(),
+ )
+ 
+-// The whole bundle is assembled here first and checked as it will ship, so nothing reaches build/contract unscanned:
+-// a file added to the test project, or a build script naming an implementation class, fails the check like a stub.
+-val bundleStage = parts.map { it.dir("bundle") }
+-
+-val contractAssemble = tasks.register<Sync>("contractAssemble") {
+-    description = "Assembles the bundle where contractLeakCheck reads it, before anything reaches build/contract."
+-    dependsOn(contractStubs, contractDocs)
+-    into(bundleStage)
++tasks.register<Sync>("contractBundle") {
++    group = "verification"
++    description = "Writes build/contract/: Hadron's contract and a test project on its real jars, for blind tests."
++    dependsOn(contractLeakCheck)
++    into(layout.buildDirectory.dir("contract"))
+     from("gradle/contract/README.md") {
+         filter<org.apache.tools.ant.filters.ReplaceTokens>("tokens" to readmeTokens)
+     }
+@@ -344,31 +359,6 @@ val contractAssemble = tasks.register<Sync>("contractAssemble") {
+         from(files(apiJar, testApiJar, modJar, harnessJar)) { into("libs") }
+     }
+     inputs.properties(readmeTokens)
+-}
+-
+-val contractLeakCheck = tasks.register<Exec>("contractLeakCheck") {
+-    description = "Fails if the bundle holds a body, a private member, an implementation class, or stripped docs text."
+-    dependsOn(contractAssemble)
+-    val script = file("gradle/contract/ContractLeakCheck.java")
+-    val bundle = bundleStage.get().asFile
+-    val marker = parts.get().file("rules/leak-check.ok").asFile
+-    inputs.file(script)
+-    inputs.dir(bundle)
+-    inputs.files(implNames, forbidden)
+-    outputs.file(marker)
+-    executable(java21.get().executablePath.asFile)
+-    // The contract by its strict rules; everything else in the bundle scanned for names.
+-    args(javacInternals + listOf(script.path, bundle.resolve("contract").path, implNames.get().asFile.path,
+-            forbidden.get().asFile.path, bundle.resolve("README.md").path, bundle.resolve("tests").path))
+-    doLast { marker.writeText("clean\n") }
+-}
+-
+-tasks.register<Sync>("contractBundle") {
+-    group = "verification"
+-    description = "Writes build/contract/: Hadron's contract and a test project on its real jars, for blind tests."
+-    dependsOn(contractLeakCheck)
+-    into(layout.buildDirectory.dir("contract"))
+-    from(bundleStage)
+     doLast {
+         logger.lifecycle("Contract bundle: ${destinationDir}\n  Copy it anywhere; the blind agent starts at its README.md.")
+     }
