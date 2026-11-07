@@ -12,6 +12,7 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **`Platform`**: the interface through which `common` asks what only the loader knows.
 - **Bridge**: a mod that makes one other mod speak Hadron's events, by attributing its actions and routing its effects that skip vanilla. ([bridges](bridges.md))
 - **Bridge API**: a loader-neutral interface or event a bridge publishes for extras, such as a network's contents. Official plugins use it with `bridge-depend:` and stay write-once.
+- **Promotion**: adding a core event for what two official bridges' events share, made the superclass of each so no plugin breaks. ([bridges](bridges.md#promotion-when-bridges-events-become-core))
 - **`mod-depend:`**: a plugin that compiles against a mod directly. It must declare `loader:`, and Hadron refuses it on any other loader.
 
 ## Events and actors

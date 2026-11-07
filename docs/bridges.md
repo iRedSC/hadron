@@ -71,6 +71,21 @@ A bridge has two parts:
 
 Each bridge owns exactly one mod id, so two bridges never compete to translate the same mod; a second bridge for a mod id fails to load, naming the first.
 
+## Promotion: when bridges' events become core
+
+A plugin hears a bridge API's events only if it names that mod. **When bridges for different mods say the same thing, core adds one event for it, so a plugin written once hears every mod that does it, including mods bridged later.** Two sources feed this:
+
+- **Missing leaves.** A bridge that fires a parent because no leaf fits names the leaf it wanted. Not built yet: those proposals, collected and grouped by name, so a repeat shows itself.
+- **Overlapping extras.** Two bridge APIs publish events a plugin would handle the same way, such as AE2's and Refined Storage's finished autocrafts.
+
+Promote when all of these hold:
+
+- **Two official bridges, for unrelated mods, ask for it.** One bridge is one mod's habit, and its parent fallback already reaches plugins. Third-party bridges don't count, but a plugin author asking to treat several mods alike can tip a close case.
+- **One listener handles them all correctly using only what they share.** If acting right needs to know which mod fired it, they only look alike: keep them apart.
+- **The event can follow the rules in [events.md](events.md#rules)**: a payload a plugin can act on without knowing the mod, and producers in the same release, which here means the bridges that asked.
+
+**Promotion never breaks a plugin.** Every event in a bridge API extends a Hadron event, so promoting adds a superclass: each bridge's own event becomes a leaf under the new one and keeps its mod-only fields, and plugins that `bridge-depend` on it still compile. Not built yet: the build refusing a bridge API event that extends nothing of Hadron's, which lands with the first bridge API. A promotion changes `api`, so it gets `@FiredBy(NONE)`, an acceptance-kit check and `@Covers` like any bridge event.
+
 ## Pilots
 
 Three mods, each stressing a different part, bridged by hand to test the vocabulary. Anything they do that no event fits becomes a new leaf in core, before more bridges are written.
@@ -91,3 +106,4 @@ Two plugin integrations come with them:
 3. The coverage report and the official bridge list.
 4. The acceptance test as a kit any bridge can run.
 5. The three pilot bridges, then this document rewritten from what they taught.
+6. The grouped list of proposed leaves ([promotion](#promotion-when-bridges-events-become-core)), once the pilots give it something to group.
