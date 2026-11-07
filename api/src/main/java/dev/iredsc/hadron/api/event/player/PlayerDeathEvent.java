@@ -68,7 +68,7 @@ public class PlayerDeathEvent extends EntityDeathEvent {
      * Show this instead; null or an empty component shows none. Setting one while {@code showDeathMessages} is off
      * shows it anyway.
      */
-    public void setDeathMessage(Component deathMessage) {
+    public void setDeathMessage(@Nullable Component deathMessage) {
         this.deathMessage = deathMessage;
     }
 }

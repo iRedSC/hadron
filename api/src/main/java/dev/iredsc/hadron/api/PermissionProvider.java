@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api;
 
+import org.jspecify.annotations.Nullable;
 import net.minecraft.server.level.ServerPlayer;
 
 /**
@@ -11,7 +12,7 @@ import net.minecraft.server.level.ServerPlayer;
  */
 public interface PermissionProvider {
     /** True or false when the player's ranks grant or deny the node id; null when they don't say. */
-    Boolean check(ServerPlayer player, String node);
+    @Nullable Boolean check(ServerPlayer player, String node);
 
     /** The name of the player's heaviest group. */
     String group(ServerPlayer player);

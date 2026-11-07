@@ -33,7 +33,7 @@ public interface ConfigurationSection {
 
     @Nullable Object get(String path);
 
-    @Nullable Object get(String path, Object def);
+    @Nullable Object get(String path, @Nullable Object def);
 
     /** Null removes the value. A map becomes a section. */
     void set(String path, @Nullable Object value);
@@ -46,7 +46,7 @@ public interface ConfigurationSection {
 
     @Nullable String getString(String path);
 
-    @Nullable String getString(String path, String def);
+    @Nullable String getString(String path, @Nullable String def);
 
     boolean isString(String path);
 
@@ -75,7 +75,7 @@ public interface ConfigurationSection {
 
     @Nullable List<?> getList(String path);
 
-    @Nullable List<?> getList(String path, List<?> def);
+    @Nullable List<?> getList(String path, @Nullable List<?> def);
 
     boolean isList(String path);
 

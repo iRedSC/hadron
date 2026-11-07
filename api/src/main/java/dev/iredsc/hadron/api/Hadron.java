@@ -48,11 +48,13 @@ public final class Hadron {
         return getServer().getOnlinePlayers();
     }
 
-    public static ServerPlayer getPlayer(String name) {
+    /** Exact name, ignoring case; null when they're offline. */
+    public static @Nullable ServerPlayer getPlayer(String name) {
         return getServer().getPlayer(name);
     }
 
-    public static ServerPlayer getPlayer(UUID id) {
+    /** Null when they're offline. */
+    public static @Nullable ServerPlayer getPlayer(UUID id) {
         return getServer().getPlayer(id);
     }
 

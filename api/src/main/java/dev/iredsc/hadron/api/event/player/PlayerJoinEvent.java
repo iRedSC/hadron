@@ -32,7 +32,7 @@ public class PlayerJoinEvent extends PlayerEvent {
     }
 
     /** Broadcast this instead; null or an empty component broadcasts nothing. */
-    public void setJoinMessage(Component joinMessage) {
+    public void setJoinMessage(@Nullable Component joinMessage) {
         this.joinMessage = joinMessage;
     }
 }

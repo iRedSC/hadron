@@ -32,7 +32,7 @@ public class PlayerQuitEvent extends PlayerEvent {
     }
 
     /** Broadcast this instead; null or an empty component broadcasts nothing. */
-    public void setQuitMessage(Component quitMessage) {
+    public void setQuitMessage(@Nullable Component quitMessage) {
         this.quitMessage = quitMessage;
     }
 }
