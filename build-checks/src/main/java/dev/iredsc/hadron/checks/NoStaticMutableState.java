@@ -66,7 +66,7 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
     private static final List<String> MUTABLE = List.of("java.lang.ThreadLocal", "java.lang.ClassValue",
             "java.lang.StringBuilder", "java.lang.StringBuffer");
 
-    /** Mutable unless built by one of {@link #unmodifiable}'s factories. */
+    /** Mutable when built here or typed as a mutable class, unless built by one of {@link #unmodifiable}'s factories. */
     private static final List<String> COLLECTIONS = List.of("java.util.Collection", "java.util.Map");
 
     @Override
@@ -122,8 +122,12 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
                 return "holds a " + name(type, state) + ", which is state";
             }
         }
+        // A collection built here (`new HashMap<>()`) or typed as a mutable class is refused. One that comes back from a
+        // call typed only as Map or List passes: the check can't see what the call returns, and refusing it would refuse
+        // the valid `static final Map<..> REGISTRY = build()` that returns Map.copyOf.
+        boolean visible = init instanceof NewClassTree || (state.getTypes().erasure(type).tsym.flags() & Flags.INTERFACE) == 0;
         for (String name : COLLECTIONS) {
-            if (isSubtype(type, name, state) && !unmodifiable(type, init, state)) {
+            if (visible && isSubtype(type, name, state) && !unmodifiable(type, init, state)) {
                 return "holds a " + name(type, state) + ", which can be changed";
             }
         }

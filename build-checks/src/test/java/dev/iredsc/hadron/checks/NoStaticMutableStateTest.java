@@ -25,8 +25,8 @@ class NoStaticMutableStateTest {
                 "  static final List<String> SEEN = new ArrayList<>();",
                 "  // BUG: Diagnostic contains: holds a EnumSet",
                 "  static final Set<TimeUnit> UNITS = EnumSet.of(TimeUnit.SECONDS);",
-                "  // BUG: Diagnostic contains: holds a List",
-                "  static final List<String> MADE = make();",
+                "  // BUG: Diagnostic contains: holds a HashMap",
+                "  static final HashMap<String, Integer> MADE = make();",
                 "  // BUG: Diagnostic contains: holds a ConcurrentHashMap",
                 "  static final ConcurrentHashMap<String, String> NAMES = new ConcurrentHashMap<>();",
                 "  // BUG: Diagnostic contains: holds a CopyOnWriteArrayList",
@@ -49,7 +49,7 @@ class NoStaticMutableStateTest {
                 "  static final StringBuilder LOG = new StringBuilder();",
                 "  // BUG: Diagnostic contains: holds a StringBuffer",
                 "  static final StringBuffer BUF = new StringBuffer();",
-                "  static List<String> make() { return List.of(); }",
+                "  static HashMap<String, Integer> make() { return new HashMap<>(); }",
                 "}")
                 .doTest();
     }
@@ -106,6 +106,8 @@ class NoStaticMutableStateTest {
                 "import java.util.concurrent.TimeUnit;",
                 "import java.util.regex.Pattern;",
                 "class MyPlugin {",
+                "  static final Map<String, Integer> REGISTRY = build();",
+                "  static Map<String, Integer> build() { Map<String, Integer> m = new HashMap<>(); return Map.copyOf(m); }",
                 "  enum Mode { ON, OFF }",
                 "  enum Rank {",
                 "    MEMBER(\"m\", List.of()), ADMIN(\"a\", List.of(\"op\"));",
