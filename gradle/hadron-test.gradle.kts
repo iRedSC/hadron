@@ -282,3 +282,10 @@ tasks.register<HadronWatchStopTask>("hadronWatchStop") {
     description = "Stops the test server hadronWatch started."
     watchDir.set(watchRoot)
 }
+
+// A plugin whose tests are all @HadronTests has test sources but no JUnit tests, and Gradle 9 fails its `test` task
+// for finding none. hadronTest is what runs those, and it refuses an empty run itself (a filter matching nothing is a
+// BROKEN suite), so the JUnit task may find nothing without hiding a mistake.
+tasks.withType<Test>().configureEach {
+    if (name == "test") failOnNoDiscoveredTests.set(false)
+}
