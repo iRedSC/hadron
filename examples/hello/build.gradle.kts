@@ -19,6 +19,20 @@ dependencies {
     compileOnly(project(":api"))
     testCompileOnly(project(":api"))
     testCompileOnly(project(":test-api"))
+
+    // Fast tests: plain JUnit in the same src/test/java, run by ./gradlew test on the JVM with no server.
+    // @WithMinecraft (test-api) boots Minecraft's registries for the classes that need them.
+    testImplementation(platform("org.junit:junit-bom:5.13.4"))
+    testImplementation("org.junit.jupiter:junit-jupiter")
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testRuntimeOnly(project(":api"))
+    testRuntimeOnly(project(":test-api"))
+}
+
+// ./gradlew :examples:hello:test runs the fast tests (@Test); the in-game @HadronTests run only with hadronTest.
+tasks.test {
+    useJUnitPlatform()
+    testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
 
 tasks.processResources {
