@@ -11,7 +11,8 @@ is reviewed in earnest.
 
 Start one delegate per `role = "questions"` member of `.github/council.toml`, in parallel, with `delegate_task` and the
 member's `provider`, `model` and option. If one can't start, say so and stop; the owner changes the seat. They are
-read-only. Give each the PR URL, the head SHA, the worktree path, the diff command (`git diff origin/main...<sha>`),
+read-only. Give each the PR URL, the head SHA, the worktree path, the diff command (`git diff <base-sha>...<head-sha>`, where `<base-sha>` is
+`gh pr view <n> --json baseRefOid -q .baseRefOid`, the commit the gate also diffs from),
 what the change is for, and:
 
 > Ask dumb questions about why the code was done this way. You are the newcomer who doesn't know the history: why this

@@ -100,6 +100,30 @@ class Record(unittest.TestCase):
     def test_a_small_cleanup_needs_no_final_review(self):
         self.assertEqual(problems(record(), cleanup=40), [])
 
+    def test_an_empty_list_line_doesnt_borrow_the_next_line(self):
+        text = record(questions="").replace("Questions: \n", "Questions:\nAsker\n")
+        self.assertTrue(problems(text))
+
+    def test_only_the_record_sections_council_commit_counts(self):
+        body = "Council commit: " + "f" * 40 + "\n\n" + record()
+        self.assertEqual(gate.council_commit(gate.record_section(body)), HEAD)
+
+
+class Cleanup(unittest.TestCase):
+    RULES = [(g, gate.glob_to_regex(g)) for g in (".claude/skills/**",)]
+
+    def test_code_lines_count(self):
+        self.assertEqual(gate.count_cleanup("3\t2\tsrc/A.java\0", self.RULES), 5)
+
+    def test_unprotected_markdown_doesnt_count(self):
+        self.assertEqual(gate.count_cleanup("30\t0\tdocs/notes.md\0", self.RULES), 0)
+
+    def test_the_review_skills_count_though_they_are_markdown(self):
+        self.assertEqual(gate.count_cleanup("30\t1\t.claude/skills/council/SKILL.md\0", self.RULES), 31)
+
+    def test_a_binary_file_forces_the_final_review(self):
+        self.assertGreater(gate.count_cleanup("-\t-\tlibs/x.jar\0", self.RULES), 10_000 - 1)
+
 
 class Config(unittest.TestCase):
     def changed(self, change) -> list[str]:

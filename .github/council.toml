@@ -6,10 +6,12 @@
 
 # A council round must have each member find at least this many issues.
 min_findings = 3
-# The council stops after the first round in which no member finds anything above this priority, or after max_rounds.
+# The council stops after the first round in which no member finds anything more serious than this priority (P0 is
+# the most serious), or after max_rounds.
 stop_at = "P3"
 max_rounds = 5
-# Code lines (not .md) changed after the council's last round, above which the final reviewer must review the head.
+# Lines changed after the council's last round, above which the final reviewer must review the head. Markdown
+# doesn't count unless it's a protected path (the review skills are), and a binary file always does.
 cleanup_lines = 40
 # The final reviewer's passing score, out of 10.
 min_score = 8

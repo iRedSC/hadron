@@ -15,7 +15,7 @@ explainer can't read the author's account of the change (commits, PR, purpose); 
 ```bash
 dir=$(mktemp -d /tmp/council-explain-XXXX)
 git archive <head-sha> | tar -x -C "$dir"
-git diff origin/main...<head-sha> > "$dir.patch"
+git diff <base-sha>...<head-sha> > "$dir.patch"   # <base-sha>: gh pr view <n> --json baseRefOid -q .baseRefOid
 ```
 
 Start one delegate per explainer, in parallel, with its `provider`, `model` and option, and only:
@@ -35,7 +35,13 @@ Compare each explanation with what the code does. For each place it's wrong:
 
 Also fix the P3 findings the council left. Commit, push, and list the explainers on the `Explained:` line.
 
-The gate counts code lines (not `.md`) changed since the `Council commit`. Above `cleanup_lines`, start the
-`role = "final"` member on the head, with the deep reviewer's brief from the council skill, and record
-`Final review: <name>, <full head SHA>, <score>/10`. It must reach `min_score`; anything it finds below that is fixed
-and it reviews the new head.
+The gate counts the lines changed since the `Council commit` (Markdown only when it's a protected path; a binary
+always counts as too many). Above `cleanup_lines`, start the `role = "final"` member on the head with the PR URL, the
+head SHA, the worktree, the diff from the `Council commit` to the head, and:
+
+> Read AGENTS.md and docs/coding-standards.md first. This is the cleanup after a council review: names, comments and
+> clarity fixes. Check that it changed no behaviour the council reviewed and broke nothing. List any findings with a
+> priority by docs/coding-standards.md ("Priority"), file and line. End with one line: `Score: <n>/10`.
+
+Record `Final review: <name>, <full head SHA>, <score>/10`. It must reach `min_score`; if it doesn't, fix what it
+found and review the new head.

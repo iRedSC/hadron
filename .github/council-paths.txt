@@ -10,6 +10,8 @@
 .claude/skills/council/**
 .claude/skills/questions/**
 .claude/skills/explain/**
+# The priority table there decides when the council stops.
+docs/coding-standards.md
 gradle/**
 **build.gradle.kts
 settings.gradle.kts

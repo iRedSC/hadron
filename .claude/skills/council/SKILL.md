@@ -13,7 +13,7 @@ PR; the **owner** is the person it works for, who decides anything that changes 
 The order, with every number in `.github/council.toml`:
 
 1. **Questions**: one pass (`.claude/skills/questions/SKILL.md`).
-2. **Council rounds**, below, until a round finds nothing above `stop_at`, or `max_rounds`.
+2. **Council rounds**, below, until a round finds nothing more serious than `stop_at`, or `max_rounds`.
 3. **Explain and clean up** (`.claude/skills/explain/SKILL.md`), with a final review if the cleanup was large.
 
 Before each step, fix what you already know, run the checks the change needs, commit and push.
@@ -22,13 +22,16 @@ Before each step, fix what you already know, run the checks the change needs, co
 
 Start one delegate per `role = "council"` member, in parallel, with `delegate_task` and the member's `provider`, `model`
 and option. If one can't start, say so and stop; the owner changes the seat. They are read-only. Give each the PR URL,
-the head SHA, the worktree path, the diff command (`git diff origin/main...<sha>`), what the change is for, and:
+the head SHA, the worktree path, the diff command (`git diff <base-sha>...<head-sha>`, where `<base-sha>` is
+`gh pr view <n> --json baseRefOid -q .baseRefOid`, the commit the gate also diffs from), what the change is for, the "Flagged complexity" list if there is
+one, and:
 
 > Read AGENTS.md, docs/design.md and docs/coding-standards.md first. Find at least <min_findings> issues in this
 > change, ideally more, and give each a priority by the table in docs/coding-standards.md ("Priority"): the highest
 > level whose test it meets. Each names a file and line, what goes wrong, and a suggested fix. You may run builds and
-> tests. If you can't find <min_findings> real issues above P4, list P4s to make up the number. End with one line:
-> `Found: <n>, top P<k>`.
+> tests. If you can't find <min_findings> real issues more serious than P4, list P4s to make up the number. Findings
+> already on the "Flagged complexity" list are known and going to their own PR: don't count them. End with one line:
+> `Found: <n>, top P<k>`, where P<k> is your most serious finding.
 
 Record each member's `<n> found, top P<k>` in the round's column. Then, highest priority first:
 
@@ -41,13 +44,14 @@ Record each member's `<n> found, top P<k>` in the round's column. Then, highest 
 Commit, push, and start the next round on the new head. Rounds must not grow the change: an idea outside the PR's
 purpose goes in the PR as a follow-up.
 
-**The council stops** after the first round in which no member finds anything above `stop_at`. Its head is the
-`Council commit`.
+**The council stops** after the first round in which no member finds anything more serious than `stop_at` (P0 is the
+most serious). Its head is the `Council commit`.
 
 **If it hasn't stopped after `max_rounds`, stop changing code.** The findings keep coming because the design is
 wrong. Write "Architecture reconsidered" in the PR: every finding grouped by the part of the design it came from, the
 root cause they share, at least two designs that would remove it with what each costs (one may be "don't build
-this"), and a recommendation. Then wait for the owner.
+this"), and a recommendation. Then wait for the owner. Once the owner picks a design, record the choice in the PR,
+build it, and start a new council: its record replaces the old table, from Round 1.
 
 ## The record
 
