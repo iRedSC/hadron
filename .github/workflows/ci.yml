@@ -29,6 +29,8 @@ jobs:
           # Only main writes the cache, so a PR can't poison what every later run reads.
           cache-read-only: ${{ github.ref != 'refs/heads/main' }}
       - run: ./gradlew build
+      # The blind-test bundle rewrites docs by exact text, so a doc edit can break it; build it on every PR to know.
+      - run: ./gradlew contractBundle
       - name: Keep test reports
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
