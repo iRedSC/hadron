@@ -26,7 +26,7 @@ abstract class HadronTestTask : DefaultTask() {
         fun check(task: Task, report: File, jar: String, log: File, extra: String = "") {
             if (!report.isFile) {
                 throw GradleException("The test server stopped before writing its report, so no test ran to the end. "
-                        + "Its log says why: $log (a copy of each failed run is kept in ${report.parentFile}/failures)")
+                        + "Its log says why: $log$extra")
             }
             val text = report.readText()
             task.logger.lifecycle(text)
@@ -36,7 +36,7 @@ abstract class HadronTestTask : DefaultTask() {
                         + "or it wasn't staged. Report: $report; log: $log$extra")
             if (!Regex(""" passed, 0 failed$""").containsMatchIn(summary) || !text.trimEnd().endsWith("RESULT: PASSED")) {
                 throw GradleException("Hadron tests failed (${summary.removePrefix("SUMMARY ")}). The failures are "
-                        + "above and in $report; as JSON: $json. A copy of each failed run is kept in ${report.parentFile}/failures$extra")
+                        + "above and in $report; as JSON: $json$extra")
             }
             task.logger.lifecycle("Report: $report\nJSON: $json")
         }
@@ -289,7 +289,9 @@ hadronTest.configure {
     val report = testRoot.file("report.txt").asFile
     val log = testRoot.file("run/logs/latest.log").asFile
     val jar = suiteJar
-    doLast { HadronTestTask.check(this, report, jar, log) }
+    // runHadronTest copies a failed run's report and log there (HadronTestServer.keep); a rerun keeps its own.
+    val kept = testRoot.dir("failures").asFile
+    doLast { HadronTestTask.check(this, report, jar, log, ". A copy of each failed run is kept in $kept") }
 }
 
 val startCommand = project.path + ":hadronWatch"
