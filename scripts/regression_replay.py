@@ -217,9 +217,13 @@ def gradle(args: list[str], log: Path) -> int:
         try:
             return proc.wait()
         except KeyboardInterrupt:
-            # Gradle got the same Ctrl-C and is cancelling; let it finish before the tree is reset under it. A second
-            # Ctrl-C stops waiting.
-            proc.wait()
+            # Gradle got the same Ctrl-C and is cancelling. Further Ctrl-Cs are ignored until it has exited, so the tree
+            # is never reset and the locks never released under a live build (kill -9 still stops everything).
+            signal.signal(signal.SIGINT, signal.SIG_IGN)
+            try:
+                proc.wait()
+            finally:
+                signal.signal(signal.SIGINT, signal.default_int_handler)
             raise
 
 
@@ -287,6 +291,11 @@ def run_in_game(guards: list[Guard], label: str) -> GuardRun:
         if suite.get("broken"):
             run.trouble = f"the suite didn't run: {suite['broken']}"
         for t in suite.get("tests", []):
+            if t["status"] == "FAIL" and t.get("failedAt") is None:
+                # Failed outside the test's own code (its world couldn't be made, the test was misused): it never
+                # ran, so its failure says nothing about the fix.
+                run.trouble = run.trouble or f"{t['id']} didn't run its own code: {t.get('message')}"
+                continue
             run.failed[t["id"]] = t["status"] != "PASS"
     if data.get("problems"):
         run.trouble = run.trouble or "the run itself failed: " + "; ".join(map(str, data["problems"]))
