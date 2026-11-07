@@ -34,6 +34,15 @@ neoForge {
             systemProperty("hadron.test.report", layout.buildDirectory.file("hadron-test/report.txt").get().asFile.absolutePath)
             disableIdeRun()
         }
+        // Watch mode: the same server, but it stays up and reruns a suite each time a build stages it in
+        // build/hadron-watch/inbox. Plugins start it with hadronWatch and rerun with hadronRerun.
+        register("hadronWatch") {
+            server()
+            programArgument("--nogui")
+            gameDirectory = layout.buildDirectory.dir("hadron-watch/run")
+            systemProperty("hadron.test.watch", layout.buildDirectory.dir("hadron-watch").get().asFile.absolutePath)
+            disableIdeRun()
+        }
     }
 
     mods {
@@ -108,6 +117,23 @@ tasks.named("runServer") { dependsOn(prepareDevServer) }
 // dev server's ports (the game port is any free one, RCON and query are off), and no watchdog, since a test holds the
 // server thread for the whole run. Suites are moved in, not copied, so a suite staged once runs once.
 val hadronTestDir = layout.buildDirectory.dir("hadron-test")
+val hadronWatchDir = layout.buildDirectory.dir("hadron-watch")
+val testServerProperties = """
+    online-mode=false
+    server-ip=127.0.0.1
+    server-port=0
+    enable-rcon=false
+    enable-query=false
+    level-type=minecraft\:flat
+    generate-structures=false
+    spawn-protection=0
+    max-tick-time=-1
+    view-distance=4
+    simulation-distance=4
+    enforce-secure-profile=false
+    sync-chunk-writes=false
+    max-players=100
+    """.trimIndent() + "\n"
 tasks.named<JavaExec>("runHadronTest") {
     description = "Runs the @HadronTests of every staged plugin suite; use a plugin's hadronTest task instead."
     // Each suite's hadronTest task reads the report and fails the build; a failed run still writes one.
@@ -115,34 +141,47 @@ tasks.named<JavaExec>("runHadronTest") {
     // Stage first, whichever projects asked for tests in this build.
     mustRunAfter(provider { rootProject.subprojects.mapNotNull { it.tasks.findByName("hadronTestStage") } })
     val root = hadronTestDir.get().asFile
+    val properties = testServerProperties
     doFirst {
         val run = root.resolve("run")
         run.deleteRecursively()
         root.resolve("report.txt").delete()
+        root.resolve("report.json").delete()
         val plugins = run.resolve("plugins")
         plugins.mkdirs()
-        root.resolve("suites").listFiles { f -> f.name.endsWith(".jar") }?.forEach { jar ->
-            jar.copyTo(plugins.resolve(jar.name), overwrite = true)
-            jar.delete()
+        // Each jar with its --tests filter, if it has one.
+        root.resolve("suites").listFiles { f -> f.name.endsWith(".jar") || f.name.endsWith(".jar.tests") }?.forEach { f ->
+            f.copyTo(plugins.resolve(f.name), overwrite = true)
+            f.delete()
         }
         run.resolve("eula.txt").writeText("eula=true\n")
-        run.resolve("server.properties").writeText(
-            """
-            online-mode=false
-            server-ip=127.0.0.1
-            server-port=0
-            enable-rcon=false
-            enable-query=false
-            level-type=minecraft\:flat
-            generate-structures=false
-            spawn-protection=0
-            max-tick-time=-1
-            view-distance=4
-            simulation-distance=4
-            enforce-secure-profile=false
-            sync-chunk-writes=false
-            max-players=100
-            """.trimIndent() + "\n"
-        )
+        run.resolve("server.properties").writeText(properties)
+    }
+}
+
+// The watching test server starts as fresh as the one-off one, keeping only the inbox, where hadronWatch has just
+// staged a suite. It runs until hadronWatchStop or Ctrl+C.
+tasks.named<JavaExec>("runHadronWatch") {
+    description = "Starts a test server that reruns each staged suite; use a plugin's hadronWatch task instead."
+    isIgnoreExitValue = true
+    mustRunAfter(provider { rootProject.subprojects.mapNotNull { it.tasks.findByName("hadronWatchStage") } })
+    val root = hadronWatchDir.get().asFile
+    val properties = testServerProperties
+    doFirst {
+        val state = root.resolve("watch.properties")
+        if (state.isFile) {
+            val pid = state.readLines().firstOrNull { it.startsWith("pid=") }?.removePrefix("pid=")?.toLongOrNull()
+            if (pid != null && ProcessHandle.of(pid).map { it.isAlive }.orElse(false)) {
+                throw GradleException("A Hadron test server is already watching (pid $pid). Rerun tests on it with "
+                        + "hadronRerun, or stop it with hadronWatchStop first.")
+            }
+        }
+        for (name in listOf("run", "done", "reports", "report.txt", "report.json", "watch.properties", "stop")) {
+            root.resolve(name).deleteRecursively()
+        }
+        val run = root.resolve("run")
+        run.resolve("plugins").mkdirs()
+        run.resolve("eula.txt").writeText("eula=true\n")
+        run.resolve("server.properties").writeText(properties)
     }
 }

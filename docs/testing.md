@@ -56,6 +56,63 @@ RESULT: FAILED
 - A test player's client is an in-memory connection to the server's memory channel, with the vanilla client's half of the protocol: login, the configuration phase (as an unmodded client), keep-alives, teleport confirmations followed by a position report, chunk-batch acknowledgements, a position reminder every 20 ticks. After every action and tick, the harness lets packets travel both ways until neither side has anything left, so the next line sees the result.
 - Suites requested in one Gradle invocation share one server, but never each other's listeners: while one suite runs, every other suite's plugin is disabled. The shared task lives in `gradle/hadron-test.gradle.kts` until the Hadron Gradle plugin takes it over.
 
+## Running some tests
+
+`--tests` limits a run, on `hadronTest`, `hadronWatch` and `hadronRerun` alike, as on Gradle's own test task: a class (`HelloTests`, or its full name), a method (`HelloTests.helloGreetsTheNameGiven`), or either with `*` (`HelloTests.hello*`, `*secret*`). Matching ignores case. Repeat it for more; a test runs when any pattern matches. The report says `Only tests matching ...: 3 of 6`, and a filter that matches nothing is a `BROKEN` suite that lists the tests it has, so a typo can't pass as an empty green run.
+
+## Warm reruns (watch mode)
+
+```
+./gradlew :examples:hello:hadronWatch          # starts a test server that stays up; leave it running
+./gradlew :examples:hello:hadronRerun          # after each change: rebuild, rerun, print the report, fail on failure
+./gradlew -t :examples:hello:hadronRerun       # or rerun on every save
+./gradlew :examples:hello:hadronWatchStop      # stop it (Ctrl+C on hadronWatch works too)
+```
+
+`hadronWatch` boots the test server once, in `neoforge/build/hadron-watch/run`, and runs the suite. Each `hadronRerun` builds the jar, drops it in the server's inbox and waits: between runs, the server unloads the old plugin, deletes its data folder, puts back the overworld state every test shares (game rules, time, weather, difficulty, ops, bans, whitelist, scoreboard) as it was at boot, and lets Hadron's hot reload load the new jar, so the rerun starts as a cold one would. Every test still gets its own world and players. For the hello suite on a busy machine: a cold `hadronTest` takes 25 s, a `hadronRerun` 5 s (4 s of it on the server, reload included).
+
+- **A build never lands in a running test.** The server takes builds from its inbox only between runs; one staged meanwhile waits its turn. When several builds of one suite wait, the newest runs and the older ones' `hadronRerun` fails saying it was superseded. If something replaces a jar in `plugins/` directly mid-run, the run stops and says so rather than report on a plugin that's no longer loaded.
+- **A stale server is refused:** if Hadron's own sources changed since the server started, `hadronRerun` fails and says to restart it, since the server still runs the old Hadron. Without a server, it says how to start one.
+- **A hung test ends the server**, as in a cold run (the server thread can't be stopped): the `hadronRerun` waiting on it still gets the report, then says to start `hadronWatch` again.
+- Each rerun's report is `reports/NNNN/report.txt` and `.json` (the last 20 are kept); `report.txt` and `report.json` beside them are the latest. The server log also prints each report.
+- **What a rerun doesn't reset:** economy accounts of anyone but test players (theirs are emptied after every test, as before), worlds or boss bars a plugin made itself, and other mods' state.
+
+## report.json
+
+Beside every `report.txt` is a `report.json` with the same results for tools; `hadronTest` and `hadronRerun` print where it is. Every key is always present, with `null` where it doesn't apply. `schema` changes only when a field changes meaning or goes away. (The comments below are notes, not part of the file.)
+
+```jsonc
+{
+  "schema": 1,
+  "result": "FAILED",                  // PASSED only if every suite ran and every test passed
+  "mode": "watch",                     // "cold" for hadronTest, "watch" for a warm server's rerun
+  "run": 5,                            // the rerun's number on that server; 1 for a cold run
+  "startedAt": "2026-11-07T02:44:03Z",
+  "wallMillis": 3992,
+  "summary": { "total": 2, "passed": 1, "failed": 1, "hung": 0, "broken": 0, "suites": 1 },
+  "problems": [],                      // failures of the run itself, outside any test
+  "suites": [{
+    "suite": "examples-hello.jar", "plugin": "Hello",
+    "broken": null,                    // why none of its tests could run, or null
+    "filter": ["TmpTests"],            // the --tests patterns; empty for every test
+    "available": 8,                    // tests in the suite before the filter
+    "summary": { "total": 2, "passed": 1, "failed": 1, "hung": 0, "broken": 0 },
+    "tests": [{
+      "suite": "examples-hello.jar",
+      "id": "TmpTests.fails",          // as the text report names it
+      "class": "dev.iredsc.hadron.examples.hello.TmpTests",
+      "method": "fails",               // null when the class itself couldn't load
+      "status": "FAIL",                // PASS, FAIL or HUNG
+      "ticks": 3, "wallMillis": 41,
+      "message": "expected failure",   // null for a pass
+      "source": "TmpTests.java:20",    // the test's first line, for every test
+      "failedAt": "TmpTests.java:21",  // the test's own line nearest the failure, or null
+      "stack": null                    // for an exception, or where a hung test's thread was; null for an assertion
+    }]
+  }]
+}
+```
+
 ## What it can't do yet
 
 - **Players have no physics**: they don't fall or get pushed; their client reports wherever the server has them. Moves are split into steps the server accepts as one client's.
