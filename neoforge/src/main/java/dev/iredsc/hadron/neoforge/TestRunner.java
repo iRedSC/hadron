@@ -28,6 +28,7 @@ import net.minecraft.server.TickTask;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.server.ServerStartedEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.bus.api.IEventBus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
@@ -66,15 +67,20 @@ final class TestRunner {
         this.watchdog = new Watchdog(onHang);
     }
 
-    /** From the mod's constructor; does nothing unless the server was started in test or watch mode. */
-    static void register() {
+    /**
+     * From the mod's constructor; does nothing unless the server was started in test or watch mode. In either, it also
+     * registers {@link TestMod}'s channel, so a normal server never has it.
+     */
+    static void register(IEventBus modBus) {
         String watch = System.getProperty(TestWatch.WATCH_PROPERTY);
         if (watch != null && !watch.isBlank()) {
+            TestMod.register(modBus);
             TestWatch.register(new File(watch).getAbsoluteFile());
             return;
         }
         String report = System.getProperty(REPORT_PROPERTY);
         if (report == null || report.isBlank()) return;
+        TestMod.register(modBus);
         File file = new File(report).getAbsoluteFile();
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> {
             MinecraftServer server = e.getServer();

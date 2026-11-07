@@ -9,6 +9,7 @@
     "ExplosionMixin",
     "ForcedChunkManagerMixin",
     "LevelMixin",
+    "NetworkRegistryAccessor",
     "NetworkRegistryMixin",
     "PacketUtilsMixin",
     "PlayerListMixin",
