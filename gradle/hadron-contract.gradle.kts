@@ -224,6 +224,8 @@ object ContractDocs {
         once("\"neoforge/build/hadron-watch\"", "\"server/build/hadron-watch\"")
         once("\":neoforge:runHadronTest\")", "\":server:runHadronTest\")")
         once("\":neoforge:runHadronWatch\")", "\":server:runHadronWatch\")")
+        // Every other task path the runner names is the test server's, which is :server in a bundle; the two once()
+        // calls above guard that the runner still has the paths this rewrite is meant for.
         return text.replace(":neoforge:", ":server:")
     }
 }

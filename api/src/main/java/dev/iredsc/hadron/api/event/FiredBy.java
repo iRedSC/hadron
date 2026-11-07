@@ -14,6 +14,10 @@ import java.lang.annotation.Target;
  *
  * <p>A parent event counts as fired by core when core fires one of its leaves. The texts are table cells: short
  * phrases, no trailing period.
+ *
+ * <p>Kept in class files but not at run time: it documents and checks who fires an event, and nothing in a running
+ * server asks. {@link Core#FULL} against {@link Core#PARTIAL} is a claim the build can't prove (it sees that core
+ * fires the event, not that it fires on every path), so reviewers judge it.
  */
 @Documented
 @Retention(RetentionPolicy.CLASS)

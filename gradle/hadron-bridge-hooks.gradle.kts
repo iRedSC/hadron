@@ -115,10 +115,15 @@ object HadronBridgeHooks {
             return out
         }
         val events = api.values.filter {
-            it.access and ACC_PUBLIC != 0 && it.access and (ACC_ABSTRACT or ACC_INTERFACE) == 0 && '$' !in it.name
+            // Nested events count too (named Outer.Inner in the doc), so one can't ship unchecked by being nested.
+            it.access and ACC_PUBLIC != 0 && it.access and (ACC_ABSTRACT or ACC_INTERFACE) == 0
                     && EVENT_ROOT in supers(it)
         }.sortedBy { simple(it.name) }
-        // Every api class core constructs, and the classes it extends: a parent counts when core fires a leaf.
+        // Firing is read as construction: core code that builds an event (`new X(...)`, `X::new`, a subclass's
+        // super(...)) is taken to post it. Following each object to Hooks.post would need a data-flow analysis; an
+        // event core builds and never posts would be its own bug, and @Covers tests prove the posting in game.
+        // A parent counts when core fires a leaf. Only api's own event classes count: a subclass defined in common
+        // or neoforge doesn't make its api parent fired, so marking that parent FULL fails visibly.
         val built = core.values.flatMap { it.constructs }.filter { it in api }.toSet()
         val fired = built + built.flatMap { supers(api[it]!!) }
         // The core classes that construct an event or one of its leaves, for the error message.
@@ -128,6 +133,15 @@ object HadronBridgeHooks {
         }
 
         val problems = mutableListOf<String>()
+        // An api helper that built events would hide them from the check above, which only reads core; api builds none.
+        for (c in api.values) for (b in c.constructs) {
+            if (b != c.name && b in events.map { it.name } && api[b]?.let { EVENT_ROOT in supers(it) } == true &&
+                    c.superName != b) problems += "${simple(c.name)} in api constructs ${simple(b)}: events are " +
+                    "built by core (common or neoforge), so the @FiredBy check can see who fires them. Move it there."
+        }
+        // A missing or empty class folder would otherwise check nothing and pass.
+        if (events.isEmpty()) problems += "found no event classes in api's compiled classes, so nothing was checked: " +
+                "build :api first (the check depends on :api:classes), or fix the folders it reads."
         val out = mutableListOf<Event>()
         for (c in events) {
             val n = simple(c.name)
@@ -138,8 +152,9 @@ object HadronBridgeHooks {
                         "bridges and fillIn if only bridges fire it."
                 continue
             }
+            // Trimmed, so a cell of only spaces counts as empty rather than filled in.
             val e = Event(n, c.name.removePrefix("dev/iredsc/hadron/api/event/").substringBefore('/'), f["core"]!!,
-                    f["coreSees"] ?: "", f["bridges"] ?: "", f["fillIn"] ?: "")
+                    f["coreSees"]?.trim() ?: "", f["bridges"]?.trim() ?: "", f["fillIn"]?.trim() ?: "")
             val texts = listOf(e.coreSees, e.bridges, e.fillIn)
             if (texts.any { '|' in it || '\n' in it }) problems += "$n's @FiredBy has a | or a line break, which breaks " +
                     "the table in docs/bridge-hooks.md: rephrase without it."
@@ -197,6 +212,11 @@ object HadronBridgeHooks {
         for ((block, lines) in tables) {
             val start = text.indexOf(begin(block))
             val stop = text.indexOf(end(block))
+            // A second copy would stay stale and still pass, since the check compares the file as rendered.
+            require(text.split(begin(block)).size == 2 && text.split(end(block)).size == 2) {
+                "docs/bridge-hooks.md has more than one generated $block marker: keep one\n  ${begin(block)}\n  " +
+                        "${end(block)}\npair, then run ./gradlew bridgeHooks."
+            }
             require(start >= 0 && stop > start) {
                 "docs/bridge-hooks.md has lost its generated $block table: put back the two lines\n  ${begin(block)}\n  " +
                         "${end(block)}\nwhere the table goes, then run ./gradlew bridgeHooks."
@@ -206,25 +226,47 @@ object HadronBridgeHooks {
         return text
     }
 
-    /** The catalog's chokepoint column says "bridge" for exactly the events core never fires. */
+    /**
+     * Every shipped event has a catalog row, and the catalog's chokepoint column says "bridge" for exactly the events
+     * core never fires. A bridge-only event must sit in a table with that column, so renaming the column fails on
+     * them rather than silently checking nothing. (The player and server tables have no chokepoint column by design.)
+     */
     fun catalogProblems(eventsMd: String, events: List<Event>): List<String> {
         val byName = events.associateBy { it.name }
         val problems = mutableListOf<String>()
+        val listed = mutableSetOf<String>()
+        val checked = mutableSetOf<String>()
         var chokepoint = -1
+        var inTable = false
         for ((index, line) in eventsMd.lines().withIndex()) {
-            if (!line.startsWith("|")) { chokepoint = -1; continue }
+            if (!line.startsWith("|")) { chokepoint = -1; inTable = false; continue }
             val cells = line.trim().removePrefix("|").removeSuffix("|").split("|").map { it.trim() }
-            if (cells.firstOrNull() == "Event") { chokepoint = cells.indexOf("Core chokepoint"); continue }
-            if (chokepoint < 0 || cells.size <= chokepoint || cells[0].startsWith("---")) continue
+            if (cells.firstOrNull() == "Event") { chokepoint = cells.indexOf("Core chokepoint"); inTable = true; continue }
+            if (!inTable || cells[0].startsWith("---")) continue
+            val names = Regex("`(\\w+Event)`").findAll(cells[0]).map { it.groupValues[1] }.filter { it in byName }.toList()
+            listed += names
+            if (chokepoint < 0) continue
+            if (cells.size <= chokepoint) {
+                problems += "docs/events.md:${index + 1}: the row has no Core chokepoint cell: fill it in."
+                continue
+            }
+            checked += names
             val says = cells[chokepoint].startsWith("bridge")
-            for (name in Regex("`(\\w+Event)`").findAll(cells[0]).map { it.groupValues[1] }) {
-                val e = byName[name] ?: continue // not shipped yet
+            for (name in names) {
+                val e = byName.getValue(name)
                 val bridgeOnly = e.core == "NONE"
                 if (bridgeOnly && !says) problems += "docs/events.md:${index + 1}: $name is @FiredBy(core = NONE), " +
                         "so its chokepoint cell must start with \"bridge\" (examples in brackets are fine)."
                 if (!bridgeOnly && says) problems += "docs/events.md:${index + 1}: $name is @FiredBy(core = ${e.core}), " +
                         "so its chokepoint cell must name core's chokepoint, not start with \"bridge\"."
             }
+        }
+        for (e in events) {
+            if (e.name !in listed) problems += "docs/events.md has no catalog row for ${e.name}: add one to its family's " +
+                    "table (a row may name several events, each in backticks)."
+            else if (e.core == "NONE" && e.name !in checked) problems += "docs/events.md lists ${e.name}, which only " +
+                    "bridges fire, outside a table with a \"Core chokepoint\" column: put it in one, with a cell starting " +
+                    "\"bridge\" (or the column was renamed: name it \"Core chokepoint\" again)."
         }
         return problems
     }

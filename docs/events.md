@@ -101,6 +101,7 @@ Payload: the entity, its position, and what changed.
 | `EntityRegainHealthEvent` | healed, including absorption | `heal`, `setAbsorptionAmount` |
 | `EntityCombustEvent` | an entity is set on fire | `igniteForSeconds`, `setRemainingFireTicks` |
 | `EntityPotionEffectEvent` | a registered effect added, changed or removed | `addEffect`, `removeEffect` |
+| `EntityPotionEffectExpireEvent` *(after)* | an effect ran out | NeoForge's effect expiry |
 | `EntityStatusChangeEvent` | a restriction outside the effect registry: stunned, frozen, AI disabled, casting interrupted, held | `Mob.setNoAi`, bridges |
 | `EntityAttributeChangeEvent` | an attribute's base value or modifiers change; source of the modifier | not shipped yet: see "Not shipped yet" |
 | `EntityVelocityEvent` | an actor pushes, pulls or launches an entity; old and new velocity | `setDeltaMovement` while something other than the entity acts |
@@ -110,6 +111,7 @@ Payload: the entity, its position, and what changed.
 | `EntityTeleportEvent` | an entity moves other than by walking; cause, and everything travelling with it (passengers, pets, leashed mobs); the destination (world, position, facing) is editable | `teleportTo`, `changeDimension` |
 | `EntityTargetEvent` | a mob or turret picks a target | `setTarget` |
 | `EntityControlChangeEvent` | who controls an entity changes without mounting: charmed, enthralled, a drone linked to a monitor, a guard assigned; expiry is *(after)* | bridge |
+| `EntityControlExpireEvent` *(after)* | control ran out: a charm wore off, a drone's link timed out | bridge |
 | `EntityRelationshipChangeEvent` | reputation or a lasting relationship changes (villager gossip, an NPC's marriage) | not shipped yet: see "Not shipped yet" |
 | `EntityUseEvent` | an actor right-clicks an entity | `interact` |
 | `EntityMountEvent`, `EntityDismountEvent` | riding, including vehicles and a player carrying another | `startRiding`, `stopRiding` |
@@ -156,7 +158,7 @@ An inventory is identified by what holds it (a block, an entity, a player, an it
 | `InventoryOpenEvent` | an actor opens a menu on a block, entity or item, including remotely | `openMenu` |
 | `InventoryCloseEvent` *(after)* | | `closeContainer` |
 | `InventoryClickEvent` | what a player asked for inside an open menu | `AbstractContainerMenu.clicked` |
-| `InventoryChangeEvent` | the authoritative change to an inventory's slots, whatever caused it; before and after | `Container.setItem`, `Inventory.add`, `Slot.set`, bridges for item handlers |
+| `InventoryChangeEvent` | the authoritative change to an inventory's slots, whatever caused it; before and after | hoppers, hopper minecarts and droppers (as `InventoryMoveItemEvent`); bridges for everything else |
 | ├ `InventoryMoveItemEvent` | items move between two inventories: hoppers, pipes, export buses, a seagull taking food from a hand | `HopperBlockEntity`, item handler transfers |
 | ├ `InventoryGenerateEvent` | items appear with no source: a quest reward, an ore laser, a creative source | bridge |
 | ├ `InventoryDestroyEvent` | items vanish with no destination: a void upgrade, a trash can, a matter condenser | bridge |
@@ -203,6 +205,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 | `PlayerRespawnEvent` | respawn location editable |
 | `PlayerChangedWorldEvent` *(after)* | |
 | `PlayerAbilitiesChangeEvent` | flight allowed or revoked (Flugel Tiara, a flight ritual), fly and walk speed; revocation is *(after)* |
+| `PlayerFlightRevokeEvent` *(after)* | a player lost permission to fly; speeds changed at the same moment come with it |
 | `PlayerToggleSneakEvent`, `PlayerToggleSprintEvent`, `PlayerToggleFlightEvent` | |
 | `PlayerGameModeChangeEvent` | |
 | `PlayerExpChangeEvent`, `PlayerLevelChangeEvent` | vanilla experience only; mod skill points are resources |
@@ -214,15 +217,15 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 
 ### Server: `ServerEvent`
 
-| Event | What |
-|---|---|
-| `ServerLoadEvent` *(after)* | once per start, after plugins enable |
-| `ServerListPingEvent` | a client's server list asks about the server; MOTD, shown player counts and the hover sample editable; not an action, so no actor |
-| `CommandExecuteEvent` | any command about to run, from a player, the console, a quest reward, a mod or each line of a datapack function; actor and authority |
-| `AccessControlChangeEvent` | a claim, team, party, alliance or trust list changes: boundaries, members, flags; who changed it |
-| `DataRevealEvent` | server data about a block, entity or inventory is about to be sent to a player who didn't open it (Jade, WTHIT, map radar); fields removable |
-| `PluginEnableEvent`, `PluginDisableEvent` *(after)* | |
-| `ServiceRegisterEvent`, `ServiceUnregisterEvent` *(after)* | a provider appeared or left |
+| Event | What | Core chokepoint |
+|---|---|---|
+| `ServerLoadEvent` *(after)* | once per start, after plugins enable | server started |
+| `ServerListPingEvent` | a client's server list asks about the server; MOTD, shown player counts and the hover sample editable; not an action, so no actor | status request |
+| `CommandExecuteEvent` | any command about to run, from a player, the console, a quest reward, a mod or each line of a datapack function; actor and authority | `Commands.performCommand`, function lines |
+| `AccessControlChangeEvent` | a claim, team, party, alliance or trust list changes: boundaries, members, flags; who changed it | bridge (claim and team mods) |
+| `DataRevealEvent` | server data about a block, entity or inventory is about to be sent to a player who didn't open it (Jade, WTHIT, map radar); fields removable | bridge (Jade, WTHIT) |
+| `PluginEnableEvent`, `PluginDisableEvent` *(after)* | | Hadron's plugin host |
+| `ServiceRegisterEvent`, `ServiceUnregisterEvent` *(after)* | a provider appeared or left | Hadron's services manager |
 
 ## Not shipped yet
 
