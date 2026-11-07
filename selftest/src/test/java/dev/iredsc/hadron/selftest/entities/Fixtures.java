@@ -1,6 +1,5 @@
 package dev.iredsc.hadron.selftest.entities;
 
-import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -22,20 +21,12 @@ public final class Fixtures {
      * in a chunk a player keeps loaded; {@code t.tick()} runs ticks as fast as it can and doesn't wait for the chunk
      * workers that get it there, so on a busy machine a test that acts at once can find nothing to act on.
      */
-    @Nondeterministic(reason = "yields wall time to work on other threads (chunk workers, async tasks) between ticks, which run faster than it")
     public static void ready(TestContext t) {
         if (t.players().isEmpty()) {
             throw new AssertionError("Join a player before spawning: entities only tick near one");
         }
-        t.await("the test world's centre to tick entities", () -> {
-            if (t.level().isPositionEntityTicking(t.pos(0, 0, 0))) return true;
-            try {
-                Thread.sleep(10); // give the chunk workers wall time; ticks alone run too fast
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            return false;
-        }, 300);
+        t.awaitAsync("the test world's centre to tick entities", () -> t.level().isPositionEntityTicking(t.pos(0, 0, 0)),
+                300);
     }
 
     /** A mob or entity standing at the bottom centre of {@code at}, AI off so it stays put. Join a player first. */

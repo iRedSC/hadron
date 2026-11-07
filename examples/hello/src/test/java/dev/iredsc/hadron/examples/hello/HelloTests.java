@@ -3,6 +3,7 @@ package dev.iredsc.hadron.examples.hello;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** The hello plugin as a player meets it: its command and its chat rule. */
 public final class HelloTests {
@@ -52,5 +53,15 @@ public final class HelloTests {
         alice.chat("good morning");
         t.assertChat(bob, "good morning");
         t.assertNoChat(bob, "(hi!)");
+    }
+
+    // Work on another thread (an async task, a chunk loading) needs wall time that ticks alone don't give it:
+    // awaitAsync waits for it, still bounded by ticks. A test can't sleep or read the clock; the build refuses that.
+    @HadronTest
+    void anAsyncTaskIsWaitedFor(TestContext t) {
+        AtomicBoolean ran = new AtomicBoolean();
+        t.plugin().getServer().getScheduler().runTaskAsynchronously(t.plugin(), () -> ran.set(true));
+        t.awaitAsync("the async task to run", ran::get, 100);
+        t.assertTrue(ran.get(), "the async task should have run");
     }
 }
