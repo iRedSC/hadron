@@ -1,0 +1,38 @@
+# A release must pass both tiers: the fast build, then every in-game suite, each in its own headless server.
+# Runs on a version tag (v0.2.0) or by hand from the Actions tab. Suites run one after another, never in parallel.
+name: Release check
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: true
+      - run: ./gradlew build
+      - run: ./gradlew :examples:hello:hadronTest
+      - run: ./gradlew :selftest:hadronTest
+      - name: Keep reports and server logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hadron-test
+          path: |
+            neoforge/build/hadron-test/report.*
+            neoforge/build/hadron-test/run/logs/
+            **/build/reports/tests/
+          if-no-files-found: ignore
