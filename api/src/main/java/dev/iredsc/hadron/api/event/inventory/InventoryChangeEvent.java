@@ -2,12 +2,15 @@ package dev.iredsc.hadron.api.event.inventory;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import net.minecraft.world.item.ItemStack;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * Items in an inventory are about to change: each {@link Change} says which holder, which slot, and the stack before
@@ -26,6 +29,9 @@ import net.minecraft.world.item.ItemStack;
  * this event only through that mod's bridge, which fires this event or a leaf for each committed change and never for
  * a simulated one. Listen here to hear all of them; the leaves say why.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "hoppers, hopper minecarts and droppers, as `InventoryMoveItemEvent`",
+        bridges = "the mod's own slot writes: machine outputs, pipes, storage networks")
 public class InventoryChangeEvent extends InventoryEvent implements Cancellable {
     private final List<Change> changes;
     private boolean cancelled;

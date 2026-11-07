@@ -2,12 +2,16 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.world.entity.Entity;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * An entity that isn't burning is being set on fire: lava, fire, a flaming arrow, fire aspect, a spell. Fired once
  * when it catches, not again while fire keeps it burning. Cancel it and it doesn't catch.
  */
+@FiredBy(core = FULL)
 public class EntityCombustEvent extends EntityEvent implements Cancellable {
     private int ticks;
     private boolean cancelled;

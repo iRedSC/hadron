@@ -11,9 +11,10 @@ import java.util.Objects;
  * hear all of them: every one says which resource, how much, and which holders it touches, so an anti-dupe or
  * protection plugin can decide without knowing the leaf. Cancel it and no holder changes, and any cost is refunded.
  *
- * <p><b>Bridge events.</b> Energy, fluids in tanks, mana and money live in each mod's own code, so these are fired by
- * the mod's bridge (or an economy plugin) before the change, never for a simulated transfer, and the change is dropped
- * if cancelled. Hadron core does not fire them yet.
+ * <p><b>Mostly bridge events.</b> Core fires them for currencies: every {@code Economy} deposit, withdrawal and
+ * transfer. Energy, fluids in tanks and mana live in each mod's own code, so those are fired by the mod's bridge
+ * before the change, never for a simulated transfer, and the change is dropped if cancelled. Each leaf's
+ * {@link dev.iredsc.hadron.api.event.FiredBy} says which.
  */
 public abstract class ResourceEvent extends ActionEvent implements Cancellable {
     private final Resource resource;

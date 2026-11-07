@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.server.level.ServerPlayer;
@@ -9,11 +10,14 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
+
 /**
  * An actor is right-clicking an entity: trading with a villager, saddling a horse, dyeing a sheep, opening a
  * minecart chest, putting an item in a frame. Bukkit's {@code PlayerInteractEntityEvent}. Cancel it and nothing
  * happens and no item is used. Fired once per hand.
  */
+@FiredBy(core = FULL)
 public class EntityUseEvent extends EntityEvent implements Cancellable {
     private final InteractionHand hand;
     private final ItemStack item;

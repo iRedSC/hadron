@@ -47,7 +47,7 @@ A test must be able to fail. Reject:
 
 ## Docs
 
-- A change to an event's coverage or bridge contract updates [bridge-hooks.md](bridge-hooks.md) in the same change.
+- An event's `@FiredBy` says what really fires it. The build checks `NONE` against the code and keeps [bridge-hooks.md](bridge-hooks.md) in step, but only a reviewer can tell `FULL` from `PARTIAL` or check the texts.
 - An API change Minecraft forced goes in that version's port guide in `docs/porting/`.
 
 ## Growing this file

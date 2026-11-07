@@ -2,10 +2,13 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.item.ItemEntity;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * An actor is about to pick an item entity up. Replaces Bukkit's {@code EntityPickupItemEvent} and
@@ -15,6 +18,9 @@ import net.minecraft.world.entity.item.ItemEntity;
  * taking gold, allays, foxes, villagers), only when the item is actually about to be taken. Bridges fire it for magnets
  * and vacuum hoppers, with the final destination, such as a backpack.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "players, hoppers, hopper minecarts, mobs",
+        bridges = "magnets and vacuums, with the final destination (a backpack)")
 public class ItemPickupEvent extends ItemEvent implements Cancellable {
     private final ItemEntity entity;
     private final InventoryHolder destination;

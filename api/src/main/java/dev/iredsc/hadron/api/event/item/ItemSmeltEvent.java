@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import java.util.List;
 import java.util.Objects;
@@ -9,6 +10,8 @@ import java.util.Optional;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeHolder;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * A machine is about to finish processing items: a furnace, smoker or blast furnace smelting, a campfire cooking, a
@@ -19,6 +22,9 @@ import net.minecraft.world.item.crafting.RecipeHolder;
  * <p>Core fires it for every vanilla furnace, campfire and brewing stand. Bridges fire it for their mod's machines,
  * including items processed in the world or on belts, with every input, catalyst and output.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "furnaces, campfires, brewing stands",
+        bridges = "the mod's machines, including items processed in the world or on belts")
 public class ItemSmeltEvent extends ItemEvent implements Cancellable {
     private final InventoryHolder holder;
     private final List<ItemStack> inputs;

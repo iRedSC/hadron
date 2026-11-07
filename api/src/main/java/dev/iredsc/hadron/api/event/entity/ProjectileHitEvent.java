@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.core.BlockPos;
@@ -13,6 +14,8 @@ import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
+
 /**
  * A projectile is about to hit a block or an entity. The actor is the projectile, which carries who fired it. Cancel
  * it and the projectile passes through as if nothing was there.
@@ -20,6 +23,9 @@ import net.minecraft.world.phys.Vec3;
  * <p>A hitscan weapon with no projectile entity (a mod's gun) is fired by its bridge: then {@link #getEntity()} is
  * the shooter.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "projectile entities",
+        bridges = "hitscan weapons with no projectile, with the shooter as the entity")
 public class ProjectileHitEvent extends EntityEvent implements Cancellable {
     private final HitResult hit;
     private boolean cancelled;

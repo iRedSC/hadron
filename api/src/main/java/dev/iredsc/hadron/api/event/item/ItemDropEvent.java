@@ -2,10 +2,13 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.Vec3;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * An actor is about to put an item into the world as an item entity. Replaces Bukkit's {@code PlayerDropItemEvent}.
@@ -25,6 +28,9 @@ import net.minecraft.world.phys.Vec3;
  * Not here: items a block or mob drops when it breaks or dies (those are the break and death events'), and items a
  * mod ejects from its own storage, which bridges fire this for before taking the item out.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "players, dispensers, droppers, mobs throwing (allays, villagers, piglins)",
+        bridges = "items the mod ejects from its own storage, before taking them out")
 public class ItemDropEvent extends ItemEvent implements Cancellable {
     private final Vec3 position;
     private boolean cancelled;

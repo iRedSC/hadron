@@ -131,3 +131,7 @@ extra["hadronTestServer.stage"] = { stage: String ->
     rootProject.subprojects.mapNotNull { it.tasks.findByName(stage) }
 }
 apply(from = rootProject.file("gradle/hadron-test-server.gradle.kts"))
+
+// bridgeHooksCheck (part of check): docs/bridge-hooks.md's tables match the @FiredBy on each event, and @FiredBy
+// matches what core fires. ./gradlew bridgeHooks rewrites the tables.
+apply(from = rootProject.file("gradle/hadron-bridge-hooks.gradle.kts"))

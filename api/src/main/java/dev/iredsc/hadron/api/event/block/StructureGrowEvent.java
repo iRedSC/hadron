@@ -1,16 +1,20 @@
 package dev.iredsc.hadron.api.event.block;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A tree, giant mushroom or huge fungus has grown from one block, on its own or from bone meal. Every block it placed
  * is in {@link #getBlocks()}; {@link #getPos()} is the sapling or mushroom it grew from. Cancel it and every block goes
  * back as it was.
  */
+@FiredBy(core = FULL)
 public class StructureGrowEvent extends BlockChangeEvent {
     private final boolean bonemeal;
 

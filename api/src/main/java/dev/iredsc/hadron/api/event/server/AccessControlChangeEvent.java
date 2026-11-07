@@ -2,9 +2,12 @@ package dev.iredsc.hadron.api.event.server;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 
 /**
  * A claim, team, party, alliance or trust list is about to change: created, removed, its area, its members or its
@@ -14,6 +17,9 @@ import java.util.UUID;
  * mod (FTB Chunks, Open Parties and Claims, FTB Teams) fires it before the change, drops the change if cancelled, and
  * fills in the system, the group, what changes and which players it affects.
  */
+@FiredBy(core = NONE,
+        bridges = "changes a claim, team, party, alliance or trust list",
+        fillIn = "what changed, who changed it")
 public class AccessControlChangeEvent extends ServerEvent implements Cancellable {
     public enum Change {
         CREATED, REMOVED, AREA, MEMBERS, FLAGS

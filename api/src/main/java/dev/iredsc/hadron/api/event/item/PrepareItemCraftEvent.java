@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -13,6 +14,8 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeHolder;
 
+import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
+
 /**
  * A crafting grid worked out what its ingredients make: a player's own 2x2 grid, a crafting table (or a mod's menu
  * built on vanilla's crafting grid), or a crafter about to craft or showing its result to someone looking in. Nothing
@@ -24,6 +27,9 @@ import net.minecraft.world.item.crafting.RecipeHolder;
  * <p>At a crafter, only a matching recipe's result can be changed or emptied; with no recipe matching, the crafter
  * makes nothing and this event doesn't fire for it.
  */
+@FiredBy(core = PARTIAL,
+        coreSees = "the 2x2 grid, crafting tables, the crafter, and mods' menus built on vanilla's crafting grid",
+        bridges = "the mod's own crafting grids, when they work out a result; honour the result a listener sets")
 public class PrepareItemCraftEvent extends ItemEvent {
     private final InventoryHolder holder;
     private final AbstractContainerMenu menu;

@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.block;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.core.BlockPos;
@@ -8,6 +9,8 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
 import org.joml.Matrix4d;
 import org.joml.Matrix4dc;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 
 /**
  * A group of blocks moves as one: a Create contraption, a Valkyrien Skies ship, an AE2 spatial transfer. Fired when it
@@ -19,6 +22,9 @@ import org.joml.Matrix4dc;
  * entering the world as {@link #getMoves()}, and every space the structure passes through or lands in as
  * {@link #getSweptSpace()}; while it only moves, with no blocks entering or leaving, moves may be empty.
  */
+@FiredBy(core = NONE,
+        bridges = "assembles, moves, rotates or disassembles a contraption, ship or spatial transfer",
+        fillIn = "source to target mapping, swept space, old and new transforms")
 public class StructureMoveEvent extends BlockMoveEvent {
     /** Which step of the structure's life this is. */
     public enum Phase {

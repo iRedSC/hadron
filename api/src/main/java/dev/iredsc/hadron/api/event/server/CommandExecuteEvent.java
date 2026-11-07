@@ -2,10 +2,13 @@ package dev.iredsc.hadron.api.event.server;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.server.level.ServerPlayer;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * Any command is about to run: typed by a player or the console, run by a command block, a quest reward, a function
@@ -13,6 +16,7 @@ import net.minecraft.server.level.ServerPlayer;
  * one event, and {@link #getSource()} says who runs it. Rewrite it with {@link #setCommand}, or cancel so it doesn't
  * run.
  */
+@FiredBy(core = FULL)
 public class CommandExecuteEvent extends ServerEvent implements Cancellable {
     private final Actor actor;
     private final CommandSourceStack source;

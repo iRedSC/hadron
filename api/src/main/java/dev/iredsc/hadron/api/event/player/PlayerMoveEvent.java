@@ -1,15 +1,19 @@
 package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.phys.Vec3;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A player has walked, swum, flown or fallen into another block. Fired at most once per tick, only when the block
  * changes. Cancel it and the player is put back where they were. A player riding something fires the vehicle's
  * {@link EntityMoveEvent} instead.
  */
+@FiredBy(core = FULL)
 public class PlayerMoveEvent extends EntityMoveEvent {
     public PlayerMoveEvent(ServerPlayer player, Vec3 from, Vec3 to) {
         super(player, from, to, new Actor.Player(player));

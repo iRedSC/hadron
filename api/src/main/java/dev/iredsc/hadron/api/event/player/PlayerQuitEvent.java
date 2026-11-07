@@ -1,13 +1,17 @@
 package dev.iredsc.hadron.api.event.player;
 
+import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A player is leaving; they're still in the world while this runs, so it's the place to save their data.
  * {@link #getQuitMessage()} is the "left the game" line about to be broadcast; change it with
  * {@link #setQuitMessage}, or set null for none. It replaces vanilla's line.
  */
+@FiredBy(core = FULL)
 public class PlayerQuitEvent extends PlayerEvent {
     private Component quitMessage;
 

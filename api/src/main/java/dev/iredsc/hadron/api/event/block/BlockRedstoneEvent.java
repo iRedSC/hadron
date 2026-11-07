@@ -2,10 +2,13 @@ package dev.iredsc.hadron.api.event.block;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 
 /**
  * An actor is about to change the redstone signal a block emits without changing its state: a logic network's
@@ -16,6 +19,9 @@ import net.minecraft.world.level.block.state.BlockState;
  * covers. A bridge fires it before its mod changes a signal kept outside the block state, applies
  * {@link #getNewCurrent()} afterwards, and keeps the old signal if it is cancelled.
  */
+@FiredBy(core = NONE,
+        bridges = "changes the signal a block emits without changing its state",
+        fillIn = "old and new signal, face")
 public class BlockRedstoneEvent extends BlockEvent implements Cancellable {
     private final int oldCurrent;
     private int newCurrent;

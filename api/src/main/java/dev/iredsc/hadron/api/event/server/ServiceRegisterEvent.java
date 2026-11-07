@@ -1,6 +1,9 @@
 package dev.iredsc.hadron.api.event.server;
 
+import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
+
+import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * A provider was registered for a service, such as an economy or permissions provider. Not
@@ -9,6 +12,7 @@ import dev.iredsc.hadron.api.plugin.JavaPlugin;
  * while another thread is announcing earlier ones is announced by that thread, so {@code register} can return before
  * its own event has been heard.
  */
+@FiredBy(core = FULL)
 public class ServiceRegisterEvent extends ServerEvent {
     private final Class<?> service;
     private final Object provider;
