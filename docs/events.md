@@ -218,7 +218,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 |---|---|
 | `ServerLoadEvent` *(after)* | once per start, after plugins enable |
 | `ServerListPingEvent` | a client's server list asks about the server; MOTD, shown player counts and the hover sample editable; not an action, so no actor |
-| `CommandExecuteEvent` | any command about to run, from a player, the console, a quest reward or a mod; actor and authority |
+| `CommandExecuteEvent` | any command about to run, from a player, the console, a quest reward, a mod or each line of a datapack function; actor and authority |
 | `AccessControlChangeEvent` | a claim, team, party, alliance or trust list changes: boundaries, members, flags; who changed it |
 | `DataRevealEvent` | server data about a block, entity or inventory is about to be sent to a player who didn't open it (Jade, WTHIT, map radar); fields removable |
 | `PluginEnableEvent`, `PluginDisableEvent` *(after)* | |
