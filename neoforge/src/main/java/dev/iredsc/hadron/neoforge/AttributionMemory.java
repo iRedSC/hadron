@@ -1,6 +1,5 @@
 package dev.iredsc.hadron.neoforge;
 
-import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
@@ -30,16 +29,13 @@ final class AttributionMemory implements Actors.Memory {
             .apply(i, (r, c, a) -> Attribution.none().withResponsible(r.orElse(null)).withController(c.orElse(null))
                     .withAuthority(a.orElse(null))));
 
-    @StaticState(reason = "NeoForge registers attachment types once, while the mod loads, and the mod is never reloaded")
     private static final DeferredRegister<AttachmentType<?>> ATTACHMENTS =
             DeferredRegister.create(NeoForgeRegistries.ATTACHMENT_TYPES, HadronMod.MOD_ID);
 
-    @StaticState(reason = "NeoForge registers attachment types once, while the mod loads, and the mod is never reloaded")
     static final Supplier<AttachmentType<Attribution>> ATTRIBUTION = ATTACHMENTS.register("attribution",
             () -> AttachmentType.builder(Attribution::none).serialize(CODEC, a -> !a.isEmpty()).build());
 
     /** Items a dead player keeps; copied to the respawned player and handed back then. */
-    @StaticState(reason = "NeoForge registers attachment types once, while the mod loads, and the mod is never reloaded")
     static final Supplier<AttachmentType<List<ItemStack>>> KEPT_ITEMS = ATTACHMENTS.register("kept_items",
             () -> AttachmentType.<List<ItemStack>>builder(() -> new ArrayList<>())
                     .serialize(ItemStack.CODEC.listOf(), list -> !list.isEmpty()).copyOnDeath().build());

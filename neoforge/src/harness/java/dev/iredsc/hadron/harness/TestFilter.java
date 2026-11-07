@@ -1,6 +1,5 @@
 package dev.iredsc.hadron.harness;
 
-import dev.iredsc.hadron.checks.StaticState;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.regex.Pattern;
@@ -12,7 +11,6 @@ import java.util.regex.Pattern;
  * every test.
  */
 record TestFilter(List<String> patterns, List<Pattern> compiled) {
-    @StaticState(reason = "two empty List.of() lists, which can't change")
     static final TestFilter ALL = new TestFilter(List.of(), List.of());
 
     /** Patterns separated by commas or new lines; blanks are ignored. */

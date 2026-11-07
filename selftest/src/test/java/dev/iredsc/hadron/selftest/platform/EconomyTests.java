@@ -107,7 +107,7 @@ public final class EconomyTests {
         newcomer.disconnect();
         t.tick(2);
         t.assertTrue(economy.hasAccount(id), name + " should have an account once they have joined, even offline");
-        t.assertFalse(economy.hasAccount(UUID.randomUUID()), "a stranger should have no account");
+        t.assertFalse(economy.hasAccount(new UUID(0, 1)), "a stranger should have no account");
         EconomyResult paid = economy.deposit(id, Economy.MONEY, new BigDecimal("1"));
         t.assertTrue(paid instanceof EconomyResult.Done, "paying offline " + name + " should work, but was " + paid);
     }

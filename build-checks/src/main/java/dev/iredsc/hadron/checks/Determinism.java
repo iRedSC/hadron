@@ -3,7 +3,6 @@ package dev.iredsc.hadron.checks;
 import static com.google.errorprone.BugPattern.SeverityLevel.ERROR;
 import static com.google.errorprone.matchers.method.MethodMatchers.constructor;
 import static com.google.errorprone.matchers.method.MethodMatchers.staticMethod;
-import static com.google.errorprone.matchers.method.MethodMatchers.instanceMethod;
 
 import com.google.auto.service.AutoService;
 import com.google.errorprone.BugPattern;
@@ -28,10 +27,16 @@ import com.sun.tools.javac.code.Symbol;
 import javax.inject.Inject;
 
 /**
- * Refuses the wall clock, sleeps and unseeded randomness where Hadron promises determinism: its {@code common} host
- * and tests. A test that sleeps or reads the clock passes or fails by how busy the machine is; Hadron's time is
- * server ticks and its randomness is seeded. It catches the common ways to read the clock, sleep or draw unseeded
- * randomness, not every one.
+ * Refuses the common ways to read the wall clock, sleep or draw unseeded randomness where Hadron promises
+ * determinism: its {@code common} host and tests. A test that sleeps or reads the clock passes or fails by how busy
+ * the machine is; Hadron's time is server ticks and its randomness is seeded.
+ *
+ * <p>Refused, as calls and as method references: Thread.sleep; System.currentTimeMillis and nanoTime; Minecraft's
+ * Util.getMillis, getNanos and getEpochMillis; java.time's no-argument now(); Clock.system*, InstantSource.system;
+ * new Date() and Calendar.getInstance() with no arguments; new Random(), SplittableRandom() and SecureRandom() with no
+ * seed, Math.random(), ThreadLocalRandom.current(), RandomGenerator.getDefault(), RandomSource.create() with no seed,
+ * UUID.randomUUID(), and Collections.shuffle(list). Seeded forms and now(Clock) pass. It never refuses valid code, and
+ * it isn't a proof: other ways to read the clock or draw randomness aren't caught.
  */
 @AutoService(BugChecker.class)
 @BugPattern(
@@ -61,49 +66,29 @@ public final class Determinism extends BugChecker
 
     private static final Matcher<ExpressionTree> CLOCK = Matchers.anyOf(
             staticMethod().onClass("java.lang.System").namedAnyOf("currentTimeMillis", "nanoTime"),
-            // The system clock itself: whatever reads it later (millis(), instant(), Instant.now(clock)) reads the
-            // wall clock. Clock.fixed(...) and Clock.offset of a fixed clock stay allowed.
-            staticMethod().onClass("java.time.Clock")
-                    .namedAnyOf("systemUTC", "systemDefaultZone", "system", "tickSeconds", "tickMinutes", "tickMillis"),
+            staticMethod().onClass("net.minecraft.Util").namedAnyOf("getMillis", "getNanos", "getEpochMillis"),
+            // The system clock itself: whatever reads it later reads the wall clock. Clock.fixed(...) passes.
+            staticMethod().onClass("java.time.Clock").namedAnyOf("systemUTC", "systemDefaultZone", "system"),
             staticMethod().onClass("java.time.InstantSource").named("system"),
-            // The old clock: new Date() and a Calendar made for now.
             constructor().forClass("java.util.Date").withNoParameters(),
-            constructor().forClass("java.util.GregorianCalendar").withNoParameters(),
-            staticMethod().onClass("java.util.Calendar").named("getInstance"),
-            // now() and now(ZoneId) read the system clock; now(Clock) reads the clock it's given.
-            Matchers.allOf(
-                    staticMethod().onClassAny("java.time.Instant", "java.time.LocalDateTime", "java.time.LocalTime",
-                                    "java.time.ZonedDateTime", "java.time.OffsetDateTime", "java.time.OffsetTime",
-                                    "java.time.LocalDate", "java.time.Year", "java.time.YearMonth",
-                                    "java.time.MonthDay")
-                            .named("now"),
-                    Matchers.not(staticMethod().anyClass().named("now").withParameters("java.time.Clock"))));
-    private static final Matcher<ExpressionTree> SLEEP = Matchers.anyOf(
-            staticMethod().onClass("java.lang.Thread").named("sleep"),
-            instanceMethod().onExactClass("java.util.concurrent.TimeUnit").named("sleep"));
+            staticMethod().onClass("java.util.Calendar").named("getInstance").withNoParameters(),
+            // now() reads the system clock; now(Clock) reads the clock it's given.
+            staticMethod().onClassAny("java.time.Instant", "java.time.LocalDateTime", "java.time.LocalTime",
+                            "java.time.ZonedDateTime", "java.time.OffsetDateTime", "java.time.OffsetTime",
+                            "java.time.LocalDate", "java.time.Year", "java.time.YearMonth", "java.time.MonthDay")
+                    .named("now").withNoParameters());
+    private static final Matcher<ExpressionTree> SLEEP = staticMethod().onClass("java.lang.Thread").named("sleep");
     private static final Matcher<ExpressionTree> RANDOM = Matchers.anyOf(
             staticMethod().onClass("java.lang.Math").named("random"),
             staticMethod().onClass("java.util.concurrent.ThreadLocalRandom").named("current"),
+            staticMethod().onClass("java.util.random.RandomGenerator").named("getDefault"),
             staticMethod().onClass("net.minecraft.util.RandomSource").named("create").withNoParameters(),
+            staticMethod().onClass("java.util.UUID").named("randomUUID"),
             constructor().forClass("java.util.Random").withNoParameters(),
             constructor().forClass("java.util.SplittableRandom").withNoParameters(),
-            // RandomGenerator.of(name) and a factory's create() seed themselves; create(seed) doesn't.
-            staticMethod().onClass("java.util.random.RandomGenerator").namedAnyOf("getDefault", "of"),
-            instanceMethod().onExactClass("java.util.random.RandomGeneratorFactory").named("create")
-                    .withNoParameters(),
+            constructor().forClass("java.security.SecureRandom").withNoParameters(),
             // shuffle(list) draws from a shared unseeded Random; shuffle(list, random) uses the one it's given.
-            staticMethod().onClass("java.util.Collections").named("shuffle").withParameters("java.util.List"),
-            Determinism::unseededAnonymous);
-
-    /** new Random() {}: an anonymous subclass calls the same unseeded constructor. */
-    private static boolean unseededAnonymous(ExpressionTree tree, VisitorState state) {
-        if (!(tree instanceof NewClassTree created) || created.getClassBody() == null
-                || !created.getArguments().isEmpty()) {
-            return false;
-        }
-        return state.getTypes().erasure(ASTHelpers.getType(created.getIdentifier())).tsym.getQualifiedName()
-                .contentEquals("java.util.Random");
-    }
+            staticMethod().onClass("java.util.Collections").named("shuffle").withParameters("java.util.List"));
 
     @Override
     public Description matchMethodInvocation(MethodInvocationTree tree, VisitorState state) {
@@ -133,7 +118,8 @@ public final class Determinism extends BugChecker
                     + "CompletableFuture, a latch).";
         } else if (RANDOM.matches(tree, state)) {
             message = "Unseeded randomness can't be repeated when a test fails. Pass a seed: new Random(seed), "
-                    + "new SplittableRandom(seed), RandomSource.create(seed), Collections.shuffle(list, random), or use the level's own RandomSource, "
+                    + "new SplittableRandom(seed), RandomSource.create(seed), new UUID(random.nextLong(), random.nextLong()), "
+                    + "Collections.shuffle(list, random), or use the level's own RandomSource, "
                     + "so the same seed gives the same result.";
         } else {
             return Description.NO_MATCH;

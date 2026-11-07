@@ -1,6 +1,5 @@
 package dev.iredsc.hadron.common;
 
-import dev.iredsc.hadron.checks.StaticState;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
@@ -26,11 +25,8 @@ import org.slf4j.Logger;
  * added again to each new one ({@link #apply}). Dispatcher preparation can run off the server thread.
  */
 final class Commands {
-    @StaticState(reason = "Brigadier's own child maps, opened once by reflection; the handle keeps no state of ours")
     private static final Field CHILDREN = field("children");
-    @StaticState(reason = "Brigadier's own child maps, opened once by reflection; the handle keeps no state of ours")
     private static final Field LITERALS = field("literals");
-    @StaticState(reason = "Brigadier's own child maps, opened once by reflection; the handle keeps no state of ours")
     private static final Field ARGUMENTS = field("arguments");
 
     /** What plugins registered and haven't undone, in registration order. */

@@ -10,35 +10,35 @@ import com.google.errorprone.bugpatterns.BugChecker;
 import com.google.errorprone.bugpatterns.BugChecker.VariableTreeMatcher;
 import com.google.errorprone.matchers.Description;
 import com.google.errorprone.util.ASTHelpers;
+import com.sun.source.tree.ClassTree;
 import com.sun.source.tree.ExpressionTree;
-import com.sun.source.tree.LambdaExpressionTree;
 import com.sun.source.tree.LiteralTree;
-import com.sun.source.tree.MemberReferenceTree;
 import com.sun.source.tree.MethodInvocationTree;
 import com.sun.source.tree.NewArrayTree;
 import com.sun.source.tree.NewClassTree;
+import com.sun.source.tree.Tree;
 import com.sun.source.tree.VariableTree;
-import com.sun.tools.javac.code.Flags;
+import com.sun.tools.javac.api.JavacTrees;
 import com.sun.tools.javac.code.Attribute;
+import com.sun.tools.javac.code.Flags;
 import com.sun.tools.javac.code.Symbol;
 import com.sun.tools.javac.code.Symbol.MethodSymbol;
 import com.sun.tools.javac.code.Symbol.VarSymbol;
 import com.sun.tools.javac.code.Type;
 import java.util.List;
 import javax.inject.Inject;
-import java.util.Set;
 import javax.lang.model.element.ElementKind;
 import javax.tools.JavaFileObject;
 
 /**
- * Refuses a static field that holds state: one that isn't final, or is final but holds anything not known to be
- * immutable (a collection, an array, a ThreadLocal, an object with a field that can change). A plugin's classes are reloaded with a new class loader, so static state either outlives the
- * reload (keeping the old class loader alive) or silently starts empty, and the plugin looks fine until a later
- * reload.
+ * Refuses the common ways to keep state in a static field: one that isn't final, or a final one holding a mutable
+ * kind of value (a java.util collection or map that isn't an unmodifiable form, a non-empty array, an atomic,
+ * ThreadLocal, ClassValue, StringBuilder, or a constant of this build's enum that keeps state). A plugin's classes
+ * are reloaded with a new class loader, so static state either outlives the reload (keeping the old class loader
+ * alive) or silently starts empty, and the plugin looks fine until a later reload.
  *
- * <p>It catches the common mistakes, not every way to hide state. Known limits: a mutable object inside an
- * unmodifiable collection ({@code List.of(new AtomicInteger())}), an inner-class instance that holds a mutable outer
- * object, and a plugin's own PersistentDataType returned through a method typed as the interface.
+ * <p>It never refuses valid code, and it isn't a proof: any other value passes, so other ways to hide state (a
+ * plugin's own class with a mutable field, a mutable object inside {@code List.of(...)}) aren't caught.
  */
 @AutoService(BugChecker.class)
 @BugPattern(
@@ -62,46 +62,12 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
         exemptions = flags.getBoolean(ALLOW_EXEMPTIONS).orElse(false);
     }
 
-    /**
-     * Types whose instances never change once built. Anything else might, so a static final field of another type is
-     * refused unless its initializer is known to build an unmodifiable value ({@link #immutableValue}).
-     */
-    private static final Set<String> IMMUTABLE = Set.of(
-            "java.lang.String", "java.lang.Boolean", "java.lang.Byte", "java.lang.Character", "java.lang.Short",
-            "java.lang.Integer", "java.lang.Long", "java.lang.Float", "java.lang.Double", "java.lang.Class",
-            "java.util.regex.Pattern", "java.lang.StackWalker",
-            // JDK value classes; some cache a hash or string in a non-final field, which never shows.
-            "java.math.BigDecimal", "java.math.BigInteger", "java.math.MathContext", "java.nio.charset.Charset",
-            "java.util.UUID", "java.util.Locale", "java.util.Currency", "java.net.URI", "java.nio.file.Path",
-            "java.time.Duration", "java.time.Instant", "java.time.LocalDate", "java.time.LocalTime",
-            "java.time.LocalDateTime", "java.time.ZonedDateTime", "java.time.OffsetDateTime", "java.time.ZoneId",
-            "java.time.ZoneOffset", "java.time.Period", "java.time.Year", "java.time.YearMonth",
-            "java.time.MonthDay", "java.time.format.DateTimeFormatter",
-            // A logger is looked up by name from the logging system's own registry, so it holds nothing of the
-            // class that keeps it and pins no class loader.
-            "org.slf4j.Logger", "org.apache.logging.log4j.Logger",
-            // Built once and never changed; Minecraft's codecs are made of stateless functions by design.
-            "com.google.gson.Gson", "com.mojang.serialization.Codec", "com.mojang.serialization.MapCodec",
-            "net.minecraft.network.codec.StreamCodec",
-            // Minecraft's block position; its mutable form is BlockPos.MutableBlockPos, a different class.
-            "net.minecraft.core.BlockPos");
+    /** Mutable however they're built. */
+    private static final List<String> MUTABLE = List.of("java.lang.ThreadLocal", "java.lang.ClassValue",
+            "java.lang.StringBuilder", "java.lang.StringBuffer");
 
-    private static final String PERSISTENT_DATA_TYPE = "dev.iredsc.hadron.api.data.PersistentDataType";
-
-    /** Types whose fields look immutable but whose value is kept elsewhere, per thread or per class. */
-    private static final List<String> THREAD_LOCAL = List.of("java.lang.ThreadLocal", "java.lang.ClassValue");
-
-    /** Owner classes whose static factories return unmodifiable collections. */
-    private static final Set<String> IMMUTABLE_OWNERS = Set.of(
-            "java.util.List", "java.util.Set", "java.util.Map", "java.util.EnumSet");
-
-    /** java.util.Collections' factories that return unmodifiable views or empty collections. */
-    private static final Set<String> COLLECTIONS_IMMUTABLE = Set.of(
-            "emptyList", "emptySet", "emptyMap", "emptyNavigableMap", "emptyNavigableSet", "emptySortedMap",
-            "emptySortedSet", "singleton", "singletonList", "singletonMap", "unmodifiableCollection",
-            "unmodifiableList", "unmodifiableMap", "unmodifiableNavigableMap", "unmodifiableNavigableSet",
-            "unmodifiableSet", "unmodifiableSequencedCollection", "unmodifiableSequencedMap",
-            "unmodifiableSequencedSet", "unmodifiableSortedMap", "unmodifiableSortedSet", "nCopies");
+    /** Mutable unless built by one of {@link #unmodifiable}'s factories. */
+    private static final List<String> COLLECTIONS = List.of("java.util.Collection", "java.util.Map");
 
     @Override
     public Description matchVariable(VariableTree tree, VisitorState state) {
@@ -113,18 +79,20 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
         // Mixin @Shadow fields are Minecraft's, declared again only so the mixin can name them.
         if (ASTHelpers.hasAnnotation(sym, "org.spongepowered.asm.mixin.Shadow", state)) return Description.NO_MATCH;
 
-        String problem = problem(sym, tree.getInitializer(), state);
+        String problem = (sym.flags() & Flags.FINAL) == 0
+                ? "isn't final, so it can be reassigned"
+                : held(sym.type, tree.getInitializer(), state);
         if (problem == null) return Description.NO_MATCH;
 
-        Attribute.Compound exemption = exemption(sym);
+        // On a class, it exempts the static fields the class declares.
+        Attribute.Compound exemption = exemption(sym) != null ? exemption(sym) : exemption(sym.owner);
         if (exemption != null) {
             if (!exemptions) {
                 return describe(tree, "@StaticState is only for Hadron's own code. A plugin keeps state on its "
                         + "plugin instance (a field of the class extending JavaPlugin) or in PersistentData, so a "
                         + "reload starts clean; remove @StaticState and move the field there.");
             }
-            String reason = reason(exemption);
-            if (reason.isBlank()) {
+            if (reason(exemption).isBlank()) {
                 return describe(tree, "@StaticState needs a reason that says why this state must be static and "
                         + "what clears it, e.g. @StaticState(reason = \"cleared in the server-stopped hook\").");
             }
@@ -133,45 +101,94 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
         return describe(tree, "Static field '" + sym.getSimpleName() + "' " + problem + ". Static state outlives a "
                 + "plugin reload: the old class loader stays alive with stale data, or the new one starts empty, and "
                 + "it only shows several reloads later. Keep it in a field of the plugin instance (or an object the "
-                + "plugin owns), or in PersistentData if it must survive restarts. A constant is fine as static "
-                + "final with an immutable value: List.of(...), Set.of(...), Map.of(...), a String, a primitive, an "
-                + "enum, a BigDecimal, UUID or java.time value, a PersistentDataType, or a record, enum or final class whose fields are all final and immutable too." + (exemptions ? " In Hadron's own code, if it must be static, annotate it "
-                + "@StaticState(reason = \"...\") saying what clears it." : ""));
+                + "plugin owns), or in PersistentData if it must survive restarts. A constant collection is fine "
+                + "as List.of(...), Set.of(...), Map.of(...) or List.copyOf(...)."
+                + (exemptions ? " In Hadron's own code, if it must be static, annotate it "
+                        + "@StaticState(reason = \"...\") saying what clears it." : ""));
     }
 
-    /** Why the field holds state, or null when it doesn't. */
-    private String problem(VarSymbol sym, ExpressionTree init, VisitorState state) {
-        if ((sym.flags() & Flags.FINAL) == 0) return "isn't final, so it can be reassigned";
-        Type type = sym.type;
-        if (type instanceof Type.ArrayType) {
+    /** Why a final field of this type and initializer holds state, or null when it isn't a known-mutable kind. */
+    private String held(Type declared, ExpressionTree init, VisitorState state) {
+        if (init != null && init.getKind() == Tree.Kind.NULL_LITERAL) return null;
+        Type type = init == null || ASTHelpers.getType(init) == null ? declared : ASTHelpers.getType(init);
+        if (declared instanceof Type.ArrayType || type instanceof Type.ArrayType) {
             return emptyArray(init) ? null : "holds an array, whose elements can be changed";
         }
-        // A lambda or a Type::method made in a static initializer captures nothing but other static fields, which
-        // are checked where they're declared.
-        if (init instanceof LambdaExpressionTree) return null;
-        if (init instanceof MemberReferenceTree ref && ASTHelpers.getSymbol(ref.getQualifierExpression())
-                instanceof Symbol.TypeSymbol) {
-            return null;
+        for (String name : MUTABLE) {
+            if (isSubtype(type, name, state)) return "holds a " + name(type, state) + ", which is state";
         }
-        // Another static final field's value, compiled from source with this check, so checked where it's declared.
-        if (init != null && ASTHelpers.getSymbol(init) instanceof VarSymbol other && other.isStatic()
-                && (other.flags() & Flags.FINAL) != 0 && other.getKind() == ElementKind.FIELD
-                && fromSource(other.enclClass())) {
-            return null;
-        }
-        // The value's own type, when the initializer says more than the field's declared type: new Foo(...) holds
-        // exactly a Foo, and SomeClass.CONSTANT holds that constant's type.
-        Type held = init == null || ASTHelpers.getType(init) == null ? type : ASTHelpers.getType(init);
-        for (String name : THREAD_LOCAL) {
-            if (ASTHelpers.isSubtype(held, state.getTypeFromString(name), state)) {
-                return "holds a " + name(held, state) + ", whose value per "
-                        + "thread or class is state";
+        for (Type t = type; t != null && t.tsym != null; t = state.getTypes().supertype(t)) {
+            if (t.tsym.getQualifiedName().toString().startsWith("java.util.concurrent.atomic.")) {
+                return "holds a " + name(type, state) + ", which is state";
             }
         }
-        if (knownImmutable(held, init instanceof NewClassTree, state, 0) || immutableValue(type, init, state)) {
-            return null;
+        for (String name : COLLECTIONS) {
+            if (isSubtype(type, name, state) && !unmodifiable(type, init, state)) {
+                return "holds a " + name(type, state) + ", which can be changed";
+            }
         }
-        return "holds a " + name(held, state) + ", which isn't known to be immutable";
+        // An enum constant of this build's enum, whose instance fields are its state: the singleton pattern.
+        if (!(state.getTypes().erasure(type).tsym instanceof Symbol.ClassSymbol cls)) return null;
+        if (cls.isAnonymous() && init instanceof NewClassTree created && created.getClassBody() != null) {
+            if (!(cls.getSuperclass().tsym instanceof Symbol.ClassSymbol parent)
+                    || (parent.flags() & Flags.ENUM) == 0) {
+                return null;
+            }
+            if (statefulFields(created.getClassBody(), state)) {
+                return "holds a " + name(type, state) + " whose body has a field that holds state";
+            }
+            cls = parent;
+        }
+        if ((cls.flags() & Flags.ENUM) == 0 || !fromSource(cls) || vouched(cls)) return null;
+        return JavacTrees.instance(state.context).getTree(cls) instanceof ClassTree body
+                && statefulFields(body, state)
+                ? "holds a " + name(type, state) + ", an enum with a field that holds state" : null;
+    }
+
+    /** In Hadron's own code, an enum annotated @StaticState(reason = ...) vouches for its constants. */
+    private boolean vouched(Symbol.ClassSymbol cls) {
+        Attribute.Compound a = exemption(cls);
+        return a != null && exemptions && !reason(a).isBlank();
+    }
+
+    /** Whether the class body declares an instance field that holds state. */
+    private boolean statefulFields(ClassTree body, VisitorState state) {
+        for (Tree member : body.getMembers()) {
+            if (member instanceof VariableTree field && ASTHelpers.getSymbol(field) instanceof VarSymbol v
+                    && !v.isStatic() && stateful(v, field.getInitializer(), state)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** A field set only in a constructor is judged by its declared type, so List<String> there passes. */
+    private boolean stateful(VarSymbol field, ExpressionTree init, VisitorState state) {
+        if ((field.flags() & Flags.FINAL) == 0) return true;
+        Symbol.TypeSymbol tsym = state.getTypes().erasure(field.type).tsym;
+        if (init == null && tsym instanceof Symbol.ClassSymbol cls && cls.isInterface()) return false;
+        if (tsym instanceof Symbol.ClassSymbol cls && (cls.flags() & Flags.ENUM) != 0) return false;
+        return held(field.type, init, state) != null;
+    }
+
+    /** List.of, Set.copyOf, Map.ofEntries, Collections.unmodifiable*, empty* and singleton*, stream().toList(). */
+    private static boolean unmodifiable(Type type, ExpressionTree init, VisitorState state) {
+        if (state.getTypes().erasure(type).tsym.getQualifiedName().toString()
+                .startsWith("com.google.common.collect.Immutable")) {
+            return true;
+        }
+        if (!(init instanceof MethodInvocationTree call) || !(ASTHelpers.getSymbol(call) instanceof MethodSymbol m)) {
+            return false;
+        }
+        String owner = m.owner.getQualifiedName().toString();
+        String name = m.getSimpleName().toString();
+        return switch (owner) {
+            case "java.util.List", "java.util.Set", "java.util.Map" -> name.startsWith("of") || name.equals("copyOf");
+            case "java.util.Collections" -> name.startsWith("unmodifiable") || name.startsWith("empty")
+                    || name.startsWith("singleton") || name.equals("nCopies");
+            case "java.util.stream.Stream" -> name.equals("toList");
+            default -> false;
+        };
     }
 
     /** The type's simple name, or for an anonymous class, the name of what it extends or implements. */
@@ -184,69 +201,12 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
         return tsym.getSimpleName().toString();
     }
 
-    /**
-     * Primitives, {@link #IMMUTABLE}, the api's persistent data types, library enums, records of known immutable components, and classes whose every
-     * instance field (theirs and their superclasses') is final and itself known immutable, as far down as it goes.
-     * The class must be final unless {@code exact}, when {@code new} made exactly it. A type variable or an interface
-     * could be anything, so it isn't. In Hadron's own code, a class annotated {@code @StaticState(reason = ...)}
-     * vouches for its instances.
-     */
-    private boolean knownImmutable(Type type, boolean exact, VisitorState state, int depth) {
-        if (type.isPrimitive()) return true;
-        if (depth > 8) return false;
-        Symbol.TypeSymbol tsym = state.getTypes().erasure(type).tsym;
-        if (IMMUTABLE.contains(tsym.getQualifiedName().toString())) return true;
-        if (!(tsym instanceof Symbol.ClassSymbol cls)) return false;
-        // The api's persistent data types are conversions with no state of their own; a plugin's own class that
-        // implements one is checked below like any other.
-        if (cls.isInterface() && isSubtype(type, PERSISTENT_DATA_TYPE, state)) return true;
-        if ((cls.flags() & Flags.ENUM) != 0) {
-            // A library's enum isn't reloaded with the plugin; one compiled here is checked like any class, whose
-            // constants are created once and implicitly final.
-            return !fromSource(cls) || fieldsImmutable(type, cls, state, depth);
-        }
-        Attribute.Compound vouched = exemption(cls);
-        if (vouched != null && exemptions && !reason(vouched).isBlank()) return true;
-        if (cls.isRecord()) {
-            for (Symbol.RecordComponent component : cls.getRecordComponents()) {
-                // As a member of this instance's type: Pair<String, Integer>'s first is a String, not an A.
-                if (!knownImmutable(state.getTypes().memberType(type, component), false, state, depth + 1)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-        if (cls.isInterface() || (!exact && (cls.flags() & Flags.FINAL) == 0)) return false;
-        Type superclass = state.getTypes().supertype(type);
-        if (superclass.tsym != null && !superclass.tsym.getQualifiedName().contentEquals("java.lang.Object")
-                && !knownImmutable(superclass, true, state, depth + 1)) {
-            return false;
-        }
-        return fieldsImmutable(type, cls, state, depth);
-    }
-
-    /**
-     * Whether every instance field of the class is final and known immutable, typed as a member of {@code type} so
-     * Optional<String>'s value is a String; its own type counts as checked.
-     */
-    private boolean fieldsImmutable(Type type, Symbol.ClassSymbol cls, VisitorState state, int depth) {
-        for (Symbol member : cls.getEnclosedElements()) {
-            if (!(member instanceof VarSymbol field) || field.isStatic()) continue;
-            if ((field.flags() & Flags.FINAL) == 0) return false;
-            if (field.type.tsym != cls
-                    && !knownImmutable(state.getTypes().memberType(type, field), false, state, depth + 1)) {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private static boolean isSubtype(Type type, String name, VisitorState state) {
         Type other = state.getTypeFromString(name);
         return other != null && ASTHelpers.isSubtype(type, other, state);
     }
 
-    /** Compiled from source in this build, so checked here, as opposed to read from a library's class file. */
+    /** Compiled from source in this build, so reloaded with the plugin, as opposed to read from a library. */
     private static boolean fromSource(Symbol.ClassSymbol cls) {
         return cls.classfile != null && cls.classfile.getKind() == JavaFileObject.Kind.SOURCE;
     }
@@ -257,28 +217,6 @@ public final class NoStaticMutableState extends BugChecker implements VariableTr
         if (array.getInitializers() != null) return array.getInitializers().isEmpty();
         return array.getDimensions().size() == 1 && array.getDimensions().get(0) instanceof LiteralTree size
                 && Integer.valueOf(0).equals(size.getValue());
-    }
-
-    /** Whether the field's type or initializer guarantees an unmodifiable collection. */
-    private static boolean immutableValue(Type type, ExpressionTree init, VisitorState state) {
-        String typeName = state.getTypes().erasure(type).tsym.getQualifiedName().toString();
-        if (typeName.startsWith("com.google.common.collect.Immutable")) return true;
-        if (!(init instanceof MethodInvocationTree call)) return false;
-        MethodSymbol method = ASTHelpers.getSymbol(call);
-        if (method == null) return false;
-        String owner = method.owner.getQualifiedName().toString();
-        String name = method.getSimpleName().toString();
-        if (owner.equals("java.util.EnumSet")) return false; // EnumSet.of is mutable
-        if (IMMUTABLE_OWNERS.contains(owner) && method.isStatic()
-                && (name.equals("of") || name.equals("copyOf") || name.equals("ofEntries") || name.equals("entry"))) {
-            return true;
-        }
-        if (owner.equals("java.util.Collections") && COLLECTIONS_IMMUTABLE.contains(name)) return true;
-        // stream.toList() is unmodifiable; Collectors.toList() isn't.
-        if (owner.equals("java.util.stream.Stream") && name.equals("toList")) return true;
-        Type returned = method.getReturnType();
-        return returned != null && state.getTypes().erasure(returned).tsym.getQualifiedName().toString()
-                .startsWith("com.google.common.collect.Immutable");
     }
 
     private Description describe(VariableTree tree, String message) {

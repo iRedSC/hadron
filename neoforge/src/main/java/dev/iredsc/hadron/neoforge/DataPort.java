@@ -1,6 +1,5 @@
 package dev.iredsc.hadron.neoforge;
 
-import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.data.PersistentData;
 import java.util.function.Supplier;
@@ -35,22 +34,18 @@ final class DataPort {
         }
     };
 
-    @StaticState(reason = "NeoForge registers attachment types once, while the mod loads, and the mod is never reloaded")
     private static final DeferredRegister<AttachmentType<?>> ATTACHMENTS =
             DeferredRegister.create(NeoForgeRegistries.ATTACHMENT_TYPES, HadronMod.MOD_ID);
 
     /** {@code PersistentData.of(entity | blockEntity | chunk | level)}. A player keeps theirs across death. */
-    @StaticState(reason = "NeoForge registers attachment types once, while the mod loads, and the mod is never reloaded")
     static final Supplier<AttachmentType<CompoundTag>> DATA = ATTACHMENTS.register("data",
             () -> AttachmentType.builder(() -> new CompoundTag()).serialize(COMPOUND).copyOnDeath().build());
 
     /** {@code PersistentData.of(level, pos)}, per chunk. Mirrored in the chunk's {@link DataChunk} field. */
-    @StaticState(reason = "NeoForge registers attachment types once, while the mod loads, and the mod is never reloaded")
     static final Supplier<AttachmentType<DataBlocks>> BLOCKS = ATTACHMENTS.register("block_data",
             () -> AttachmentType.builder(DataBlocks::new).serialize(DataBlocks.SERIALIZER).build());
 
     /** A pushed block's position data, carried by its moving piston block entity until it lands. */
-    @StaticState(reason = "NeoForge registers attachment types once, while the mod loads, and the mod is never reloaded")
     static final Supplier<AttachmentType<CompoundTag>> MOVING = ATTACHMENTS.register("moving_block_data",
             () -> AttachmentType.builder(() -> new CompoundTag()).serialize(COMPOUND).build());
 

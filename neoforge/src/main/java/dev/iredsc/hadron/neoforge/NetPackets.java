@@ -32,9 +32,7 @@ final class NetPackets {
     @StaticState(reason = "a sequence ordering handlers registered at one priority; it only needs to grow")
     private static long registered;
 
-    @StaticState(reason = "packet handlers by direction; the disable hook (remove) drops a plugin's")
     static final Side OUT = new Side(true);
-    @StaticState(reason = "packet handlers by direction; the disable hook (remove) drops a plugin's")
     static final Side IN = new Side(false);
 
     static final class Handler implements PacketRegistration {

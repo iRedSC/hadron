@@ -159,7 +159,6 @@ final class Trace {
     /** Narrows a trace to one actor, a world, or a radius around where it was started. All must match. */
     record Filters(@Nullable String byKind, @Nullable UUID byPlayer, @Nullable String byName,
             @Nullable ResourceKey<Level> world, @Nullable ServerLevel nearLevel, @Nullable Vec3 nearPos, double radius) {
-        @StaticState(reason = "every component null or zero, so it holds no world or level")
         static final Filters NONE = new Filters(null, null, null, null, null, null, 0);
 
         boolean none() {
