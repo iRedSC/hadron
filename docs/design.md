@@ -12,6 +12,17 @@ Someone with no coding background asks their agent "make me a Hadron plugin for 
 
 Plugin authors who code get the same benefits: hot reload, checked configs, and nothing to clean up on disable.
 
+## Built to be verified
+
+Hadron makes promises (a cancel fully undoes, a machine's break is its owner's, a vanished player is never sent), and its users are agents who can't watch a server to see whether they hold. So every promise is something a machine can check, and the checks are enforced, not hoped for.
+
+- **Two tiers of tests.** Fast tests run on the JVM with Minecraft's registries but no server or world, in milliseconds, for everything that decides rather than acts. In-game tests run in a headless server with real players over an in-memory connection, for everything that touches the world, a player or a packet ([testing.md](testing.md)). A warm test server reruns a plugin's in-game tests in about a second after each build, so iterating doesn't pay a server boot each time. There is no fake Minecraft: a mock that disagrees with the real game is a test that passes while the plugin is broken.
+- **Logic in the middle, Minecraft at the edges.** Decisions (who is the actor, which event fits, refuse or allow, the new balance) live in plain functions the fast tier tests; mixins and listeners only translate between Minecraft and those functions.
+- **Every claim has a test, and the build checks it.** A test declares what it proves with `@Covers`. Every shipped event, bridge contract and public API method must be covered, or the build fails and names what isn't: an event ships only with its producer and a test.
+- **Deterministic.** Time is server ticks, randomness can be seeded, and nothing in Hadron is timed by the wall clock where a test can't control it.
+- **Results machines read.** Test reports come as JSON as well as text, so an agent reads exactly which test failed and why.
+- **Verifiable live, too.** `/hadron trace` shows events as they fire on a real server, with actor, operation and outcome, so an owner or agent can see that a mod's machines are covered, alongside the coverage report for mods without bridges.
+
 ## Write a plugin once
 
 A plugin is written once and runs on every loader Hadron supports. Only Hadron and its bridges are ported to a new loader.
