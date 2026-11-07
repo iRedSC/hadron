@@ -93,8 +93,8 @@ Payload: the entity, its position, and what changed.
 | Event | What | Core chokepoint |
 |---|---|---|
 | `EntitySpawnEvent` | an entity enters the world; reason (natural, spawner, egg, breeding, summoned, released from capture, actor). Not for dropped items, experience orbs or falling blocks, whose cancelling would destroy what they carry; see `ItemDropEvent` | `addFreshEntity` |
-| `EntityRemoveEvent` | an entity leaves the world other than by dying or unloading; reason (killed without damage, dismissed, converted, discarded) | `Entity.remove` with a reason other than unload |
-| └ `EntityCaptureEvent` | an entity is stored into an item, block or player's carry state (bucket, mob catcher, Carry On) | `Bucketable`, bridges |
+| `EntityRemoveEvent` | an entity leaves the world other than by dying or unloading; reason (killed without damage, dismissed, converted, discarded) | not shipped yet: see "Not shipped yet" |
+| └ `EntityCaptureEvent` | an entity is stored into an item, block or player's carry state (bucket, mob catcher, Carry On) | not shipped yet: see "Not shipped yet" |
 | `EntityDamageEvent` | an entity is hurt; damage source, actor, and the weapon or spell | `hurt` |
 | `EntityDeathEvent` | an entity is dying; drops, experience and where each item goes are editable; not cancellable | `die` |
 | └ `PlayerDeathEvent` | a player is dying; each item, including extra slots, is assigned to kept, dropped, grave or destroyed; the death line is editable and replaces vanilla's | `ServerPlayer.die` |
@@ -102,7 +102,7 @@ Payload: the entity, its position, and what changed.
 | `EntityCombustEvent` | an entity is set on fire | `igniteForSeconds`, `setRemainingFireTicks` |
 | `EntityPotionEffectEvent` | a registered effect added, changed or removed | `addEffect`, `removeEffect` |
 | `EntityStatusChangeEvent` | a restriction outside the effect registry: stunned, frozen, AI disabled, casting interrupted, held | `Mob.setNoAi`, bridges |
-| `EntityAttributeChangeEvent` | an attribute's base value or modifiers change; source of the modifier | `AttributeInstance` setters |
+| `EntityAttributeChangeEvent` | an attribute's base value or modifiers change; source of the modifier | not shipped yet: see "Not shipped yet" |
 | `EntityVelocityEvent` | an actor pushes, pulls or launches an entity; old and new velocity | `setDeltaMovement` while something other than the entity acts |
 | └ `EntityKnockbackEvent` | knockback from a hit or blast | `LivingEntity.knockback` |
 | `EntityMoveEvent` | an entity with an actor or controller (a player, a vehicle) crosses into another block | movement ticks, only when a listener's area is involved |
@@ -110,19 +110,20 @@ Payload: the entity, its position, and what changed.
 | `EntityTeleportEvent` | an entity moves other than by walking; cause, and everything travelling with it (passengers, pets, leashed mobs); the destination (world, position, facing) is editable | `teleportTo`, `changeDimension` |
 | `EntityTargetEvent` | a mob or turret picks a target | `setTarget` |
 | `EntityControlChangeEvent` | who controls an entity changes without mounting: charmed, enthralled, a drone linked to a monitor, a guard assigned; expiry is *(after)* | bridge |
-| `EntityRelationshipChangeEvent` | reputation or a lasting relationship changes (villager gossip, an NPC's marriage) | `GossipContainer`, bridges |
+| `EntityRelationshipChangeEvent` | reputation or a lasting relationship changes (villager gossip, an NPC's marriage) | not shipped yet: see "Not shipped yet" |
 | `EntityUseEvent` | an actor right-clicks an entity | `interact` |
 | `EntityMountEvent`, `EntityDismountEvent` | riding, including vehicles and a player carrying another | `startRiding`, `stopRiding` |
-| `EntityLeashEvent`, `EntityUnleashEvent` | | `Leashable` |
-| `EntityShearEvent` | | `Shearable` |
+| `EntityLeashEvent`, `EntityUnleashEvent` | | not shipped yet: see "Not shipped yet" |
+| `EntityShearEvent` | | not shipped yet: see "Not shipped yet" |
 | `EntityTameEvent`, `EntityBreedEvent` | | `tame`, `spawnChildFromBreeding` |
 | `EntityTransformEvent` | an entity becomes another (zombie villager, a mod's conversion) | `convertTo` |
-| `EntityAirChangeEvent`, `FoodLevelChangeEvent` | | `setAirSupply`, `FoodData` |
+| `EntityAirChangeEvent` | | `setAirSupply` |
+| `FoodLevelChangeEvent` | | not shipped yet: see "Not shipped yet" |
 | `ExperiencePickupEvent` | an experience orb is collected by a player or a machine (a magnet storing XP as fluid) | `ExperienceOrb.playerTouch`, bridges |
 | `ProjectileLaunchEvent` | anything fired or thrown; the actor is the shooter | `Projectile` spawn |
 | `ProjectileHitEvent` | a projectile, or a hitscan shot with no projectile, hits a block or entity; hit position, origin, weapon | `onHit`, bridges for hitscan |
 | `HangingPlaceEvent`, `HangingBreakEvent` | item frames, paintings | `HangingEntity` |
-| `ArmorStandManipulateEvent` | equipment taken or placed on a stand | `ArmorStand.interactAt` |
+| `ArmorStandManipulateEvent` | equipment taken or placed on a stand | not shipped yet: see "Not shipped yet" |
 
 ### Items: `ItemEvent`
 
@@ -184,7 +185,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 | `LightningStrikeEvent` | | `LightningBolt` spawn |
 | `WeatherChangeEvent` | rain, thunder, clear; actor for a ritual or weather machine | `ServerLevel.setWeatherParameters` |
 | `TimeSkipEvent` | an actor changes the time or whether it advances | `ServerLevel.setDayTime`, `PrimaryLevelData.setDayTime` |
-| `BiomeChangeEvent` | biome cells change, with or without blocks changing | `PalettedContainer` writes, bridges |
+| `BiomeChangeEvent` | biome cells change, with or without blocks changing | not shipped yet: see "Not shipped yet" |
 | `TickAccelerateEvent` | an actor speeds up blocks or entities in an area; one event per accelerator per change, never per extra tick | bridge (Torcherino, time bottles) |
 | `ChunkLoadEvent`, `ChunkUnloadEvent` *(after)* | | `ChunkMap` |
 | `ChunkForceLoadEvent` | an actor keeps chunks loaded: a chunk loader, an anchor, a claim | `ServerChunkCache` tickets, `setChunkForced` |

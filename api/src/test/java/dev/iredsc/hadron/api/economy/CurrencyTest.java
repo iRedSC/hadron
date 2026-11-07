@@ -97,6 +97,13 @@ class CurrencyTest {
                 () -> new Currency("gems", "gem", "gems", decimals));
         assertTrue(e.getMessage().contains("at most " + Currency.MAX_DECIMALS), e.getMessage());
     }
+    @Covers(value = Currency.class, method = "decimals")
+    @ParameterizedTest
+    @ValueSource(ints = {0, Currency.MAX_DECIMALS})
+    void zeroToSixDecimalsAreAccepted(int decimals) {
+        assertEquals(decimals, new Currency("gems", "gem", "gems", decimals).decimals());
+    }
+
     @Test
     void moneyIsDollarsWithCents() {
         assertEquals(new Currency("money", "dollar", "dollars", 2), Economy.MONEY);

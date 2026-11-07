@@ -108,6 +108,16 @@ class NodeTest {
     }
 
     @Covers(value = Node.class, method = "declare")
+    @Covers(value = Node.Lifecycle.class, method = "release")
+    @Test
+    void aNodeIsOwnedByTheLoaderOfTheClassThatDeclaredIt() {
+        String id = id();
+        Node.declare(id, Default.OPS, "");
+        Node.Lifecycle.release(NodeTest.class.getClassLoader());
+        assertNull(Node.get(id), "unloading the declaring plugin's loader must take its node with it");
+    }
+
+    @Covers(value = Node.class, method = "declare")
     @Test
     void declaringTwiceWithTheSameDefaultGivesTheFirstNode() {
         String id = id();

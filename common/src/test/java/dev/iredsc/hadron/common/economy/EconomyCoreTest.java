@@ -381,7 +381,11 @@ class EconomyCoreTest {
     void aBadAmountIsRefusedEvenForAnUnregisteredCurrency() {
         start();
         assertThrows(IllegalArgumentException.class, () -> economy.deposit(ANN, GEMS, money("0.5")));
+        assertThrows(IllegalArgumentException.class, () -> economy.withdraw(ANN, GEMS, money("0.5")));
+        assertThrows(IllegalArgumentException.class, () -> economy.transfer(ANN, BO, GEMS, money("0.5")));
         assertEquals(new EconomyResult.NoSuchCurrency("gems"), economy.deposit(ANN, GEMS, money("1")));
+        assertEquals(new EconomyResult.NoSuchCurrency("gems"), economy.withdraw(ANN, GEMS, money("1")));
+        assertEquals(new EconomyResult.NoSuchCurrency("gems"), economy.transfer(ANN, BO, GEMS, money("1")));
     }
 
     @Covers(value = Economy.class, method = "deposit")
@@ -501,6 +505,7 @@ class EconomyCoreTest {
         ResourceConsumeEvent event = assertInstanceOf(ResourceConsumeEvent.class, host.events.get(0));
         assertEquals(500, event.getOldAmount());
         assertEquals(350, event.getNewAmount());
+        assertEquals(money("3.50"), economy.getBalance(ANN), "the withdrawal is stored, not only reported");
     }
 
     @Covers(value = Economy.class, method = "withdraw")
@@ -521,6 +526,7 @@ class EconomyCoreTest {
         start();
         fund(ANN, "2.00");
         assertEquals(new EconomyResult.Done(MONEY, money("2.00"), money("0.00")), economy.withdraw(ANN, money("2")));
+        assertEquals(money("0.00"), economy.getBalance(ANN));
     }
 
     @Covers(value = Economy.class, method = "has")
@@ -666,6 +672,26 @@ class EconomyCoreTest {
         assertInstanceOf(EconomyResult.Done.class, economy.deposit(ANN, money("1")), "the account isn't stuck");
     }
 
+    @Covers(value = Economy.class, method = "getBalance")
+    @Covers(value = Economy.class, method = "deposit")
+    @Test
+    void everyCallLetsGoOfTheEconomySoAnotherThreadCanUseIt() throws Exception {
+        start();
+        economy.getBalance(ANN, MONEY);
+        economy.deposit(ANN, money("1"));
+        java.util.concurrent.ExecutorService other = java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            assertEquals(money("1.00"), other.submit(() -> economy.getBalance(ANN, MONEY))
+                    .get(10, java.util.concurrent.TimeUnit.SECONDS), "a read must let go of the lock");
+            economy.close();
+            assertEquals(new EconomyResult.Unavailable("the server is stopping"), other.submit(
+                    () -> economy.deposit(ANN, money("1"))).get(10, java.util.concurrent.TimeUnit.SECONDS),
+                    "a change and close must let go of the lock");
+        } finally {
+            other.shutdownNow();
+        }
+    }
+
     // ---- providers ----
 
     @Nested
@@ -740,6 +766,13 @@ class EconomyCoreTest {
                 }
             };
             assertInstanceOf(EconomyResult.Unavailable.class, economy.deposit(ANN, money("1")));
+        }
+
+        @Covers(value = Economy.class, method = "getBalance")
+        @Test
+        void aStrangerReadsZeroWithoutTheProviderBeingAskedForABalance() {
+            // MapProvider, like many a plugin's, can't give a balance for an account it doesn't have.
+            assertEquals(money("0.00"), economy.getBalance(NOBODY, MONEY));
         }
 
         @Covers(value = Economy.class, method = "getBalance")

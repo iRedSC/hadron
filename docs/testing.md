@@ -179,3 +179,61 @@ There is no list of exceptions, and none should be added for something that simp
 **Nothing can look covered that isn't.** The check fails on a `@Covers` that is on a method that isn't a test (`@HadronTest`, or JUnit's `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory`, `@TestTemplate`) or is on a `@Disabled` one; that names a type outside `api`'s public types; that names an abstract event (it lists the concrete ones to name instead); that names a type that isn't an event without a method; or that names a method the type and its API supertypes don't have (it lists the ones they do).
 
 **Economy providers** are covered through Hadron's own JSON provider: a test registering an `EconomyProvider` of its own would switch the store for the rest of the run, since once a plugin has provided accounts Hadron refuses to fall back to its file.
+
+## Blind tests
+
+`./gradlew contractBundle` writes `build/contract/`: Hadron's contract with nothing of its implementation, so a test agent writes tests from what Hadron promises rather than from what its code does ([design.md](design.md), "Built to be verified"). The folder stands alone: copy it anywhere and point the agent at its `README.md`.
+
+- **`contract/src/`**: stubs of every public type of `api` and `test-api`, with their real signatures, annotations, generics and Javadoc, and every body a `throw new UnsupportedOperationException("contract stub")`. Constants keep their values (literals and expressions of them); any other field initializer becomes a marked `null`, 0 or false. Left out: private and package-private members and types, initializer blocks, and the port's wiring, by the same names `coverageCheck` skips (types named `Port`, `Lifecycle`, `Backend`, `NetBackend`, `Memory`, `PluginContext`, and what they nest). A class with no public or protected constructor says so in a comment. A kept signature that names a left-out type fails the task, so the rule is widened or the type made public; nothing dangles.
+- **`contract/docs/`**: `events.md`, `platform.md`, `bridge-hooks.md` and `testing.md`, stripped by named rules in `gradle/hadron-contract.gradle.kts`: `events.md`'s "Core chokepoint" column becomes "Fired by" (core, bridge, or both, naming no code), `testing.md` loses "How a run works", "What Hadron's own tests cover" and this section, and a short list of exact passages is reworded or removed. Every rule must still find its text, so a doc edit that a rule no longer fits fails the task until someone reviews it. Links to docs outside the bundle become plain text.
+- **`tests/`**: a Gradle project with an example of each tier, compiled against `libs/hadron-api.jar` and `libs/hadron-test-api.jar`, with `libs/hadron.jar` (the real mod) installed in its test server's `mods/`. `./gradlew test`, `hadronTest`, `hadronWatch`/`hadronRerun` and `coverageCheck` run there as in a plugin, using copies of `gradle/hadron-test.gradle.kts` (rewired to the bundle's `:server` project) and `gradle/hadron-coverage.gradle.kts`. The jars are repacked without timestamps, so the same sources give the same bytes.
+
+**`contractLeakCheck` runs before anything is assembled** and fails the task if `contract/` holds: a file other than stubs and docs; a body other than the stub throw; a private member, a package-private type or class member, or an initializer block; a field initializer that isn't a constant; an enum constant with arguments or a body; a port-only type; a package outside Hadron's `api` and `test` packages; anywhere, any top-level class name from `common` or `neoforge` (whole word; "Platform APIs" is the one reviewed English use) or the word "mixin"; or any text the doc rules remove, including every code name from the removed column. The README and example tests are scanned for names too. It is `gradle/contract/ContractLeakCheck.java`, written apart from the stub writer (`ContractStubs.java`) so one's bug can't hide a leak from the other.
+
+The blind agent never changes an assertion to match what it saw: it reports the failing test, what it expected, and the contract text it relied on, and a sighted agent triages it ([design.md](design.md)). What a blind agent can't do from the bundle: test what only the implementation defines (log lines, internal timing), or anything needing a client mod the harness doesn't stand in for (see "What it can't do yet").
+
+## Mutation testing
+
+Coverage says every claim has a test; mutation testing says the tests would notice if the code were wrong. PIT makes hundreds of small breaks in `api`'s and `common`'s main code (a `<` turned into `<=`, a condition negated, a call removed, a return replaced by null or zero), runs the fast tests that reach each one, and counts the breaks no test noticed.
+
+```
+./gradlew :api:pitest       # about 2.5 minutes on a busy machine
+./gradlew :common:pitest    # about 2 minutes
+```
+
+Run them one at a time, before a PR that touches `api` or `common`. They are not part of `check`: each takes minutes. PIT runs on 2 threads; each of its worker JVMs boots Minecraft's registries once (`@WithMinecraft`), with 1.5 GB of heap and 10 s beyond a test's normal time before a break counts as a hang (a hang counts as caught).
+
+**Reading the result.** The task prints the score and every surviving break, as `File.java:line method: what was changed`, pass or fail; the full report is `build/reports/pitest/index.html` in the module (`mutations.xml` beside it for tools), where each source line shows its breaks in green (caught) or red (survived).
+
+- **Mutation score:** breaks caught out of all breaks made. Most of `api` is events and most of `common` is the plugin host and `/hadron trace`, which only the in-game tier can drive, so most breaks are never reached by a fast test and the score stays low. That is expected: the in-game tests check those.
+- **Test strength:** breaks caught out of those a fast test reaches. This is the one that says whether the fast tests are strict.
+- **A survivor** is either a decision no test pins (write the test, as for coverage) or an equivalent break, one that changes no behaviour (the list below). Never weaken a test or contort one to kill an equivalent break.
+
+**The gate.** Each task fails below the score its tests have reached, so the score can only go up. When a change raises it, raise the gate in the module's `build.gradle.kts` in the same change; never lower it.
+
+| | Mutation score gate | Test strength gate | Reached |
+|---|---|---|---|
+| `api` | 29% | 97% | 413 of 1436 caught, 413 of the 424 fast tests reach |
+| `common` | 28% | 97% | 350 of 1228 caught, 350 of the 360 fast tests reach |
+
+`common`'s 350 is 28.5%, exactly on PIT's rounding edge, and one of its catches depends on timing, so its score gate is 28 rather than 29.
+
+**Exclusions.** Only methods that never decide anything are left unmutated:
+
+- `toString`, in both modules: text for people. Where a message matters (an error that says the fix), the tests assert the message itself.
+- `EconomyCore.logMissingDefault`, in `common`: it only logs, once, that the default currency is missing. The refusal itself (`NoSuchCurrency`) is tested.
+
+PIT already leaves logging calls (SLF4J) alone.
+
+**Equivalent survivors,** each checked by hand. A new survivor not on this list is a test to write.
+
+- `NamespacedKey.fromString`, the colon's position checks: an empty namespace or key fails the pattern check right after, so loosening them changes nothing. `NamespacedKey.hashCode`'s arithmetic: any mix of the two parts' hashes keeps `equals` and `hashCode` consistent.
+- `PluginDescription`'s `strings`, `commands` and `permissions`, the early return for a missing key: an empty collection either way, wrapped or copied by the caller.
+- `Node.declare`, which frame counts as the caller: in a fast test, `Node` and the test share one class loader. In game, each plugin has its own. `Node.Lifecycle.release`, the removal's return value: it only leaves an empty owner set behind, which nothing reads.
+- `Actors` closing leaked scopes: the boundary only decides whether a warning is logged.
+- `EconomyCore.close`, clearing the running instance: a closed economy is never reached again. `ensureAccount`: the result of `createAccount` is ignored on purpose. `noDefault`: the log call (see exclusions).
+- `EventBus.remove`, a removal that leaves an empty list: an empty list adds no handler. `awaitIdle`, `remaining <= 0` against `< 0`: a wait of zero returns at once either way.
+- `JsonEconomyProvider.load`, clearing accounts after a failed read: a store that couldn't read its file refuses every call, and the next load clears them first. `write`, `FileChannel.force`: only a power cut tells a synced write from an unsynced one.
+- `PluginLoader.loadClass`, resolving when asked: the JVM links the class on first use anyway. `Services.removeWhere`, dropping an emptied list: every read treats an empty list as no provider.
+
+**Next:** sampled mutants of the riskiest in-game code (cancels, attribution, suppression), run against the in-game tests, as [design.md](design.md) plans. PIT covers the fast tier only.
