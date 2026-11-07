@@ -231,8 +231,9 @@ public final class HostileTests {
                     "version: \"2\""), Hostile.HOSTILE_CLASSES);
             t.await("version 2 to enable", () -> h.hostileLog.contains("enabled 2"), 400);
             t.assertTrue(h.plugins().isPluginEnabled(Hostile.HOSTILE), "version 2 should be enabled");
-            t.assertTrue(h.hostileLog.contains("disabled 1"), "version 1 should have disabled before version 2 "
-                    + "enabled, but the log is " + h.hostileLog);
+            int disabled = h.hostileLog.indexOf("disabled 1");
+            t.assertTrue(disabled >= 0 && disabled < h.hostileLog.indexOf("enabled 2"), "version 1 should have "
+                    + "disabled before version 2 enabled, but the log is " + h.hostileLog);
             h.hostileLog.removeIf(l -> l.equals("tick 1"));
             t.tick(10);
             t.assertFalse(h.hostileLog.contains("tick 1"), "version 1's timer still ticks after version 2 replaced it");

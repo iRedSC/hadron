@@ -31,6 +31,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.Deque;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -615,47 +616,12 @@ public final class PluginHost implements PluginManager {
     }
 
     /** Why a plugin left over by dependency ordering can't start: it is in a cycle, or waits on one. */
-    private String unstartable(Entry e, List<Entry> left) {
-        Set<Entry> cycle = cycleThrough(e, left);
-        if (cycle.equals(Set.of(e))) {
-            return "depends on itself: remove " + e.name + " from its own depend: list in plugin.yml";
-        }
-        if (!cycle.isEmpty()) {
-            return names(cycle) + " depend on each other, so none of them can start first. In one of their plugin.yml "
-                    + "files, move the other from depend: to softdepend:";
-        }
-        return "needs a plugin that can't start: its depend: leads to " + names(left.stream()
-                .filter(o -> o != e && cycleThrough(o, left).contains(o)).toList()) + ", which depend on each other. "
-                + "Break that cycle and it starts too";
+    private static String unstartable(Entry e, List<Entry> left) {
+        Map<String, List<String>> waiting = new LinkedHashMap<>();
+        for (Entry o : left) waiting.put(o.name, o.description.getDepend());
+        return DependencyCycles.reason(e.name, waiting);
     }
 
-    /** The plugins in {@code among} on a depend: cycle through {@code e}, or empty when it is on none. */
-    private Set<Entry> cycleThrough(Entry e, List<Entry> among) {
-        Set<Entry> reachable = reachable(e, among);
-        if (!reachable.contains(e)) return Set.of();
-        Set<Entry> cycle = new LinkedHashSet<>();
-        for (Entry o : among) if (reachable.contains(o) && reachable(o, among).contains(e)) cycle.add(o);
-        return cycle;
-    }
-
-    /** Every plugin in {@code among} that {@code from}'s depend: reaches, through one or more steps. */
-    private Set<Entry> reachable(Entry from, List<Entry> among) {
-        Set<Entry> seen = new LinkedHashSet<>();
-        java.util.ArrayDeque<Entry> todo = new java.util.ArrayDeque<>(List.of(from));
-        while (!todo.isEmpty()) {
-            for (String need : todo.pop().description.getDepend()) {
-                Entry n = entries.get(need);
-                if (n != null && among.contains(n) && seen.add(n)) todo.push(n);
-            }
-        }
-        return seen;
-    }
-
-    private static String names(Collection<Entry> entries) {
-        List<String> out = new ArrayList<String>();
-        for (Entry e : entries) out.add(e.name);
-        return String.join(", ", out);
-    }
 
     /** The first of a plugin's two steps: its own loader, its main class constructed, {@code onLoad} called. */
     private void load(Entry e) {
