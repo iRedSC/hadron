@@ -1,4 +1,4 @@
-package dev.iredsc.hadron.neoforge.mixin.world;
+package dev.iredsc.hadron.harness.mixin;
 
 import java.util.Map;
 import net.minecraft.network.ConnectionProtocol;

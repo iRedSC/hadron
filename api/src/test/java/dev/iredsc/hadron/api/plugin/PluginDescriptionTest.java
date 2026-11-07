@@ -73,9 +73,10 @@ class PluginDescriptionTest {
     void eachRequiredKeyIsNamedWhenMissing(String key) {
         Map<String, Object> yaml = minimal();
         yaml.remove(key);
-        assertEquals("plugin.yml needs '" + key + "'", refusal(yaml));
+        String missing = refusal(yaml);
+        assertTrue(missing.startsWith("plugin.yml needs '" + key + "', such as " + key + ": "), missing);
         yaml.put(key, "");
-        assertEquals("plugin.yml needs '" + key + "'", refusal(yaml));
+        assertEquals(missing, refusal(yaml));
     }
 
     @Covers(value = PluginDescription.class, method = "parse")
@@ -136,7 +137,8 @@ class PluginDescriptionTest {
     void aSingleValueKeyGivenAListIsRefused() {
         Map<String, Object> yaml = minimal();
         yaml.put("description", List.of("a", "b"));
-        assertEquals("plugin.yml 'description' must be a single value", refusal(yaml));
+        assertEquals("plugin.yml 'description' must be a single value, such as description: What the plugin does",
+                refusal(yaml));
     }
 
     @Covers(value = PluginDescription.class, method = "getAuthors")
@@ -159,7 +161,7 @@ class PluginDescriptionTest {
         assertEquals(List.of("Vault"), d.getDepend());
         assertEquals(List.of("A", "B"), d.getSoftDepend());
         yaml.put("depend", Map.of("x", 1));
-        assertEquals("plugin.yml 'depend' must be a list", refusal(yaml));
+        assertEquals("plugin.yml 'depend' must be a list, such as depend: [OtherPlugin]", refusal(yaml));
     }
 
     @Covers(value = PluginDescription.class, method = "getModDepend")
