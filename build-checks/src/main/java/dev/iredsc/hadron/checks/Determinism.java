@@ -91,6 +91,8 @@ public final class Determinism extends BugChecker
             staticMethod().onClass("java.util.random.RandomGenerator").namedAnyOf("getDefault", "of"),
             instanceMethod().onExactClass("java.util.random.RandomGeneratorFactory").named("create")
                     .withNoParameters(),
+            // shuffle(list) draws from a shared unseeded Random; shuffle(list, random) uses the one it's given.
+            staticMethod().onClass("java.util.Collections").named("shuffle").withParameters("java.util.List"),
             Determinism::unseededAnonymous);
 
     /** new Random() {}: an anonymous subclass calls the same unseeded constructor. */
@@ -131,7 +133,7 @@ public final class Determinism extends BugChecker
                     + "CompletableFuture, a latch).";
         } else if (RANDOM.matches(tree, state)) {
             message = "Unseeded randomness can't be repeated when a test fails. Pass a seed: new Random(seed), "
-                    + "new SplittableRandom(seed), RandomSource.create(seed), or use the level's own RandomSource, "
+                    + "new SplittableRandom(seed), RandomSource.create(seed), Collections.shuffle(list, random), or use the level's own RandomSource, "
                     + "so the same seed gives the same result.";
         } else {
             return Description.NO_MATCH;

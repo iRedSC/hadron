@@ -110,6 +110,56 @@ class NoStaticMutableStateTest {
     }
 
     @Test
+    void acceptsJdkValueTypesAndGenericRecordsOfImmutables() {
+        helper.addSourceLines("com/example/MyPlugin.java",
+                "package com.example;",
+                "import java.math.*;",
+                "import java.nio.charset.*;",
+                "import java.time.*;",
+                "import java.util.*;",
+                "class MyPlugin {",
+                "  static final BigDecimal COST = new BigDecimal(\"1.00\");",
+                "  static final BigInteger BIG = BigInteger.TEN;",
+                "  static final Charset UTF8 = StandardCharsets.UTF_8;",
+                "  static final UUID ID = UUID.fromString(\"00000000-0000-0000-0000-000000000001\");",
+                "  static final Duration COOLDOWN = Duration.ofSeconds(5);",
+                "  static final Instant EPOCH = Instant.EPOCH;",
+                "  static final LocalDate DAY = LocalDate.of(2026, 1, 1);",
+                "  static final LocalTime NOON = LocalTime.NOON;",
+                "  static final LocalDateTime START = LocalDateTime.of(2026, 1, 1, 0, 0);",
+                "  static final ZoneId ZONE = ZoneId.of(\"UTC\");",
+                "  static final ZoneOffset OFFSET = ZoneOffset.UTC;",
+                "  static final ZonedDateTime AT = ZonedDateTime.of(START, ZONE);",
+                "  static final Period WEEK = Period.ofWeeks(1);",
+                "  static final Optional<String> NAME = Optional.of(\"x\");",
+                "  static final Optional<String> NO_NAME = Optional.empty();",
+                "  record Pair<A, B>(A first, B second) {}",
+                "  static final Pair<String, Integer> DEFAULT = new Pair<>(\"value\", 1);",
+                "  static final class Box<T> { final T value; Box(T v) { value = v; } }",
+                "  static final Box<String> LABEL = new Box<>(\"label\");",
+                "}")
+                .doTest();
+    }
+
+    @Test
+    void refusesGenericValuesOfMutables() {
+        helper.addSourceLines("com/example/MyPlugin.java",
+                "package com.example;",
+                "import java.util.*;",
+                "class MyPlugin {",
+                "  record Pair<A, B>(A first, B second) {}",
+                "  // BUG: Diagnostic contains: holds a Pair",
+                "  static final Pair<String, List<String>> SEEN = new Pair<>(\"seen\", new ArrayList<>());",
+                "  // BUG: Diagnostic contains: holds a Optional",
+                "  static final Optional<List<String>> MAYBE = Optional.of(new ArrayList<>());",
+                "  static final class Box<T> { final T value; Box(T v) { value = v; } }",
+                "  // BUG: Diagnostic contains: holds a Box",
+                "  static final Box<Map<String, Integer>> COUNTS = new Box<>(new HashMap<>());",
+                "}")
+                .doTest();
+    }
+
+    @Test
     void acceptsAPluginsPersistentDataTypeConstants() {
         // PersistentDataType comes from a class file here, as the api jar does for a plugin.
         helper.addSourceLines("com/example/MyPlugin.java",

@@ -109,6 +109,8 @@ class DeterminismTest {
                 "    RandomGenerator made = RandomGeneratorFactory.getDefault().create();",
                 "    // BUG: Diagnostic contains: Pass a seed",
                 "    Random anon = new Random() {};",
+                "    // BUG: Diagnostic contains: Pass a seed",
+                "    Collections.shuffle(new ArrayList<>(List.of(1, 2)));",
                 "  }",
                 "}")
                 .doTest();
@@ -126,6 +128,7 @@ class DeterminismTest {
                 "    Calendar greg = new GregorianCalendar(2026, Calendar.JANUARY, 1);",
                 "    RandomGenerator made = RandomGeneratorFactory.of(\"L64X128MixRandom\").create(seed);",
                 "    Random anon = new Random(seed) {};",
+                "    Collections.shuffle(new ArrayList<>(List.of(1, 2)), new Random(seed));",
                 "  }",
                 "}")
                 .doTest();
