@@ -68,8 +68,26 @@ Summarize the useful findings, disagreements and questions. Then for each:
 Commit, push, and start a fresh round on the new head. Each full pass is one round.
 
 **Keep scope small.** Rounds must not grow the change. A good idea outside the PR's purpose goes in the PR as a
-follow-up, not into the code. After 3 rounds without passing, stop and tell the owner the approach may be wrong,
-as `docs/coding-standards.md` says.
+follow-up, not into the code.
+
+## Three rounds at most, then reconsider the architecture
+
+A council gets at most 3 rounds. Findings that keep coming are a sign the design is wrong, not that it needs one more
+patch.
+
+- **Before round 3**, look at what rounds 1 and 2 found. If the findings cluster on one mechanism (the same function,
+  the same kind of check, fixes that each needed another fix), that mechanism is the problem: change its design so the
+  whole class of finding can't happen, rather than fixing the instances. Say in the PR which findings the redesign
+  removes and why.
+- **If round 3 doesn't pass, there is no round 4.** Stop changing code and reconsider the architecture:
+  1. List every finding across the three rounds, grouped by the part of the design it came from.
+  2. Name the root cause: the assumption or structure those findings share.
+  3. Describe at least two different designs that would remove that root cause, with what each costs (size,
+     speed, what it can't do) and which findings each makes impossible. One may be "don't build this".
+  4. Recommend one.
+
+  Put this in the PR under "Architecture reconsidered", and tell the owner. A redesign changes the PR's scope, so it's
+  the owner's call; a new council starts on the redesigned change, from round 1.
 
 ## Recording it
 
