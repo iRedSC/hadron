@@ -262,6 +262,8 @@ def run_fast(guards: list[Guard], label: str) -> GuardRun:
                 # filter ran only this class's one guard, so its invocations are that guard's. Only invocations count:
                 # a class that failed to load reports "initializationError", which is not the guard failing.
                 cases = [c for c in every if c.get("name", "").startswith("[")]
+            # A skipped case never ran, so it neither passes a baseline nor fails a guard: leave it out (BROKEN).
+            cases = [c for c in cases if c.find("skipped") is None]
             if cases:
                 run.failed[g.test] = any(c.find("failure") is not None or c.find("error") is not None for c in cases)
     if len(run.failed) < len(guards):
