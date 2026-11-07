@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.block;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
@@ -17,9 +18,9 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  */
 @FiredBy(core = FULL)
 public class BlockBurnEvent extends BlockChangeEvent {
-    private final BlockPos ignitingPos;
+    private final @Nullable BlockPos ignitingPos;
 
-    public BlockBurnEvent(ServerLevel level, BlockPos pos, BlockState state, BlockPos ignitingPos, Actor actor) {
+    public BlockBurnEvent(ServerLevel level, BlockPos pos, BlockState state, @Nullable BlockPos ignitingPos, Actor actor) {
         super(level, pos, state, List.of(BlockChange.of(level, pos, state, Blocks.AIR.defaultBlockState())), actor);
         this.ignitingPos = ignitingPos == null ? null : ignitingPos.immutable();
     }

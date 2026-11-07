@@ -15,6 +15,9 @@ rootProject.name = "hadron"
 // neoforge: the NeoForge port. The only part rewritten for another loader.
 include("api", "common", "neoforge")
 
+// build-checks: Hadron's own Error Prone checks (gradle/hadron-checks.gradle.kts), run on Hadron and on plugins' builds.
+include("build-checks")
+
 // test-api: what a plugin's tests compile against (@HadronTest, TestContext, TestPlayer), vanilla only like api.
 include("test-api")
 

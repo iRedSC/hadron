@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.plugin;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.Node;
 import dev.iredsc.hadron.api.Permissions;
 import java.util.List;
@@ -22,11 +23,13 @@ public final class PluginCommand {
         this.completer = plugin;
     }
 
-    public void setExecutor(CommandExecutor executor) {
+    /** Null restores the plugin's own onCommand. */
+    public void setExecutor(@Nullable CommandExecutor executor) {
         this.executor = executor == null ? plugin : executor;
     }
 
-    public void setTabCompleter(TabCompleter completer) {
+    /** Null restores the plugin's own onTabComplete. */
+    public void setTabCompleter(@Nullable TabCompleter completer) {
         this.completer = completer == null ? plugin : completer;
     }
 
@@ -59,7 +62,7 @@ public final class PluginCommand {
     }
 
     /** Null when anyone may run it. */
-    public String getPermission() {
+    public @Nullable String getPermission() {
         return spec.permission;
     }
 

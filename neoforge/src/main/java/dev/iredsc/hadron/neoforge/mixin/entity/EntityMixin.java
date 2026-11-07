@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.entity;
 
+import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.iredsc.hadron.api.actor.Actor;
@@ -37,9 +38,9 @@ abstract class EntityMixin implements EntityState {
     @Shadow
     public abstract int getAirSupply();
 
-    @Unique private Actor hadron$actor;
+    @Unique private @Nullable Actor hadron$actor;
     @Unique private boolean hadron$tracked;
-    @Unique private Level hadron$trackedLevel;
+    @Unique private @Nullable Level hadron$trackedLevel;
     @Unique private double hadron$trackedX;
     @Unique private double hadron$trackedY;
     @Unique private double hadron$trackedZ;
@@ -48,12 +49,12 @@ abstract class EntityMixin implements EntityState {
     @Unique private int hadron$deathExp;
 
     @Override
-    public Actor hadron$actor() {
+    public @Nullable Actor hadron$actor() {
         return hadron$actor;
     }
 
     @Override
-    public void hadron$setActor(Actor actor) {
+    public void hadron$setActor(@Nullable Actor actor) {
         hadron$actor = actor;
     }
 
@@ -63,7 +64,7 @@ abstract class EntityMixin implements EntityState {
     }
 
     @Override
-    public Level hadron$trackedLevel() {
+    public @Nullable Level hadron$trackedLevel() {
         return hadron$trackedLevel;
     }
 
@@ -155,7 +156,7 @@ abstract class EntityMixin implements EntityState {
     }
 
     @WrapMethod(method = "changeDimension")
-    private Entity hadron$changeDimension(DimensionTransition transition, Operation<Entity> original) {
+    private @Nullable Entity hadron$changeDimension(DimensionTransition transition, Operation<Entity> original) {
         Entity self = (Entity) (Object) this;
         var pos = transition.pos();
         EntityTeleports.Destination to = EntityTeleports.ask(self, transition.newLevel(), pos.x, pos.y, pos.z,

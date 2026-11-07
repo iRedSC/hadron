@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.harness;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.test.TestPlayer;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
@@ -58,6 +59,11 @@ import net.minecraft.network.protocol.cookie.ClientboundCookieRequestPacket;
 import net.minecraft.network.protocol.cookie.ServerboundCookieResponsePacket;
 import net.minecraft.network.protocol.game.ClientboundAddEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundChunkBatchFinishedPacket;
+import net.minecraft.network.protocol.game.ClientboundChunkBatchStartPacket;
+import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
+import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
+import net.minecraft.network.protocol.game.ClientboundLightUpdatePacket;
+import net.minecraft.network.protocol.game.ClientboundSetChunkCacheCenterPacket;
 import net.minecraft.network.protocol.game.ClientboundDisguisedChatPacket;
 import net.minecraft.network.protocol.game.ClientboundLoginPacket;
 import net.minecraft.network.protocol.game.ClientboundPlayerChatPacket;
@@ -149,13 +155,15 @@ final class TestClient implements TestPlayer {
     /** A NeoForge client with the server's mods, rather than a vanilla one. */
     private final boolean modded;
     /** The channels the server agreed on with a modded client; null until it says. */
-    private volatile NetworkPayloadSetup channels;
+    private volatile @Nullable NetworkPayloadSetup channels;
     private volatile Phase phase = Phase.LOGIN;
     private volatile String disconnectReason = "";
-    private volatile Throwable failure;
-    private volatile ServerPlayer player;
+    private volatile @Nullable Throwable failure;
+    private volatile @Nullable ServerPlayer player;
     /** Bumped for each packet received, so settling knows when traffic stopped. */
     final AtomicLong activity = new AtomicLong();
+    /** Of {@link #activity}, the packets that aren't the world streaming in (chunks and their light). */
+    final AtomicLong effects = new AtomicLong();
 
     private final Object lock = new Object();
     private final List<Packet<?>> packets = new ArrayList<>();
@@ -195,8 +203,12 @@ final class TestClient implements TestPlayer {
     }
 
     /** Opens the connection and sends the login start; the rest of the login happens as the server ticks. */
-    static TestClient connect(MinecraftServer server, TestWorld world, SocketAddress address, String name,
+    static TestClient connect(MinecraftServer server, TestWorld world, @Nullable SocketAddress address, String name,
             boolean modded) {
+        if (address == null) {
+            throw new IllegalStateException("The test server's in-memory channel isn't open yet, so " + name
+                    + " can't join; players join from inside a test");
+        }
         TestClient client = new TestClient(server, world, name, modded);
         Connection connection = client.connection;
         new Bootstrap().group(Connection.LOCAL_WORKER_GROUP.get()).handler(new ChannelInitializer<Channel>() {
@@ -233,7 +245,7 @@ final class TestClient implements TestPlayer {
     }
 
     /** A packet this client couldn't handle: a gap in the harness, reported rather than hidden. */
-    Throwable failure() {
+    @Nullable Throwable failure() {
         return failure;
     }
 
@@ -676,8 +688,16 @@ final class TestClient implements TestPlayer {
                     + packet.getClass().getSimpleName() + ", a bug in the test harness rather than the test", e);
             throw e;
         } finally {
+            if (!streaming(packet)) effects.incrementAndGet();
             activity.incrementAndGet();
         }
+    }
+
+    /** Chunks and light arriving as the server streams the world in: finite, and no effect of the test's. */
+    private static boolean streaming(Packet<?> packet) {
+        return packet instanceof ClientboundLevelChunkWithLightPacket || packet instanceof ClientboundLightUpdatePacket
+                || packet instanceof ClientboundChunkBatchStartPacket || packet instanceof ClientboundChunkBatchFinishedPacket
+                || packet instanceof ClientboundForgetLevelChunkPacket || packet instanceof ClientboundSetChunkCacheCenterPacket;
     }
 
     private void record(Packet<?> packet) {
@@ -820,6 +840,7 @@ final class TestClient implements TestPlayer {
     private void disconnected(DisconnectionDetails details) {
         if (disconnectReason.isEmpty()) disconnectReason = details.reason().getString();
         phase = Phase.GONE;
+        effects.incrementAndGet();
         activity.incrementAndGet();
     }
 

@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.net;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import java.util.Objects;
@@ -28,15 +30,16 @@ public interface NetBackend {
 
     boolean isHiddenFromAll(JavaPlugin plugin, Entity target);
 
-    void setDisplayName(JavaPlugin plugin, ServerPlayer player, Component name);
+    void setDisplayName(JavaPlugin plugin, ServerPlayer player, @Nullable Component name);
 
-    void setPlayerListName(JavaPlugin plugin, ServerPlayer player, Component name);
+    void setPlayerListName(JavaPlugin plugin, ServerPlayer player, @Nullable Component name);
 
-    void setNameTag(JavaPlugin plugin, ServerPlayer player, String tag);
+    void setNameTag(JavaPlugin plugin, ServerPlayer player, @Nullable String tag);
 
     /** For the loader port only. */
     final class Port {
-        private static volatile NetBackend backend;
+        @StaticState(reason = "the port installs its one backend when the mod loads; Hadron itself is never reloaded")
+        private static volatile @Nullable NetBackend backend;
 
         private Port() {}
 

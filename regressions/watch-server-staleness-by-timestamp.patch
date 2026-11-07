@@ -182,10 +182,10 @@ index 417e25d..459137a 100644
  }
  
 diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWatch.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWatch.java
-index 59c0654..88179dc 100644
+index b97d251..60ef323 100644
 --- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWatch.java
 +++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestWatch.java
-@@ -51,8 +51,7 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
+@@ -53,8 +53,7 @@ import net.neoforged.neoforge.event.tick.ServerTickEvent;
   *   <li>{@code reports/NNNN/report.txt} and {@code .json}, one pair per rerun, the last {@value #KEEP_REPORTS} kept;
   *       {@code report.txt} and {@code report.json} in {@code <dir>} are the latest.</li>
   *   <li>{@code watch.properties}: the server's {@code pid} and when it {@code started}, there while it runs.</li>
@@ -195,16 +195,16 @@ index 59c0654..88179dc 100644
   * </ul>
   *
   * <p>A rerun starts each suite as a cold run would: the old plugin is unloaded, its data folder deleted, the
-@@ -87,8 +86,6 @@ final class TestWatch {
+@@ -90,8 +89,6 @@ final class TestWatch {
      private final TestRunner runner;
      private final Shared shared;
      private State state = State.WAITING;
 -    /** Whether hadronWatchStop asked it to stop, the only stop that exits 0. */
 -    private volatile boolean stopAsked;
-     private volatile Current current;
+     private volatile @Nullable Current current;
      private int ticks;
      private int runs;
-@@ -112,10 +109,8 @@ final class TestWatch {
+@@ -115,10 +112,8 @@ final class TestWatch {
              if (active != null) active.tick();
          });
          NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> {
@@ -216,7 +216,7 @@ index 59c0654..88179dc 100644
          });
      }
  
-@@ -143,7 +138,6 @@ final class TestWatch {
+@@ -146,7 +141,6 @@ final class TestWatch {
          File stop = new File(dir, "stop");
          if (stop.exists()) {
              stop.delete();
@@ -224,7 +224,7 @@ index 59c0654..88179dc 100644
              TestRunner.LOG.info("Stopping the Hadron test server, as asked");
              server.halt(false);
              return;
-@@ -285,8 +279,6 @@ final class TestWatch {
+@@ -288,8 +282,6 @@ final class TestWatch {
          answer.setProperty("report", text.getAbsolutePath());
          answer.setProperty("json", TestReport.jsonFile(text).getAbsolutePath());
          write(new File(done, c.request().token() + ".properties"), answer);

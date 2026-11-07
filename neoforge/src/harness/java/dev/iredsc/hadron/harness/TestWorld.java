@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.harness;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.Hadron;
 import dev.iredsc.hadron.api.economy.Currency;
 import dev.iredsc.hadron.api.economy.Economy;
@@ -25,6 +27,8 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.LockSupport;
+import java.util.function.BooleanSupplier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.Connection;
 import net.minecraft.resources.ResourceLocation;
@@ -55,7 +59,7 @@ final class TestWorld implements TestContext {
 
     private final MinecraftServer server;
     private final JavaPlugin plugin;
-    private final SocketAddress address;
+    private final @Nullable SocketAddress address;
     private final String test;
     private final int timeout;
     private final ResourceLocation key;
@@ -65,7 +69,7 @@ final class TestWorld implements TestContext {
     private int spent;
     private boolean ticking;
 
-    TestWorld(MinecraftServer server, JavaPlugin plugin, SocketAddress address, String test, int index, int timeout) {
+    TestWorld(MinecraftServer server, JavaPlugin plugin, @Nullable SocketAddress address, String test, int index, int timeout) {
         this.server = server;
         this.plugin = plugin;
         this.address = address;
@@ -122,6 +126,7 @@ final class TestWorld implements TestContext {
      * Each harness tick lets the server spend a moment on the work it does when it has time to spare (unloading
      * chunks, saving), as a real server's idle part of the tick would, so chunks unload in tests too.
      */
+    @StaticState(reason = "the end of the current harness tick's spare time; each tick sets it afresh")
     private static long budgetEnd;
 
     private static boolean shortBudget() {
@@ -265,6 +270,30 @@ final class TestWorld implements TestContext {
         return spent;
     }
 
+    // The wall clock lives here, in the harness, so a plugin's test can wait on another thread without reading it.
+    @Override
+    public void awaitAsync(String what, BooleanSupplier condition, int ticks) {
+        for (int i = 0; i < ticks; i++) {
+            if (holdsWithin(condition, TimeUnit.MILLISECONDS.toNanos(ASYNC_YIELD_MILLIS))) return;
+            tick(1);
+        }
+        if (holdsWithin(condition, TimeUnit.MILLISECONDS.toNanos(ASYNC_YIELD_MILLIS))) return;
+        throw new AssertionError("Waited " + ticks + " ticks, with up to " + ASYNC_YIELD_MILLIS + " ms between each "
+                + "for other threads, for " + what + ", and it never happened. Check that the work was started (the "
+                + "task scheduled, the chunk forced) and that it didn't throw: an async task's exception is in the "
+                + "server log. If it needs longer, raise the ticks given to awaitAsync.");
+    }
+
+    /** Whether the condition holds now or within {@code nanos}, checked about every quarter millisecond. */
+    private static boolean holdsWithin(BooleanSupplier condition, long nanos) {
+        long until = System.nanoTime() + nanos;
+        while (true) {
+            if (condition.getAsBoolean()) return true;
+            if (System.nanoTime() - until >= 0) return false;
+            LockSupport.parkNanos(250_000);
+        }
+    }
+
     // ---- For the harness ----
 
     /**
@@ -291,6 +320,7 @@ final class TestWorld implements TestContext {
         int busy = 0;
         for (int round = 0; ; round++) {
             long before = activity();
+            long effectsBefore = effects();
             for (TestClient c : players.values()) c.connection().tick();
             fence();
             // The server runs its own queue (packets, tasks) before any chunk loading, so a task that ran while that
@@ -313,20 +343,25 @@ final class TestWorld implements TestContext {
             }
             boolean moved = activity() != before;
             if (ran == 0 && !moved) return;
-            if (!moved && queued == 0) {
-                // Only chunk loading, as between two real ticks: let it run, but it never holds the test up for long.
-                if (round >= CHUNK_ROUNDS) return;
-                continue;
-            }
-            if (++busy >= SETTLE_ROUNDS) {
-                // Returning now would let the next line (assertNoChat, assertNotSent) pass before what's pending
-                // arrives.
-                throw new IllegalStateException("Packets or server tasks were still arriving after " + SETTLE_ROUNDS
+            // The world streaming in, as between two real ticks: nothing arrived but chunks and light, and either
+            // something did arrive (the clients' acknowledgements are queued) or chunks loaded (a loaded chunk's
+            // entities finish in a queued task). It gets CHUNK_ROUNDS rather than SETTLE_ROUNDS. A task that
+            // re-queues itself is still caught once chunk loading stops.
+            boolean streaming = effects() == effectsBefore && (moved || ran > queued);
+            // Returning while packets or queued tasks still arrive would let the next line (assertNoChat,
+            // assertNotSent) pass before what's pending arrives: only chunk loading alone may outlast its rounds.
+            boolean onlyLoading = !moved && queued == 0;
+            if (streaming ? round >= CHUNK_ROUNDS && !onlyLoading : ++busy >= SETTLE_ROUNDS) {
+                throw new IllegalStateException("Packets or server tasks were still arriving after " + (streaming
+                        ? CHUNK_ROUNDS : SETTLE_ROUNDS)
                         + " rounds of letting them through without a tick, so the harness can't tell when this "
                         + "action's effects have all arrived. Something keeps making work without the server ticking: "
                         + "a task that re-queues itself, or a listener that answers every packet with another. Make it "
-                        + "wait for the next tick (a scheduled task), or stop it before the test acts.");
+                        + "wait for the next tick (a scheduled task), or stop it before the test acts. Server tasks "
+                        + "in the last round: " + queued + " queued, " + (ran - queued) + " chunk loading."
+                        + lastPacketsOfEach());
             }
+            if (streaming && round >= CHUNK_ROUNDS) return;
         }
     }
 
@@ -353,6 +388,12 @@ final class TestWorld implements TestContext {
     private long activity() {
         long sum = 0;
         for (TestClient c : players.values()) sum += c.activity.get();
+        return sum;
+    }
+
+    private long effects() {
+        long sum = 0;
+        for (TestClient c : players.values()) sum += c.effects.get();
         return sum;
     }
 
@@ -440,6 +481,13 @@ final class TestWorld implements TestContext {
                 }
             }
         }
+    }
+
+    /** Each player's last packets, for a failure that depends on what was still arriving. */
+    private String lastPacketsOfEach() {
+        StringBuilder out = new StringBuilder();
+        for (TestClient c : players.values()) out.append(" Last packets for ").append(c.name()).append(": ").append(lastPackets(c));
+        return out.toString();
     }
 
     private static String lastPackets(TestClient c) {

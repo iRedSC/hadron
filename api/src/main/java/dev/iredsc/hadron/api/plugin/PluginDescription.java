@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.plugin;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.Default;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -34,9 +35,9 @@ public final class PluginDescription {
         public final String usage;
         public final List<String> aliases;
         /** Null when anyone may run it. */
-        public final String permission;
+        public final @Nullable String permission;
 
-        CommandSpec(String name, String description, String usage, List<String> aliases, String permission) {
+        CommandSpec(String name, String description, String usage, List<String> aliases, @Nullable String permission) {
             this.name = name;
             this.description = description;
             this.usage = usage;
@@ -68,7 +69,7 @@ public final class PluginDescription {
     private final List<String> softDepend;
     private final List<String> modDepend;
     private final String minecraft;
-    private final String loader;
+    private final @Nullable String loader;
     private final Map<String, CommandSpec> commands;
     private final List<PermissionSpec> permissions;
 
@@ -87,20 +88,21 @@ public final class PluginDescription {
         main = required(yaml, "main");
         description = optional(yaml, "description", "");
         List<String> authorList = new ArrayList<String>(strings(yaml, "authors"));
-        String author = optional(yaml, "author", null);
+        String author = optional(yaml, "author");
         if (author != null) authorList.add(0, author);
         authors = Collections.unmodifiableList(authorList);
         website = optional(yaml, "website", "");
         depend = Collections.unmodifiableList(strings(yaml, "depend"));
         softDepend = Collections.unmodifiableList(strings(yaml, "softdepend"));
         modDepend = Collections.unmodifiableList(strings(yaml, "mod-depend"));
-        minecraft = optional(yaml, "minecraft", null);
+        String minecraft = optional(yaml, "minecraft");
         if (minecraft == null || minecraft.isEmpty()) {
             throw new PluginException("plugin.yml needs 'minecraft', the Minecraft version the plugin was built for, "
                     + "such as 1.21.1. Hadron's Gradle plugin fills it in; by hand, add minecraft: ${minecraft_version} "
                     + "and expand it in processResources");
         }
-        loader = optional(yaml, "loader", null);
+        this.minecraft = minecraft;
+        loader = optional(yaml, "loader");
         if (!modDepend.isEmpty() && loader == null) {
             throw new PluginException("plugin.yml lists mod-depend, so it uses those mods' classes, which differ per "
                     + "loader. Add the loader it was built for, such as loader: neoforge");
@@ -154,7 +156,7 @@ public final class PluginDescription {
     }
 
     /** The loader this plugin was built for, or null when it runs on any. Set by plugins that use mods directly. */
-    public String getLoader() {
+    public @Nullable String getLoader() {
         return loader;
     }
 
@@ -202,7 +204,7 @@ public final class PluginDescription {
     }
 
     private static String required(Map<?, ?> yaml, String key) {
-        String value = optional(yaml, key, null);
+        String value = optional(yaml, key);
         if (value == null || value.isEmpty()) {
             throw new PluginException("plugin.yml needs '" + key + "', such as " + example(key));
         }
@@ -210,8 +212,13 @@ public final class PluginDescription {
     }
 
     private static String optional(Map<?, ?> yaml, String key, String fallback) {
+        String value = optional(yaml, key);
+        return value == null ? fallback : value;
+    }
+
+    private static @Nullable String optional(Map<?, ?> yaml, String key) {
         Object value = yaml.get(key);
-        if (value == null) return fallback;
+        if (value == null) return null;
         // YAML reads an unquoted 1.10 as the number 1.1 before Hadron sees it, so a version could change silently.
         if (value instanceof Number n && (key.equals("version") || key.equals("minecraft"))) {
             throw new PluginException("plugin.yml '" + key + "' must be quoted: unquoted, YAML reads it as the number "
@@ -238,7 +245,7 @@ public final class PluginDescription {
         return out;
     }
 
-    private static Map<String, CommandSpec> commands(Object section) {
+    private static Map<String, CommandSpec> commands(@Nullable Object section) {
         Map<String, CommandSpec> out = new LinkedHashMap<String, CommandSpec>();
         if (section == null) return out;
         if (!(section instanceof Map)) throw new PluginException("plugin.yml 'commands' must be a map of names");
@@ -253,12 +260,12 @@ public final class PluginDescription {
                         + "hides a command from anyone without its permission, as vanilla does. Remove the line.");
             }
             out.put(cmd, new CommandSpec(cmd, optional(spec, "description", ""), usage, aliases,
-                    optional(spec, "permission", null)));
+                    optional(spec, "permission")));
         }
         return out;
     }
 
-    private static List<PermissionSpec> permissions(Object section) {
+    private static List<PermissionSpec> permissions(@Nullable Object section) {
         List<PermissionSpec> out = new ArrayList<PermissionSpec>();
         if (section == null) return out;
         if (!(section instanceof Map)) throw new PluginException("plugin.yml 'permissions' must be a map of nodes");

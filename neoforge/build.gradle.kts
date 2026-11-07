@@ -208,3 +208,15 @@ apply(from = rootProject.file("gradle/hadron-test-server.gradle.kts"))
 // bridgeHooksCheck (part of check): docs/bridge-hooks.md's tables match the @FiredBy on each event, and @FiredBy
 // matches what core fires. ./gradlew bridgeHooks rewrites the tables.
 apply(from = rootProject.file("gradle/hadron-bridge-hooks.gradle.kts"))
+
+// Compile-time checks (gradle/hadron-checks.gradle.kts): Error Prone's errors, NullAway, and Hadron's own checks.
+dependencies {
+    compileOnly(project(":build-checks"))
+    "harnessCompileOnly"(project(":build-checks"))
+}
+// The harness is Hadron's own code that ships to every plugin's test server, so it gets main's checks.
+extra["hadronChecks.nullAway"] = listOf("main", "harness")
+extra["hadronChecks.exemptions"] = true
+extra["hadronChecks.staticState"] = listOf("main", "harness")
+extra["hadronChecks.determinism"] = listOf<String>()
+apply(from = rootProject.file("gradle/hadron-checks.gradle.kts"))

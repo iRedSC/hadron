@@ -42,7 +42,8 @@ A test must be able to fail. Reject:
 - **Tautological tests**, which restate the code: asserting a constant equals itself, or computing the expected value the same way the code does.
 - **Structure-sensitive tests**, which check how the code is built rather than what it does: private fields, call order, a class's shape. Test at the event, the API method or the command, the way a plugin would.
 - **Over-mocked tests**, which mock the thing under test until nothing real runs. Hadron has no fake Minecraft by design; anything that touches the world goes in the in-game tier.
-- **Tests that pass by luck**: wall-clock sleeps, an unseeded random, a test that relies on an earlier test's state. Time is ticks (`t.tick()`), randomness is seeded.
+- **Tests that pass by luck**: a test that relies on an earlier test's state. (The build refuses the common forms of sleeps, the wall clock and unseeded randomness; other forms aren't caught, so look for them.)
+- **An exemption that doesn't hold**: a `@StaticState` or `@Nondeterministic` whose reason the code doesn't bear out.
 - **A `@Covers` the test doesn't earn.** The test must fire or call what it names and check the result, not merely mention it.
 - **An assertion loosened to make a failure go away.** A red test is a Hadron bug, a test bug or a contract gap; say which.
 
@@ -63,7 +64,7 @@ A test must be able to fail. Reject:
 
 ## Growing this file
 
-After each merged PR, look at every fix made during its review, its test runs or its triage, and ask which check would have caught it first. A bug fix also needs a test that fails without the fix, so the bug can't return unnoticed. It adds its entry to `regressions/regressions.toml`, with the patch that undoes it, so `regressionReplay` proves that test still fails without the fix ([testing.md](testing.md), "Regression replay"). In order of preference:
+After each merged PR, look at every fix made during its review, its test runs or its triage, and ask which check would have caught it first. A bug fix also needs a test that fails without the fix, so the bug can't return unnoticed. It adds its entry to `regressions/regressions.toml`, with the patch that undoes it, so the regression replay proves that test still fails without the fix ([testing.md](testing.md), "Regression replay"). In order of preference:
 
 1. **A type or API that can't be misused.** Then the mistake can't be written.
 2. **A build check** (like `coverageCheck` or the `plugin.yml` checks) that fails and says the fix.

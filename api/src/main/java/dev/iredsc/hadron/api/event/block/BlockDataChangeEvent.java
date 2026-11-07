@@ -11,6 +11,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.chunk.LevelChunk;
+import org.jspecify.annotations.Nullable;
 
 import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 
@@ -40,8 +41,8 @@ public class BlockDataChangeEvent extends BlockChangeEvent {
             "block_entity");
 
     private final ResourceLocation kind;
-    private final CompoundTag before;
-    private final CompoundTag after;
+    private final @Nullable CompoundTag before;
+    private final @Nullable CompoundTag after;
 
     /** A block entity's data changes. */
     public BlockDataChangeEvent(ServerLevel level, BlockPos pos, BlockState state, CompoundTag before,

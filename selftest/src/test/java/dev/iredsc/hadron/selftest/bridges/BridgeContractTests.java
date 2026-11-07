@@ -586,7 +586,7 @@ public final class BridgeContractTests {
         t.assertEquals(1, sent.size(), "a withheld reveal sends nothing");
         t.assertEquals(Optional.of(pig), seen.get(1).getEntity(), "the entity revealed");
         cancel[0] = false;
-        ResourceHolder.Account bobs = ResourceHolder.Account.player(UUID.randomUUID()); // bob may be offline
+        ResourceHolder.Account bobs = ResourceHolder.Account.player(new UUID(0, 42)); // bob, who may be offline
         fire(t, new Actor.Player(alice.player()), a -> fired[0] = new DataRevealEvent(alice.player(), bobs,
                 data.copy()), () -> sent.add(fired[0].getData()));
         t.assertEquals(Optional.of(bobs), seen.get(2).getAccount(), "the account revealed");

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.block;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.core.Direction;
@@ -14,7 +15,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  */
 @FiredBy(core = FULL)
 public class BucketEmptyEvent extends BucketEvent {
-    public BucketEmptyEvent(ServerLevel level, BlockChange change, ItemStack bucket, Direction face, Actor actor) {
+    public BucketEmptyEvent(ServerLevel level, BlockChange change, ItemStack bucket, @Nullable Direction face, Actor actor) {
         super(level, change, bucket, face, actor);
     }
 }

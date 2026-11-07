@@ -2,7 +2,6 @@ package dev.iredsc.hadron.selftest.world;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.test.TestContext;
-import java.util.function.BooleanSupplier;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.phys.Vec3;
@@ -25,20 +24,7 @@ final class Console {
      */
     static void awaitTicking(TestContext t, BlockPos pos) {
         t.level().setChunkForced(pos.getX() >> 4, pos.getZ() >> 4, true);
-        awaitSlowly(t, "the test world's chunk to start ticking", () -> t.level().isPositionEntityTicking(pos), 300);
-    }
-
-    /** {@link TestContext#await}, sleeping briefly between ticks for work the server does on other threads. */
-    static void awaitSlowly(TestContext t, String what, BooleanSupplier condition, int ticks) {
-        t.await(what, () -> {
-            if (condition.getAsBoolean()) return true;
-            try {
-                Thread.sleep(5);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-            return false;
-        }, ticks);
+        t.awaitAsync("the test world's chunk to start ticking", () -> t.level().isPositionEntityTicking(pos), 300);
     }
 
     static void assertServer(TestContext t, Actor actor) {

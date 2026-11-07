@@ -1,8 +1,8 @@
 diff --git a/api/src/main/java/dev/iredsc/hadron/api/event/block/BlockDropItemEvent.java b/api/src/main/java/dev/iredsc/hadron/api/event/block/BlockDropItemEvent.java
-index ec76436..3b0853a 100644
+index 3ab820c..cbadbd1 100644
 --- a/api/src/main/java/dev/iredsc/hadron/api/event/block/BlockDropItemEvent.java
 +++ b/api/src/main/java/dev/iredsc/hadron/api/event/block/BlockDropItemEvent.java
-@@ -6,7 +6,6 @@ import java.util.List;
+@@ -8,7 +8,6 @@ import java.util.List;
  import java.util.Objects;
  import java.util.Optional;
  import net.minecraft.core.BlockPos;
@@ -10,7 +10,7 @@ index ec76436..3b0853a 100644
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.world.entity.item.ItemEntity;
  import net.minecraft.world.item.ItemStack;
-@@ -50,14 +49,10 @@ public class BlockDropItemEvent extends BlockEvent implements Cancellable {
+@@ -58,15 +57,11 @@ public class BlockDropItemEvent extends BlockEvent implements Cancellable {
          this.experience = Math.max(0, experience);
      }
  
@@ -19,7 +19,8 @@ index ec76436..3b0853a 100644
 -     * now: by the time drops roll, a player's break has already removed the block entity, so reading it later throws.
 -     */
 +    /** The break, from the block and block entity that were there to what is there now. */
-     private static BlockChange broken(ServerLevel level, BlockPos pos, BlockState state, BlockEntity blockEntity) {
+     private static BlockChange broken(ServerLevel level, BlockPos pos, BlockState state,
+             @Nullable BlockEntity blockEntity) {
          BlockState now = level.getBlockState(pos);
 -        CompoundTag before = blockEntity != null ? blockEntity.saveWithFullMetadata(level.registryAccess()) : null;
 -        return BlockChange.withData(level, pos, state, now, before,

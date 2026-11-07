@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.net;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -23,7 +24,7 @@ public final class DisplayNames {
      * The name in chat, death and join messages, and wherever a mod asks for {@code player.getDisplayName()}, as
      * Bukkit's {@code setDisplayName}. Scoreboard team colours and prefixes still apply around it.
      */
-    public static void setDisplayName(JavaPlugin plugin, ServerPlayer player, Component name) {
+    public static void setDisplayName(JavaPlugin plugin, ServerPlayer player, @Nullable Component name) {
         NetBackend.Port.get().setDisplayName(plugin, player, name);
     }
 
@@ -33,7 +34,7 @@ public final class DisplayNames {
     }
 
     /** The name in the tab list, as Bukkit's {@code setPlayerListName}. Any text and colours. */
-    public static void setPlayerListName(JavaPlugin plugin, ServerPlayer player, Component name) {
+    public static void setPlayerListName(JavaPlugin plugin, ServerPlayer player, @Nullable Component name) {
         NetBackend.Port.get().setPlayerListName(plugin, player, name);
     }
 
@@ -45,7 +46,7 @@ public final class DisplayNames {
      *
      * @throws IllegalArgumentException if the tag is empty, too long, or has formatting codes or line breaks
      */
-    public static void setNameTag(JavaPlugin plugin, ServerPlayer player, String tag) {
+    public static void setNameTag(JavaPlugin plugin, ServerPlayer player, @Nullable String tag) {
         NetBackend.Port.get().setNameTag(plugin, player, tag);
     }
 

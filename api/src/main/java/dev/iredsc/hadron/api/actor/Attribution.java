@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.actor;
 
+import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -17,11 +18,11 @@ import java.util.UUID;
 public final class Attribution {
     private static final Attribution NONE = new Attribution(null, null, null);
 
-    private final UUID responsible;
-    private final UUID controller;
-    private final UUID authority;
+    private final @Nullable UUID responsible;
+    private final @Nullable UUID controller;
+    private final @Nullable UUID authority;
 
-    private Attribution(UUID responsible, UUID controller, UUID authority) {
+    private Attribution(@Nullable UUID responsible, @Nullable UUID controller, @Nullable UUID authority) {
         this.responsible = responsible;
         this.controller = controller;
         this.authority = authority;
@@ -38,15 +39,15 @@ public final class Attribution {
                 null, null);
     }
 
-    public Attribution withResponsible(UUID responsible) {
+    public Attribution withResponsible(@Nullable UUID responsible) {
         return new Attribution(responsible, controller, authority);
     }
 
-    public Attribution withController(UUID controller) {
+    public Attribution withController(@Nullable UUID controller) {
         return new Attribution(responsible, controller, authority);
     }
 
-    public Attribution withAuthority(UUID authority) {
+    public Attribution withAuthority(@Nullable UUID authority) {
         return new Attribution(responsible, controller, authority);
     }
 
@@ -75,7 +76,7 @@ public final class Attribution {
     }
 
     @Override
-    public boolean equals(Object o) {
+    public boolean equals(@Nullable Object o) {
         return o instanceof Attribution a && Objects.equals(responsible, a.responsible)
                 && Objects.equals(controller, a.controller) && Objects.equals(authority, a.authority);
     }

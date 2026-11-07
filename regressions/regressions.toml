@@ -1,5 +1,5 @@
 # Every bug Hadron has fixed, the patch that undoes its fix, and the tests that must fail without it.
-# `python3 scripts/regression_replay.py` (or ./gradlew regressionReplay) applies each regressions/<id>.patch in a
+# `python3 scripts/regression_replay.py` applies each regressions/<id>.patch in a
 # throwaway worktree and runs the entry's guards; every guard must FAIL. See docs/testing.md, "Regression replay".
 #
 #   id         names the patch file, regressions/<id>.patch
@@ -333,6 +333,7 @@ paths = [
 guards = [
     { test = "SettleTests.anActionFailsWhenWorkKeepsArrivingWithoutATick", tier = "in-game" },
     { test = "SettleTests.anActionFailsWhenANetworkThreadNeverAnswers", tier = "in-game" },
+    { test = "SettleTests.anActionFailsWhenChunkPacketsKeepArriving", tier = "in-game" },
 ]
 note = "Hand-made on top of 65c7f57: the join's chunk check, settle's budget throw (now `return`) and the fence's timeout throw are undone."
 

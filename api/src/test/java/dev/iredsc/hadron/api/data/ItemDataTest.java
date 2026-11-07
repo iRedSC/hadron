@@ -48,7 +48,7 @@ class ItemDataTest {
         assertEquals(true, roundTrip(PersistentDataType.BOOLEAN, true));
         assertEquals(false, roundTrip(PersistentDataType.BOOLEAN, false));
         assertEquals("héllo", roundTrip(PersistentDataType.STRING, "héllo"));
-        UUID id = UUID.randomUUID();
+        UUID id = new UUID(0x1234_5678L, 0x9abc_def0L);
         assertEquals(id, roundTrip(PersistentDataType.UUID, id));
     }
     @Test

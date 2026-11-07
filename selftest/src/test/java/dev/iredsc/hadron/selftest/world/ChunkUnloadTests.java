@@ -38,9 +38,9 @@ public final class ChunkUnloadTests {
             }
         });
         Console.run(t, "forceload add " + at.getX() + " " + at.getZ());
-        Console.awaitSlowly(t, "the forced chunk to load", () -> seen.contains("load"), 300);
+        t.awaitAsync("the forced chunk to load", () -> seen.contains("load"), 300);
         Console.run(t, "forceload remove " + at.getX() + " " + at.getZ());
-        Console.awaitSlowly(t, "the released chunk to unload", () -> {
+        t.awaitAsync("the released chunk to unload", () -> {
             t.level().getChunkSource().tick(() -> true, false);
             return seen.stream().anyMatch(s -> s.startsWith("unload"));
         }, 600);

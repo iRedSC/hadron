@@ -15,12 +15,13 @@ public final class ServerLoadTests {
     @HadronTest
     @Covers(ServerLoadEvent.class)
     void theServerLoadIsHeardOnceAtStartupAndNeverOnAReload(TestContext t) {
-        if (SelfTestPlugin.enabledAtStartup) {
-            t.assertEquals(1, SelfTestPlugin.serverLoads, "ServerLoadEvents heard by a plugin enabled at startup");
-            t.assertTrue(SelfTestPlugin.loadedServer == t.server(), "the ServerLoadEvent should name this server, "
-                    + "but named " + SelfTestPlugin.loadedServer);
+        SelfTestPlugin plugin = (SelfTestPlugin) t.plugin();
+        if (plugin.enabledAtStartup()) {
+            t.assertEquals(1, plugin.serverLoads(), "ServerLoadEvents heard by a plugin enabled at startup");
+            t.assertTrue(plugin.loadedServer() == t.server(), "the ServerLoadEvent should name this server, "
+                    + "but named " + plugin.loadedServer());
         } else {
-            t.assertEquals(0, SelfTestPlugin.serverLoads, "ServerLoadEvents heard by a plugin enabled by a reload");
+            t.assertEquals(0, plugin.serverLoads(), "ServerLoadEvents heard by a plugin enabled by a reload");
         }
     }
 }

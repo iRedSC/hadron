@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.item;
 
+import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -35,7 +36,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
         bridges = "the mod's equip paths and extra slots (Curios, Accessories), with the slot name")
 public class EquipEvent extends ItemEvent implements Cancellable {
     private final LivingEntity entity;
-    private final EquipmentSlot slot;
+    private final @Nullable EquipmentSlot slot;
     private final String slotName;
     private final ItemStack replaced;
     private boolean cancelled;
@@ -52,7 +53,7 @@ public class EquipEvent extends ItemEvent implements Cancellable {
         this(level, entity, null, Objects.requireNonNull(slotName, "slotName"), replaced, item, actor);
     }
 
-    private EquipEvent(ServerLevel level, LivingEntity entity, EquipmentSlot slot, String slotName,
+    private EquipEvent(ServerLevel level, LivingEntity entity, @Nullable EquipmentSlot slot, String slotName,
             ItemStack replaced, ItemStack item, Actor actor) {
         super(level, item.copy(), actor);
         this.entity = Objects.requireNonNull(entity, "entity");

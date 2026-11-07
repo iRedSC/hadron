@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.test;
 
+import dev.iredsc.hadron.checks.StaticState;
 import net.minecraft.SharedConstants;
 import net.minecraft.server.Bootstrap;
 import org.junit.jupiter.api.extension.BeforeAllCallback;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.extension.ExtensionContext;
  * packet is an {@code @HadronTest}, which runs in a real server with {@code ./gradlew hadronTest}.
  */
 public final class MinecraftBootstrap implements BeforeAllCallback {
+    @StaticState(reason = "Minecraft's registries bootstrap once per JVM, so whether they have is the JVM's")
     private static volatile boolean done;
 
     /** JUnit makes one through {@link WithMinecraft}; nothing else needs to. */

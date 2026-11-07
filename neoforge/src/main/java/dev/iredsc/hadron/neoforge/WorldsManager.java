@@ -45,7 +45,7 @@ import net.minecraft.world.level.storage.LevelStorageSource;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.level.LevelEvent;
-import org.jetbrains.annotations.Nullable;
+import org.jspecify.annotations.Nullable;
 import org.slf4j.Logger;
 
 /**
@@ -217,12 +217,15 @@ final class WorldsManager implements Worlds.Backend {
             to = server.overworld();
             BlockPos spawn = to.getSharedSpawnPos();
             at = Vec3.atBottomCenterOf(spawn);
+        } else if (at == null) {
+            throw new IllegalArgumentException("Give both a target world and a position");
         } else if (to == level || server.getLevel(to.dimension()) != to) {
             throw new IllegalArgumentException("Can't move players out of " + dimension.location() + " into "
                     + to.dimension().location() + ": pick another loaded world");
         }
         // Saved first: if the file can't be written, nothing has happened yet.
         Definition definition = store.get(dimension.location());
+        if (definition == null) throw notOurs(dimension, "unload");
         store.put(definition.withLoaded(false));
         // Players are asked to leave like any teleport, so listeners may send them somewhere else; anyone a listener
         // kept here is moved anyway, without events, since a world being unloaded can't keep anyone in it.

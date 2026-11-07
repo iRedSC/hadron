@@ -1,8 +1,8 @@
 diff --git a/api/src/main/java/dev/iredsc/hadron/api/Node.java b/api/src/main/java/dev/iredsc/hadron/api/Node.java
-index 8df24af..124f083 100644
+index faa76a0..ee55d2b 100644
 --- a/api/src/main/java/dev/iredsc/hadron/api/Node.java
 +++ b/api/src/main/java/dev/iredsc/hadron/api/Node.java
-@@ -68,13 +68,6 @@ public final class Node {
+@@ -72,13 +72,6 @@ public final class Node {
              throw new IllegalArgumentException("Permission node '" + id + "' must look like plugin.thing, lowercase");
          }
          String root = id.substring(0, id.indexOf('.'));
@@ -17,10 +17,10 @@ index 8df24af..124f083 100644
              throw new dev.iredsc.hadron.api.plugin.PluginException("it declares permission node " + id
                      + ", but '" + root + ".' is reserved for nodes Hadron makes itself. Start it with the plugin's "
 diff --git a/api/src/main/java/dev/iredsc/hadron/api/plugin/PluginContext.java b/api/src/main/java/dev/iredsc/hadron/api/plugin/PluginContext.java
-index 784f7fa..d4228b6 100644
+index 3756396..c7f1fe7 100644
 --- a/api/src/main/java/dev/iredsc/hadron/api/plugin/PluginContext.java
 +++ b/api/src/main/java/dev/iredsc/hadron/api/plugin/PluginContext.java
-@@ -26,9 +26,6 @@ public interface PluginContext {
+@@ -27,9 +27,6 @@ public interface PluginContext {
  
      boolean enabled();
  
@@ -28,13 +28,13 @@ index 784f7fa..d4228b6 100644
 -    boolean alive();
 -
      /** A command from plugin.yml; null for a name it doesn't declare. */
-     PluginCommand command(String name);
+     @Nullable PluginCommand command(String name);
  
 diff --git a/common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java b/common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java
-index d077ef5..ca178ce 100644
+index 3425022..563f6e9 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java
-@@ -137,8 +137,7 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
+@@ -145,8 +145,7 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
          return this.server == server;
      }
  

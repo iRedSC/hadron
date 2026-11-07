@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.common.PluginHost;
 import java.util.function.Supplier;
@@ -9,6 +10,7 @@ import java.util.function.Supplier;
  * building an event, so a server where no plugin listens pays almost nothing.
  */
 public final class Hooks {
+    @StaticState(reason = "the port installs its host supplier once when the mod loads")
     private static volatile Supplier<PluginHost> hosts = () -> null;
 
     private Hooks() {}

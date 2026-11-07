@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import it.unimi.dsi.fastutil.longs.Long2ObjectMap;
 import it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap;
 import java.util.function.Consumer;
@@ -32,7 +34,7 @@ public final class DataBlocks {
         }
 
         @Override
-        public ListTag write(DataBlocks blocks, HolderLookup.Provider provider) {
+        public @Nullable ListTag write(DataBlocks blocks, HolderLookup.Provider provider) {
             if (blocks.byPos.isEmpty()) return null;
             ListTag list = new ListTag();
             for (Long2ObjectMap.Entry<CompoundTag> entry : blocks.byPos.long2ObjectEntrySet()) {
@@ -52,15 +54,15 @@ public final class DataBlocks {
      * (a block write there in the same tick) keeps the data instead of clearing it, so {@code move} works whether
      * the bridge calls it before or after placing the block. Never saved.
      */
-    private it.unimi.dsi.fastutil.longs.Long2LongOpenHashMap arriving;
+    private it.unimi.dsi.fastutil.longs.@Nullable Long2LongOpenHashMap arriving;
 
     DataBlocks() {}
 
-    static DataBlocks of(LevelChunk chunk) {
+    static @Nullable DataBlocks of(LevelChunk chunk) {
         return ((DataChunk) chunk).hadron$blocks();
     }
 
-    static CompoundTag get(LevelChunk chunk, BlockPos pos) {
+    static @Nullable CompoundTag get(LevelChunk chunk, BlockPos pos) {
         DataBlocks blocks = of(chunk);
         return blocks == null ? null : blocks.byPos.get(pos.asLong());
     }
@@ -81,7 +83,7 @@ public final class DataBlocks {
     }
 
     /** Removes and returns the data at a position; null if it had none. */
-    static CompoundTag take(LevelChunk chunk, BlockPos pos) {
+    static @Nullable CompoundTag take(LevelChunk chunk, BlockPos pos) {
         DataBlocks blocks = of(chunk);
         if (blocks == null) return null;
         CompoundTag tag = blocks.byPos.remove(pos.asLong());
@@ -90,7 +92,7 @@ public final class DataBlocks {
     }
 
     /** Replaces the data at a position; null or empty leaves it with none. */
-    static void put(LevelChunk chunk, BlockPos pos, CompoundTag tag) {
+    static void put(LevelChunk chunk, BlockPos pos, @Nullable CompoundTag tag) {
         if (tag == null || tag.isEmpty()) {
             take(chunk, pos);
             return;
@@ -104,7 +106,9 @@ public final class DataBlocks {
      * Data cleared while NeoForge captures block snapshots (a placement waiting for its event, a tree growing): kept
      * aside for the rest of the tick, and put back if the capture is rolled back. Server thread only.
      */
+    @StaticState(reason = "weakly keyed by chunk, for the tick of one snapshot capture; the next tick's first stash clears it")
     private static final java.util.Map<LevelChunk, Long2ObjectOpenHashMap<CompoundTag>> STASH = new java.util.WeakHashMap<>();
+    @StaticState(reason = "the game tick STASH belongs to; a stale one only makes the next stash clear it")
     private static long stashTime = Long.MIN_VALUE;
 
     private static void stash(LevelChunk chunk, long key, CompoundTag tag) {

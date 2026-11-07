@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.data;
 
+import org.jspecify.annotations.Nullable;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -47,7 +48,7 @@ final class TagContainer implements PersistentDataContainer {
     }
 
     /** This container's compound, or null when nothing is stored. Never modified. */
-    private CompoundTag view() {
+    private @Nullable CompoundTag view() {
         CompoundTag tag = root.read();
         for (NamespacedKey key : path) {
             if (tag == null) return null;
@@ -74,7 +75,7 @@ final class TagContainer implements PersistentDataContainer {
         });
     }
 
-    private static Tag value(CompoundTag tag, NamespacedKey key) {
+    private static @Nullable Tag value(CompoundTag tag, NamespacedKey key) {
         return tag.get(key.getNamespace()) instanceof CompoundTag namespace ? namespace.get(key.getKey()) : null;
     }
 
@@ -93,7 +94,7 @@ final class TagContainer implements PersistentDataContainer {
         if (namespace.isEmpty()) tag.remove(key.getNamespace());
     }
 
-    private Tag stored(NamespacedKey key) {
+    private @Nullable Tag stored(NamespacedKey key) {
         CompoundTag view = view();
         return view == null ? null : value(view, Objects.requireNonNull(key, "key"));
     }
@@ -119,7 +120,7 @@ final class TagContainer implements PersistentDataContainer {
 
     @Override
     @SuppressWarnings("unchecked")
-    public <P, C> C get(NamespacedKey key, PersistentDataType<P, C> type) {
+    public <P, C> @Nullable C get(NamespacedKey key, PersistentDataType<P, C> type) {
         Objects.requireNonNull(type, "type");
         Tag tag = stored(key);
         if (tag == null) return null;
@@ -194,7 +195,7 @@ final class TagContainer implements PersistentDataContainer {
     }
 
     @Override
-    public boolean equals(Object other) {
+    public boolean equals(@Nullable Object other) {
         if (!(other instanceof TagContainer that)) return false;
         CompoundTag a = view();
         CompoundTag b = that.view();

@@ -10,6 +10,7 @@ import dev.iredsc.hadron.api.event.resource.Resource;
 import dev.iredsc.hadron.api.event.resource.ResourceConsumeEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
 import dev.iredsc.hadron.api.event.resource.ResourceProduceEvent;
+import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
@@ -54,6 +55,7 @@ public final class EconomyApiTests {
     @Covers(value = EconomyProvider.class, method = "createAccount")
     @Covers(value = EconomyProvider.class, method = "getBalance")
     @Covers(value = EconomyProvider.class, method = "setBalances")
+    @Nondeterministic(reason = "a town no earlier run on a warm test server has made an account for")
     void aTownAccountIsMadeOnceAndHoldsWhatIsPaidIn(TestContext t) {
         // These calls reach the accounts through EconomyProvider, here Hadron's own JSON provider. A test registering
         // a provider of its own would switch the store for the rest of the run: once a plugin has provided accounts,

@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.actor;
 
+import dev.iredsc.hadron.checks.StaticState;
+import org.jspecify.annotations.Nullable;
 import java.util.Arrays;
 import java.util.Objects;
 import java.util.Optional;
@@ -27,7 +29,9 @@ import org.slf4j.LoggerFactory;
  */
 public final class Actors {
     private static final Logger LOG = LoggerFactory.getLogger("Hadron");
+    @StaticState(reason = "each thread's open actor scopes; every scope pops itself when it closes, so a thread's stack is empty between operations, and Hadron is never reloaded")
     private static final ThreadLocal<Stack> STACK = ThreadLocal.withInitial(Stack::new);
+    @StaticState(reason = "the port installs its world-saved memory when the mod loads; Hadron itself is never reloaded")
     private static volatile Memory memory = new Memory.Transient();
 
     private Actors() {}
@@ -46,7 +50,7 @@ public final class Actors {
         int depth;
         long nextToken;
 
-        long push(Actor actor, Operation operation) {
+        long push(Actor actor, @Nullable Operation operation) {
             if (depth == actors.length) {
                 actors = Arrays.copyOf(actors, depth * 2);
                 operations = Arrays.copyOf(operations, depth * 2);
@@ -113,7 +117,7 @@ public final class Actors {
         return scope(stack, checked(actor), stack.depth == 0 ? null : stack.operations[stack.depth - 1]);
     }
 
-    private static Scope scope(Stack stack, Actor actor, Operation operation) {
+    private static Scope scope(Stack stack, Actor actor, @Nullable Operation operation) {
         int index = stack.depth;
         return new Scope(stack, index, stack.push(actor, operation));
     }
@@ -148,7 +152,7 @@ public final class Actors {
         return STACK.get().depth == 0;
     }
 
-    private static Actor top() {
+    private static @Nullable Actor top() {
         Stack stack = STACK.get();
         return stack.depth == 0 ? null : stack.actors[stack.depth - 1];
     }
@@ -157,7 +161,7 @@ public final class Actors {
         return scope(STACK.get(), checked(actor), operation);
     }
 
-    static Operation currentOperation() {
+    static @Nullable Operation currentOperation() {
         Stack stack = STACK.get();
         return stack.depth == 0 ? null : stack.operations[stack.depth - 1];
     }

@@ -1,10 +1,12 @@
 diff --git a/api/src/main/java/dev/iredsc/hadron/api/Permissions.java b/api/src/main/java/dev/iredsc/hadron/api/Permissions.java
-index 9639315..1b836b1 100644
+index 8b5c78a..1b836b1 100644
 --- a/api/src/main/java/dev/iredsc/hadron/api/Permissions.java
 +++ b/api/src/main/java/dev/iredsc/hadron/api/Permissions.java
-@@ -1,46 +1,23 @@
+@@ -1,49 +1,23 @@
  package dev.iredsc.hadron.api;
  
+-import dev.iredsc.hadron.checks.StaticState;
+-import org.jspecify.annotations.Nullable;
 -import java.util.concurrent.atomic.AtomicInteger;
 -import java.util.function.Function;
  import net.minecraft.commands.CommandSourceStack;
@@ -24,6 +26,7 @@ index 9639315..1b836b1 100644
      public static final String DEFAULT_GROUP = "default";
  
 -    private static final Logger LOG = LoggerFactory.getLogger("Hadron");
+-    @StaticState(reason = "counts permission provider failures only to keep them from flooding the log")
 -    private static final AtomicInteger FAILURES = new AtomicInteger();
 -
      private Permissions() {}
@@ -34,7 +37,7 @@ index 9639315..1b836b1 100644
 -    }
 -
 -    /** The provider's answer; {@code none} without a provider or when it throws (logged, a few times in full). */
--    private static <T> T ask(Function<PermissionProvider, T> question, T none) {
+-    private static <T> @Nullable T ask(Function<PermissionProvider, T> question, @Nullable T none) {
          PermissionProvider ranks = Providers.get(PermissionProvider.class);
 -        if (ranks == null) return none;
 -        try {
@@ -52,7 +55,7 @@ index 9639315..1b836b1 100644
      }
  
      /** Players by their ranks; the console, command blocks and other sources by operator level 2. */
-@@ -51,24 +28,24 @@ public final class Permissions {
+@@ -54,24 +28,24 @@ public final class Permissions {
  
      /** The name of the player's heaviest group, which supplies their prefix first. */
      public static String group(ServerPlayer player) {

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.selftest.platform;
 
+import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.net.DisplayNames;
 import dev.iredsc.hadron.api.net.PacketEvent;
@@ -306,6 +307,13 @@ public final class NamesAndPacketsTests {
         }
     }
 
+    /** Waits up to 5 s for another thread to log {@code line}: the server thread isn't the one that will. */
+    @Nondeterministic(reason = "waits for a packet handler starting on another thread, which no server tick drives")
+    private static void awaitOffThread(List<Object> log, String line) {
+        long until = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
+        while (!log.contains(line) && System.nanoTime() < until) Thread.onSpinWait();
+    }
+
     @HadronTest(timeout = 700)
     @Covers(value = Packets.class, method = "onSend")
     void aPacketHandlerAlreadyRunningFinishesBeforeItsPluginsOnDisable(TestContext t) throws Exception {
@@ -322,8 +330,7 @@ public final class NamesAndPacketsTests {
             sender = new Thread(() -> bob.player().connection.send(
                     new ClientboundSystemChatPacket(Component.literal("probe slow"), false)), "selftest-slow-send");
             sender.start();
-            long until = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(5);
-            while (!log.contains("slow started") && System.nanoTime() < until) Thread.onSpinWait();
+            awaitOffThread(log, "slow started");
             t.assertTrue(log.contains("slow started"), "the probe's handler started on the sending thread");
             Files.delete(jar.toPath());
             t.await("Hadron to disable the probe", () -> !plugins.isPluginEnabled("SelfTestPacketProbe"), 300);

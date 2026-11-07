@@ -1,5 +1,8 @@
 package dev.iredsc.hadron.selftest.harness;
 
+import dev.iredsc.hadron.api.net.PacketRegistration;
+import dev.iredsc.hadron.api.net.Packets;
+import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -9,6 +12,8 @@ import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.network.Connection;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundChunkBatchFinishedPacket;
+import net.minecraft.network.protocol.game.ServerboundChunkBatchReceivedPacket;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.TickTask;
 
@@ -50,6 +55,41 @@ public final class SettleTests {
     }
 
     @HadronTest
+    void anActionFailsWhenChunkPacketsKeepArriving(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        // A listener that answers every chunk acknowledgement with another batch: only chunk packets, never ending.
+        boolean[] on = {true};
+        PacketRegistration loop = Packets.onReceive(t.plugin(), ServerboundChunkBatchReceivedPacket.class, e -> {
+            e.setCancelled(true);
+            if (on[0]) e.getPlayer().connection.send(new ClientboundChunkBatchFinishedPacket(0));
+        });
+        RuntimeException failure = null;
+        try {
+            alice.player().connection.send(new ClientboundChunkBatchFinishedPacket(0));
+            alice.selectSlot(2);
+        } catch (RuntimeException e) {
+            failure = e;
+        } finally {
+            on[0] = false;
+            loop.unregister();
+        }
+        if (failure == null) t.fail("an action returned while chunk packets were still arriving, so a negative "
+                + "assertion right after it could pass early; it should fail instead");
+        t.assertTrue(failure.getMessage() != null && failure.getMessage().contains("answers every packet"),
+                "the failure should say what keeps work arriving, but was: " + failure.getMessage());
+    }
+
+    /** Run on a network thread: holds it past the 10 s the harness waits for one. */
+    @Nondeterministic(reason = "stands in for a network thread that never answers, which the harness bounds by wall time")
+    private static void hangPastTheHarnessWait() {
+        try {
+            Thread.sleep(10_500);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    @HadronTest
     void anActionFailsWhenANetworkThreadNeverAnswers(TestContext t) throws ReflectiveOperationException {
         TestPlayer alice = t.player("alice");
         List<Channel> channels = new ArrayList<>();
@@ -62,13 +102,7 @@ public final class SettleTests {
         }
         t.assertTrue(!channels.isEmpty(), "alice's connection should have a channel");
         // Longer than the harness waits for a network thread.
-        channels.get(0).eventLoop().execute(() -> {
-            try {
-                Thread.sleep(10_500);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-            }
-        });
+        channels.get(0).eventLoop().execute(SettleTests::hangPastTheHarnessWait);
         RuntimeException failure = null;
         try {
             alice.chat("hello");

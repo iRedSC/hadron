@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import org.jspecify.annotations.Nullable;
 import com.mojang.brigadier.ParseResults;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
@@ -45,7 +46,7 @@ public final class ServerEvents {
     }
 
     /** Fires {@link CommandExecuteEvent} for a command about to run: the command to run instead, or null to refuse. */
-    public static String ask(CommandSourceStack source, String command) {
+    public static @Nullable String ask(CommandSourceStack source, String command) {
         if (!Hooks.listens(CommandExecuteEvent.class)) return command;
         Actor actor = Actors.current().orElseGet(() -> source.getEntity() != null
                 ? WorldActors.of(source.getEntity()) : Actor.Unknown.INSTANCE);

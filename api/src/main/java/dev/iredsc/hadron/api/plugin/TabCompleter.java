@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.plugin;
 
+import org.jspecify.annotations.Nullable;
 import java.util.List;
 import net.minecraft.commands.CommandSourceStack;
 
@@ -10,5 +11,5 @@ public interface TabCompleter {
      * @return the candidates for the last word (Hadron keeps those starting with what's typed), or null for online
      *     player names.
      */
-    List<String> onTabComplete(CommandSourceStack sender, PluginCommand command, String label, String[] args);
+    @Nullable List<String> onTabComplete(CommandSourceStack sender, PluginCommand command, String label, String[] args);
 }
