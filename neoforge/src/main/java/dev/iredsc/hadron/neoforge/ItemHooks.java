@@ -178,6 +178,40 @@ public final class ItemHooks {
 
     // ---- Drops and pickups --------------------------------------------------------------------------------------
 
+    /** The menu handling a click on the server thread, and a refused cursor throw waiting to go back on its cursor. */
+    private static AbstractContainerMenu clicking;
+    private static ItemStack keptForCursor;
+
+    public static void clickStarts(AbstractContainerMenu menu) {
+        clicking = menu;
+        keptForCursor = null;
+    }
+
+    public static void clickEnds(AbstractContainerMenu menu) {
+        if (clicking == menu) {
+            clicking = null;
+            keptForCursor = null;
+        }
+    }
+
+    /**
+     * A refused drop of the cursor's own stack, during a click, that the inventory had no room for. True when it will
+     * stay on the cursor: the click empties the cursor next, and {@link #carried} puts this back instead.
+     */
+    static boolean keepOnCursor(AbstractContainerMenu menu, ItemStack stack) {
+        if (clicking != menu || menu.getCarried() != stack) return false;
+        keptForCursor = stack;
+        return true;
+    }
+
+    /** What a click's {@code setCarried} really sets: the kept stack, where the click would empty the cursor. */
+    public static ItemStack carried(AbstractContainerMenu menu, ItemStack value) {
+        if (keptForCursor == null || clicking != menu || !value.isEmpty()) return value;
+        ItemStack kept = keptForCursor;
+        keptForCursor = null;
+        return kept;
+    }
+
     /**
      * A mob is about to throw an item (vanilla's one throw method, which allays, villagers and piglins all use). True
      * when cancelled and the whole stack went into the mob's inventory; otherwise {@code stack} is left holding what
@@ -206,8 +240,15 @@ public final class ItemHooks {
     public static boolean hopperPickup(Container hopper, ItemEntity item) {
         if (!Hooks.listens(ItemPickupEvent.class) || !(item.level() instanceof ServerLevel level)) return false;
         if (!canAccept(hopper, item.getItem(), null)) return false; // nothing would move: rule 8, no phantom pickup
-        return Hooks.post(new ItemPickupEvent(level, item, InventoryHolders.of(hopper, null), container(hopper)))
-                .isCancelled();
+        Actor actor = container(hopper);
+        // An item landing on a hopper is taken during the item's own tick, which puts the item on the actor stack;
+        // the hopper is still the one taking it.
+        if (actor instanceof Actor.EntityActor e && e.entity() == item) {
+            actor = hopper instanceof BlockEntity be && be.getLevel() instanceof ServerLevel server
+                    ? new Actor.Machine(server, be.getBlockPos(), Actors.remembered(be))
+                    : hopper instanceof Entity entity ? derive(entity) : Actor.Unknown.INSTANCE;
+        }
+        return Hooks.post(new ItemPickupEvent(level, item, InventoryHolders.of(hopper, null), actor)).isCancelled();
     }
 
     /** A mob is about to pick an item entity up; true leaves it on the ground. */
