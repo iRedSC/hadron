@@ -9,7 +9,7 @@ import council_gate as gate
 
 HEAD = "0123456789abcdef0123456789abcdef01234567"
 CONFIG = {
-    "min_findings": 3, "stop_at": "P3", "max_rounds": 5, "cleanup_lines": 40, "min_score": 8,
+    "min_findings": 3, "stop_at": "P3", "max_rounds": 5,
     "member": [
         {"name": "Asker", "role": "questions", "provider": "claudeAgent", "model": "m", "effort": "medium"},
         {"name": "Deep A", "role": "council", "provider": "codex", "model": "m", "reasoningEffort": "high"},
@@ -21,7 +21,8 @@ CONFIG = {
 ROUNDS = {"Deep A": ["5 found, top P1", "3 found, top P3"], "Deep B": ["4 found, top P2", "4 found, top P4"]}
 
 
-def record(rows=ROUNDS, questions="Asker", explained="Explainer", final=None, columns=None) -> str:
+def record(rows=ROUNDS, questions="Asker", explained="Explainer", final=f"Final, {HEAD}, 2 found, top P4",
+           columns=None) -> str:
     columns = columns or [f"Round {i}" for i in range(1, len(next(iter(rows.values()))) + 1)]
     lines = ["## Council review", "", "Council commit: " + HEAD, f"Questions: {questions}",
              f"Explained: {explained}"] + ([f"Final review: {final}"] if final else []) + [
@@ -30,8 +31,8 @@ def record(rows=ROUNDS, questions="Asker", explained="Explainer", final=None, co
     return "\n".join(lines) + "\n\n🤖 Generated"
 
 
-def problems(text: str, cleanup: int | None = 0) -> list[str]:
-    return gate.review_problems(text, HEAD, CONFIG, cleanup)
+def problems(text: str, in_history: bool = True) -> list[str]:
+    return gate.review_problems(text, HEAD, CONFIG, in_history)
 
 
 class Record(unittest.TestCase):
@@ -42,7 +43,7 @@ class Record(unittest.TestCase):
         self.assertTrue(problems("nothing here"))
 
     def test_a_council_commit_outside_the_history_fails(self):
-        self.assertTrue(problems(record(), cleanup=None))
+        self.assertTrue(problems(record(), in_history=False))
 
     def test_a_last_round_above_the_stop_level_asks_for_another_round(self):
         found = problems(record(dict(ROUNDS, **{"Deep B": ["4 found, top P2", "4 found, top P2"]})))
@@ -85,20 +86,17 @@ class Record(unittest.TestCase):
     def test_skipping_the_explain_pass_fails(self):
         self.assertTrue(problems(record(explained="Someone else")))
 
-    def test_a_large_cleanup_needs_the_final_review(self):
-        self.assertTrue(problems(record(), cleanup=41))
-
-    def test_a_large_cleanup_with_a_passing_final_review_of_the_head_passes(self):
-        self.assertEqual(problems(record(final=f"Final, {HEAD}, 9/10"), cleanup=41), [])
+    def test_no_final_review_fails(self):
+        self.assertTrue(problems(record(final=None)))
 
     def test_a_final_review_of_another_commit_fails(self):
-        self.assertTrue(problems(record(final=f"Final, {'f' * 40}, 9/10"), cleanup=41))
+        self.assertTrue(problems(record(final=f"Final, {'f' * 40}, 2 found, top P4")))
 
-    def test_a_low_final_score_fails(self):
-        self.assertTrue(problems(record(final=f"Final, {HEAD}, 7/10"), cleanup=41))
+    def test_a_final_review_that_found_something_serious_fails(self):
+        self.assertTrue(problems(record(final=f"Final, {HEAD}, 2 found, top P0")))
 
-    def test_a_small_cleanup_needs_no_final_review(self):
-        self.assertEqual(problems(record(), cleanup=40), [])
+    def test_a_final_review_by_someone_else_fails(self):
+        self.assertTrue(problems(record(final=f"Deep A, {HEAD}, 2 found, top P4")))
 
     def test_an_empty_list_line_doesnt_borrow_the_next_line(self):
         text = record(questions="").replace("Questions: \n", "Questions:\nAsker\n")
@@ -107,22 +105,6 @@ class Record(unittest.TestCase):
     def test_only_the_record_sections_council_commit_counts(self):
         body = "Council commit: " + "f" * 40 + "\n\n" + record()
         self.assertEqual(gate.council_commit(gate.record_section(body)), HEAD)
-
-
-class Cleanup(unittest.TestCase):
-    RULES = [(g, gate.glob_to_regex(g)) for g in (".claude/skills/**",)]
-
-    def test_code_lines_count(self):
-        self.assertEqual(gate.count_cleanup("3\t2\tsrc/A.java\0", self.RULES), 5)
-
-    def test_unprotected_markdown_doesnt_count(self):
-        self.assertEqual(gate.count_cleanup("30\t0\tdocs/notes.md\0", self.RULES), 0)
-
-    def test_the_review_skills_count_though_they_are_markdown(self):
-        self.assertEqual(gate.count_cleanup("30\t1\t.claude/skills/council/SKILL.md\0", self.RULES), 31)
-
-    def test_a_binary_file_forces_the_final_review(self):
-        self.assertGreater(gate.count_cleanup("-\t-\tlibs/x.jar\0", self.RULES), 10_000 - 1)
 
 
 class Config(unittest.TestCase):
@@ -157,6 +139,9 @@ class Config(unittest.TestCase):
 
     def test_a_bad_option_value_is_refused(self):
         self.assertTrue(self.changed(lambda c: c["member"][0].update(effort="ultra")))
+
+    def test_a_member_without_a_name_is_refused(self):
+        self.assertTrue(self.changed(lambda c: c["member"][1].pop("name")))
 
     def test_two_members_with_one_name_are_refused(self):
         self.assertTrue(self.changed(lambda c: c["member"][2].update(name="Deep A")))

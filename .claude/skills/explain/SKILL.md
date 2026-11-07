@@ -9,6 +9,8 @@ After the council converges, small models explain the change from the code alone
 time would. Where an explanation is wrong, the code is likely unclear; and where it matches what the author believed
 but not what the code does, one of the two is wrong. The author is the agent running this on its own PR.
 
+**One pass.** Each explainer is asked once; don't send it follow-ups or a second round.
+
 For each `role = "explain"` member of `.github/council.toml`, make a snapshot of the head with no history, so the
 explainer can't read the author's account of the change (commits, PR, purpose); the code and its docs stay in:
 
@@ -33,15 +35,5 @@ Compare each explanation with what the code does. For each place it's wrong:
   questions skill's order (impossible, rename, checked comment).
 - **The model's own limit**: say why in the PR under "Misreadings", quoting it.
 
-Also fix the P3 findings the council left. Commit, push, and list the explainers on the `Explained:` line.
-
-The gate counts the lines changed since the `Council commit` (Markdown only when it's a protected path; a binary
-always counts as too many). Above `cleanup_lines`, start the `role = "final"` member on the head with the PR URL, the
-head SHA, the worktree, the diff from the `Council commit` to the head, and:
-
-> Read AGENTS.md and docs/coding-standards.md first. This is the cleanup after a council review: names, comments and
-> clarity fixes. Check that it changed no behaviour the council reviewed and broke nothing. List any findings with a
-> priority by docs/coding-standards.md ("Priority"), file and line. End with one line: `Score: <n>/10`.
-
-Record `Final review: <name>, <full head SHA>, <score>/10`. It must reach `min_score`; if it doesn't, fix what it
-found and review the new head.
+Also fix the P3 findings the council left. Commit, push, and list the explainers on the `Explained:` line. Then
+the final review (.claude/skills/council/SKILL.md).

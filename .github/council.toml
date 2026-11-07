@@ -1,20 +1,15 @@
 # Who reviews a hard-to-undo change, and when it's done. Read by the three skills (.claude/skills/questions,
 # council, explain) to start their delegates, and by the gate (.github/scripts/council_gate.py) to check the record.
 #
-# Order: one pass of questions, then council rounds, then one explain pass and cleanup, then a final review only when
-# the cleanup changed more than `cleanup_lines` lines of code.
+# Order: one pass of questions, council rounds, one explain pass and cleanup, then the final review of the head.
 
 # A council round must have each member find at least this many issues.
 min_findings = 3
 # The council stops after the first round in which no member finds anything more serious than this priority (P0 is
-# the most serious), or after max_rounds.
+# the most serious). If max_rounds pass without that, the gate fails and the owner decides what's next. The final
+# review must reach the same priority.
 stop_at = "P3"
 max_rounds = 5
-# Lines changed after the council's last round, above which the final reviewer must review the head. Markdown
-# doesn't count unless it's a protected path (the review skills are), and a binary file always does.
-cleanup_lines = 40
-# The final reviewer's passing score, out of 10.
-min_score = 8
 
 [[member]]
 name = "Claude Haiku 5.5"

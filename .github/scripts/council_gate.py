@@ -7,7 +7,7 @@ The record is a "## Council review" section in the PR description, written by th
     Council commit: <the commit the last council round reviewed>
     Questions: Claude Haiku 5.5, GPT-6.1 Terra
     Explained: Claude Haiku 5.5 (explainer), GPT-6 Luna
-    Final review: GPT-6.1 Sol (final), <the PR's head>, 9/10      (only when the cleanup was large)
+    Final review: GPT-6.1 Sol (final), <the PR's head>, 2 found, top P4
 
     | Member | Round 1 | Round 2 |
     | --- | --- | --- |
@@ -15,8 +15,8 @@ The record is a "## Council review" section in the PR description, written by th
     | Claude Opus 5.5 | 4 found, top P2 | 4 found, top P4 |
 
 It passes when every council member found at least min_findings issues in every round, the last round found nothing
-more serious than stop_at (P0 is the most serious), every question asker and explainer is listed, and, if the code changed by more than cleanup_lines lines
-since the council commit, the final reviewer passed the PR's head. The cleanup size comes from git, not the record.
+more serious than stop_at (P0 is the most serious), every question asker and explainer is listed, and the final
+reviewer's last pass, on the PR's head, found nothing more serious than stop_at either.
 
 Reads BASE and HEAD (commit SHAs) and PR_BODY from the environment. CI runs main's copy of this script, the path list
 and the member list against the PR, so a PR can't change what checks it.
@@ -79,8 +79,7 @@ def whole(value: object, low: int, high: int) -> bool:
 def config_problems(config: dict) -> list[str]:
     """Why .github/council.toml can't run a council; empty when it can."""
     problems = []
-    for key, low, high in (("min_findings", 1, 20), ("max_rounds", 1, 10), ("cleanup_lines", 0, 10_000),
-                           ("min_score", 1, 10)):
+    for key, low, high in (("min_findings", 1, 20), ("max_rounds", 1, 10)):
         if not whole(config.get(key), low, high):
             problems.append(f"{COUNCIL_FILE} needs {key} = <a whole number from {low} to {high}>.")
     if config.get("stop_at") not in ("P0", "P1", "P2", "P3", "P4"):
@@ -88,6 +87,8 @@ def config_problems(config: dict) -> list[str]:
     members = config.get("member", [])
     for m in members:
         name = m.get("name", "<no name>")
+        if not isinstance(m.get("name"), str) or not m["name"].strip():
+            problems.append(f"{COUNCIL_FILE}: every member needs a name; one has {m.get('name')!r}.")
         if m.get("role") not in ROLES:
             problems.append(f"{COUNCIL_FILE}: {name} has role {m.get('role')!r}; roles are {', '.join(ROLES)}.")
         allowed = PROVIDER_OPTIONS.get(m.get("provider"), {})
@@ -148,12 +149,8 @@ def listed(text: str, label: str) -> list[str]:
     return [name.strip() for name in line.group(1).split(",")] if line else []
 
 
-def review_problems(body: str, head: str, config: dict, cleanup: int | None) -> list[str]:
-    """Why the PR description's record doesn't pass for this head commit; empty when it does.
-
-    `cleanup` is the number of code lines changed from the council commit to the head, or None when the council
-    commit isn't an ancestor of the head.
-    """
+def review_problems(body: str, head: str, config: dict, council_in_history: bool) -> list[str]:
+    """Why the PR description's record doesn't pass for this head commit; empty when it does."""
     text = record_section(body)
     if text is None:
         return ["The PR description has no \"## Council review\" section."]
@@ -163,7 +160,7 @@ def review_problems(body: str, head: str, config: dict, cleanup: int | None) -> 
     if council_commit(text) is None:
         problems.append("The record needs \"Council commit: <sha>\", at least 12 characters, naming the commit the "
                         "last council round reviewed.")
-    elif cleanup is None:
+    elif not council_in_history:
         problems.append("The council commit isn't in this PR's history: rebasing or force-pushing after the council "
                         "needs a new council round on the rewritten commits.")
 
@@ -205,43 +202,18 @@ def review_problems(body: str, head: str, config: dict, cleanup: int | None) -> 
             problems.append(f"\"{label}:\" must list {', '.join(missing)}: run the {role} pass "
                             f"(.claude/skills/{role}/SKILL.md).")
 
-    if cleanup is not None and cleanup > config["cleanup_lines"]:
-        final = re.search(r"^Final review:\s*(.+?),\s*([0-9a-f]{12,40}),\s*(\d+(?:\.\d+)?)/10\s*$", text, re.M)
-        if not final or final.group(1) != members["final"][0] or not head.startswith(final.group(2)) \
-                or float(final.group(3)) < config["min_score"]:
-            problems.append(f"{cleanup} code lines changed after the council commit (more than "
-                            f"{config['cleanup_lines']}), so {members['final'][0]} must review the head: "
-                            f"\"Final review: {members['final'][0]}, {head}, <score>/10\", at least "
-                            f"{config['min_score']}/10.")
+    final = re.search(r"^Final review:[ \t]*(.+?),[ \t]*([0-9a-f]{12,40}),[ \t]*(\d+) found, top P([0-4])[ \t]*$",
+                          text, re.M)
+    if not final or final.group(1) != members["final"][0] or not head.startswith(final.group(2)) \
+            or int(final.group(4)) < stop:
+        problems.append(f"{members['final'][0]}'s last pass must be on the head and find nothing more serious than "
+                        f"{config['stop_at']}: \"Final review: {members['final'][0]}, {head}, <n> found, top P<k>\" "
+                        "(.claude/skills/council/SKILL.md, \"Final review\").")
     return problems
 
 
-# A changed binary file's size isn't known in lines, so it counts as more than any threshold.
-BINARY = 10_000
-
-
-def count_cleanup(numstat: str, rules: list[tuple[str, re.Pattern[str]]]) -> int:
-    """Lines added plus removed in `git diff --numstat -z` output, not counting .md files outside the protected paths
-    (the review skills are .md, and they count)."""
-    total = 0
-    for entry in numstat.split("\0"):
-        if not entry:
-            continue
-        added, removed, path = entry.split("\t", 2)
-        if path.endswith(".md") and not any(rx.match(path) for _, rx in rules):
-            continue
-        total += BINARY if added == "-" else int(added) + int(removed)
-    return total
-
-
-def cleanup_lines(commit: str, head: str, rules: list[tuple[str, re.Pattern[str]]]) -> int | None:
-    """Lines changed from the council commit to the head, or None when the commit isn't in the head's history."""
-    if git("merge-base", "--is-ancestor", commit, head).returncode != 0:
-        return None
-    diff = git("diff", "--no-renames", "--numstat", "-z", commit, head)
-    if diff.returncode != 0:
-        raise SystemExit(f"git diff {commit} {head} failed, so the cleanup can't be measured: {diff.stderr.strip()}")
-    return count_cleanup(diff.stdout, rules)
+def in_history(commit: str, head: str) -> bool:
+    return git("merge-base", "--is-ancestor", commit, head).returncode == 0
 
 
 def main() -> int:
@@ -274,8 +246,7 @@ def main() -> int:
         print(f"  {name}  (matches {glob})")
     body = os.environ.get("PR_BODY") or ""
     commit = council_commit(record_section(body) or "")
-    cleanup = cleanup_lines(commit, head, rules) if commit else None
-    problems = review_problems(body, head, config, cleanup)
+    problems = review_problems(body, head, config, bool(commit) and in_history(commit, head))
     if not problems:
         print(f"Passed: the council converged and every pass ran, for {head[:12]}.")
         return 0

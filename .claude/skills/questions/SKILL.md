@@ -9,6 +9,8 @@ One pass of dumb questions before the council, to pick the author's brain: the a
 own PR. Questions surface what's only in the author's head, and make the author think outside the box before the code
 is reviewed in earnest.
 
+**One pass.** Each asker is asked once; don't send it follow-ups or a second round. The author settles what it asked.
+
 Start one delegate per `role = "questions"` member of `.github/council.toml`, in parallel, with `delegate_task` and the
 member's `provider`, `model` and option. If one can't start, say so and stop; the owner changes the seat. They are
 read-only. Give each the PR URL, the head SHA, the worktree path, the diff command (`git diff <base-sha>...<head-sha>`, where `<base-sha>` is
