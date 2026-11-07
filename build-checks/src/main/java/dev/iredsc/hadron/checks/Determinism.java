@@ -7,6 +7,7 @@ import static com.google.errorprone.matchers.method.MethodMatchers.instanceMetho
 
 import com.google.auto.service.AutoService;
 import com.google.errorprone.BugPattern;
+import com.google.errorprone.ErrorProneFlags;
 import com.google.errorprone.VisitorState;
 import com.google.errorprone.bugpatterns.BugChecker;
 import com.google.errorprone.bugpatterns.BugChecker.MethodInvocationTreeMatcher;
@@ -22,6 +23,7 @@ import com.sun.source.tree.Tree;
 import com.sun.source.util.TreePath;
 import com.sun.tools.javac.code.Attribute;
 import com.sun.tools.javac.code.Symbol;
+import javax.inject.Inject;
 
 /**
  * Refuses the wall clock, sleeps and unseeded randomness where Hadron promises determinism: its {@code common} host
@@ -36,6 +38,18 @@ import com.sun.tools.javac.code.Symbol;
         suppressionAnnotations = {})
 public final class Determinism extends BugChecker implements MethodInvocationTreeMatcher, NewClassTreeMatcher {
     static final String EXEMPTION = "dev.iredsc.hadron.checks.Nondeterministic";
+
+    private final boolean exemptions;
+
+    /** For ServiceLoader, which finds the check; Error Prone itself makes it with its flags, below. */
+    public Determinism() {
+        this(ErrorProneFlags.empty());
+    }
+
+    @Inject
+    public Determinism(ErrorProneFlags flags) {
+        exemptions = flags.getBoolean(NoStaticMutableState.ALLOW_EXEMPTIONS).orElse(false);
+    }
 
     private static final String TICKS = " Time in Hadron is server ticks: in a test, t.tick(n) or "
             + "t.await(condition, ticks); in a plugin or Hadron's host, the scheduler's runTaskLater(ticks) or the "
@@ -90,7 +104,7 @@ public final class Determinism extends BugChecker implements MethodInvocationTre
             if (sym == null) continue;
             Attribute.Compound exemption = NoStaticMutableState.exemption(sym, EXEMPTION);
             if (exemption == null) continue;
-            if (!NoStaticMutableState.isHadron(sym)) {
+            if (!exemptions) {
                 return buildDescription(tree).setMessage("@Nondeterministic is only for Hadron's own code. "
                         + message).build();
             }
@@ -101,8 +115,8 @@ public final class Determinism extends BugChecker implements MethodInvocationTre
             }
             return Description.NO_MATCH;
         }
-        return buildDescription(tree).setMessage(message + " If the wall clock is the point (a deadline for another "
-                + "thread, a timing printed for people), annotate the method @Nondeterministic(reason = \"...\").")
-                .build();
+        return buildDescription(tree).setMessage(message + (exemptions ? " If the wall clock is the point (a deadline "
+                + "for another thread, a timing printed for people), annotate the method "
+                + "@Nondeterministic(reason = \"...\")." : "")).build();
     }
 }

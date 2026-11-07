@@ -5,6 +5,9 @@ import org.junit.jupiter.api.Test;
 
 class DeterminismTest {
     private final CompilationTestHelper helper = CompilationTestHelper.newInstance(Determinism.class, getClass());
+    /** As Hadron's own modules compile: a reasoned exemption is allowed. */
+    private final CompilationTestHelper hadron = CompilationTestHelper.newInstance(Determinism.class, getClass())
+            .setArgs("-XepOpt:Hadron:AllowExemptions=true");
 
     @Test
     void refusesClockSleepAndUnseededRandom() {
@@ -58,7 +61,7 @@ class DeterminismTest {
 
     @Test
     void hadronMayExemptAMethodWithAReason() {
-        helper.addSourceLines("dev/iredsc/hadron/common/Host.java",
+        hadron.addSourceLines("dev/iredsc/hadron/common/Host.java",
                 "package dev.iredsc.hadron.common;",
                 "import dev.iredsc.hadron.checks.Nondeterministic;",
                 "class Host {",
@@ -70,8 +73,14 @@ class DeterminismTest {
                 "    return System.nanoTime();",
                 "  }",
                 "}")
-                .addSourceLines("com/example/MyTests.java",
-                "package com.example;",
+                .doTest();
+    }
+
+    @Test
+    void aPluginCantExemptItself() {
+        // Even in Hadron's package, as examples/hello is: only Hadron's own builds allow exemptions.
+        helper.addSourceLines("dev/iredsc/hadron/examples/hello/MyTests.java",
+                "package dev.iredsc.hadron.examples.hello;",
                 "class MyTests {",
                 "  @dev.iredsc.hadron.checks.Nondeterministic(reason = \"a plugin can't exempt itself\")",
                 "  void waits() throws InterruptedException {",
