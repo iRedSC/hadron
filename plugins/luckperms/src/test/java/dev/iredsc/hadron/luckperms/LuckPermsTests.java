@@ -124,6 +124,29 @@ public final class LuckPermsTests {
     }
 
     @HadronTest
+    void thePrefixIsLuckPermsHighestPriorityNotTheHeaviestGroups(TestContext t) {
+        group(t, "lp_lord", g -> {
+            g.data().add(net.luckperms.api.node.types.WeightNode.builder(100).build());
+            g.data().add(PrefixNode.builder("[Lord] ", 1).build());
+        });
+        group(t, "lp_vip", g -> {
+            g.data().add(net.luckperms.api.node.types.WeightNode.builder(10).build());
+            g.data().add(PrefixNode.builder("[VIP] ", 100).build());
+        });
+        TestPlayer pat = t.player("lp_pat");
+        ServerPlayer p = pat.player();
+        t.awaitAsync("LuckPerms to load pat", () -> luckPerms().getUserManager().getUser(p.getUUID()) != null, 200);
+        modify(t, p.getUUID(), u -> {
+            u.data().add(InheritanceNode.builder("lp_lord").build());
+            u.data().add(InheritanceNode.builder("lp_vip").build());
+        });
+        t.awaitAsync("pat to join both groups", () -> Permissions.inGroup(p, "lp_vip") && Permissions.inGroup(p,
+                "lp_lord"), 200);
+        t.assertEquals("lp_lord", Permissions.group(p), "the heaviest group");
+        t.assertEquals("[VIP] ", Permissions.prefix(p), "the prefix LuckPerms ranks highest, from the lighter group");
+    }
+
+    @HadronTest
     void aWildcardGrantIsNotGroupMembership(TestContext t) {
         TestPlayer sam = t.player("lp_sam");
         ServerPlayer s = sam.player();

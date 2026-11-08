@@ -56,6 +56,7 @@ final class Ranks implements PermissionProvider {
         return false;
     }
 
+    /** LuckPerms' own choice: the prefix with the highest priority, whichever group gives it. */
     @Override
     public String prefix(ServerPlayer player) {
         CachedMetaData meta = meta(player);
