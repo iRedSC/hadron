@@ -21,6 +21,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Cod;
 import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.boss.enderdragon.EnderDragon;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.item.ItemStack;
@@ -123,6 +124,26 @@ public final class RemovalTests {
         t.assertEquals(1, events.size(), "the number of EntityRemoveEvents for /kill on an armor stand, which "
                 + "Minecraft removes without hurting");
         t.assertTrue(stand.isRemoved(), "the armor stand should be gone");
+    }
+
+    @HadronTest
+    @Covers(EntityRemoveEvent.class)
+    void aRefusedKillLeavesTheEnderDragon(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        alice.setOp(true);
+        EnderDragon dragon = spawn(t, EntityType.ENDER_DRAGON, t.pos(4, 2, 0));
+        List<EntityRemoveEvent> events = removals(t, dragon);
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityRemoveEvent e) {
+                if (e.getEntity() == dragon) e.setCancelled(true);
+            }
+        });
+        alice.command("kill " + dragon.getStringUUID());
+        t.assertEquals(1, events.size(), "the number of EntityRemoveEvents for /kill on the ender dragon, which "
+                + "removes itself without dying");
+        t.assertEquals(EntityRemoveEvent.Cause.KILLED, events.get(0).getCause(), "the cause");
+        t.assertFalse(dragon.isRemoved(), "the refused dragon should still be in the world");
     }
 
     @HadronTest

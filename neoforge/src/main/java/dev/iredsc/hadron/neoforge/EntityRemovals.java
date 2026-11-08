@@ -3,6 +3,7 @@ package dev.iredsc.hadron.neoforge;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.entity.EntityCaptureEvent;
 import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
+import dev.iredsc.hadron.checks.StaticState;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
@@ -12,7 +13,6 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.Bucketable;
-import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -48,8 +48,8 @@ public final class EntityRemovals {
     }
 
     /**
-     * {@code /kill}'s targets, without those a plugin refused to have removed. Living entities other than armor
-     * stands are kept without asking: {@code kill} hurts them, so they die through the damage and death events.
+     * {@code /kill}'s targets, without those a plugin refused to have removed. Entities whose {@code kill} hurts them
+     * are kept without asking: they die through the damage and death events.
      */
     public static <E extends Entity> Collection<E> killable(Collection<E> targets) {
         if (!Hooks.listens(EntityRemoveEvent.class)) return targets;
@@ -61,13 +61,27 @@ public final class EntityRemovals {
     }
 
     private static boolean refuseKill(Entity entity) {
-        if (!(entity.level() instanceof ServerLevel) || diesWhenKilled(entity)) return false;
+        if (!(entity.level() instanceof ServerLevel) || HURT_BY_KILL.get(entity.getClass())) return false;
         Actor actor = EntityActors.fromStack(entity, Actor.Unknown.INSTANCE);
         return Hooks.post(new EntityRemoveEvent(entity, EntityRemoveEvent.Cause.KILLED, actor)).isCancelled();
     }
 
-    /** Whether {@code kill} hurts the entity to death instead of removing it: every living entity but armor stands. */
-    static boolean diesWhenKilled(Entity entity) {
-        return entity instanceof LivingEntity && !(entity instanceof ArmorStand);
-    }
+    /**
+     * Per entity class, whether {@code kill} hurts it to death: only when it runs {@link LivingEntity}'s own
+     * {@code kill}. Any override is asked about as a removal, whatever it does: armor stands and the ender dragon
+     * remove themselves without dying, and a mod's override may too. One that ends up hurting the entity after all is
+     * asked twice (a removal, then its damage), never missed.
+     */
+    @StaticState(reason = "which kill() a class runs, derived from the class alone and stored on it, so an entry never goes stale and goes with its class loader")
+    private static final ClassValue<Boolean> HURT_BY_KILL = new ClassValue<>() {
+        @Override
+        protected Boolean computeValue(Class<?> type) {
+            try {
+                return type.getMethod("kill").getDeclaringClass() == LivingEntity.class;
+            } catch (NoSuchMethodException e) {
+                throw new IllegalStateException("Entity.kill() is missing from " + type.getName() + ": this Hadron "
+                        + "doesn't match the running Minecraft; install the Hadron built for this version", e);
+            }
+        }
+    };
 }

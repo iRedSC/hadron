@@ -62,7 +62,7 @@ Core fires these for vanilla's paths; the bridge covers its mod's.
 | `BlockFertilizeEvent` | bone meal | growth accelerators that grow without bone meal |
 | `BlockMoveEvent` | pistons, through its piston leaves | contraptions and ships within one level, as `StructureMoveEvent` |
 | `EntityCaptureEvent` | water buckets, for vanilla's and mods' fish, axolotls and tadpoles | the mod storing an entity in an item, a block or a player's arms (mob catchers, jars, Carry On) |
-| `EntityRemoveEvent` | /kill on entities that don't die (boats, minecarts, items, armor stands) | the mod removing an entity in its own code: dismissing a summon, an instant kill, its own conversion |
+| `EntityRemoveEvent` | /kill on entities that don't die (boats, minecarts, items, armor stands, the ender dragon) | the mod removing an entity in its own code: dismissing a summon, an instant kill, its own conversion |
 | `EntityStatusChangeEvent` | a mob's AI turned off or on | the mod's stuns, freezes, holds and interrupted casts, with its own status ids |
 | `EntityTargetEvent` | mobs | turret blocks |
 | `EntityVelocityEvent` | any velocity set while something other than the entity acts (commands, explosions, entities, machines, mods with an actor pushed); knockback as `EntityKnockbackEvent` | pushes the mod makes with nothing on the stack: push the actor instead, and core fires it |

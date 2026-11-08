@@ -10,8 +10,8 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * An entity is about to leave the world other than by dying, unloading, changing dimension or converting into another
- * kind: {@code /kill} on a boat, a minecart, an item or an armor stand, a summon dismissed, a fish caught in a bucket
- * ({@link EntityCaptureEvent}). Cancel it and the entity stays exactly as it was.
+ * kind: {@code /kill} on a boat, a minecart, an item, an armor stand or the ender dragon, a summon dismissed, a fish
+ * caught in a bucket ({@link EntityCaptureEvent}). Cancel it and the entity stays exactly as it was.
  *
  * <p>Not fired for an entity that dies: {@code /kill} on a pig hurts it and fires {@link EntityDamageEvent} and
  * {@link EntityDeathEvent} instead. Not fired for {@link EntityTransformEvent}'s conversions, nor for entities that
@@ -23,7 +23,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
  * explosions too, so refusing there would duplicate things.
  */
 @FiredBy(core = PARTIAL,
-        coreSees = "/kill on entities that don't die (boats, minecarts, items, armor stands)",
+        coreSees = "/kill on entities that don't die (boats, minecarts, items, armor stands, the ender dragon)",
         bridges = "the mod removing an entity in its own code: dismissing a summon, an instant kill, its own conversion")
 public class EntityRemoveEvent extends EntityEvent implements Cancellable {
     /** Why an entity is leaving. Bukkit's name for the same idea. */
