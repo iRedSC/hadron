@@ -24,5 +24,8 @@ include("test-api")
 // A plugin built the way plugin authors will, used to try the host on a real server.
 include("examples:hello")
 
+// Plugins bundled with Hadron, written the way plugin authors write theirs.
+include("plugins:luckperms")
+
 // Hadron's own tests: a plugin whose src/test/java checks Hadron's events and APIs with the harness plugin authors use.
 include("selftest")

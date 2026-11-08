@@ -52,7 +52,7 @@ public final class Permissions {
         return player != null ? has(player, node) : source.hasPermission(2);
     }
 
-    /** The name of the player's heaviest group, which supplies their prefix first. */
+    /** The name of the player's heaviest group, counting groups they're in through another. */
     public static String group(ServerPlayer player) {
         String group = ask(ranks -> ranks.group(player), DEFAULT_GROUP);
         return group == null ? DEFAULT_GROUP : group;
@@ -64,11 +64,16 @@ public final class Permissions {
         return in != null ? in : group.equalsIgnoreCase(DEFAULT_GROUP);
     }
 
+    /**
+     * The prefix the permissions plugin picks, with colors applied; empty for none. It needn't come from
+     * {@link #group}: LuckPerms, for one, shows the prefix with the highest priority, whichever group gives it.
+     */
     public static String prefix(ServerPlayer player) {
         String prefix = ask(ranks -> ranks.prefix(player), "");
         return prefix == null ? "" : prefix;
     }
 
+    /** The suffix the permissions plugin picks, as {@link #prefix} does. */
     public static String suffix(ServerPlayer player) {
         String suffix = ask(ranks -> ranks.suffix(player), "");
         return suffix == null ? "" : suffix;

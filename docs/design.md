@@ -53,7 +53,7 @@ On Minecraft 1.21.1 Fabric runs with different class names than NeoForge, so a F
 - **Official plugins use bridge APIs** (`bridge-depend: [ae2]` in plugin.yml): loader-neutral interfaces and events a bridge publishes. They stay write-once.
 - **Anyone can use a mod directly** (`mod-depend: [ae2]`) for their own instance. That compiles against the mod and the loader, so it ties the plugin to one loader, and plugin.yml must say which (`loader: neoforge`). Hadron refuses it on another loader and says why. The build will fill `loader` in, as it does `minecraft`.
 
-Pure-Java libraries that are the same everywhere (LuckPerms' API, WorldEdit's core API) are allowed in write-once plugins when plugin.yml declares them.
+Pure-Java libraries that are the same everywhere (LuckPerms' API, WorldEdit's core API) are allowed in write-once plugins when plugin.yml declares them: `api-depend: [luckperms]` names the mod that provides the API, which must be installed, and needs no `loader`.
 
 See [bridges.md](bridges.md) for what a bridge is for, how one is judged done, and the coverage report that tells owners which bridges they're missing.
 
@@ -78,12 +78,12 @@ Today the host still refuses any jar built for another Minecraft version; the re
 
 ## Permissions
 
-- **Ranks come from LuckPerms**, which has a NeoForge build, through a provider plugin on its API. Hadron doesn't ship a rank system of its own. Without LuckPerms, every node falls back to its default (everyone, ops, or nobody).
+- **Ranks come from LuckPerms**, which has a NeoForge build, through a provider plugin on its API (`plugins/luckperms`). It asks LuckPerms in the player's current contexts; LuckPerms keeps each player's command list current itself, through this provider. On Minecraft 1.21.1 it needs LuckPerms 5.4.150: 5.4.140, the build labelled for 1.21.1, lets no one join. Hadron doesn't ship a rank system of its own. Without LuckPerms, every node falls back to its default (everyone, ops, or nobody).
 - **Mods using NeoForge's PermissionAPI** reach LuckPerms directly when it's installed; Hadron registers its own handler only when it isn't, so there is always one source of truth.
 - **Hadron makes nodes for everything a mod adds**, with no bridge: `use.<modid>.<path>`, `place.`, `break.`, `open.`, `attack.` by registry id, `command.<name>` for every command, `packet.<modid>.<payload>` for mods' network messages. A server owner can write `use.ae2.*: false` on day one.
 - **Those roots are reserved**: `use`, `place`, `break`, `open`, `attack`, `command`, `packet`, `hadron`. A plugin declaring a node under one fails to load, with the fix in the message.
 
-The reserved roots are enforced now; the registry-id nodes, the PermissionAPI handler and the LuckPerms provider are still to build.
+The reserved roots and the LuckPerms provider are built; the registry-id nodes and the PermissionAPI handler are still to build.
 
 ## What makes "make me a plugin for X" work
 

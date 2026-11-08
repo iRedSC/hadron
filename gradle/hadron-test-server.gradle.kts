@@ -75,6 +75,111 @@ object HadronTestServer {
     }
 
     /**
+     * Each staged suite's extras, consumed like its jar: the mod jars it needs beside Hadron (listed in
+     * `<suite>.mods`, from its `hadronTest.mods`) are copied to the run's mods/, and the folders it keeps between runs
+     * (`<suite>.keep`, from `hadronTest.keep`, such as a mod's downloaded libraries) come back from [root]/kept, so a
+     * fresh run needs no network for what an earlier one fetched.
+     */
+    fun stageSuiteExtras(root: File, run: File) {
+        val suites = root.resolve("suites")
+        suites.listFiles { f -> f.isFile && f.name.endsWith(".jar.mods") }?.forEach { list ->
+            for (jar in list.readLines().map { it.trim() }.filter { it.isNotEmpty() }.map(::File)) {
+                if (!jar.isFile) throw GradleException("A staged suite needs the mod $jar, which is gone. Run its "
+                        + "hadronTest again, so Gradle fetches it.")
+                jar.copyTo(run.resolve("mods").resolve(jar.name), overwrite = true)
+            }
+            list.delete()
+        }
+        val keep = suites.listFiles { f -> f.name.endsWith(".jar.keep") }.orEmpty().flatMap { f ->
+            f.readLines().map { it.trim() }.filter { it.isNotEmpty() }.also { f.delete() }
+        }.distinct()
+        run.resolve(".hadron-keep").writeText(keep.joinToString("\n", postfix = "\n"))
+        for (path in keep) {
+            val saved = inside(root, "kept", path)
+            if (saved.isDirectory) copyTree(saved, inside(run.parentFile, run.name, path))
+        }
+    }
+
+    /**
+     * Deletes [dir] and everything under it without following links: a link is removed, never what it points to, so
+     * a link planted under a kept or run folder can't reach files elsewhere. Kotlin's deleteRecursively follows them.
+     */
+    fun deleteTree(dir: File) {
+        val start = dir.toPath()
+        if (!java.nio.file.Files.exists(start, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return
+        java.nio.file.Files.walkFileTree(start, object : java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+            override fun visitFile(file: java.nio.file.Path, attrs: java.nio.file.attribute.BasicFileAttributes)
+                    : java.nio.file.FileVisitResult {
+                java.nio.file.Files.delete(file)
+                return java.nio.file.FileVisitResult.CONTINUE
+            }
+
+            override fun postVisitDirectory(d: java.nio.file.Path, e: java.io.IOException?): java.nio.file.FileVisitResult {
+                if (e != null) throw e
+                java.nio.file.Files.delete(d)
+                return java.nio.file.FileVisitResult.CONTINUE
+            }
+        })
+    }
+
+    /** Copies [from]'s folders and plain files into [to], skipping links, so nothing outside [from] is read. */
+    fun copyTree(from: File, to: File) {
+        val source = from.toPath()
+        val target = to.toPath()
+        java.nio.file.Files.walkFileTree(source, object : java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+            override fun preVisitDirectory(d: java.nio.file.Path, attrs: java.nio.file.attribute.BasicFileAttributes)
+                    : java.nio.file.FileVisitResult {
+                java.nio.file.Files.createDirectories(target.resolve(source.relativize(d).toString()))
+                return java.nio.file.FileVisitResult.CONTINUE
+            }
+
+            override fun visitFile(file: java.nio.file.Path, attrs: java.nio.file.attribute.BasicFileAttributes)
+                    : java.nio.file.FileVisitResult {
+                if (attrs.isRegularFile) {
+                    java.nio.file.Files.copy(file, target.resolve(source.relativize(file).toString()),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                }
+                return java.nio.file.FileVisitResult.CONTINUE
+            }
+        })
+    }
+
+    /**
+     * [root]/[base]/[path], refusing a path that leads out of [root]/[base] (absolute or `..`), and refusing it when
+     * any folder from [root] down to it is a link: kept folders are deleted and overwritten, so a link anywhere on the
+     * way (the cache folder itself included) would aim that at files outside the test run and its cache.
+     */
+    fun inside(root: File, base: String, path: String): File {
+        val top = root.toPath().toAbsolutePath().normalize()
+        val home = top.resolve(base).normalize()
+        val target = home.resolve(path).normalize()
+        fun refuse(why: String): Nothing = throw GradleException("hadronTest.keep has \"$path\", which $why. Give a "
+                + "relative path that stays inside the test server's run folder, such as config/luckperms/libs")
+        if (path.isBlank() || java.nio.file.Paths.get(path).isAbsolute || !target.startsWith(home) || target == home) {
+            refuse("leads out of $home")
+        }
+        var at = top
+        for (part in top.relativize(target)) {
+            at = at.resolve(part)
+            if (java.nio.file.Files.isSymbolicLink(at)) refuse("passes through the link $at")
+        }
+        return target.toFile()
+    }
+
+    /** After a run, copies each kept folder back to [root]/kept for the next run. */
+    fun saveKept(root: File, run: File) {
+        val list = run.resolve(".hadron-keep")
+        if (!list.isFile) return
+        for (path in list.readLines().map { it.trim() }.filter { it.isNotEmpty() }) {
+            val live = inside(run.parentFile, run.name, path)
+            if (!live.isDirectory) continue
+            val saved = inside(root, "kept", path)
+            deleteTree(saved)
+            copyTree(live, saved)
+        }
+    }
+
+    /**
      * Fails unless the run passes -D[property]=[expected]. ModDevGradle writes a run's JVM arguments to a file it hands
      * the JVM as @file, so the arguments are read from there as well as from the task's own.
      */
@@ -112,7 +217,7 @@ tasks.named<JavaExec>("runHadronTest") {
     doFirst {
         HadronTestServer.requireRun(this as JavaExec, "hadron.test.report", root.resolve("report.txt"))
         val run = root.resolve("run")
-        run.deleteRecursively()
+        HadronTestServer.deleteTree(run)
         root.resolve("report.txt").delete()
         root.resolve("report.json").delete()
         val plugins = run.resolve("plugins")
@@ -123,11 +228,13 @@ tasks.named<JavaExec>("runHadronTest") {
             f.delete()
         }
         HadronTestServer.prepare(run, mod, harness)
+        HadronTestServer.stageSuiteExtras(root, run)
     }
     // The server exits 0 only when every test passed. A failing run's report already says why, so hadronTest reports
     // it; but a nonzero exit after a passing report means the server broke after the tests (a crash while stopping,
     // a mod failing at shutdown), and trusting the report alone would end that green.
     doLast {
+        HadronTestServer.saveKept(root, root.resolve("run"))
         val code = (this as JavaExec).executionResult.get().exitValue
         // The server exits 0 only when every test passed, so any other exit is a failed run: keep its evidence.
         val kept = if (code != 0) HadronTestServer.keep(root) else null

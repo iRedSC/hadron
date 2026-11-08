@@ -1,0 +1,6 @@
+name: LuckPermsProvider
+version: ${version}
+minecraft: ${minecraft}
+main: dev.iredsc.hadron.luckperms.LuckPermsPlugin
+description: Answers Hadron's permission checks, groups, prefixes and suffixes from LuckPerms.
+api-depend: [luckperms]

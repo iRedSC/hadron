@@ -803,6 +803,12 @@ public final class PluginHost implements PluginManager {
         for (String mod : e.description.getModDepend()) {
             if (!platform.isModLoaded(mod)) return "needs the " + mod + " mod, which isn't installed";
         }
+        for (String mod : e.description.getApiDepend()) {
+            if (!platform.isModLoaded(mod)) {
+                return "uses the " + mod + " mod's API, but that mod isn't installed: add " + mod + " to mods/, or "
+                        + "remove this plugin";
+            }
+        }
         for (String need : e.description.getDepend()) {
             Entry n = entries.get(need);
             if (n == null) {
