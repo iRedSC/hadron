@@ -298,7 +298,10 @@ val hadronTestStage = tasks.register<Copy>("hadronTestStage") {
         val patterns = tests.get()
         if (patterns.isEmpty()) filter.delete() else filter.writeText(patterns.joinToString("\n", postfix = "\n"))
         val mods = suites.resolve("$name.mods")
-        mods.deleteRecursively()
+        // Without following links, unlike deleteRecursively: a link left here is removed, never what it points to.
+        if (mods.exists()) java.nio.file.Files.walk(mods.toPath()).use { paths ->
+            paths.sorted(Comparator.reverseOrder()).forEach { java.nio.file.Files.delete(it) }
+        }
         for (jar in modJars.files) jar.copyTo(mods.resolve(jar.name).also { mods.mkdirs() }, overwrite = true)
         val kept = suites.resolve("$name.keep")
         if (keep.isEmpty()) kept.delete() else kept.writeText(keep.joinToString("\n", postfix = "\n"))

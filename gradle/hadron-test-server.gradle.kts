@@ -84,7 +84,7 @@ object HadronTestServer {
         val suites = root.resolve("suites")
         suites.listFiles { f -> f.isDirectory && f.name.endsWith(".jar.mods") }?.forEach { dir ->
             dir.listFiles()?.forEach { it.copyTo(run.resolve("mods").resolve(it.name), overwrite = true) }
-            dir.deleteRecursively()
+            deleteTree(dir)
         }
         val keep = suites.listFiles { f -> f.name.endsWith(".jar.keep") }.orEmpty().flatMap { f ->
             f.readLines().map { it.trim() }.filter { it.isNotEmpty() }.also { f.delete() }
@@ -92,8 +92,52 @@ object HadronTestServer {
         run.resolve(".hadron-keep").writeText(keep.joinToString("\n", postfix = "\n"))
         for (path in keep) {
             val saved = inside(root.resolve("kept"), path)
-            if (saved.isDirectory) saved.copyRecursively(inside(run, path), overwrite = true)
+            if (saved.isDirectory) copyTree(saved, inside(run, path))
         }
+    }
+
+    /**
+     * Deletes [dir] and everything under it without following links: a link is removed, never what it points to, so
+     * a link planted under a kept or run folder can't reach files elsewhere. Kotlin's deleteRecursively follows them.
+     */
+    fun deleteTree(dir: File) {
+        val start = dir.toPath()
+        if (!java.nio.file.Files.exists(start, java.nio.file.LinkOption.NOFOLLOW_LINKS)) return
+        java.nio.file.Files.walkFileTree(start, object : java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+            override fun visitFile(file: java.nio.file.Path, attrs: java.nio.file.attribute.BasicFileAttributes)
+                    : java.nio.file.FileVisitResult {
+                java.nio.file.Files.delete(file)
+                return java.nio.file.FileVisitResult.CONTINUE
+            }
+
+            override fun postVisitDirectory(d: java.nio.file.Path, e: java.io.IOException?): java.nio.file.FileVisitResult {
+                if (e != null) throw e
+                java.nio.file.Files.delete(d)
+                return java.nio.file.FileVisitResult.CONTINUE
+            }
+        })
+    }
+
+    /** Copies [from]'s folders and plain files into [to], skipping links, so nothing outside [from] is read. */
+    fun copyTree(from: File, to: File) {
+        val source = from.toPath()
+        val target = to.toPath()
+        java.nio.file.Files.walkFileTree(source, object : java.nio.file.SimpleFileVisitor<java.nio.file.Path>() {
+            override fun preVisitDirectory(d: java.nio.file.Path, attrs: java.nio.file.attribute.BasicFileAttributes)
+                    : java.nio.file.FileVisitResult {
+                java.nio.file.Files.createDirectories(target.resolve(source.relativize(d).toString()))
+                return java.nio.file.FileVisitResult.CONTINUE
+            }
+
+            override fun visitFile(file: java.nio.file.Path, attrs: java.nio.file.attribute.BasicFileAttributes)
+                    : java.nio.file.FileVisitResult {
+                if (attrs.isRegularFile) {
+                    java.nio.file.Files.copy(file, target.resolve(source.relativize(file).toString()),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING, java.nio.file.LinkOption.NOFOLLOW_LINKS)
+                }
+                return java.nio.file.FileVisitResult.CONTINUE
+            }
+        })
     }
 
     /**
@@ -126,8 +170,8 @@ object HadronTestServer {
             val live = inside(run, path)
             if (!live.isDirectory) continue
             val saved = inside(root.resolve("kept"), path)
-            saved.deleteRecursively()
-            live.copyRecursively(saved, overwrite = true)
+            deleteTree(saved)
+            copyTree(live, saved)
         }
     }
 
@@ -169,7 +213,7 @@ tasks.named<JavaExec>("runHadronTest") {
     doFirst {
         HadronTestServer.requireRun(this as JavaExec, "hadron.test.report", root.resolve("report.txt"))
         val run = root.resolve("run")
-        run.deleteRecursively()
+        HadronTestServer.deleteTree(run)
         root.resolve("report.txt").delete()
         root.resolve("report.json").delete()
         val plugins = run.resolve("plugins")
