@@ -107,6 +107,33 @@ public final class LuckPermsTests {
         t.assertEquals(" §7*", Permissions.suffix(g), "the suffix inherited from lp_helper");
     }
 
+    @HadronTest
+    void theHeaviestInheritedGroupIsTheGroup(TestContext t) {
+        group(t, "lp_owner", g -> g.data().add(net.luckperms.api.node.types.WeightNode.builder(100).build()));
+        group(t, "lp_staff", g -> {
+            g.data().add(net.luckperms.api.node.types.WeightNode.builder(10).build());
+            g.data().add(InheritanceNode.builder("lp_owner").build());
+        });
+        TestPlayer hal = t.player("lp_hal");
+        ServerPlayer h = hal.player();
+        t.awaitAsync("LuckPerms to load hal", () -> luckPerms().getUserManager().getUser(h.getUUID()) != null, 200);
+        modify(t, h.getUUID(), u -> u.data().add(InheritanceNode.builder("lp_staff").build()));
+        t.awaitAsync("hal to join lp_staff", () -> Permissions.inGroup(h, "lp_staff"), 200);
+        t.assertEquals("lp_owner", Permissions.group(h),
+                "lp_owner (weight 100), inherited through lp_staff (weight 10), is hal's heaviest group");
+    }
+
+    @HadronTest
+    void aWildcardGrantIsNotGroupMembership(TestContext t) {
+        TestPlayer sam = t.player("lp_sam");
+        ServerPlayer s = sam.player();
+        t.awaitAsync("LuckPerms to load sam", () -> luckPerms().getUserManager().getUser(s.getUUID()) != null, 200);
+        modify(t, s.getUUID(), u -> u.data().add(PermissionNode.builder("*").value(true).build()));
+        t.awaitAsync("the * grant to reach Hadron", () -> Permissions.has(s, NOBODY), 200);
+        t.assertFalse(Permissions.inGroup(s, "lp_nobody_has_this"), "* grants every node, but no group membership");
+        t.assertEquals("default", Permissions.group(s), "and sam's group is still default");
+    }
+
     /** LuckPerms resends the list itself; this checks the integration still gets a new one to the player. */
     @HadronTest
     void aRankChangeResendsThePlayersCommands(TestContext t) {

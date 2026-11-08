@@ -2,16 +2,18 @@ package dev.iredsc.hadron.luckperms;
 
 import dev.iredsc.hadron.api.PermissionProvider;
 import dev.iredsc.hadron.api.Permissions;
-import java.util.Locale;
+import java.util.Collection;
+import java.util.List;
 import net.luckperms.api.LuckPerms;
-import net.luckperms.api.cacheddata.CachedDataManager;
+import net.luckperms.api.cacheddata.CachedMetaData;
+import net.luckperms.api.model.group.Group;
 import net.luckperms.api.model.user.User;
 import net.luckperms.api.query.QueryOptions;
 import net.luckperms.api.util.Tristate;
 import net.minecraft.server.level.ServerPlayer;
 import org.jspecify.annotations.Nullable;
 
-/** {@link PermissionProvider} answered by LuckPerms' cached data for the player's current contexts. */
+/** {@link PermissionProvider} answered by LuckPerms for the player's current contexts. */
 final class Ranks implements PermissionProvider {
     private final LuckPerms luckPerms;
 
@@ -21,42 +23,64 @@ final class Ranks implements PermissionProvider {
 
     @Override
     public @Nullable Boolean check(ServerPlayer player, String node) {
-        CachedDataManager data = data(player);
-        if (data == null) return null;
-        Tristate answer = data.getPermissionData(options(player)).checkPermission(node);
+        User user = user(player);
+        if (user == null) return null;
+        Tristate answer = user.getCachedData().getPermissionData(options(player)).checkPermission(node);
         return answer == Tristate.UNDEFINED ? null : answer.asBoolean();
     }
 
+    /**
+     * The heaviest of the groups the player is in, directly or through another, by LuckPerms' group weight; among
+     * equal weights, the first LuckPerms lists. Chosen here rather than by LuckPerms' primary group, whose default
+     * setting follows only the groups a player was given directly.
+     */
     @Override
     public String group(ServerPlayer player) {
-        CachedDataManager data = data(player);
-        String group = data == null ? null : data.getMetaData(options(player)).getPrimaryGroup();
-        return group == null ? Permissions.DEFAULT_GROUP : group;
+        Group heaviest = null;
+        for (Group group : groups(player)) {
+            if (heaviest == null || group.getWeight().orElse(0) > heaviest.getWeight().orElse(0)) heaviest = group;
+        }
+        return heaviest == null ? Permissions.DEFAULT_GROUP : heaviest.getName();
     }
 
-    /** Through LuckPerms' {@code group.<name>} node, so a group inherited through another counts too. */
+    /**
+     * Membership itself, directly or through a group that inherits it, in the player's current contexts; never a
+     * {@code group.<name>} permission check, which a {@code *} grant would answer yes for any name.
+     */
     @Override
     public boolean inGroup(ServerPlayer player, String group) {
         if (group.equalsIgnoreCase(Permissions.DEFAULT_GROUP)) return true;
-        return Boolean.TRUE.equals(check(player, "group." + group.toLowerCase(Locale.ROOT)));
+        for (Group in : groups(player)) {
+            if (in.getName().equalsIgnoreCase(group)) return true;
+        }
+        return false;
     }
 
     @Override
     public String prefix(ServerPlayer player) {
-        CachedDataManager data = data(player);
-        return Colors.translate(data == null ? null : data.getMetaData(options(player)).getPrefix());
+        CachedMetaData meta = meta(player);
+        return Colors.translate(meta == null ? null : meta.getPrefix());
     }
 
     @Override
     public String suffix(ServerPlayer player) {
-        CachedDataManager data = data(player);
-        return Colors.translate(data == null ? null : data.getMetaData(options(player)).getSuffix());
+        CachedMetaData meta = meta(player);
+        return Colors.translate(meta == null ? null : meta.getSuffix());
+    }
+
+    private Collection<Group> groups(ServerPlayer player) {
+        User user = user(player);
+        return user == null ? List.of() : user.getInheritedGroups(options(player));
+    }
+
+    private @Nullable CachedMetaData meta(ServerPlayer player) {
+        User user = user(player);
+        return user == null ? null : user.getCachedData().getMetaData(options(player));
     }
 
     /** Null while LuckPerms hasn't loaded the player, as during login. */
-    private @Nullable CachedDataManager data(ServerPlayer player) {
-        User user = luckPerms.getUserManager().getUser(player.getUUID());
-        return user == null ? null : user.getCachedData();
+    private @Nullable User user(ServerPlayer player) {
+        return luckPerms.getUserManager().getUser(player.getUUID());
     }
 
     /**
