@@ -75,16 +75,20 @@ object HadronTestServer {
     }
 
     /**
-     * Each staged suite's extras, consumed like its jar: the mods it needs beside Hadron (`<suite>.mods/`, from its
-     * `hadronTest.mods`) go to the run's mods/, and the folders it keeps between runs (`<suite>.keep`, from
-     * `hadronTest.keep`, such as a mod's downloaded libraries) come back from [root]/kept, so a fresh run needs no
-     * network for what an earlier one fetched.
+     * Each staged suite's extras, consumed like its jar: the mod jars it needs beside Hadron (listed in
+     * `<suite>.mods`, from its `hadronTest.mods`) are copied to the run's mods/, and the folders it keeps between runs
+     * (`<suite>.keep`, from `hadronTest.keep`, such as a mod's downloaded libraries) come back from [root]/kept, so a
+     * fresh run needs no network for what an earlier one fetched.
      */
     fun stageSuiteExtras(root: File, run: File) {
         val suites = root.resolve("suites")
-        suites.listFiles { f -> f.isDirectory && f.name.endsWith(".jar.mods") }?.forEach { dir ->
-            dir.listFiles()?.forEach { it.copyTo(run.resolve("mods").resolve(it.name), overwrite = true) }
-            deleteTree(dir)
+        suites.listFiles { f -> f.isFile && f.name.endsWith(".jar.mods") }?.forEach { list ->
+            for (jar in list.readLines().map { it.trim() }.filter { it.isNotEmpty() }.map(::File)) {
+                if (!jar.isFile) throw GradleException("A staged suite needs the mod $jar, which is gone. Run its "
+                        + "hadronTest again, so Gradle fetches it.")
+                jar.copyTo(run.resolve("mods").resolve(jar.name), overwrite = true)
+            }
+            list.delete()
         }
         val keep = suites.listFiles { f -> f.name.endsWith(".jar.keep") }.orEmpty().flatMap { f ->
             f.readLines().map { it.trim() }.filter { it.isNotEmpty() }.also { f.delete() }
