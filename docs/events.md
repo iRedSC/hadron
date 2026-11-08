@@ -93,8 +93,8 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | Event | What | Core chokepoint |
 |---|---|---|
 | `EntitySpawnEvent` | an entity enters the world; reason (natural, spawner, egg, breeding, summoned, released from capture, actor). Not for dropped items, experience orbs or falling blocks, whose cancelling would destroy what they carry; see `ItemDropEvent` | `addFreshEntity` |
-| `EntityRemoveEvent` | an entity leaves the world other than by dying or unloading; reason (killed without damage, dismissed, converted, discarded) | not shipped yet: see "Not shipped yet" |
-| └ `EntityCaptureEvent` | an entity is stored into an item, block or player's carry state (bucket, mob catcher, Carry On) | not shipped yet: see "Not shipped yet" |
+| `EntityRemoveEvent` | an entity leaves the world other than by dying, unloading or converting; cause (killed without damage, dismissed, converted in a mod's own code, captured, discarded) | `KillCommand`, for entities that don't die; bridges for mods' own removals |
+| └ `EntityCaptureEvent` | an entity is stored into an item, block or carrier (bucket, mob catcher, Carry On); where it goes | `Bucketable`; bridges for catchers and carrying |
 | `EntityDamageEvent` | an entity is hurt; damage source, actor, and the weapon or spell | `hurt` |
 | `EntityDeathEvent` | an entity is dying; drops, experience and where each item goes are editable; not cancellable | `die` |
 | └ `PlayerDeathEvent` | a player is dying; each item, including extra slots, is assigned to kept, dropped, grave or destroyed; the death line is editable and replaces vanilla's | `ServerPlayer.die` |
@@ -232,7 +232,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 
 Designed but not in `api`, because core can't yet fire them for every actor without breaking rule 7 or making a cancel unsafe. A plugin can't listen for them, so none of them can look like coverage.
 
-- `EntityRemoveEvent`, `EntityCaptureEvent`: cancelling at `Entity.remove` can duplicate (a cancelled arrow pickup); each cause needs its own hook. First to ship ([design](design.md#order-of-work)). Removal by expiry (a timed summon, a temporary portal) will be *(after)*, so a cancel can't make it permanent.
+- Removal by expiry (a mob despawning, a timed summon, a temporary portal): will be an *(after)* event, so a cancel can't make it permanent. `EntityRemoveEvent` shipped without it, and core fires it only for `/kill` and buckets: refusing in Minecraft's one removal method could duplicate (a cancelled arrow pickup), so each cause needs its own hook.
 - `EntityLeashEvent`, `EntityUnleashEvent`, `EntityShearEvent`, `ArmorStandManipulateEvent`: need hooks inside interface methods or per-path logic.
 - `EntityAttributeChangeEvent`, `EntityRelationshipChangeEvent`, `FoodLevelChangeEvent`: the vanilla classes that change don't know their entity.
 - `BiomeChangeEvent`: biome writes are too hot and scattered for one hook.
@@ -245,4 +245,4 @@ Designed but not in `api`, because core can't yet fire them for every actor with
 - **Mod progression state** (Twilight Forest's conquered bosses, quest progress). It changes no world, player or item; plugins that need it use the bridge's extras.
 - **Client-only data** (local waypoints, minimap settings).
 - **Data tied to no place** (a computer's files, a mod's network database). Plugins guard it through the block or item that reaches it, and whatever it makes happen in the world fires its own events.
-- **Creatures stored outside items** (Cobblemon's party and PC). Moving, trading, evolving or deleting them in storage are the bridge's own events until a second official bridge needs the same ([promotion](bridges.md#promotion-when-bridges-events-become-core)). Sending one out is an `EntitySpawnEvent`, and capture into storage will be `EntityCaptureEvent` once it ships, so then every creature entering or leaving the world is seen.
+- **Creatures stored outside items** (Cobblemon's party and PC). Moving, trading, evolving or deleting them in storage are the bridge's own events until a second official bridge needs the same ([promotion](bridges.md#promotion-when-bridges-events-become-core)). Sending one out is an `EntitySpawnEvent`, and capture into storage is an `EntityCaptureEvent`, so every creature entering or leaving the world is seen.
