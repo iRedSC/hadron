@@ -42,6 +42,10 @@ Bukkit's `WorldCreator` and `createWorld`, for Multiverse.
 - **Vanilla clients can join them**, with no client mod: a created world is an ordinary dimension to the client, and commands suggest it even to players who joined before it was created.
 - A world belongs to the server, not to the plugin that made it: disabling the plugin doesn't unload it.
 
+## Watched areas
+
+`Areas.watch(plugin, level, box)` marks a box where a block change matters even with nobody behind it, so an unbridged mod's change there fires as `Unknown` and protection can refuse it ([bridges](bridges.md#the-chokepoint-cost)). A regions plugin watches each region, a logging plugin each logged area. An area lasts until `close()`, its plugin disables, or its world unloads, so a plugin watches again in `onEnable`. `Areas.isWatched(level, pos)` says whether any plugin watches a position. Server thread only.
+
 ## Text and placeholders
 
 Every message a server owner writes (config lines, join and death messages, tab lists, scoreboards, holograms) uses one format, and placeholders are part of it.

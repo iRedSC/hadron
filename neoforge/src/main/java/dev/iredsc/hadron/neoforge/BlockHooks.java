@@ -145,6 +145,8 @@ public final class BlockHooks {
         long[] tickScopes = new long[8];
         int ticks;
         int forming;
+        /** Vanilla block entities ticking: vanilla's own machinery, so a write in one is nobody's, never an outsider's. */
+        int vanillaMachines;
         @Nullable Actor fertilizer;
         /**
          * A container's emptying a command put off until its replacement is decided (see {@link #deferClear}), and
@@ -312,7 +314,7 @@ public final class BlockHooks {
     }
 
     /** Whether a block is a mod's. Two field reads, no registry lookup, so it is cheap enough for every tick. */
-    static boolean modded(Block block) {
+    public static boolean modded(Block block) {
         var holder = block.builtInRegistryHolder();
         return !holder.isBound() || modded(holder.key().location());
     }
@@ -371,6 +373,19 @@ public final class BlockHooks {
     }
 
     /** Weather forming snow and ice: every change while it runs is a {@link BlockFormEvent}. */
+    /**
+     * Around a vanilla block entity's tick (a furnace lighting, a piston finishing its move). Nothing is on the stack
+     * then, and that stays silent even in a watched area: it is vanilla working, already reported by its own events
+     * where it matters, not a mod with a missing bridge.
+     */
+    public static void enterVanillaMachine() {
+        CONTEXT.get().vanillaMachines++;
+    }
+
+    public static void exitVanillaMachine() {
+        CONTEXT.get().vanillaMachines--;
+    }
+
     public static void enterForming() {
         CONTEXT.get().forming++;
     }
@@ -504,7 +519,11 @@ public final class BlockHooks {
         Actor actor = EntityActors.current();
         boolean ticking = ctx.ticking() && (actor == null || actor == ctx.tickActor());
         boolean fire = isFire(after);
-        if (actor == null && !ticking && ctx.forming == 0 && !fire) return false;
+        if (actor == null && !ticking && ctx.forming == 0 && !fire) {
+            // Nobody is behind this write. It matters only where a plugin watches; there, it is an outsider's.
+            if (ctx.vanillaMachines > 0 || !AreaIndex.covers(server, pos)) return false;
+            actor = Actor.Unknown.INSTANCE;
+        }
 
         BlockState before = level.getBlockState(pos);
         if (before == after) return false;
@@ -680,6 +699,10 @@ public final class BlockHooks {
             actor = ctx.tickActor();
             kind = actor instanceof Actor.Nature ? Kind.FADE : Kind.BREAK;
         } else if (actor != null) {
+            kind = Kind.BREAK;
+        } else if (ctx.vanillaMachines == 0 && AreaIndex.covers(server, pos)) {
+            // Nobody is behind it, inside an area a plugin watches: an outsider's break.
+            actor = Actor.Unknown.INSTANCE;
             kind = Kind.BREAK;
         } else {
             return false;
