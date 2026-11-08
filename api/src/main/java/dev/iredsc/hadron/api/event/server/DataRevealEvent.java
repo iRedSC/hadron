@@ -16,7 +16,8 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 
 /**
  * Server data about a block, an entity (and what it holds) or an account is about to be sent to a player who didn't
- * open it: a Jade or WTHIT tooltip, a map radar, a sigil that reads another player's mana network. Remove keys from
+ * open it: a Jade or WTHIT tooltip, a map radar, a sigil that reads another player's mana network. Each reveal is about
+ * exactly one of the three, so a guard that checks only blocks and entities lets accounts through. Remove keys from
  * {@link #getData()} to hide those fields, or cancel to send nothing.
  *
  * <p><b>Bridge event.</b> Vanilla sends no such data, so Hadron core never fires this; the bridge for an info mod

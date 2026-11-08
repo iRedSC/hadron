@@ -446,27 +446,20 @@ public final class BridgeContractTests {
         InventoryHolder.PerPlayer copy = (InventoryHolder.PerPlayer) e.getChanges().get(0).holder();
         t.assertEquals(chest, copy.at(), "where the copy is, for protection");
         t.assertEquals(alice.uuid(), copy.owner(), "whose copy");
-        t.assertEquals(Optional.of(chest), chest.place(), "a chest is its own place");
-        t.assertEquals(Optional.of(chest), alices.place(), "a claim check finds the copy's chest");
+        t.assertEquals(chest, chest.place(), "a chest is its own place");
+        t.assertEquals(chest, alices.place(), "a claim check finds the copy's chest");
         InventoryHolder cart = new InventoryHolder.Entity(EntityType.CHEST_MINECART.create(t.level()));
-        t.assertEquals(Optional.of(cart), cart.place(), "an entity is its own place");
-        t.assertEquals(Optional.of(chest), new InventoryHolder.Item(chest, loot).place(), "a backpack in a chest");
-        t.assertEquals(Optional.of(cart), new InventoryHolder.Item(cart, loot).place(), "a backpack on an entity");
-        t.assertEquals(Optional.of(cart), new InventoryHolder.PerPlayer(cart, bob.uuid()).place(), "a copy in an "
-                + "entity is at the entity");
-        t.assertEquals(Optional.of(chest), new InventoryHolder.Item(alices, loot).place(), "and a backpack inside it");
-        t.assertEquals(Optional.empty(), new InventoryHolder.Linked(InventoryHolder.Linked.ENDER_CHEST,
-                alice.uuid().toString()).place(), "an ender chest has no place");
-        t.assertEquals(Optional.of(InventoryHolder.Unknown.INSTANCE), new InventoryHolder.Item(
-                InventoryHolder.Unknown.INSTANCE, loot).place(), "a backpack nothing identified is Unknown, for "
-                + "protection to deny, never no place");
-        refuses(t, "is Linked itself", () -> new InventoryHolder.PerPlayer(new InventoryHolder.Linked(
-                InventoryHolder.Linked.ENDER_CHEST, alice.uuid().toString()), alice.uuid()));
-        refuses(t, "aren't supported", () -> new InventoryHolder.PerPlayer(new InventoryHolder.Item(chest, loot),
-                alice.uuid()));
-        refuses(t, "not another copy", () -> new InventoryHolder.PerPlayer(alices, bob.uuid()));
-        refuses(t, "use InventoryHolder.Unknown.INSTANCE", () -> new InventoryHolder.PerPlayer(
-                InventoryHolder.Unknown.INSTANCE, alice.uuid()));
+        t.assertEquals(cart, new InventoryHolder.Item(cart, loot).place(), "a backpack on an entity");
+        t.assertEquals(chest, new InventoryHolder.Item(alices, loot).place(), "a backpack in a copy is at its chest");
+        InventoryHolder ender = new InventoryHolder.Linked(InventoryHolder.Linked.ENDER_CHEST, alice.uuid().toString());
+        t.assertEquals(ender, new InventoryHolder.Item(ender, loot).place(), "a backpack in an ender chest comes "
+                + "down to its frequency");
+        InventoryHolder unplaced = new InventoryHolder.PerPlayer(InventoryHolder.Unknown.INSTANCE, alice.uuid());
+        t.assertEquals(InventoryHolder.Unknown.INSTANCE, unplaced.place(), "whose copy, but not where, is Unknown");
+        t.assertFalse(unplaced.equals(new InventoryHolder.PerPlayer(InventoryHolder.Unknown.INSTANCE, bob.uuid())),
+                "and still never merges two players' copies");
+        refuses(t, "keyed by its frequency", () -> new InventoryHolder.PerPlayer(ender, alice.uuid()));
+        refuses(t, "its at()", () -> new InventoryHolder.PerPlayer(alices, bob.uuid()));
     }
 
     // ---- Resources
