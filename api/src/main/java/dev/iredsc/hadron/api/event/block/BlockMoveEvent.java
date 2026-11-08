@@ -21,7 +21,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
  */
 @FiredBy(core = PARTIAL,
         coreSees = "pistons, through its piston leaves",
-        bridges = "contraptions, ships and spatial transfers, as `StructureMoveEvent`")
+        bridges = "contraptions and ships within one level, as `StructureMoveEvent`")
 public class BlockMoveEvent extends BlockEvent implements Cancellable {
     /** One block moving from {@code from} to {@code to}; {@code state} is the block as it is before moving. */
     public record Move(BlockPos from, BlockPos to, BlockState state) {

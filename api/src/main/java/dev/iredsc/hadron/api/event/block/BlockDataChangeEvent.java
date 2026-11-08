@@ -27,8 +27,8 @@ public class BlockDataChangeEvent extends BlockChangeEvent {
     public BlockDataChangeEvent(ServerLevel level, BlockPos pos, BlockState state, CompoundTag before,
             CompoundTag after, Actor actor) {
         super(level, pos, state, List.of(BlockChange.withData(pos, state, state,
-                Objects.requireNonNull(before, "before; pass the block entity's data as it is now"),
-                Objects.requireNonNull(after, "after; pass the data as it will be"))), actor);
+                Objects.requireNonNull(before, "before; pass the block entity's data as it is now").copy(),
+                Objects.requireNonNull(after, "after; pass the data as it will be").copy())), actor);
     }
 
     /** A copy of the data before. */

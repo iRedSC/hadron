@@ -24,7 +24,11 @@ Every bridge does these, whatever its mod does. Without them, core still fires i
 - **If the mod skips vanilla, fire the core event yourself**, before the change, and honour a cancel by not making it.
 - **Fire for committed changes only**, never for a simulated transfer or a capacity probe.
 - **Cancelled means fully undone**: nothing spent, nothing half-moved. If the mod spends a cost before acting, fire before the cost.
-- **No exact leaf? Fire the nearest parent** with its full payload, and propose the leaf for core.
+- **Fire before the first change on either side.** Mods often fill the destination before draining the source, place the moved block before removing the old one, or clear a slot before spawning its item. A cancel at the last step then duplicates or loses things. Call `Operation.begin(actor)` before the first change, so the action's opening event can be refused while nothing has happened; and if a core event inside the operation is cancelled after one side already changed, undo that side.
+- **Check what the mod does after a vanilla spawn or hit.** Many ignore `addFreshEntity`'s or `hurt`'s result and spend the cost, clear the stored copy or set health directly anyway. Don't fire the event a second time around it: make the mod honour the result. Whether a cost comes back is the catalog's rule ([events](events.md#operations-and-cancelling)), not the bridge's; `hurt` returning false can also mean a shield took it.
+- **A read can be a write.** Some mods break a block while listing its drops, or edit a sign while checking a position. Fire for those as the changes they are; never fire for a read that changes nothing.
+- **Report stored amounts, not derived ones.** Air, not pressure; heat, not temperature. A derived value changes when a tank's volume does, though nothing was added or removed.
+- **No exact leaf? Fire the nearest parent** with its full payload, and propose the leaf for core. For an entity change that no entity event, leaf or parent, describes, fire `EntityDataChangeEvent`, whose data kind is the proposal.
 
 ## Events only bridges fire
 
@@ -36,13 +40,14 @@ Core never fires these; with no bridge, plugins hear nothing for them.
 | `BlockDamageEvent` | puts lasting partial damage on a block short of breaking it | damage before and after |
 | `BlockDataChangeEvent` | changes a block entity's data with the block state unchanged (a spawner's mob, a drawer lock, a terminal binding, a name) | the block entity data before and after |
 | `BlockRedstoneEvent` | changes the signal a block emits without changing its state | old and new signal, face |
-| `StructureMoveEvent` | assembles, moves, rotates or disassembles a contraption, ship or spatial transfer | source to target mapping, swept space, old and new transforms |
+| `StructureMoveEvent` | assembles, moves, rotates or disassembles a contraption or ship within one level | source to target mapping, swept space, old and new transforms |
 | `EntityControlChangeEvent`, `EntityControlExpireEvent` | changes who controls an entity without mounting (charm, thrall, drone link, guard assignment); expiry is after-only | old and new controller |
+| `EntityDataChangeEvent` | changes lasting data it keeps on an entity that no other entity event describes (a colonist's job, a familiar's upgrades, a player's spell anchor) | the kind of data, and the data before and after |
 | `InventoryDestroyEvent`, `InventoryGenerateEvent`, `InventorySortEvent` | makes items appear with no source, vanish with no destination, or rearranges contents in place | slots before and after |
 | `ResourceConvertEvent` | turns one resource into another in one step (fuel to heat, heat to steam, mana to energy) | resource id and unit, holder, old and new amount of the input, and the output |
 | `TickAccelerateEvent` | speeds up blocks or entities in an area | accelerator, area, rate; once per change, never per extra tick |
 | `AccessControlChangeEvent` | changes a claim, team, party, alliance or trust list | what changed, who changed it |
-| `DataRevealEvent` | is about to send block, entity or inventory data to a player who didn't open it (Jade, WTHIT, map radar) | the data, with removable fields |
+| `DataRevealEvent` | is about to send block, entity, inventory or account data to a player who didn't open it (Jade, WTHIT, map radar, a sigil reading another player's network) | the data, with removable fields |
 <!-- end generated: bridge-only -->
 
 ## Events core covers in part
@@ -55,7 +60,7 @@ Core fires these for vanilla's paths; the bridge covers its mod's.
 | `BlockChangeEvent` | every block state change, through `Level.setBlock` | block entity data changes, as `BlockDataChangeEvent`, and growth without bone meal, as `BlockFertilizeEvent` |
 | `BlockDropItemEvent` | every drop through `Block.dropResources` (player mining, `destroyBlock`, blocks losing support) | drops the mod spawns itself when it breaks or harvests a block, before spawning them; honour the edited list and experience |
 | `BlockFertilizeEvent` | bone meal | growth accelerators that grow without bone meal |
-| `BlockMoveEvent` | pistons, through its piston leaves | contraptions, ships and spatial transfers, as `StructureMoveEvent` |
+| `BlockMoveEvent` | pistons, through its piston leaves | contraptions and ships within one level, as `StructureMoveEvent` |
 | `EntityStatusChangeEvent` | a mob's AI turned off or on | the mod's stuns, freezes, holds and interrupted casts, with its own status ids |
 | `EntityTargetEvent` | mobs | turret blocks |
 | `EntityVelocityEvent` | any velocity set while something other than the entity acts (commands, explosions, entities, machines, mods with an actor pushed); knockback as `EntityKnockbackEvent` | pushes the mod makes with nothing on the stack: push the actor instead, and core fires it |

@@ -12,6 +12,7 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **`Platform`**: the interface through which `common` asks what only the loader knows.
 - **Bridge**: a mod that makes one other mod speak Hadron's events, by attributing its actions and routing its effects that skip vanilla. ([bridges](bridges.md))
 - **Bridge API**: a loader-neutral interface or event a bridge publishes for extras, such as a network's contents. Official plugins use it with `bridge-depend:` and stay write-once.
+- **Promotion**: adding a core event for what two official bridges' events, or their proposed leaves, share, made the superclass of each so no plugin depending on those events breaks. The exception is a data kind moving from `EntityDataChangeEvent` to a new leaf, which plugins listening for that kind must follow. ([bridges](bridges.md#promotion-when-bridges-events-become-core))
 - **`mod-depend:`**: a plugin that compiles against a mod directly. It must declare `loader:`, and Hadron refuses it on any other loader.
 - **Helper**: API for something Minecraft makes hard (NPCs, bulk block edits, packets) that takes and returns Minecraft's own types and keeps the topic's version-specific code inside Hadron. Sits beside raw access, never wraps it. ([design](design.md#minecraft-versions))
 - **Rename table**: the classes, methods and fields Minecraft renamed in one version jump. Hadron rewrites an older plugin's references through it as the plugin loads.
@@ -33,6 +34,8 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **Per-target event**: one target of an operation. Cancelling it spares only that target.
 - **After event**: an expiry or revocation, marked *(after)*. It can be observed but not cancelled.
 - **Simulation**: a mod testing an action before doing it. Never fires an event.
+- **Per-player copy**: one player's own contents of an inventory at a block or entity (a Lootr chest), held by `InventoryHolder.PerPlayer`, so two players' copies are never one inventory. ([events](events.md#containers-inventoryevent))
+- **Data kind**: the id on `EntityDataChangeEvent` saying whose data changed, in the mod's namespace, such as `minecolonies:job`.
 
 ## Gaps and coverage
 

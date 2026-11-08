@@ -13,7 +13,7 @@ import org.joml.Matrix4dc;
 import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 
 /**
- * A group of blocks moves as one: a Create contraption, a Valkyrien Skies ship, an AE2 spatial transfer. Fired when it
+ * A group of blocks moves as one within a level: a Create contraption, a Valkyrien Skies ship. Fired when it
  * assembles out of the world, each time it moves or rotates, and when it disassembles back into blocks. Cancel it and
  * that step doesn't happen.
  *
@@ -23,7 +23,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
  * {@link #getSweptSpace()}; while it only moves, with no blocks entering or leaving, moves may be empty.
  */
 @FiredBy(core = NONE,
-        bridges = "assembles, moves, rotates or disassembles a contraption, ship or spatial transfer",
+        bridges = "assembles, moves, rotates or disassembles a contraption or ship within one level",
         fillIn = "source to target mapping, swept space, old and new transforms")
 public class StructureMoveEvent extends BlockMoveEvent {
     /** Which step of the structure's life this is. */

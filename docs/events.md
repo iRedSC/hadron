@@ -21,7 +21,7 @@ Many effects are one action with many parts: a spell hits ten entities, a gadget
 
 - **Related events share an `Operation`**: an id, the actor, and every event it produced. A logger groups them; a rollback undoes them together.
 - **An operation opens with a cancellable event fired before its first mutation.** Bridges fire it at the start of the mod's action, not at the last vanilla call inside it: Iron Chests and Carry On remove a block entity before calling `setBlock`, so cancelling at `setBlock` is already too late. Cancelling the opening event undoes nothing because nothing has happened yet, and refunds any cost.
-- **Per-target events cancel only their target.** Denying one entity in an area spell spares that entity; the rest of the spell lands. The cost is not refunded, because the action happened.
+- **Per-target events cancel only their target.** Denying one entity in an area spell spares that entity; the rest of the spell lands. The cost is not refunded, because the action happened. The one exception: core may put an item use's inventory back when its spawns were refused, even if the use did something else too.
 - **Cancellable means fully undone for what it covers.** No item consumed, no durability lost, no half-moved stack, no fluid handed over while the block stays.
 - **Expiry and revocation are not cancellable.** A flight grant can be refused; a flight expiry can only be observed, or temporary powers would become permanent. Such events are marked *(after)*.
 
@@ -74,7 +74,7 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 | └ `StructureGrowEvent` | a tree or structure grows from one block | `TreeGrower` |
 | `BlockMoveEvent` | blocks relocate with their data and scheduled ticks; source to target mapping, and the space swept through | `PistonBaseBlock`, through its leaves |
 | ├ `BlockPistonExtendEvent`, `BlockPistonRetractEvent` | | `PistonBaseBlock` |
-| └ `StructureMoveEvent` | a contraption, ship or spatial transfer assembles, moves, rotates or disassembles; old and new transforms | bridge (Create, Valkyrien Skies, AE2 spatial IO) |
+| └ `StructureMoveEvent` | a contraption or ship assembles, moves, rotates or disassembles within one level; old and new transforms | bridge (Create, Valkyrien Skies) |
 | `BlockDropItemEvent` | a broken block's drops are about to appear; the item entities and experience are editable, and a cancel drops nothing | `Block.dropResources` (NeoForge's `BlockDropsEvent`), so player mining, `destroyBlock` and blocks losing their support |
 | `BlockUseEvent` | an actor right-clicks or activates a block, including remotely through a linked terminal | `useItemOn`, `useWithoutItem` |
 | `BlockRedstoneEvent` | an actor changes the signal a block emits without changing its state | bridge (Integrated Dynamics, LaserIO) |
@@ -88,7 +88,7 @@ As in Bukkit, `BlockMultiPlaceEvent` extends `BlockPlaceEvent`, `BlockSpreadEven
 
 ### Entities: `EntityEvent`
 
-Payload: the entity, its position, and what changed.
+Payload: the entity and its position; each leaf adds what changed. A bridge whose change no shipped entity event describes, leaf or parent, fires `EntityDataChangeEvent`.
 
 | Event | What | Core chokepoint |
 |---|---|---|
@@ -112,6 +112,7 @@ Payload: the entity, its position, and what changed.
 | `EntityTargetEvent` | a mob or turret picks a target | `setTarget` |
 | `EntityControlChangeEvent` | who controls an entity changes without mounting: charmed, enthralled, a drone linked to a monitor, a guard assigned; expiry is *(after)* | bridge |
 | `EntityControlExpireEvent` *(after)* | control ran out: a charm wore off, a drone's link timed out | bridge |
+| `EntityDataChangeEvent` | lasting data a mod keeps on an entity changes and no other shipped entity event, leaf or parent, describes it: a colonist's job, a familiar's upgrades, a player's spell anchor; a kind id says whose | bridge |
 | `EntityRelationshipChangeEvent` | reputation or a lasting relationship changes (villager gossip, an NPC's marriage) | not shipped yet: see "Not shipped yet" |
 | `EntityUseEvent` | an actor right-clicks an entity | `interact` |
 | `EntityMountEvent`, `EntityDismountEvent` | riding, including vehicles and a player carrying another | `startRiding`, `stopRiding` |
@@ -151,7 +152,7 @@ Payload: the entity, its position, and what changed.
 
 ### Containers: `InventoryEvent`
 
-An inventory is identified by what holds it (a block, an entity, a player, an item inside another item, a frequency in linked storage), not by where a player is standing.
+An inventory is identified by what holds it (a block, an entity, a player, an item inside another item, a frequency in linked storage, or one player's own copy of a block's or entity's inventory, such as a Lootr chest, which only that mod's bridge can name), not by where a player is standing.
 
 | Event | What | Core chokepoint |
 |---|---|---|
@@ -223,7 +224,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 | `ServerListPingEvent` | a client's server list asks about the server; MOTD, shown player counts and the hover sample editable; not an action, so no actor | status request |
 | `CommandExecuteEvent` | any command about to run, from a player, the console, a quest reward, a mod or each line of a datapack function; actor and authority | `Commands.performCommand`, function lines |
 | `AccessControlChangeEvent` | a claim, team, party, alliance or trust list changes: boundaries, members, flags; who changed it | bridge (claim and team mods) |
-| `DataRevealEvent` | server data about a block, entity or inventory is about to be sent to a player who didn't open it (Jade, WTHIT, map radar); fields removable | bridge (Jade, WTHIT) |
+| `DataRevealEvent` | server data about a block, entity, inventory or account is about to be sent to a player who didn't open it (Jade, WTHIT, map radar, a sigil reading another player's network); fields removable | bridge (Jade, WTHIT, Blood Magic) |
 | `PluginEnableEvent`, `PluginDisableEvent` *(after)* | | Hadron's plugin host |
 | `ServiceRegisterEvent`, `ServiceUnregisterEvent` *(after)* | a provider appeared or left | Hadron's services manager |
 
@@ -231,7 +232,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 
 Designed but not in `api`, because core can't yet fire them for every actor without breaking rule 7 or making a cancel unsafe. A plugin can't listen for them, so none of them can look like coverage.
 
-- `EntityRemoveEvent`, `EntityCaptureEvent`: cancelling at `Entity.remove` can duplicate (a cancelled arrow pickup); each cause needs its own hook.
+- `EntityRemoveEvent`, `EntityCaptureEvent`: cancelling at `Entity.remove` can duplicate (a cancelled arrow pickup); each cause needs its own hook. First to ship ([design](design.md#order-of-work)). Removal by expiry (a timed summon, a temporary portal) will be *(after)*, so a cancel can't make it permanent.
 - `EntityLeashEvent`, `EntityUnleashEvent`, `EntityShearEvent`, `ArmorStandManipulateEvent`: need hooks inside interface methods or per-path logic.
 - `EntityAttributeChangeEvent`, `EntityRelationshipChangeEvent`, `FoodLevelChangeEvent`: the vanilla classes that change don't know their entity.
 - `BiomeChangeEvent`: biome writes are too hot and scattered for one hook.
@@ -243,3 +244,5 @@ Designed but not in `api`, because core can't yet fire them for every actor with
 - **An event per fuel tick.** Burning internal fuel is a `ResourceConsumeEvent` when the reserve changes, and acceleration is one event per change, so hot loops don't fire thousands of events.
 - **Mod progression state** (Twilight Forest's conquered bosses, quest progress). It changes no world, player or item; plugins that need it use the bridge's extras.
 - **Client-only data** (local waypoints, minimap settings).
+- **Data tied to no place** (a computer's files, a mod's network database). Plugins guard it through the block or item that reaches it, and whatever it makes happen in the world fires its own events.
+- **Creatures stored outside items** (Cobblemon's party and PC). Moving, trading, evolving or deleting them in storage are the bridge's own events until a second official bridge needs the same ([promotion](bridges.md#promotion-when-bridges-events-become-core)). Sending one out is an `EntitySpawnEvent`, and capture into storage will be `EntityCaptureEvent` once it ships, so then every creature entering or leaving the world is seen.

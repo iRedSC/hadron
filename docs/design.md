@@ -117,10 +117,18 @@ Hadron ships lightweight plugins server owners expect: essentials-style commands
 1. ~~Plugin host~~: done. Loads, enables, disables and hot-reloads jars, each with its own class loader, and undoes everything a plugin registered (listeners, commands, tasks, services, permission nodes). Ported from FTAM's Foundation.
 2. ~~Loader-neutral split~~: done. `api` and `common` on vanilla Minecraft, `neoforge` as the port, Hadron's own event bus, `loader:` for plugins that use mods directly, reserved node roots.
 3. Hadron's API, first slice: config and storage, placeholders, the LuckPerms provider.
-4. The actor stack and the events in [events.md](events.md) at their chokepoints, with a benchmark for the chokepoint cost; then the coverage report ([bridges.md](bridges.md)).
+4. The actor stack and the events in [events.md](events.md) at their chokepoints, with a benchmark for the chokepoint cost; then the coverage report ([bridges.md](bridges.md)). Of the events not shipped yet, `EntityRemoveEvent` and `EntityCaptureEvent` come first: they were the most needed in a survey of 21 mods ([#19](https://github.com/iRedSC/hadron/pull/19)).
 5. Gradle plugin and project template, with the build checks.
 6. The skill, written against what exists, then tested by asking fresh agents for real plugins and fixing whatever they trip on.
 7. ~~Headless test runner~~: done ([testing.md](testing.md)). `hadronTest` for `examples/hello` and `selftest`; moves into the Gradle plugin with step 5.
 8. Bundled plugins; pilot bridges (Mekanism, AE2, Superb Warfare); the client companion.
 9. Helpers for NPCs, bulk block edits and packets.
 10. A second Minecraft version: its rename table, the load-time link check, and the first port guide.
+
+### Open designs
+
+Each waits for the work that will show what it needs; a guess at it failed review ([#19](https://github.com/iRedSC/hadron/pull/19)).
+
+- **Running resource flows**, with the Mekanism pilot. A machine's per-tick power draw, a boiler turning heat to steam every tick, a cable feeding a running machine: are resource events a ledger a plugin can sum, and if so how are per-tick flows reported without firing thousands of events? Today the catalog says both "a machine spending power" is a `ResourceConsumeEvent` and "no event per fuel tick".
+- **A mod's own data at block spaces**, with the first official bridge for a mod that keeps it (Immersive Engineering's wires, Ad Astra's oxygen and gravity fields, waystone names). `BlockChange` describes a block whose state or block entity changes; a wire through air is neither, so reusing it marks every covered space unchanged. Needs its own shape, fired on the server thread, with every covered space loaded.
+- **Moves between levels**, with the AE2 pilot, whose spatial storage moves blocks into its own dimension. A `BlockEvent` holds one level, and splitting a move into one event per level lets one side pass while the other is refused, and hides the source from protection.
