@@ -75,7 +75,7 @@ Each bridge owns exactly one mod id, so two bridges never compete to translate t
 
 A plugin hears a bridge API's events only if it names that mod. **When bridges for different mods say the same thing, core adds one event for it, so a plugin written once hears every mod that does it, including mods bridged later.** Two sources feed this:
 
-- **Missing leaves.** A bridge that fires a parent because no leaf fits names the leaf it wanted; for an entity, the data kind on `EntityDataChangeEvent` is that proposal. Not built yet: those proposals, collected and grouped by what they mean, since each is in its own mod's namespace (`minecolonies:job` and another mod's `:job` are one repeat), so a repeat shows itself.
+- **Missing leaves.** A bridge that fires a parent because no leaf fits names the leaf it wanted; for an entity, the data kind on `EntityDataChangeEvent` is that proposal. Not built yet: those proposals, collected and grouped by what they mean, since each is in its own mod's namespace (`minecolonies:job` and another mod's `:profession`, if they mean the same, are one repeat), so a repeat shows itself.
 - **Overlapping extras.** Two bridge APIs publish events a plugin would handle the same way, such as AE2's and Refined Storage's finished autocrafts.
 
 Promote when all of these hold:
@@ -84,7 +84,11 @@ Promote when all of these hold:
 - **One listener handles them all correctly using only what they share.** If acting right needs to know which mod fired it, they only look alike: keep them apart.
 - **The event can follow the rules in [events.md](events.md#rules)**: a payload a plugin can act on without knowing the mod, and producers in the same release, which here means the bridges that asked.
 
-**Promotion never breaks a plugin that depends on a bridge's events.** Every event in a bridge API extends a Hadron event, so promoting adds a superclass between that event and theirs: each bridge's own event becomes a leaf under the new one, keeps its mod-only fields, and plugins that `bridge-depend` on it still compile. The one exception: a data kind moving from `EntityDataChangeEvent` to a new leaf, which breaks plugins listening for that kind, so the leaf's Javadoc names each kind it replaces. Events under different Hadron parents aren't promoted together, since one listener couldn't handle them alike. Not built yet: the build refusing a bridge API event that extends nothing of Hadron's, which lands with the first bridge API. A promotion changes `api`, so it gets `@FiredBy(core = NONE, ...)`, an acceptance-kit check and `@Covers` like any bridge event.
+**Promotion never breaks a plugin that depends on a bridge's events.** Every event in a bridge API extends a Hadron event, so promoting adds a superclass between that event and theirs: each bridge's own event becomes a leaf under the new one, keeps its mod-only fields, and plugins that `bridge-depend` on it still compile. The one exception: a data kind moving from `EntityDataChangeEvent` to a new leaf, which breaks plugins listening for that kind, so the leaf's Javadoc names each kind it replaces.
+
+Events under different Hadron parents aren't promoted together, since one listener couldn't handle them alike.
+
+Not built yet: the build refusing a bridge API event that extends nothing of Hadron's, which lands with the first bridge API. A promotion changes `api`, so it gets `@FiredBy(core = NONE, ...)`, an acceptance-kit check and `@Covers` like any bridge event.
 
 ## Pilots
 

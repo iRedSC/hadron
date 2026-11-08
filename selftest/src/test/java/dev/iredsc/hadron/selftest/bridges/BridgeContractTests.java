@@ -139,7 +139,7 @@ public final class BridgeContractTests {
         try {
             build.run();
         } catch (IllegalArgumentException expected) {
-            said = expected.getMessage();
+            said = String.valueOf(expected.getMessage());
         }
         t.assertTrue(said.contains(fix), "should be refused, saying \"" + fix + "\", but said: " + said);
     }

@@ -29,8 +29,10 @@ public sealed interface InventoryHolder {
      * Where the inventory is, for protection: the block or entity itself, the place a per-player copy belongs to, or
      * whatever holds the item a backpack is in. Check this rather than matching {@link Block} alone, so a Lootr chest
      * or a backpack in a chest is protected too. {@link Unknown} when nothing identified where it is, even through
-     * a backpack, which protection denies as belonging to nobody it trusts. Empty only for storage with no place:
-     * an ender chest, whose contents are its player's wherever it is opened.
+     * a backpack, which protection denies as belonging to nobody it trusts. Empty only for {@link Linked} storage,
+     * which has no place: empty says nothing about who owns it. Decide by its network and frequency: an
+     * {@link Linked#ENDER_CHEST}'s frequency is its owner's UUID; any other network's owner only its mod's bridge
+     * knows, so deny it unless the bridge says otherwise.
      */
     default Optional<InventoryHolder> place() {
         return switch (this) {
@@ -85,8 +87,8 @@ public sealed interface InventoryHolder {
      * One player's own copy of the inventory at a block or entity, where each player who opens it sees
      * different contents: a Lootr chest, a per-player reward crate. {@code at} is where it is, for protection;
      * {@code owner} is whose copy, so two players' copies are never mistaken for one inventory. Only a bridge for the
-     * per-player mod names one; without it, core reports the chest's own holder, and every player's copy looks like
-     * one inventory.
+     * per-player mod names one; without it, core reports whatever it can identify, often {@link Unknown} (Lootr hands
+     * vanilla a plain container, not the chest), so the chest's place also needs that bridge.
      */
     record PerPlayer(InventoryHolder at, UUID owner) implements InventoryHolder {
         public PerPlayer {
