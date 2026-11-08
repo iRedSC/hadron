@@ -286,6 +286,13 @@ val hadronTestStage = tasks.register<Copy>("hadronTestStage") {
     inputs.files(modJars)
     @Suppress("UNCHECKED_CAST")
     val keep = (findProperty("hadronTest.keep") as List<String>?).orEmpty()
+    for (path in keep) {
+        val normal = java.nio.file.Paths.get(path).normalize()
+        if (path.isBlank() || normal.isAbsolute || normal.startsWith("..") || normal.toString().isEmpty()) {
+            throw GradleException("hadronTest.keep has \"$path\", which isn't a folder inside the test server's run "
+                    + "folder. Give a relative path that stays inside it, such as config/luckperms/libs")
+        }
+    }
     doLast {
         val filter = suites.resolve("$name.tests")
         val patterns = tests.get()

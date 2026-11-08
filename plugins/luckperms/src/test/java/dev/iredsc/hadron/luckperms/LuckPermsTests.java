@@ -17,6 +17,11 @@ import net.luckperms.api.node.types.InheritanceNode;
 import net.luckperms.api.node.types.PermissionNode;
 import net.luckperms.api.node.types.PrefixNode;
 import net.luckperms.api.node.types.SuffixNode;
+import java.nio.charset.StandardCharsets;
+import java.util.List;
+import net.luckperms.api.context.DefaultContextKeys;
+import net.minecraft.commands.CommandBuildContext;
+import net.minecraft.commands.Commands;
 import net.minecraft.network.protocol.game.ClientboundCommandsPacket;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -102,6 +107,7 @@ public final class LuckPermsTests {
         t.assertEquals(" §7*", Permissions.suffix(g), "the suffix inherited from lp_helper");
     }
 
+    /** LuckPerms resends the list itself; this checks the integration still gets a new one to the player. */
     @HadronTest
     void aRankChangeResendsThePlayersCommands(TestContext t) {
         TestPlayer rae = t.player("lp_rae");
@@ -112,6 +118,28 @@ public final class LuckPermsTests {
         modify(t, r.getUUID(), u -> u.data().add(PermissionNode.builder("lptest.refresh").value(true).build()));
         t.awaitAsync("rae's client to get a new command tree",
                 () -> !rae.received(ClientboundCommandsPacket.class).isEmpty(), 200);
+    }
+
+    /** A command granted only in one context reaches the player's client once they've joined in it. */
+    @HadronTest
+    void aCommandGrantedInAContextIsInTheTreeAfterJoining(TestContext t) {
+        Node inSurvival = Node.declare("lptest.survivalcmd", Default.NOBODY, "Only granted in survival");
+        t.server().getCommands().getDispatcher().register(Commands.literal("lptest_survival")
+                .requires(source -> Permissions.has(source, inSurvival)).executes(c -> 1));
+        // Offline mode: LuckPerms keys a player by the UUID their name gives, before they ever join.
+        UUID id = UUID.nameUUIDFromBytes("OfflinePlayer:lp_cai".getBytes(StandardCharsets.UTF_8));
+        modify(t, id, u -> u.data().add(PermissionNode.builder(inSurvival.id)
+                .withContext(DefaultContextKeys.GAMEMODE_KEY, "survival").build()));
+
+        TestPlayer cai = t.player("lp_cai");
+        t.assertEquals(id, cai.uuid(), "the UUID LuckPerms was given for lp_cai");
+        t.assertTrue(Permissions.has(cai.player(), inSurvival), "cai is in survival, so has the node");
+        CommandBuildContext context = CommandBuildContext.simple(t.server().registryAccess(),
+                t.server().getWorldData().enabledFeatures());
+        t.awaitAsync("cai's newest command tree to hold /lptest_survival", () -> {
+            List<ClientboundCommandsPacket> trees = cai.received(ClientboundCommandsPacket.class);
+            return !trees.isEmpty() && trees.get(trees.size() - 1).getRoot(context).getChild("lptest_survival") != null;
+        }, 100);
     }
 
     @HadronTest

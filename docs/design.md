@@ -78,7 +78,7 @@ Today the host still refuses any jar built for another Minecraft version; the re
 
 ## Permissions
 
-- **Ranks come from LuckPerms**, which has a NeoForge build, through a provider plugin on its API (`plugins/luckperms`). It asks LuckPerms in the player's current contexts, and resends a player's commands when LuckPerms recalculates them, since LuckPerms on NeoForge doesn't. On Minecraft 1.21.1 it needs LuckPerms 5.4.150: 5.4.140, the build labelled for 1.21.1, lets no one join. Hadron doesn't ship a rank system of its own. Without LuckPerms, every node falls back to its default (everyone, ops, or nobody).
+- **Ranks come from LuckPerms**, which has a NeoForge build, through a provider plugin on its API (`plugins/luckperms`). It asks LuckPerms in the player's current contexts; LuckPerms keeps each player's command list current itself, through this provider. On Minecraft 1.21.1 it needs LuckPerms 5.4.150: 5.4.140, the build labelled for 1.21.1, lets no one join. Hadron doesn't ship a rank system of its own. Without LuckPerms, every node falls back to its default (everyone, ops, or nobody).
 - **Mods using NeoForge's PermissionAPI** reach LuckPerms directly when it's installed; Hadron registers its own handler only when it isn't, so there is always one source of truth.
 - **Hadron makes nodes for everything a mod adds**, with no bridge: `use.<modid>.<path>`, `place.`, `break.`, `open.`, `attack.` by registry id, `command.<name>` for every command, `packet.<modid>.<payload>` for mods' network messages. A server owner can write `use.ae2.*: false` on day one.
 - **Those roots are reserved**: `use`, `place`, `break`, `open`, `attack`, `command`, `packet`, `hadron`. A plugin declaring a node under one fails to load, with the fix in the message.

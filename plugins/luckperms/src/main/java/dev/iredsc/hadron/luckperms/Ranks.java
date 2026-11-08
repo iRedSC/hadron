@@ -60,8 +60,8 @@ final class Ranks implements PermissionProvider {
     }
 
     /**
-     * The player's contexts. While LuckPerms is still logging them in it can't say yet, so their server-wide ranks
-     * answer for those few ticks; {@link LuckPermsPlugin} resends their commands once they've joined.
+     * The player's contexts. Some LuckPerms builds can't say yet while a player is still logging in (5.4.140 throws),
+     * so their server-wide ranks answer for those few ticks instead of an error.
      */
     private QueryOptions options(ServerPlayer player) {
         try {
