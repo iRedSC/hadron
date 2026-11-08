@@ -33,11 +33,6 @@ object ContractDocs {
                     "Bridges fire it at the start of the mod's action, not at the last vanilla call inside it: Iron " +
                     "Chests and Carry On remove a block entity before placing the new block, so cancelling at the " +
                     "placement is already too late.",
-                // Why events aren't shipped yet, without where core would hook them.
-                "- `EntityRemoveEvent`, `EntityCaptureEvent`: cancelling at `Entity.remove` can duplicate (a cancelled " +
-                    "arrow pickup); each cause needs its own hook." to
-                    "- `EntityRemoveEvent`, `EntityCaptureEvent`: cancelling one could duplicate (a cancelled arrow " +
-                    "pickup); each cause needs its own hook.",
             ),
         ),
         "platform.md" to Rules(),
