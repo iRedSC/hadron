@@ -91,8 +91,8 @@ object HadronTestServer {
         }.distinct()
         run.resolve(".hadron-keep").writeText(keep.joinToString("\n", postfix = "\n"))
         for (path in keep) {
-            val saved = inside(root.resolve("kept"), path)
-            if (saved.isDirectory) copyTree(saved, inside(run, path))
+            val saved = inside(root, "kept", path)
+            if (saved.isDirectory) copyTree(saved, inside(run.parentFile, run.name, path))
         }
     }
 
@@ -141,23 +141,23 @@ object HadronTestServer {
     }
 
     /**
-     * [base]/[path], refusing a path that leads out of [base] (absolute, `..`, or through a link), since kept folders
-     * are deleted and overwritten: a bad entry must never reach files outside the test run and its cache.
+     * [root]/[base]/[path], refusing a path that leads out of [root]/[base] (absolute or `..`), and refusing it when
+     * any folder from [root] down to it is a link: kept folders are deleted and overwritten, so a link anywhere on the
+     * way (the cache folder itself included) would aim that at files outside the test run and its cache.
      */
-    fun inside(base: File, path: String): File {
-        fun real(p: java.nio.file.Path): java.nio.file.Path {
-            // The nearest part that exists, with its links resolved, plus whatever below it doesn't exist yet.
-            val existing = generateSequence(p) { it.parent }.first { java.nio.file.Files.exists(it) }
-            return existing.toRealPath().resolve(existing.relativize(p)).normalize()
-        }
-        val home = base.toPath().toAbsolutePath().normalize()
+    fun inside(root: File, base: String, path: String): File {
+        val top = root.toPath().toAbsolutePath().normalize()
+        val home = top.resolve(base).normalize()
         val target = home.resolve(path).normalize()
-        val escapes = path.isBlank() || java.nio.file.Paths.get(path).isAbsolute
-            || !target.startsWith(home) || target == home
-            || !real(target).startsWith(real(home)) || real(target) == real(home)
-        if (escapes) {
-            throw GradleException("hadronTest.keep has \"$path\", which leads out of $base. Give a relative path that "
-                    + "stays inside the test server's run folder, such as config/luckperms/libs")
+        fun refuse(why: String): Nothing = throw GradleException("hadronTest.keep has \"$path\", which $why. Give a "
+                + "relative path that stays inside the test server's run folder, such as config/luckperms/libs")
+        if (path.isBlank() || java.nio.file.Paths.get(path).isAbsolute || !target.startsWith(home) || target == home) {
+            refuse("leads out of $home")
+        }
+        var at = top
+        for (part in top.relativize(target)) {
+            at = at.resolve(part)
+            if (java.nio.file.Files.isSymbolicLink(at)) refuse("passes through the link $at")
         }
         return target.toFile()
     }
@@ -167,9 +167,9 @@ object HadronTestServer {
         val list = run.resolve(".hadron-keep")
         if (!list.isFile) return
         for (path in list.readLines().map { it.trim() }.filter { it.isNotEmpty() }) {
-            val live = inside(run, path)
+            val live = inside(run.parentFile, run.name, path)
             if (!live.isDirectory) continue
-            val saved = inside(root.resolve("kept"), path)
+            val saved = inside(root, "kept", path)
             deleteTree(saved)
             copyTree(live, saved)
         }
