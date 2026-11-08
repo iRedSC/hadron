@@ -13,7 +13,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 /**
  * Lasting data a mod keeps on an entity is about to change, and no other entity event describes it: a colonist's job,
  * a familiar's upgrades, a dragon's age, a player's spell anchor. This is the event a bridge fires when an entity
- * change has no fitting leaf. Cancel it and the data stays as it was.
+ * change fits no shipped entity event, leaf or parent. Cancel it and the data stays as it was.
  *
  * <p>A leaf designed but not shipped yet (a relationship, an attribute) doesn't count as describing it: fire this
  * until the leaf ships. When it does, the bridge moves to the leaf, and a plugin listening here for that kind must
@@ -52,6 +52,10 @@ public class EntityDataChangeEvent extends EntityEvent implements Cancellable {
         }
         this.before = Objects.requireNonNull(before, "before; pass an empty CompoundTag when there was none").copy();
         this.after = Objects.requireNonNull(after, "after; pass an empty CompoundTag when it is being removed").copy();
+        if (before.equals(after)) {
+            throw new IllegalArgumentException("before and after are the same, so nothing changes: fire "
+                    + "EntityDataChangeEvent only when the mod's data does");
+        }
     }
 
     /** The data kind: whose data this is, as an id in the mod's namespace. */

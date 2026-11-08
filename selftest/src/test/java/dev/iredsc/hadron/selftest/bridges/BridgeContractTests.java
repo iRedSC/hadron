@@ -239,6 +239,8 @@ public final class BridgeContractTests {
                 ResourceLocation.fromNamespaceAndPath("hadron", "job"), builder, farmer, machine(t, alice)));
         refuses(t, "isn't a mod's id", () -> new EntityDataChangeEvent(pig,
                 ResourceLocation.withDefaultNamespace("job"), builder, farmer, machine(t, alice)));
+        refuses(t, "nothing changes", () -> new EntityDataChangeEvent(pig, job, builder, builder.copy(),
+                machine(t, alice)));
     }
 
     @HadronTest

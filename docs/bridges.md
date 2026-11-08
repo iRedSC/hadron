@@ -75,7 +75,7 @@ Each bridge owns exactly one mod id, so two bridges never compete to translate t
 
 A plugin hears a bridge API's events only if it names that mod. **When bridges for different mods say the same thing, core adds one event for it, so a plugin written once hears every mod that does it, including mods bridged later.** Two sources feed this:
 
-- **Missing leaves.** A bridge that fires a parent because no leaf fits names the leaf it wanted; for an entity, the data kind on `EntityDataChangeEvent` is that proposal. Not built yet: those proposals, collected and grouped by what they mean, since each is in its own mod's namespace (`minecolonies:job` and another mod's `:profession`, if they mean the same, are one repeat), so a repeat shows itself.
+- **Missing leaves.** A bridge that fires a parent because no leaf fits names the leaf it wanted; for an entity, the data kind on `EntityDataChangeEvent` is that proposal. Not built yet: a list that collects these proposals and groups them by meaning, since each is in its own mod's namespace (`minecolonies:job` and another mod's `:profession`, if they mean the same, are one repeat).
 - **Overlapping extras.** Two bridge APIs publish events a plugin would handle the same way, such as AE2's and Refined Storage's finished autocrafts.
 
 Promote when all of these hold:
@@ -88,7 +88,7 @@ Promote when all of these hold:
 
 Events under different Hadron parents aren't promoted together, since one listener couldn't handle them alike.
 
-Not built yet: the build refusing a bridge API event that extends nothing of Hadron's, which lands with the first bridge API. A promotion changes `api`, so it gets `@FiredBy(core = NONE, ...)`, an acceptance-kit check and `@Covers` like any bridge event.
+Not built yet: refusing a data kind whose namespace isn't the firing bridge's mod id, which needs a bridge's identity at firing; and the build refusing a bridge API event that extends nothing of Hadron's, which lands with the first bridge API. A promotion changes `api`, so it gets `@FiredBy(core = NONE, ...)`, an acceptance-kit check and `@Covers` like any bridge event.
 
 ## Pilots
 
