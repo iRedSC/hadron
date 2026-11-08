@@ -86,7 +86,10 @@ public class DataRevealEvent extends ServerEvent implements Cancellable {
         return Optional.ofNullable(entity);
     }
 
-    /** The account, when it's about an account. */
+    /**
+     * The account, when it's about an account. Whether it's the viewer's own:
+     * {@code account.equals(ResourceHolder.Account.player(event.getViewer().getUUID()))}.
+     */
     public Optional<ResourceHolder.Account> getAccount() {
         return Optional.ofNullable(account);
     }

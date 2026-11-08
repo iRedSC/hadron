@@ -460,15 +460,11 @@ public final class BridgeContractTests {
         t.assertEquals(Optional.of(InventoryHolder.Unknown.INSTANCE), new InventoryHolder.Item(
                 InventoryHolder.Unknown.INSTANCE, loot).place(), "a backpack nothing identified is Unknown, for "
                 + "protection to deny, never no place");
-        String refused = "";
-        try {
-            new InventoryHolder.PerPlayer(new InventoryHolder.Linked(InventoryHolder.Linked.ENDER_CHEST,
-                    alice.uuid().toString()), alice.uuid());
-        } catch (IllegalArgumentException expected) {
-            refused = expected.getMessage();
-        }
-        t.assertTrue(refused.contains("is Linked"), "a copy of storage with no place should be refused, naming "
-                + "Linked, but said: " + refused);
+        refuses(t, "is Linked itself", () -> new InventoryHolder.PerPlayer(new InventoryHolder.Linked(
+                InventoryHolder.Linked.ENDER_CHEST, alice.uuid().toString()), alice.uuid()));
+        refuses(t, "aren't supported", () -> new InventoryHolder.PerPlayer(new InventoryHolder.Item(chest, loot),
+                alice.uuid()));
+        refuses(t, "not another copy", () -> new InventoryHolder.PerPlayer(alices, bob.uuid()));
         refuses(t, "use InventoryHolder.Unknown.INSTANCE", () -> new InventoryHolder.PerPlayer(
                 InventoryHolder.Unknown.INSTANCE, alice.uuid()));
     }

@@ -98,7 +98,8 @@ public sealed interface InventoryHolder {
                 case Linked l -> throw new IllegalArgumentException("A per-player copy belongs to a Block or an "
                         + "Entity, not " + at + ": storage with no place, such as an ender chest, is Linked itself");
                 case Item it -> throw new IllegalArgumentException("A per-player copy belongs to a Block or an "
-                        + "Entity, not an item: pass the place that holds it, " + it.outer());
+                        + "Entity; per-player copies of an item's inventory aren't supported, so name it "
+                        + "InventoryHolder.Unknown.INSTANCE, which protection denies");
                 case PerPlayer p -> throw new IllegalArgumentException("A per-player copy belongs to a Block or an "
                         + "Entity, not another copy: pass its at(), " + p.at());
             }
