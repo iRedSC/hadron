@@ -75,6 +75,41 @@ object HadronTestServer {
     }
 
     /**
+     * Each staged suite's extras, consumed like its jar: the mods it needs beside Hadron (`<suite>.mods/`, from its
+     * `hadronTest.mods`) go to the run's mods/, and the folders it keeps between runs (`<suite>.keep`, from
+     * `hadronTest.keep`, such as a mod's downloaded libraries) come back from [root]/kept, so a fresh run needs no
+     * network for what an earlier one fetched.
+     */
+    fun stageSuiteExtras(root: File, run: File) {
+        val suites = root.resolve("suites")
+        suites.listFiles { f -> f.isDirectory && f.name.endsWith(".jar.mods") }?.forEach { dir ->
+            dir.listFiles()?.forEach { it.copyTo(run.resolve("mods").resolve(it.name), overwrite = true) }
+            dir.deleteRecursively()
+        }
+        val keep = suites.listFiles { f -> f.name.endsWith(".jar.keep") }.orEmpty().flatMap { f ->
+            f.readLines().map { it.trim() }.filter { it.isNotEmpty() }.also { f.delete() }
+        }.distinct()
+        run.resolve(".hadron-keep").writeText(keep.joinToString("\n", postfix = "\n"))
+        for (path in keep) {
+            val saved = root.resolve("kept").resolve(path)
+            if (saved.isDirectory) saved.copyRecursively(run.resolve(path), overwrite = true)
+        }
+    }
+
+    /** After a run, copies each kept folder back to [root]/kept for the next run. */
+    fun saveKept(root: File, run: File) {
+        val list = run.resolve(".hadron-keep")
+        if (!list.isFile) return
+        for (path in list.readLines().map { it.trim() }.filter { it.isNotEmpty() }) {
+            val live = run.resolve(path)
+            if (!live.isDirectory) continue
+            val saved = root.resolve("kept").resolve(path)
+            saved.deleteRecursively()
+            live.copyRecursively(saved, overwrite = true)
+        }
+    }
+
+    /**
      * Fails unless the run passes -D[property]=[expected]. ModDevGradle writes a run's JVM arguments to a file it hands
      * the JVM as @file, so the arguments are read from there as well as from the task's own.
      */
@@ -123,11 +158,13 @@ tasks.named<JavaExec>("runHadronTest") {
             f.delete()
         }
         HadronTestServer.prepare(run, mod, harness)
+        HadronTestServer.stageSuiteExtras(root, run)
     }
     // The server exits 0 only when every test passed. A failing run's report already says why, so hadronTest reports
     // it; but a nonzero exit after a passing report means the server broke after the tests (a crash while stopping,
     // a mod failing at shutdown), and trusting the report alone would end that green.
     doLast {
+        HadronTestServer.saveKept(root, root.resolve("run"))
         val code = (this as JavaExec).executionResult.get().exitValue
         // The server exits 0 only when every test passed, so any other exit is a failed run: keep its evidence.
         val kept = if (code != 0) HadronTestServer.keep(root) else null

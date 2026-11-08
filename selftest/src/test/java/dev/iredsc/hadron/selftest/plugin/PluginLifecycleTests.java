@@ -125,6 +125,7 @@ public final class PluginLifecycleTests {
     @Covers(value = PluginDescription.class, method = "getDepend")
     @Covers(value = PluginDescription.class, method = "getSoftDepend")
     @Covers(value = PluginDescription.class, method = "getModDepend")
+    @Covers(value = PluginDescription.class, method = "getApiDepend")
     @Covers(value = PluginDescription.class, method = "getLoader")
     @Covers(value = PluginDescription.class, method = "getMinecraft")
     @Covers(value = PluginDescription.class, method = "getCommands")
@@ -185,6 +186,7 @@ public final class PluginLifecycleTests {
             t.assertEquals(List.of(), d.getDepend(), "depend");
             t.assertEquals(List.of("NobodyHasThisPlugin"), d.getSoftDepend(), "softdepend");
             t.assertEquals(List.of(), d.getModDepend(), "mod-depend");
+            t.assertEquals(List.of(), d.getApiDepend(), "api-depend");
             t.assertEquals(null, d.getLoader(), "the loader of a write-once plugin");
             t.assertEquals(minecraft, d.getMinecraft(), "the Minecraft version");
             t.assertEquals(List.of("probe", "guarded"), List.copyOf(d.getCommands().keySet()), "the commands");

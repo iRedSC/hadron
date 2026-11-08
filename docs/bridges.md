@@ -59,7 +59,7 @@ The report says what should be covered; `/hadron trace` shows what is. An op run
 
 ## Plugin or bridge
 
-- **The mod has an API** that does what's needed: write a **plugin** with `mod-depend`. It reloads, and needs no mixins. LuckPerms and WorldEdit integrations are plugins.
+- **The mod has an API** that does what's needed: write a **plugin** with `api-depend` (or `mod-depend` when the API is loader-specific). It reloads, and needs no mixins. LuckPerms and WorldEdit integrations are plugins.
 - **The mod has no hooks** for it: write a **bridge** mod, with mixins.
 
 A bridge has two parts:

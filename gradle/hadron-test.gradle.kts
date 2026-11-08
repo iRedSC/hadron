@@ -7,6 +7,10 @@
 // fresh build there and waits for its report, without a server boot. hadronWatchStop stops it. All three tasks take
 // --tests, as Gradle's test task does.
 //
+// A suite that needs other mods in its server sets extra["hadronTest.mods"] (a FileCollection of mod jars), and
+// extra["hadronTest.keep"] (run-relative folders, such as a mod's downloaded libraries) to keep them between runs.
+// Both apply to hadronTest only, not to the watch tasks.
+//
 // The applying project compiles its tests against test-api and Minecraft:
 //     neoForge.addModdingDependenciesTo(sourceSets.test.get())
 //     testCompileOnly(project(":test-api"))
@@ -277,10 +281,20 @@ val hadronTestStage = tasks.register<Copy>("hadronTestStage") {
     outputs.upToDateWhen { false }
     // Beside the jar, the --tests patterns, if any; the run moves it with the jar.
     val tests = hadronTest.flatMap { it.tests }
+    // Mods the suite needs beside Hadron (hadronTest.mods), and run folders kept between runs (hadronTest.keep).
+    val modJars = files(findProperty("hadronTest.mods") ?: emptyList<File>())
+    inputs.files(modJars)
+    @Suppress("UNCHECKED_CAST")
+    val keep = (findProperty("hadronTest.keep") as List<String>?).orEmpty()
     doLast {
         val filter = suites.resolve("$name.tests")
         val patterns = tests.get()
         if (patterns.isEmpty()) filter.delete() else filter.writeText(patterns.joinToString("\n", postfix = "\n"))
+        val mods = suites.resolve("$name.mods")
+        mods.deleteRecursively()
+        for (jar in modJars.files) jar.copyTo(mods.resolve(jar.name).also { mods.mkdirs() }, overwrite = true)
+        val kept = suites.resolve("$name.keep")
+        if (keep.isEmpty()) kept.delete() else kept.writeText(keep.joinToString("\n", postfix = "\n"))
     }
 }
 

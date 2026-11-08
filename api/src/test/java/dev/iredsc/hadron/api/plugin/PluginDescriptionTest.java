@@ -177,6 +177,21 @@ class PluginDescriptionTest {
         assertEquals("neoforge", d.getLoader());
     }
 
+    @Covers(value = PluginDescription.class, method = "getApiDepend")
+    @Test
+    void apiDependNeedsNoLoader() {
+        Map<String, Object> yaml = minimal();
+        assertEquals(List.of(), PluginDescription.parse(yaml).getApiDepend());
+        yaml.put("api-depend", List.of("luckperms"));
+        PluginDescription d = PluginDescription.parse(yaml);
+        assertEquals(List.of("luckperms"), d.getApiDepend());
+        assertEquals(null, d.getLoader());
+        yaml.put("api-depend", "luckperms");
+        assertEquals(List.of("luckperms"), PluginDescription.parse(yaml).getApiDepend(), "one mod, unbracketed");
+        yaml.put("api-depend", Map.of("luckperms", 5));
+        assertEquals("plugin.yml 'api-depend' must be a list, such as api-depend: [modid]", refusal(yaml));
+    }
+
     @Covers(value = PluginDescription.class, method = "getCommands")
     @Test
     void commandsAreLowercasedWithUsageAndAliases() {
