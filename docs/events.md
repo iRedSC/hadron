@@ -21,7 +21,7 @@ Many effects are one action with many parts: a spell hits ten entities, a gadget
 
 - **Related events share an `Operation`**: an id, the actor, and every event it produced. A logger groups them; a rollback undoes them together.
 - **An operation opens with a cancellable event fired before its first mutation.** Bridges fire it at the start of the mod's action, not at the last vanilla call inside it: Iron Chests and Carry On remove a block entity before calling `setBlock`, so cancelling at `setBlock` is already too late. Cancelling the opening event undoes nothing because nothing has happened yet, and refunds any cost.
-- **Per-target events cancel only their target.** Denying one entity in an area spell spares that entity; the rest of the spell lands. The cost is not refunded, because the action happened. The one exception: when every spawn an item use tried was refused, core puts the user's inventory back as it was, since for a bow or a thrown trident nothing happened. It does this for every item use, a mod's too, and leaves anything else the use did (a heal) done.
+- **Per-target events cancel only their target.** Denying one entity in an area spell spares that entity; the rest of the spell lands. The cost is not refunded, because the action happened. The one exception: core may put an item use's inventory back when its spawns were refused, even if the use did something else too.
 - **Cancellable means fully undone for what it covers.** No item consumed, no durability lost, no half-moved stack, no fluid handed over while the block stays.
 - **Expiry and revocation are not cancellable.** A flight grant can be refused; a flight expiry can only be observed, or temporary powers would become permanent. Such events are marked *(after)*.
 
