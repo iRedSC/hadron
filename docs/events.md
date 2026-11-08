@@ -112,7 +112,7 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | `EntityTargetEvent` | a mob or turret picks a target | `setTarget` |
 | `EntityControlChangeEvent` | who controls an entity changes without mounting: charmed, enthralled, a drone linked to a monitor, a guard assigned; expiry is *(after)* | bridge |
 | `EntityControlExpireEvent` *(after)* | control ran out: a charm wore off, a drone's link timed out | bridge |
-| `EntityDataChangeEvent` | lasting data a mod keeps on an entity changes and no leaf above describes it: a colonist's job, a familiar's upgrades, a player's spell anchor; a kind id says whose | bridge |
+| `EntityDataChangeEvent` | lasting data a mod keeps on an entity changes and no other shipped leaf describes it: a colonist's job, a familiar's upgrades, a player's spell anchor; a kind id says whose | bridge |
 | `EntityRelationshipChangeEvent` | reputation or a lasting relationship changes (villager gossip, an NPC's marriage) | not shipped yet: see "Not shipped yet" |
 | `EntityUseEvent` | an actor right-clicks an entity | `interact` |
 | `EntityMountEvent`, `EntityDismountEvent` | riding, including vehicles and a player carrying another | `startRiding`, `stopRiding` |
@@ -224,7 +224,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 | `ServerListPingEvent` | a client's server list asks about the server; MOTD, shown player counts and the hover sample editable; not an action, so no actor | status request |
 | `CommandExecuteEvent` | any command about to run, from a player, the console, a quest reward, a mod or each line of a datapack function; actor and authority | `Commands.performCommand`, function lines |
 | `AccessControlChangeEvent` | a claim, team, party, alliance or trust list changes: boundaries, members, flags; who changed it | bridge (claim and team mods) |
-| `DataRevealEvent` | server data about a block, entity, inventory or account is about to be sent to a player who didn't open it (Jade, WTHIT, map radar, a sigil reading another player's network); fields removable | bridge (Jade, WTHIT) |
+| `DataRevealEvent` | server data about a block, entity, inventory or account is about to be sent to a player who didn't open it (Jade, WTHIT, map radar, a sigil reading another player's network); fields removable | bridge (Jade, WTHIT, Blood Magic) |
 | `PluginEnableEvent`, `PluginDisableEvent` *(after)* | | Hadron's plugin host |
 | `ServiceRegisterEvent`, `ServiceUnregisterEvent` *(after)* | a provider appeared or left | Hadron's services manager |
 

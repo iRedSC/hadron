@@ -35,7 +35,7 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **After event**: an expiry or revocation, marked *(after)*. It can be observed but not cancelled.
 - **Simulation**: a mod testing an action before doing it. Never fires an event.
 - **Per-player copy**: one player's own contents of an inventory at a block or entity (a Lootr chest), held by `InventoryHolder.PerPlayer`, so two players' copies are never one inventory. ([events](events.md#containers-inventoryevent))
-- **Kind**: the id on `EntityDataChangeEvent` saying whose data changed, in the mod's namespace, such as `minecolonies:job`.
+- **Data kind**: the id on `EntityDataChangeEvent` saying whose data changed, in the mod's namespace, such as `minecolonies:job`.
 
 ## Gaps and coverage
 

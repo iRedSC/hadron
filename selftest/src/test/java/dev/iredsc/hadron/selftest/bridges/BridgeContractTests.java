@@ -212,6 +212,8 @@ public final class BridgeContractTests {
                 () -> stored[0] = builder);
         EntityDataChangeEvent e = (EntityDataChangeEvent) only(t, seen, "EntityEvent");
         t.assertTrue(e.getEntity() == pig, "the entity");
+        t.assertTrue(e.getActor() instanceof Actor.Machine, "the machine that changed it, but was " + e.getActor());
+        t.assertTrue(e.getActingPlayer().orElse(null) == alice.player(), "the machine's owner is the acting player");
         t.assertEquals(job, e.getKind(), "whose data");
         t.assertEquals("builder", e.getAfterData().getString("job"), "the data after");
         e.getAfterData().putString("job", "miner");
@@ -235,6 +237,8 @@ public final class BridgeContractTests {
         builder.putString("job", "builder");
         refuses(t, "isn't a mod's id", () -> new EntityDataChangeEvent(pig,
                 ResourceLocation.fromNamespaceAndPath("hadron", "job"), builder, farmer, machine(t, alice)));
+        refuses(t, "isn't a mod's id", () -> new EntityDataChangeEvent(pig,
+                ResourceLocation.withDefaultNamespace("job"), builder, farmer, machine(t, alice)));
     }
 
     @HadronTest
@@ -465,6 +469,8 @@ public final class BridgeContractTests {
         }
         t.assertTrue(refused.contains("is Linked"), "a copy of storage with no place should be refused, naming "
                 + "Linked, but said: " + refused);
+        refuses(t, "use InventoryHolder.Unknown.INSTANCE", () -> new InventoryHolder.PerPlayer(
+                InventoryHolder.Unknown.INSTANCE, alice.uuid()));
     }
 
     // ---- Resources
@@ -566,6 +572,7 @@ public final class BridgeContractTests {
         t.assertEquals(Optional.of(bobs), seen.get(2).getAccount(), "the account revealed");
         t.assertEquals(Optional.empty(), seen.get(2).getLevel(), "an account has no world");
         t.assertFalse(sent.get(1).contains("owner"), "the field a listener removed isn't sent for an account either");
+        t.assertEquals(12, sent.get(1).getInt("items"), "the rest of an account's data is sent");
     }
 
     @HadronTest

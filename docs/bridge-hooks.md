@@ -25,10 +25,10 @@ Every bridge does these, whatever its mod does. Without them, core still fires i
 - **Fire for committed changes only**, never for a simulated transfer or a capacity probe.
 - **Cancelled means fully undone**: nothing spent, nothing half-moved. If the mod spends a cost before acting, fire before the cost.
 - **Fire before the first change on either side.** Mods often fill the destination before draining the source, place the moved block before removing the old one, or clear a slot before spawning its item. A cancel at the last step then duplicates or loses things, so hook the enclosing action, not the step that looks like the event.
-- **Check what the mod does after a vanilla call.** Many ignore the result of `addFreshEntity` or `hurt` and spend the cost, apply the effect or clear the stored copy anyway. Don't fire the event a second time around it: make the mod honour the vanilla call's result, skipping the cost when `addFreshEntity` returns false or `hurt` was refused.
+- **Check what the mod does after a vanilla call.** Many ignore the result of `addFreshEntity` or `hurt` and spend the cost, apply the effect or clear the stored copy anyway. Don't fire the event a second time around it: make the mod honour the vanilla call's result, skipping the cost when `addFreshEntity` returns false or `hurt` was refused. A cost shared by several targets (a multishot, an area spell) is skipped only when every target was refused, since the others landed.
 - **A read can be a write.** Some mods break a block while listing its drops, or edit a sign while checking a position. Fire for those as the changes they are; never fire for a read that changes nothing.
-- **Report stored amounts, not derived ones.** Air, not pressure; heat, not temperature. A derived value changes when a tank's volume does, so summing it looks conserved while being wrong.
-- **No exact leaf? Fire the nearest parent** with its full payload, and propose the leaf for core.
+- **Report stored amounts, not derived ones.** Air, not pressure; heat, not temperature. A derived value changes when a tank's volume does, though nothing was added or removed.
+- **No exact leaf? Fire the nearest parent** with its full payload, and propose the leaf for core. For an entity, the nearest is `EntityDataChangeEvent`, whose data kind is the proposal.
 
 ## Events only bridges fire
 

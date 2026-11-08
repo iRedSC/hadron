@@ -89,9 +89,18 @@ public sealed interface InventoryHolder {
     record PerPlayer(InventoryHolder at, UUID owner) implements InventoryHolder {
         public PerPlayer {
             Objects.requireNonNull(at, "at; pass the Block or Entity holder the copy belongs to");
-            if (!(at instanceof Block) && !(at instanceof Entity)) {
-                throw new IllegalArgumentException("A per-player copy belongs to a Block or an Entity, not " + at
-                        + ": storage with no place, such as an ender chest, is Linked");
+            switch (at) {
+                case Block b -> { }
+                case Entity e -> { }
+                case Unknown u -> throw new IllegalArgumentException("A per-player copy of a place nothing identified "
+                        + "is still unidentified: use InventoryHolder.Unknown.INSTANCE as the holder, which protection "
+                        + "denies");
+                case Linked l -> throw new IllegalArgumentException("A per-player copy belongs to a Block or an "
+                        + "Entity, not " + at + ": storage with no place, such as an ender chest, is Linked itself");
+                case Item it -> throw new IllegalArgumentException("A per-player copy belongs to a Block or an "
+                        + "Entity, not an item: pass the place that holds it, " + it.outer());
+                case PerPlayer p -> throw new IllegalArgumentException("A per-player copy belongs to a Block or an "
+                        + "Entity, not another copy: pass its at(), " + p.at());
             }
             Objects.requireNonNull(owner, "owner; pass the UUID of the player whose copy it is");
         }

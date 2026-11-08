@@ -15,6 +15,10 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
  * a familiar's upgrades, a dragon's age, a player's spell anchor. This is the event a bridge fires when an entity
  * change has no fitting leaf. Cancel it and the data stays as it was.
  *
+ * <p>A leaf designed but not shipped yet (a relationship, an attribute) doesn't count as describing it: fire this
+ * until the leaf ships. When it does, the bridge moves to the leaf, and a plugin listening here for that kind must
+ * listen to the leaf instead; the leaf's Javadoc names each kind it replaces.
+ *
  * <p>{@link #getKind()} says whose data it is, as an id in the mod's namespace such as {@code minecolonies:job}. The
  * data before and after is in the mod's own format: log it, don't parse it.
  *
@@ -49,7 +53,7 @@ public class EntityDataChangeEvent extends EntityEvent implements Cancellable {
         this.after = Objects.requireNonNull(after, "after; pass an empty CompoundTag when it is being removed").copy();
     }
 
-    /** Whose data this is, as an id in the mod's namespace. */
+    /** The data kind: whose data this is, as an id in the mod's namespace. */
     public ResourceLocation getKind() {
         return kind;
     }
