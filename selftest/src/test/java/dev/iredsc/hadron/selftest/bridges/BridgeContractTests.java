@@ -448,7 +448,7 @@ public final class BridgeContractTests {
         t.assertEquals(alice.uuid(), copy.owner(), "whose copy");
         t.assertEquals(Optional.of(chest), chest.place(), "a chest is its own place");
         t.assertEquals(Optional.of(chest), alices.place(), "a claim check finds the copy's chest");
-        InventoryHolder cart = new InventoryHolder.Entity(alice.player());
+        InventoryHolder cart = new InventoryHolder.Entity(EntityType.CHEST_MINECART.create(t.level()));
         t.assertEquals(Optional.of(cart), cart.place(), "an entity is its own place");
         t.assertEquals(Optional.of(chest), new InventoryHolder.Item(chest, loot).place(), "a backpack in a chest");
         t.assertEquals(Optional.of(cart), new InventoryHolder.Item(cart, loot).place(), "a backpack on an entity");
@@ -553,6 +553,7 @@ public final class BridgeContractTests {
         t.assertTrue(e.getViewer() == alice.player() && e.getLevel().orElse(null) == t.level(), "the viewer and world");
         t.assertEquals(Optional.of(pos), e.getBlockPos(), "the block revealed");
         t.assertEquals(Optional.empty(), e.getEntity(), "no entity for a block reveal");
+        t.assertEquals(Optional.empty(), e.getAccount(), "no account for a block reveal");
         t.assertFalse(sent.get(0).contains("owner"), "the field a listener removed isn't sent");
         t.assertEquals(12, sent.get(0).getInt("items"), "the rest is sent");
         cancel[0] = true;
@@ -561,12 +562,15 @@ public final class BridgeContractTests {
                 () -> sent.add(data));
         t.assertEquals(1, sent.size(), "a withheld reveal sends nothing");
         t.assertEquals(Optional.of(pig), seen.get(1).getEntity(), "the entity revealed");
+        t.assertEquals(Optional.empty(), seen.get(1).getAccount(), "no account for an entity reveal");
         cancel[0] = false;
         ResourceHolder.Account bobs = ResourceHolder.Account.player(new UUID(0, 42)); // bob, who may be offline
         fire(t, new Actor.Player(alice.player()), a -> fired[0] = new DataRevealEvent(alice.player(), bobs,
                 data.copy()), () -> sent.add(fired[0].getData()));
         t.assertEquals(Optional.of(bobs), seen.get(2).getAccount(), "the account revealed");
         t.assertEquals(Optional.empty(), seen.get(2).getLevel(), "an account has no world");
+        t.assertTrue(seen.get(2).getBlockPos().isEmpty() && seen.get(2).getEntity().isEmpty(), "an account reveal "
+                + "is about nothing else");
         t.assertFalse(sent.get(1).contains("owner"), "the field a listener removed isn't sent for an account either");
         t.assertEquals(12, sent.get(1).getInt("items"), "the rest of an account's data is sent");
     }

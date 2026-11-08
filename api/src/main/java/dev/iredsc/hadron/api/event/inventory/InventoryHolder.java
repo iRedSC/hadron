@@ -84,7 +84,9 @@ public sealed interface InventoryHolder {
     /**
      * One player's own copy of the inventory at a block or entity, where each player who opens it sees
      * different contents: a Lootr chest, a per-player reward crate. {@code at} is where it is, for protection;
-     * {@code owner} is whose copy, so two players' copies are never mistaken for one inventory.
+     * {@code owner} is whose copy, so two players' copies are never mistaken for one inventory. Only a bridge for the
+     * per-player mod names one; without it, core reports the chest's own holder, and every player's copy looks like
+     * one inventory.
      */
     record PerPlayer(InventoryHolder at, UUID owner) implements InventoryHolder {
         public PerPlayer {

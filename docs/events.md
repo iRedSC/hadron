@@ -88,7 +88,7 @@ As in Bukkit, `BlockMultiPlaceEvent` extends `BlockPlaceEvent`, `BlockSpreadEven
 
 ### Entities: `EntityEvent`
 
-Payload: the entity and its position; each leaf adds what changed. A bridge whose change no leaf fits fires `EntityDataChangeEvent`.
+Payload: the entity and its position; each leaf adds what changed. A bridge whose change no shipped entity event describes, leaf or parent, fires `EntityDataChangeEvent`.
 
 | Event | What | Core chokepoint |
 |---|---|---|
@@ -112,7 +112,7 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | `EntityTargetEvent` | a mob or turret picks a target | `setTarget` |
 | `EntityControlChangeEvent` | who controls an entity changes without mounting: charmed, enthralled, a drone linked to a monitor, a guard assigned; expiry is *(after)* | bridge |
 | `EntityControlExpireEvent` *(after)* | control ran out: a charm wore off, a drone's link timed out | bridge |
-| `EntityDataChangeEvent` | lasting data a mod keeps on an entity changes and no other shipped leaf describes it: a colonist's job, a familiar's upgrades, a player's spell anchor; a kind id says whose | bridge |
+| `EntityDataChangeEvent` | lasting data a mod keeps on an entity changes and no other shipped entity event, leaf or parent, describes it: a colonist's job, a familiar's upgrades, a player's spell anchor; a kind id says whose | bridge |
 | `EntityRelationshipChangeEvent` | reputation or a lasting relationship changes (villager gossip, an NPC's marriage) | not shipped yet: see "Not shipped yet" |
 | `EntityUseEvent` | an actor right-clicks an entity | `interact` |
 | `EntityMountEvent`, `EntityDismountEvent` | riding, including vehicles and a player carrying another | `startRiding`, `stopRiding` |
@@ -152,7 +152,7 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 
 ### Containers: `InventoryEvent`
 
-An inventory is identified by what holds it (a block, an entity, a player, an item inside another item, a frequency in linked storage, or one player's own copy of a block's or entity's inventory, such as a Lootr chest), not by where a player is standing.
+An inventory is identified by what holds it (a block, an entity, a player, an item inside another item, a frequency in linked storage, or one player's own copy of a block's or entity's inventory, such as a Lootr chest, which only that mod's bridge can name), not by where a player is standing.
 
 | Event | What | Core chokepoint |
 |---|---|---|

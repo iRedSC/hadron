@@ -39,7 +39,8 @@ public class EntityDataChangeEvent extends EntityEvent implements Cancellable {
     /**
      * @param kind whose data, in the mod's namespace: {@code minecolonies:job}, {@code occultism:familiar_upgrades}
      * @param before the data as it is now, in the mod's format; an empty tag when there was none
-     * @param after the data as it will be; an empty tag when it is being removed
+     * @param after the data as it will be; an empty tag when it is being removed. An empty tag always means none, so
+     *     data that is present but empty carries a key saying so
      */
     public EntityDataChangeEvent(Entity entity, ResourceLocation kind, CompoundTag before, CompoundTag after,
             Actor actor) {
