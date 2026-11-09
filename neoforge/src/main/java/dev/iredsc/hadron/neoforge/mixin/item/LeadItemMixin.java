@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.item;
 
+import com.llamalad7.mixinextras.injector.ModifyReturnValue;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -18,6 +19,7 @@ import net.minecraft.world.entity.Leashable;
 import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.LeadItem;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.gameevent.GameEvent;
 import org.spongepowered.asm.mixin.Mixin;
@@ -85,5 +87,15 @@ abstract class LeadItemMixin {
         if (knot != null) knot.discard();
         ((EntityState) player).hadron$setInteractRefused(true);
         cir.setReturnValue(InteractionResult.FAIL);
+    }
+
+    /**
+     * A sneaking click uses the lead on the fence directly, and vanilla's {@code useOn} ignores what the binding said;
+     * a click whose ties were all refused fails here too, before NeoForge counts it as a use of the lead.
+     */
+    @ModifyReturnValue(method = "useOn", at = @At("RETURN"))
+    private InteractionResult hadron$refusedUse(InteractionResult result, @Local(argsOnly = true) UseOnContext context) {
+        Player player = context.getPlayer();
+        return player != null && ((EntityState) player).hadron$interactRefused() ? InteractionResult.FAIL : result;
     }
 }

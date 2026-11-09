@@ -24,6 +24,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ClientboundAnimatePacket;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.stats.Stats;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -365,6 +366,34 @@ public final class HandlingTests {
             refuse[0] = false;
             alice.useBlock(fence, Direction.UP);
             t.assertTrue(blockUses.counted() || itemUses.counted(), "a tie should count as a use of the fence");
+        }
+    }
+
+    @HadronTest
+    @Covers(EntityLeashEvent.class)
+    void aRefusedSneakingTieIsNotAUseOfTheLead(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos fence = t.pos(2, 0, 0);
+        t.setBlock(fence, Blocks.OAK_FENCE.defaultBlockState());
+        Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 2));
+        cow.setLeashedTo(alice.player(), true);
+        alice.hold(new ItemStack(Items.LEAD));
+        alice.player().setShiftKeyDown(true); // sneaking skips the fence and uses the lead on it instead
+        int[] asked = {0};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityLeashEvent e) {
+                asked[0]++;
+                e.setCancelled(true);
+            }
+        });
+        try (CriterionWatch<?> itemUses = CriterionWatch.itemsOnBlocks(alice)) {
+            alice.useBlock(fence, Direction.UP);
+            t.assertEquals(1, asked[0], "EntityLeashEvents for one refused click");
+            t.assertEquals(0, alice.player().getStats().getValue(Stats.ITEM_USED.get(Items.LEAD)),
+                    "times the lead counts as used");
+            t.assertFalse(itemUses.counted(), "a refused tie should count for no advancement");
+            t.assertEquals(alice.player(), cow.getLeashHolder(), "the cow's leash holder");
         }
     }
 
