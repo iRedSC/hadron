@@ -7,6 +7,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 public interface Area extends AutoCloseable {
     ServerLevel level();
 
+    /** A copy: moving it doesn't move the area. */
     BoundingBox box();
 
     /** False once closed, once its plugin disabled, or once its world unloaded. */

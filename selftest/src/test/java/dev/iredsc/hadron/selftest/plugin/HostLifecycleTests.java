@@ -4,7 +4,10 @@ import com.mojang.brigadier.suggestion.Suggestion;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.server.PluginDisableEvent;
+import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.PluginManager;
+import dev.iredsc.hadron.api.world.Area;
+import dev.iredsc.hadron.api.world.Areas;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
@@ -23,6 +26,7 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 /**
  * What the host leaves behind when a plugin stops: no menu of its code still open, no class of it remembered, and
@@ -90,6 +94,29 @@ public final class HostLifecycleTests {
         } finally {
             jar.delete();
             t.tick(60);
+            clearProperties();
+            deleteTree(new File(folder, NAME));
+        }
+    }
+
+    @HadronTest(timeout = 900)
+    @Covers(value = Areas.class, method = "watch")
+    void aDisabledPluginsAreasClose(TestContext t) throws Exception {
+        PluginManager plugins = t.plugin().getServer().getPluginManager();
+        File folder = t.plugin().getServer().getPluginsFolder();
+        File jar = new File(folder, "selftest-hostprobe.jar");
+        try {
+            writeJar(jar, t.server().getServerVersion());
+            t.await("Hadron to enable the probe", () -> plugins.isPluginEnabled(NAME), 300);
+            JavaPlugin probe = java.util.Objects.requireNonNull(plugins.getPlugin(NAME), "the enabled probe by name");
+            Area area = Areas.watch(probe, t.level(), BoundingBox.fromCorners(t.pos(0, 0, 0), t.pos(2, 2, 2)));
+            jar.delete();
+            t.await("Hadron to disable the probe whose jar was deleted", () -> !plugins.isPluginEnabled(NAME), 200);
+            t.assertTrue(!area.isOpen(), "an area should close when the plugin that watched it disables");
+            t.assertTrue(!Areas.isWatched(t.level(), t.pos(1, 1, 1)), "nothing is watched once its plugin is gone");
+        } finally {
+            jar.delete();
+            if (plugins.isPluginEnabled(NAME)) t.await("the probe to unload", () -> !plugins.isPluginEnabled(NAME), 200);
             clearProperties();
             deleteTree(new File(folder, NAME));
         }

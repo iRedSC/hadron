@@ -58,7 +58,7 @@ public final class AreaIndex {
             index = new AreaIndex(level);
             holder.hadron$setAreas(index);
         }
-        Watched w = new Watched(index, plugin, box);
+        Watched w = new Watched(index, plugin, copy(box));
         index.add(w);
         return w;
     }
@@ -77,6 +77,11 @@ public final class AreaIndex {
         AreaIndex index = ((AreaLevel) level).hadron$areas();
         if (index == null) return;
         for (Watched w : List.copyOf(index.all)) w.close();
+    }
+
+    /** BoundingBox can be moved in place; the index keeps its own, so a plugin moving the one it passed changes nothing. */
+    private static BoundingBox copy(BoundingBox b) {
+        return new BoundingBox(b.minX(), b.minY(), b.minZ(), b.maxX(), b.maxY(), b.maxZ());
     }
 
     private static long chunkSpan(BoundingBox box) {
@@ -159,7 +164,7 @@ public final class AreaIndex {
 
         @Override
         public BoundingBox box() {
-            return box;
+            return copy(box);
         }
 
         @Override
@@ -169,8 +174,8 @@ public final class AreaIndex {
 
         @Override
         public void close() {
-            AreasPort.requireServerThread(index.level, "close an area");
             if (!open) return;
+            AreasPort.requireServerThread(index.level, "close an area");
             open = false;
             index.remove(this);
         }

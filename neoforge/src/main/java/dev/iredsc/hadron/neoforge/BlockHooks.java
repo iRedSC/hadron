@@ -372,11 +372,11 @@ public final class BlockHooks {
         if (scope != 0) Actors.Port.exit(scope);
     }
 
-    /** Weather forming snow and ice: every change while it runs is a {@link BlockFormEvent}. */
     /**
-     * Around a vanilla block entity's tick (a furnace lighting, a piston finishing its move). Nothing is on the stack
-     * then, and that stays silent even in a watched area: it is vanilla working, already reported by its own events
-     * where it matters, not a mod with a missing bridge.
+     * Around a vanilla block entity's tick or block event (a furnace lighting, a piston pushing). Nothing is on the
+     * stack then, and that stays silent even in a watched area: it is vanilla working, already reported by its own
+     * events where it matters, not a mod with a missing bridge. A mod's code that vanilla calls from inside it is
+     * silent too; its writes would need their own bridge.
      */
     public static void enterVanillaMachine() {
         CONTEXT.get().vanillaMachines++;
@@ -386,6 +386,7 @@ public final class BlockHooks {
         CONTEXT.get().vanillaMachines--;
     }
 
+    /** Weather forming snow and ice: every change while it runs is a {@link BlockFormEvent}. */
     public static void enterForming() {
         CONTEXT.get().forming++;
     }
@@ -519,10 +520,11 @@ public final class BlockHooks {
         Actor actor = EntityActors.current();
         boolean ticking = ctx.ticking() && (actor == null || actor == ctx.tickActor());
         boolean fire = isFire(after);
-        if (actor == null && !ticking && ctx.forming == 0 && !fire) {
-            // Nobody is behind this write. It matters only where a plugin watches; there, it is an outsider's.
-            if (ctx.vanillaMachines > 0 || !AreaIndex.covers(server, pos)) return false;
-            actor = Actor.Unknown.INSTANCE;
+        if (actor == null && !ticking && ctx.forming == 0) {
+            // Nobody is behind this write: inside an area a plugin watches, it is an outsider's. Elsewhere it matters
+            // only if it starts a fire, which is nature's.
+            if (ctx.vanillaMachines == 0 && AreaIndex.covers(server, pos)) actor = Actor.Unknown.INSTANCE;
+            else if (!fire) return false;
         }
 
         BlockState before = level.getBlockState(pos);

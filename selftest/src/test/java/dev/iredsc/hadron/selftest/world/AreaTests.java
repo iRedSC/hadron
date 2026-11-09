@@ -21,6 +21,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -28,6 +29,7 @@ import net.minecraft.world.level.block.FurnaceBlock;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.entity.FurnaceBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.phys.AABB;
 
 /**
  * Watched areas: a block change with nobody behind it fires as {@link Actor.Unknown} inside one, and nothing outside,
@@ -77,6 +79,46 @@ public final class AreaTests {
         t.setBlock(t.pos(1, 1, 1), Blocks.STONE);
         t.assertEquals(1, seen.size(), "the number of block events for one refused write");
         t.assertBlock(t.pos(1, 1, 1), Blocks.AIR);
+    }
+
+    @HadronTest
+    @Covers(value = Areas.class, method = "watch")
+    void refusingAnUnknownBreakKeepsTheBlockAndDropsNothing(TestContext t) {
+        t.setBlock(t.pos(1, 1, 1), Blocks.STONE);
+        Areas.watch(t.plugin(), t.level(), around(t));
+        List<BlockEvent> seen = record(t, true);
+        t.level().destroyBlock(t.pos(1, 1, 1), true);
+        t.assertEquals(1, seen.size(), "the number of block events for one refused break");
+        t.assertTrue(seen.get(0).getActor() instanceof Actor.Unknown, "a break with nobody behind it in a watched "
+                + "area should be Actor.Unknown, but was " + seen.get(0).getActor());
+        t.assertBlock(t.pos(1, 1, 1), Blocks.STONE);
+        t.assertTrue(t.level().getEntitiesOfClass(ItemEntity.class, new AABB(t.pos(1, 1, 1)).inflate(2)).isEmpty(),
+                "a refused break should drop nothing");
+    }
+
+    @HadronTest
+    @Covers(value = Areas.class, method = "watch")
+    void aFireWithNobodyBehindItInAWatchedAreaIsUnknown(TestContext t) {
+        t.setBlock(t.pos(1, 0, 1), Blocks.NETHERRACK);
+        Areas.watch(t.plugin(), t.level(), around(t));
+        List<BlockEvent> seen = record(t, true);
+        t.setBlock(t.pos(1, 1, 1), Blocks.FIRE);
+        t.assertEquals(1, seen.size(), "the number of block events for one fire with nobody behind it");
+        t.assertTrue(seen.get(0).getActor() instanceof Actor.Unknown, "a fire with nobody behind it in a watched "
+                + "area is an outsider's, not nature's, but was " + seen.get(0).getActor());
+        t.assertBlock(t.pos(1, 1, 1), Blocks.AIR);
+    }
+
+    @HadronTest
+    @Covers(value = Area.class, method = "box")
+    @SuppressWarnings("deprecation") // BoundingBox.move: the in-place move this test makes sure can't reach the area
+    void movingTheBoxAfterwardsDoesntMoveTheArea(TestContext t) {
+        BoundingBox box = around(t);
+        Area area = Areas.watch(t.plugin(), t.level(), box);
+        box.move(100, 0, 0);
+        area.box().move(100, 0, 0);
+        t.assertEquals(around(t), area.box(), "the area's box after the plugin moved its own copies");
+        t.assertTrue(Areas.isWatched(t.level(), t.pos(1, 1, 1)), "the area still watches where it was made");
     }
 
     @HadronTest
