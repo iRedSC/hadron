@@ -175,7 +175,6 @@ class BridgeTest {
         assertEquals(List.of(ping), loader.fired);
     }
 
-    @Covers(value = Bridge.class, method = "fire")
     @Test
     void aDataKindMustBeInOneOfTheBridgesMods() {
         Bridge bridge = claimAs("kind_bridge", "colonies", "colonies_extra");

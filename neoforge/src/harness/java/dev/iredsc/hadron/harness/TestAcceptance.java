@@ -19,6 +19,7 @@ import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTargetEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityVelocityEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.item.ItemEvent;
@@ -49,6 +50,7 @@ import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.FallingBlockEntity;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.Container;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -76,7 +78,8 @@ final class TestAcceptance implements Acceptance, Listener {
     private final List<Seen> seen = new ArrayList<>();
     /** Entities spawned or removed outside the box this step: one of them in the box at only one end crossed its edge. */
     private final Set<UUID> crossing = new HashSet<>();
-    private final Map<Event, List<BlockPos>> blasts = new IdentityHashMap<>();
+    /** What each heard event said it changes, copied as it fired. */
+    private final Map<Event, AcceptanceDiff.Report> reports = new IdentityHashMap<>();
     private AcceptanceDiff.Snapshot before;
 
     TestAcceptance(TestContext t, BoundingBox box) {
@@ -105,7 +108,7 @@ final class TestAcceptance implements Acceptance, Listener {
         before = snapshot();
         seen.clear();
         crossing.clear();
-        blasts.clear();
+        reports.clear();
     }
 
     @Override
@@ -153,7 +156,7 @@ final class TestAcceptance implements Acceptance, Listener {
     }
 
     private AcceptanceDiff.Step step() {
-        return new AcceptanceDiff.Step(seen, crossing, blasts);
+        return new AcceptanceDiff.Step(seen, reports, crossing);
     }
 
     // ---- Listening ------------------------------------------------------------------------------------------------
@@ -176,7 +179,7 @@ final class TestAcceptance implements Acceptance, Listener {
             }
             return;
         }
-        if (event instanceof ExplosionEvent x) blasts.put(x, List.copyOf(x.blockList()));
+        reports.put(event, AcceptanceDiff.report(event));
         seen.add(new Seen(event, a.getActor(), event instanceof Cancellable c && c.isCancelled(), at.get().pos()));
     }
 
@@ -209,6 +212,11 @@ final class TestAcceptance implements Acceptance, Listener {
             return Optional.empty();
         }
         if (event instanceof ItemEvent i) return i.getLevel() == level ? actorAt(i.getActor()) : Optional.empty();
+        if (event instanceof InventoryClickEvent click) {
+            // A click in a menu showing a block in the box, whichever slot was clicked: a shift-click from the
+            // player's own inventory fills the block's.
+            for (BlockPos p : AcceptanceDiff.report(click).slots().keySet()) if (box.isInside(p)) return inBox(p);
+        }
         if (event instanceof InventoryEvent i) {
             for (InventoryHolder holder : AcceptanceDiff.holders(i)) {
                 Optional<Where> w = holderAt(holder);
@@ -266,13 +274,13 @@ final class TestAcceptance implements Acceptance, Listener {
     private AcceptanceDiff.Snapshot snapshot() {
         Map<BlockPos, BlockState> blocks = new LinkedHashMap<>();
         Map<BlockPos, String> blockEntities = new LinkedHashMap<>();
-        Map<BlockPos, List<ItemStack>> contents = new LinkedHashMap<>();
+        Map<BlockPos, Map<String, ItemStack>> contents = new LinkedHashMap<>();
         for (BlockPos p : BlockPos.betweenClosed(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ())) {
             BlockPos pos = p.immutable();
             blocks.put(pos, level.getBlockState(pos));
             BlockEntity be = level.getBlockEntity(pos);
             if (be != null) blockEntities.put(pos, String.valueOf(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType())));
-            List<ItemStack> stacks = items(pos);
+            Map<String, ItemStack> stacks = items(pos, be);
             if (!stacks.isEmpty()) contents.put(pos, stacks);
         }
         Map<UUID, AcceptanceDiff.Thing> entities = new LinkedHashMap<>();
@@ -306,23 +314,29 @@ final class TestAcceptance implements Acceptance, Listener {
     }
 
     /**
-     * Every slot a block exposes: its sideless item handler, then each distinct face's in turn. A wrapper made afresh
-     * per face lists the same slots again, which only repeats them. Empty when it has none.
+     * Every slot a block exposes, labelled so an event can name it: {@code slot 3} for the block's own inventory (a
+     * container block entity's slots, or else its sideless item handler's), then, for a block that isn't a container,
+     * {@code north slot 3} for each face whose handler is another object. Empty when it has none.
      */
-    private List<ItemStack> items(BlockPos pos) {
+    private Map<String, ItemStack> items(BlockPos pos, @Nullable BlockEntity be) {
+        Map<String, ItemStack> out = new LinkedHashMap<>();
         List<IItemHandler> handlers = new ArrayList<>();
-        // Every face as well as the sideless one: a block may keep a separate store behind one face.
-        List<@Nullable Direction> sides = new ArrayList<>();
-        sides.add(null);
-        sides.addAll(List.of(Direction.values()));
-        for (@Nullable Direction side : sides) {
+        @Nullable IItemHandler sideless = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null);
+        if (be instanceof Container c) {
+            for (int i = 0; i < c.getContainerSize(); i++) out.put("slot " + i, c.getItem(i).copy());
+        } else if (sideless != null) {
+            for (int i = 0; i < sideless.getSlots(); i++) out.put("slot " + i, sideless.getStackInSlot(i).copy());
+        }
+        if (sideless != null) handlers.add(sideless);
+        for (Direction side : Direction.values()) {
             @Nullable IItemHandler h = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, side);
-            if (h != null && handlers.stream().noneMatch(seen -> seen == h)) handlers.add(h);
+            if (h == null || handlers.stream().anyMatch(seen -> seen == h)) continue;
+            handlers.add(h);
+            // A container's faces are views of its own slots (vanilla's sided wrappers); another block's may be a
+            // separate store, or a view a mod made afresh, which only lists the same slots again under its face.
+            if (be instanceof Container) continue;
+            for (int i = 0; i < h.getSlots(); i++) out.put(side.getName() + " slot " + i, h.getStackInSlot(i).copy());
         }
-        List<ItemStack> stacks = new ArrayList<>();
-        for (IItemHandler h : handlers) {
-            for (int i = 0; i < h.getSlots(); i++) stacks.add(h.getStackInSlot(i).copy());
-        }
-        return stacks;
+        return out;
     }
 }

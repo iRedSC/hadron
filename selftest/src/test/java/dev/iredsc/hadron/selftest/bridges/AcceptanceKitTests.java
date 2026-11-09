@@ -10,6 +10,9 @@ import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import dev.iredsc.hadron.api.event.block.BlockUseEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import java.util.List;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -337,5 +340,52 @@ public final class AcceptanceKitTests {
         alice.breakBlock(stone);
         t.tick(2);
         area.assertEveryChangeSeen("alice breaking stone as a pig born outside walks in");
+    }
+
+    @HadronTest
+    void aBlockRemovedAfterItWasUsedStillChecks(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos pos = t.pos(1, 0, 0);
+        t.setBlock(pos, Blocks.CHEST);
+        alice.hold(new ItemStack(Items.IRON_AXE));
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        alice.useBlock(pos);
+        alice.breakBlock(pos);
+        t.tick(2);
+        t.assertBlock(pos, Blocks.AIR);
+        area.assertEveryChangeSeen("alice opening a chest, then breaking it");
+    }
+
+    @HadronTest
+    void oneReportedSlotDoesNotCoverAnother(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos pos = t.pos(2, 0, 0);
+        t.setBlock(pos, Blocks.CHEST);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        ChestBlockEntity chest = (ChestBlockEntity) t.level().getBlockEntity(pos);
+        ItemStack diamonds = new ItemStack(Items.DIAMOND, 3);
+        Hadron.getPluginManager().callEvent(new InventoryChangeEvent(List.of(new InventoryChangeEvent.Change(
+                new InventoryHolder.Block(t.level(), pos), 0, ItemStack.EMPTY, diamonds.copy())),
+                new Actor.Player(alice.player())));
+        chest.setItem(0, diamonds.copy());
+        chest.setItem(1, new ItemStack(Items.EMERALD, 5));
+        String why = failure(t, () -> area.assertEveryChangeSeen("a machine reporting one slot and filling two"));
+        t.assertTrue(why.contains("slot 1") && why.contains("emerald") && !why.contains("slot 0"), why);
+    }
+
+    @HadronTest
+    void takingFromAChestByClickingIsSeen(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos pos = t.pos(1, 0, 0);
+        t.setBlock(pos, Blocks.CHEST);
+        ((ChestBlockEntity) t.level().getBlockEntity(pos)).setItem(0, new ItemStack(Items.DIAMOND, 3));
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        alice.useBlock(pos);
+        alice.clickSlot(0);
+        t.assertTrue(alice.player().containerMenu.getCarried().is(Items.DIAMOND), "alice took the diamonds");
+        area.assertEveryChangeSeen("alice taking diamonds from a chest");
     }
 }
