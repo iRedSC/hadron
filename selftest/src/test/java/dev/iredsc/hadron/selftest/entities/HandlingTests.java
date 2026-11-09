@@ -32,6 +32,8 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DispenserBlock;
+import net.minecraft.world.level.block.SculkSensorBlock;
+import net.minecraft.world.level.block.state.properties.SculkSensorPhase;
 import net.minecraft.world.level.block.entity.DispenserBlockEntity;
 
 /** Leads, shears and armor stands: each asked once, before anything changes, and fully undone when refused. */
@@ -175,6 +177,91 @@ public final class HandlingTests {
         t.assertEquals(alice.player(), cow.getLeashHolder(), "the cow's leash holder");
         t.assertTrue(near(t, LeashFenceKnotEntity.class).isEmpty(), "no knot should be left on the fence, but found "
                 + near(t, LeashFenceKnotEntity.class));
+    }
+
+    @HadronTest
+    @Covers(EntityLeashEvent.class)
+    void aRefusedTieKeepsAKnotThatWasAlreadyThere(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos fence = t.pos(2, 0, 0);
+        t.setBlock(fence, Blocks.OAK_FENCE.defaultBlockState());
+        Cow tied = spawn(t, EntityType.COW, t.pos(2, 0, 9)); // past the seven blocks a lead click looks
+        Cow held = spawn(t, EntityType.COW, t.pos(2, 0, 2));
+        LeashFenceKnotEntity knot = LeashFenceKnotEntity.getOrCreateKnot(t.level(), fence); // not ticked yet
+        tied.setLeashedTo(knot, true);
+        held.setLeashedTo(alice.player(), true);
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityLeashEvent e) {
+                e.setCancelled(true);
+            }
+        });
+        alice.useBlock(fence, Direction.UP);
+        t.tick();
+        t.assertFalse(knot.isRemoved(), "the knot that was already on the fence should stay");
+        t.assertEquals(knot, tied.getLeashHolder(), "the tied cow's leash holder");
+        t.assertEquals(alice.player(), held.getLeashHolder(), "the held cow's leash holder");
+    }
+
+    /** A sculk sensor beside the fence, settled, so only what happens next can set it off. */
+    private static BlockPos sensor(TestContext t) {
+        BlockPos sensor = t.pos(4, 0, 0);
+        t.setBlock(sensor, Blocks.SCULK_SENSOR.defaultBlockState());
+        t.tick(10);
+        t.assertFalse(sensed(t, sensor, 1), "the sensor should be quiet before the click");
+        return sensor;
+    }
+
+    private static boolean sensed(TestContext t, BlockPos sensor, int ticks) {
+        for (int i = 0; i < ticks; i++) {
+            if (SculkSensorBlock.getPhase(t.level().getBlockState(sensor)) != SculkSensorPhase.INACTIVE) return true;
+            t.tick();
+        }
+        return SculkSensorBlock.getPhase(t.level().getBlockState(sensor)) != SculkSensorPhase.INACTIVE;
+    }
+
+    @HadronTest
+    @Covers(EntityLeashEvent.class)
+    void aTieSetsOffASculkSensorAndARefusedOneDoesNot(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos fence = t.pos(2, 0, 0);
+        t.setBlock(fence, Blocks.OAK_FENCE.defaultBlockState());
+        Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 2));
+        cow.setLeashedTo(alice.player(), true);
+        boolean[] refuse = {true};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityLeashEvent e) {
+                e.setCancelled(refuse[0]);
+            }
+        });
+        BlockPos sensor = sensor(t);
+        alice.useBlock(fence, Direction.UP);
+        t.assertFalse(sensed(t, sensor, 20), "a refused tie should make no vibration");
+        refuse[0] = false;
+        alice.useBlock(fence, Direction.UP);
+        t.assertTrue(sensed(t, sensor, 20), "a tie should make the attach vibration");
+    }
+
+    @HadronTest
+    @Covers(EntityLeashEvent.class)
+    void aRefusedTieToAKnotMakesNoVibration(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos fence = t.pos(2, 0, 0);
+        t.setBlock(fence, Blocks.OAK_FENCE.defaultBlockState());
+        LeashFenceKnotEntity knot = LeashFenceKnotEntity.getOrCreateKnot(t.level(), fence);
+        Cow held = spawn(t, EntityType.COW, t.pos(2, 0, 2));
+        held.setLeashedTo(alice.player(), true);
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityLeashEvent e) {
+                e.setCancelled(true);
+            }
+        });
+        BlockPos sensor = sensor(t);
+        alice.interact(knot);
+        t.assertFalse(sensed(t, sensor, 20), "a refused tie to a knot should make no vibration");
+        t.assertFalse(knot.isRemoved(), "the knot should stay");
     }
 
     @HadronTest

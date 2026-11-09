@@ -16,7 +16,6 @@ import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.LeadItem;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import org.jspecify.annotations.Nullable;
@@ -61,27 +60,10 @@ public final class EntityHandling {
         return Hooks.post(new EntityLeashEvent(entity, knot, EntityActors.of(player))).isCancelled();
     }
 
-    /** Whether a tie was refused: the player still holds an entity the click would have tied to the fence. */
-    public static boolean refusedTie(Level level, BlockPos fence, Player player) {
-        return Hooks.listens(EntityLeashEvent.class)
-                && !LeadItem.leashableInArea(level, fence, l -> l.getLeashHolder() == player).isEmpty();
-    }
-
-    /**
-     * After a lead click on a fence: a knot made by this click that ended up holding nothing, because every tie was
-     * refused, is taken down again rather than left on the fence.
-     */
-    public static void dropUnusedKnot(Level level, BlockPos fence, Player player) {
-        if (level.isClientSide || !refusedTie(level, fence, player)) return;
-        AABB around = new AABB(fence).inflate(1);
-        for (LeashFenceKnotEntity knot : level.getEntitiesOfClass(LeashFenceKnotEntity.class, around,
-                k -> k.getPos().equals(fence))) {
-            // Packets are handled before entities tick, so a knot this click made has not ticked yet.
-            if (knot.tickCount == 0 && LeadItem.leashableInArea(level, fence, l -> l.getLeashHolder() == knot)
-                    .isEmpty()) {
-                knot.discard();
-            }
-        }
+    /** Whether a knot is already on the fence, found the way {@code LeashFenceKnotEntity.getOrCreateKnot} looks. */
+    public static boolean hasKnot(Level level, BlockPos fence) {
+        return !level.getEntitiesOfClass(LeashFenceKnotEntity.class, new AABB(fence).inflate(1),
+                k -> k.getPos().equals(fence)).isEmpty();
     }
 
     /**

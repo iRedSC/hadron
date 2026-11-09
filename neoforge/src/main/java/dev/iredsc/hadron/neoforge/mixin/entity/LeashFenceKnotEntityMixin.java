@@ -1,39 +1,46 @@
 package dev.iredsc.hadron.neoforge.mixin.entity;
 
+import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.sugar.Local;
+import com.llamalad7.mixinextras.sugar.Share;
+import com.llamalad7.mixinextras.sugar.ref.LocalIntRef;
 import dev.iredsc.hadron.neoforge.EntityHandling;
-import net.minecraft.world.InteractionHand;
-import net.minecraft.world.InteractionResult;
+import net.minecraft.core.Holder;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Leashable;
 import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.gameevent.GameEvent;
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Clicking a knot while holding leashed mobs ties them to it. Vanilla takes the knot down when the click tied nothing,
- * which would loose every mob already on it; a click whose ties were all refused keeps the knot.
+ * Clicking a knot while holding leashed mobs ties them to it, each tie asked on its own. Vanilla counts a refused tie
+ * as tied, so it keeps the knot and the mobs already on it; only the attach vibration is held back when every tie was
+ * refused.
  */
 @Mixin(LeashFenceKnotEntity.class)
 abstract class LeashFenceKnotEntityMixin {
     @WrapOperation(method = "interact", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/entity/Leashable;setLeashedTo(Lnet/minecraft/world/entity/Entity;Z)V"))
     private void hadron$tie(Leashable leashable, Entity knot, boolean broadcast, Operation<Void> original,
-            @Local(argsOnly = true) Player player) {
-        if (!EntityHandling.refuseTie(leashable, knot, player)) original.call(leashable, knot, broadcast);
+            @Local(argsOnly = true) Player player, @Share("tied") LocalIntRef tied,
+            @Share("refused") LocalIntRef refused) {
+        if (EntityHandling.refuseTie(leashable, knot, player)) {
+            refused.set(refused.get() + 1);
+            return;
+        }
+        original.call(leashable, knot, broadcast);
+        tied.set(tied.get() + 1);
     }
 
-    @Inject(method = "interact", cancellable = true, at = @At(value = "INVOKE",
-            target = "Lnet/minecraft/world/entity/decoration/LeashFenceKnotEntity;discard()V"))
-    private void hadron$keepKnot(Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
-        LeashFenceKnotEntity self = (LeashFenceKnotEntity) (Object) this;
-        if (EntityHandling.refusedTie(self.level(), self.getPos(), player)) {
-            cir.setReturnValue(InteractionResult.CONSUME);
-        }
+    @WrapWithCondition(method = "interact", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/decoration/LeashFenceKnotEntity;gameEvent(Lnet/minecraft/core/Holder;Lnet/minecraft/world/entity/Entity;)V"))
+    private boolean hadron$attachSignal(LeashFenceKnotEntity self, Holder<GameEvent> event, @Nullable Entity cause,
+            @Share("tied") LocalIntRef tied, @Share("refused") LocalIntRef refused) {
+        return refused.get() == 0 || tied.get() > 0;
     }
 }
