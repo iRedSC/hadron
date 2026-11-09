@@ -65,7 +65,11 @@ public final class EntityHandling {
             return;
         }
         Entity holder = leashable.getLeashHolder();
-        EntityLeashBreakEvent.@Nullable Reason reason = holder == null ? null
+        Entity.RemovalReason removed = entity.getRemovalReason();
+        // A destroyed entity's lead was reported as it was removed (leashedEntityRemoved); a conversion can still tick
+        // the removed entity once and drop it again.
+        boolean reportedAtRemoval = removed != null && removed.shouldDestroy();
+        EntityLeashBreakEvent.@Nullable Reason reason = holder == null || reportedAtRemoval ? null
                 : switch (((EntityState) entity).hadron$leashDrop()) {
                     case CHOSEN -> null;
                     case LEAVING -> EntityLeashBreakEvent.Reason.ENTITY_GONE;

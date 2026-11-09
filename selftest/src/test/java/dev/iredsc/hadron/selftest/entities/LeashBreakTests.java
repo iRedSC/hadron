@@ -175,6 +175,7 @@ public final class LeashBreakTests {
         cow.setLeashedTo(alice.player(), true);
         Heard heard = listen(t);
         cow.discard(); // as a conversion does: no dropLeash on the way out
+        Leashable.tickLeash(cow); // a conversion ticks the removed mob once more, which drops the lead
         t.tick();
         EntityLeashBreakEvent e = one(t, heard);
         t.assertEquals(Reason.ENTITY_GONE, e.getReason(), "the reason");
