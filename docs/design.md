@@ -114,6 +114,8 @@ Hadron ships lightweight plugins server owners expect: essentials-style commands
 
 **Regions** are Hadron's own, written from scratch under MIT, using FTAM's WorldGuard plugin only as a description of what it should do (commands, flags, nesting), never as code. It has its own selection wand and protects through core's events and the actor stack, so it covers every mod a bridge covers. WorldEdit selections come from a small separate plugin, licensed GPL like WorldEdit, so no GPL code reaches Hadron or the regions plugin.
 
+The first cut is in `plugins/regions`: cuboid regions an operator makes with `/region wand` and `/region define`, with owners, members, priorities (the highest priority at a place decides) and four flags (`build`, `use`, `entry`, `pvp`), saved to `regions.yml`. Every region is a watched area, so an unbridged mod's change inside one is refused as `Unknown`. The world on its own (water, pistons, spreading) may act inside the regions it starts in, but not cross into one. Still to come: parent regions, a global region per world, more flags, and moves of entities nothing drives (a drone, a charmed mob) in watched areas.
+
 ## Out of scope
 
 - Running Bukkit plugins.

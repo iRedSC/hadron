@@ -155,7 +155,7 @@ Two plugin integrations come with them:
 ## What's next
 
 1. ~~The actor stack and core's events at their chokepoints~~, with the chokepoint benchmark ([above](#the-chokepoint-cost)).
-2. ~~Areas of interest~~: done for block writes (`Areas.watch`, see "The chokepoint cost"). Entity moves in an area (`EntityMoveEvent`) come with the regions plugin.
+2. ~~Areas of interest~~: done for block writes (`Areas.watch`, see "The chokepoint cost"). Players and driven vehicles already fire `EntityMoveEvent`, which the regions plugin's `entry` flag uses; moves of entities nothing drives (a drone, a charmed mob) in a watched area are still to come, when a flag needs them.
 3. ~~Claiming a mod~~ ([above](#claiming-a-mod)) and `bridge-depend:`.
 4. ~~The acceptance test as a kit any bridge can run~~ ([above](#the-acceptance-kit)).
 5. The Mekanism bridge, then AE2 and Superb Warfare, then this document rewritten from what they taught.
