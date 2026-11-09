@@ -17,6 +17,7 @@ import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.item.ItemEvent;
+import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
 import dev.iredsc.hadron.test.Acceptance.Seen;
 import java.util.ArrayList;
@@ -32,6 +33,7 @@ import java.util.UUID;
 import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.Slot;
@@ -47,20 +49,21 @@ final class AcceptanceDiff {
     static final String ANY_SLOT = "*";
 
     /**
-     * An entity in the area. {@code health} is -1 for an entity that has none. {@code contents}: a container entity's
-     * slots (a chest minecart's), by label. {@code consequence}: a dropped item, orb or falling block, made by a change
-     * elsewhere.
+     * An entity in the test's world. {@code health} is -1 for an entity that has none. {@code contents}: a container
+     * entity's slots (a chest minecart's), by label. {@code inBox}: whether it stands in the area. {@code consequence}:
+     * a dropped item, orb or falling block, made by a change elsewhere.
      */
     record Thing(UUID id, String type, ItemStack stack, float health, Map<String, ItemStack> contents, BlockPos pos,
-            boolean consequence) {}
+            boolean inBox, boolean consequence) {}
 
     /**
      * The area at one moment. {@code contents}: each block's slots by label, {@code slot 3} for the block's own
-     * inventory and {@code north slot 3} for a separate store behind one face. {@code world}: every entity in the
-     * test's world, so one walking in or out of the area isn't taken for new or gone.
+     * inventory and {@code north slot 3} for a separate store behind one face. {@code entities}: every entity in the
+     * test's world but players, so one hurt in the area and then walking out still counts, and one walking in or out
+     * isn't taken for new or gone. Players by name, with their ids for events that name their inventory.
      */
     record Snapshot(Map<BlockPos, BlockState> blocks, Map<BlockPos, String> blockEntities,
-            Map<BlockPos, Map<String, ItemStack>> contents, Map<UUID, Thing> entities, Set<UUID> world,
+            Map<BlockPos, Map<String, ItemStack>> contents, Map<UUID, Thing> entities, Map<String, UUID> playerIds,
             Map<String, List<ItemStack>> players, Map<String, Float> playerHealth, Set<String> playersInBox) {}
 
     /**
@@ -91,24 +94,30 @@ final class AcceptanceDiff {
         return Set.of(event.getHolder());
     }
 
-    /** What the event says it changes, read now, while its block entities and lists are as it fired them. */
-    static Report report(Event event) {
+    /**
+     * What the event says it changes in {@code level}, read now, while its block entities and lists are as it fired
+     * them. A holder in another world names nothing here, though its position may match one in the area.
+     */
+    static Report report(Event event, ServerLevel level) {
         if (event instanceof BlockEvent b) {
+            if (b.getLevel() != level) return Report.NONE;
             Set<BlockPos> changed = new HashSet<>();
             for (BlockChange c : b.getBlocks()) if (c.isChanged() || dataChanged(c)) changed.add(c.getPos());
             return new Report(changed, Map.of(), Map.of());
         }
-        if (event instanceof ExplosionEvent x) return new Report(Set.copyOf(x.blockList()), Map.of(), Map.of());
+        if (event instanceof ExplosionEvent x) {
+            return x.getLevel() == level ? new Report(Set.copyOf(x.blockList()), Map.of(), Map.of()) : Report.NONE;
+        }
         Map<BlockPos, Set<String>> slots = new HashMap<>();
         Map<UUID, Set<String>> entitySlots = new HashMap<>();
         if (event instanceof InventoryChangeEvent i) {
             for (InventoryChangeEvent.Change c : i.getChanges()) {
                 String label = c.slot() == InventoryChangeEvent.Change.ANY_SLOT ? ANY_SLOT : "slot " + c.slot();
-                blockOf(c.holder()).ifPresent(pos -> slots.computeIfAbsent(pos, p -> new HashSet<>()).add(label));
-                if (c.holder() instanceof InventoryHolder.Entity holder) {
-                    entitySlots.computeIfAbsent(holder.entity().getUUID(), id -> new HashSet<>()).add(label);
-                }
+                name(c.holder(), label, level, slots, entitySlots);
             }
+        } else if (event instanceof ItemPickupEvent pickup) {
+            // A hopper or a player taking an item: it lands wherever the destination has room.
+            name(pickup.getDestination(), ANY_SLOT, level, slots, entitySlots);
         } else if (event instanceof InventoryClickEvent click) {
             // A plain click moves only the clicked slot; a shift-click, a collect-all or a drag can move any slot of
             // any inventory in the menu.
@@ -120,13 +129,31 @@ final class AcceptanceDiff {
                 if (!spreads && !isClicked) continue;
                 String label = spreads ? ANY_SLOT : "slot " + slot.getContainerSlot();
                 if (slot.container instanceof BlockEntity be) {
-                    slots.computeIfAbsent(be.getBlockPos(), p -> new HashSet<>()).add(label);
+                    if (be.getLevel() == level) slots.computeIfAbsent(be.getBlockPos(), p -> new HashSet<>()).add(label);
                 } else if (slot.container instanceof net.minecraft.world.entity.Entity e) {
                     entitySlots.computeIfAbsent(e.getUUID(), id -> new HashSet<>()).add(label);
                 }
             }
         }
         return slots.isEmpty() && entitySlots.isEmpty() ? Report.NONE : new Report(Set.of(), slots, entitySlots);
+    }
+
+    /** Adds {@code label} under the block or entity that holds that inventory, when it is in {@code level}. */
+    private static void name(InventoryHolder holder, String label, ServerLevel level, Map<BlockPos, Set<String>> slots,
+            Map<UUID, Set<String>> entitySlots) {
+        switch (holder) {
+            case InventoryHolder.Block b -> {
+                if (b.level() == level) slots.computeIfAbsent(b.pos(), p -> new HashSet<>()).add(label);
+            }
+            case InventoryHolder.Entity e -> {
+                if (e.entity().level() == level) {
+                    entitySlots.computeIfAbsent(e.entity().getUUID(), id -> new HashSet<>()).add(label);
+                }
+            }
+            case InventoryHolder.Item i -> name(i.outer(), label, level, slots, entitySlots);
+            case InventoryHolder.PerPlayer p -> name(p.at(), label, level, slots, entitySlots);
+            default -> { }
+        }
     }
 
     private static boolean dataChanged(BlockChange c) {
@@ -146,7 +173,7 @@ final class AcceptanceDiff {
 
     /** Whether anything in the area or a test player's inventory changed. */
     static boolean anyChange(Snapshot before, Snapshot after, Step step) {
-        return !changes(before, after, true, step).isEmpty();
+        return !changes(before, after, false, step).isEmpty();
     }
 
     /** Each change no event that went through reports. */
@@ -207,7 +234,7 @@ final class AcceptanceDiff {
         blockChanges(before, after, step, out);
         inventoryChanges(before, after, refused, step, out);
         entityChanges(before, after, refused, step, out);
-        playerChanges(before, after, refused, out);
+        playerChanges(before, after, refused, step, out);
         return out;
     }
 
@@ -262,10 +289,12 @@ final class AcceptanceDiff {
         ids.addAll(after.entities().keySet());
         for (UUID id : ids) {
             Thing was = before.entities().get(id), is = after.entities().get(id);
+            // Only what was in the area at either end; once there, it is followed wherever it goes.
+            if (!(was != null && was.inBox() || is != null && is.inBox())) continue;
             String what;
             Predicate<Seen> explains;
             if (was == null && is != null) {
-                if (is.consequence() && !refused || before.world().contains(id) || crossing.contains(id)) continue;
+                if (is.consequence() && !refused || crossing.contains(id)) continue;
                 what = "a " + is.type() + describe(is) + " appeared at " + at(is.pos());
                 Thing born = is;
                 explains = s -> s.event() instanceof EntitySpawnEvent e && e.getEntity().getUUID().equals(id)
@@ -273,7 +302,7 @@ final class AcceptanceDiff {
                                 String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(x.getTransformedType())))
                                 && x.getEntity().blockPosition().closerThan(born.pos(), 2);
             } else if (was != null && is == null) {
-                if (was.consequence() && !refused || after.world().contains(id) || crossing.contains(id)) continue;
+                if (was.consequence() && !refused || crossing.contains(id)) continue;
                 what = "the " + was.type() + describe(was) + " at " + at(was.pos()) + " left";
                 explains = s -> names(s, id) && (s.event() instanceof EntityRemoveEvent
                         || s.event() instanceof EntityDeathEvent || s.event() instanceof HangingBreakEvent
@@ -304,7 +333,7 @@ final class AcceptanceDiff {
         }
     }
 
-    private static void playerChanges(Snapshot before, Snapshot after, boolean refused, List<Change> out) {
+    private static void playerChanges(Snapshot before, Snapshot after, boolean refused, Step step, List<Change> out) {
         Predicate<String> counted = name -> refused || before.playersInBox().contains(name)
                 || after.playersInBox().contains(name);
         for (Map.Entry<String, List<ItemStack>> e : before.players().entrySet()) {
@@ -314,9 +343,10 @@ final class AcceptanceDiff {
             String diff = stacks(e.getValue(), now);
             // By something the player did that spends or gains items (a tool wearing on a break, a block placed, an
             // item used or picked up, a click in a menu), or a change to their inventory: not a use or an open.
+            UUID player = after.playerIds().get(name);
             if (diff != null) {
-                out.add(new Change(name + "'s inventory " + diff, s -> isPlayer(s.actor(), name)
-                        && (s.event() instanceof ItemEvent || s.event() instanceof InventoryChangeEvent
+                out.add(new Change(name + "'s inventory " + diff, s -> step.of(s).entitySlots().containsKey(player)
+                        || isPlayer(s.actor(), name) && (s.event() instanceof ItemEvent || s.event() instanceof InventoryChangeEvent
                                 || s.event() instanceof InventoryClickEvent
                                 || s.event() instanceof BlockEvent b
                                         && b.getBlocks().stream().anyMatch(BlockChange::isChanged)
@@ -350,15 +380,6 @@ final class AcceptanceDiff {
 
     private static boolean names(Seen s, UUID id) {
         return s.event() instanceof EntityEvent e && e.getEntity().getUUID().equals(id);
-    }
-
-    static Optional<BlockPos> blockOf(InventoryHolder holder) {
-        return switch (holder) {
-            case InventoryHolder.Block b -> Optional.of(b.pos());
-            case InventoryHolder.Item i -> blockOf(i.outer());
-            case InventoryHolder.PerPlayer p -> blockOf(p.at());
-            default -> Optional.empty();
-        };
     }
 
     private static String describe(Thing t) {

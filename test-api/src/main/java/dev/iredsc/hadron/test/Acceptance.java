@@ -39,7 +39,9 @@ import net.minecraft.core.BlockPos;
  * holds. Those wait for Hadron's design for running resource flows, since a machine's own data also changes while it
  * merely ticks.
  *
- * <p>Get one with {@link TestContext#acceptance}. It lasts until the test ends.
+ * <p>Get one with {@link TestContext#acceptance}, after the box is built and every player the test needs has joined:
+ * the box's own setup would be refused as Unknown once it is watched, and a player who joins after a {@link #mark} has
+ * nothing to be compared against, so the assertions refuse that step. It lasts until the test ends.
  */
 public interface Acceptance {
     /**
@@ -74,11 +76,13 @@ public interface Acceptance {
      *   <li>a block, by a block event whose change there isn't empty (a use or a crack changes nothing), or an
      *       explosion listing it;
      *   <li>a slot of a block's or a container entity's inventory, by an inventory change or a click naming that
-     *       slot, or, when the block itself went or changed, by the block event;
+     *       slot, a pickup into that inventory, or, when the block itself went or changed, by the block event;
      *   <li>an entity that appeared, by its spawn or transformation; one that left, by its removal, death or
      *       transformation; one whose health changed, by its damage or healing;
-     *   <li>a test player standing in the area, their inventory by what they did and their health by what hurt or
-     *       healed them.
+     *   <li>a test player standing in the area, their inventory by what they did or an inventory change naming it,
+     *       and their health by what hurt or healed them;
+     *   <li>an entity that was in the area at either end is followed wherever it goes, so one hurt here and walking
+     *       out still counts.
      * </ul>
      *
      * Dropped items, experience and falling blocks are exempt, since their contents come from a change reported

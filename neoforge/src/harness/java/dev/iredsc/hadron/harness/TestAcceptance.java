@@ -23,6 +23,7 @@ import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.item.ItemEvent;
+import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
@@ -56,7 +57,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
-import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.items.IItemHandler;
@@ -116,9 +116,20 @@ final class TestAcceptance implements Acceptance, Listener {
         return List.copyOf(seen);
     }
 
+    /** The area now, refusing a step whose players changed: one who joined has nothing to be compared against. */
+    private AcceptanceDiff.Snapshot after(String step) {
+        AcceptanceDiff.Snapshot now = snapshot();
+        if (!now.players().keySet().equals(before.players().keySet())) {
+            throw new AssertionError(step + ": the test's players changed since the last mark (" + before.players()
+                    .keySet() + " then, " + now.players().keySet() + " now), so their inventories and health have "
+                    + "nothing to be compared against. Join every player before calling mark().");
+        }
+        return now;
+    }
+
     @Override
     public void assertUnchanged(String step) {
-        List<String> problems = AcceptanceDiff.unchanged(before, snapshot(), step());
+        List<String> problems = AcceptanceDiff.unchanged(before, after(step), step());
         if (!problems.isEmpty()) {
             throw new AssertionError(step + " should have changed nothing in the protected area, but "
                     + problems.size() + " thing(s) changed:\n  " + String.join("\n  ", problems));
@@ -127,7 +138,7 @@ final class TestAcceptance implements Acceptance, Listener {
 
     @Override
     public void assertEveryChangeSeen(String step) {
-        AcceptanceDiff.Snapshot after = snapshot();
+        AcceptanceDiff.Snapshot after = after(step);
         if (!AcceptanceDiff.anyChange(before, after, step())) {
             throw new AssertionError(step + ": nothing in the area changed since the last mark, so this proves "
                     + "nothing. Check the machine ran (power, fuel, an owner, enough ticks), or use assertUnchanged "
@@ -179,7 +190,7 @@ final class TestAcceptance implements Acceptance, Listener {
             }
             return;
         }
-        reports.put(event, AcceptanceDiff.report(event));
+        reports.put(event, AcceptanceDiff.report(event, level));
         seen.add(new Seen(event, a.getActor(), event instanceof Cancellable c && c.isCancelled(), at.get().pos()));
     }
 
@@ -212,11 +223,17 @@ final class TestAcceptance implements Acceptance, Listener {
             for (BlockPos p : x.blockList()) if (box.isInside(p)) return inBox(p);
             return Optional.empty();
         }
+        if (event instanceof ItemPickupEvent pickup && pickup.getLevel() == level) {
+            // Where the item lands, or where it lay.
+            Optional<Where> into = holderAt(pickup.getDestination());
+            if (into.isPresent()) return into;
+            return at(level, pickup.getItemEntity().position());
+        }
         if (event instanceof ItemEvent i) return i.getLevel() == level ? actorAt(i.getActor()) : Optional.empty();
         if (event instanceof InventoryClickEvent click) {
             // A click in a menu showing a block in the box, whichever slot was clicked: a shift-click from the
             // player's own inventory fills the block's.
-            for (BlockPos p : AcceptanceDiff.report(click).slots().keySet()) if (box.isInside(p)) return inBox(p);
+            for (BlockPos p : AcceptanceDiff.report(click, level).slots().keySet()) if (box.isInside(p)) return inBox(p);
         }
         if (event instanceof InventoryEvent i) {
             for (InventoryHolder holder : AcceptanceDiff.holders(i)) {
@@ -288,12 +305,8 @@ final class TestAcceptance implements Acceptance, Listener {
             if (!stacks.isEmpty()) contents.put(pos, stacks);
         }
         Map<UUID, AcceptanceDiff.Thing> entities = new LinkedHashMap<>();
-        Set<UUID> world = new HashSet<>();
-        for (Entity e : level.getAllEntities()) world.add(e.getUUID());
-        // By the block it stands in, as where() places its events, so an entity counted here is one whose events
-        // protection and the logger hear.
-        for (Entity e : level.getEntities((Entity) null, AABB.of(box).inflate(1),
-                e -> !(e instanceof ServerPlayer) && box.isInside(e.blockPosition()))) {
+        for (Entity e : level.getAllEntities()) {
+            if (e instanceof ServerPlayer) continue;
             ItemStack stack = e instanceof ItemEntity item ? item.getItem().copy() : ItemStack.EMPTY;
             Map<String, ItemStack> held = new LinkedHashMap<>();
             if (e instanceof Container c) {
@@ -304,10 +317,12 @@ final class TestAcceptance implements Acceptance, Listener {
             float health = e instanceof LivingEntity living ? living.getHealth() : -1;
             entities.put(e.getUUID(), new AcceptanceDiff.Thing(e.getUUID(),
                     String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(e.getType())), stack, health, held,
-                    e.blockPosition(), consequence));
+                    // By the block it stands in, as where() places its events.
+                    e.blockPosition(), box.isInside(e.blockPosition()), consequence));
         }
         Map<String, List<ItemStack>> players = new LinkedHashMap<>();
         Map<String, Float> health = new LinkedHashMap<>();
+        Map<String, UUID> ids = new LinkedHashMap<>();
         Set<String> inBox = new HashSet<>();
         for (TestPlayer tp : t.players()) {
             Inventory inv = tp.player().getInventory();
@@ -317,8 +332,9 @@ final class TestAcceptance implements Acceptance, Listener {
             players.put(tp.name(), stacks);
             if (box.isInside(tp.player().blockPosition())) inBox.add(tp.name());
             health.put(tp.name(), tp.player().getHealth());
+            ids.put(tp.name(), tp.uuid());
         }
-        return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, world, players, health, inBox);
+        return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, ids, players, health, inBox);
     }
 
     /**

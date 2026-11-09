@@ -29,6 +29,7 @@ import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.vehicle.MinecartChest;
 
 /**
@@ -411,5 +412,87 @@ public final class AcceptanceKitTests {
         cart.setItem(0, ItemStack.EMPTY);
         String why = failure(t, () -> area.assertUnchanged("a pipe draining a chest minecart"));
         t.assertTrue(why.contains("chest_minecart") && why.contains("slot 0") && why.contains("diamond"), why);
+    }
+
+    @HadronTest
+    void aReportFromAnotherWorldExplainsNothingHere(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos pos = t.pos(2, 0, 0);
+        t.setBlock(pos, Blocks.CHEST);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        ItemStack diamonds = new ItemStack(Items.DIAMOND, 3);
+        // The same coordinates in the overworld, and a slot in the area so the event is heard here.
+        Hadron.getPluginManager().callEvent(new InventoryChangeEvent(List.of(
+                new InventoryChangeEvent.Change(new InventoryHolder.Block(t.server().overworld(), pos), 0,
+                        ItemStack.EMPTY, diamonds.copy()),
+                new InventoryChangeEvent.Change(new InventoryHolder.Block(t.level(), t.pos(3, 0, 0)), 0,
+                        ItemStack.EMPTY, ItemStack.EMPTY)), new Actor.Player(alice.player())));
+        ((ChestBlockEntity) t.level().getBlockEntity(pos)).setItem(0, diamonds.copy());
+        String why = failure(t, () -> area.assertEveryChangeSeen("a write excused by another world's report"));
+        t.assertTrue(why.contains("the inventory at") && why.contains("diamond"), why);
+    }
+
+    @HadronTest
+    void aChangeOutsideTheAreaIsNoWorkInIt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        alice.player().setHealth(10);
+        String why = failure(t, () -> area.assertEveryChangeSeen("alice hurt far from the area"));
+        t.assertTrue(why.contains("nothing in the area changed since the last mark"), why);
+    }
+
+    @HadronTest
+    void aPlayerJoiningAfterTheMarkIsRefused(TestContext t) {
+        Acceptance area = t.acceptance(around(t));
+        TestPlayer alice = t.player("alice");
+        alice.player().setHealth(10);
+        String why = failure(t, () -> area.assertUnchanged("alice hurt after joining late"));
+        t.assertTrue(why.contains("Join every player before calling mark()"), why);
+    }
+
+    @HadronTest
+    void anEntityHurtInTheAreaThenWalkingOutIsStillChecked(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Pig pig = EntityType.PIG.create(t.level());
+        pig.moveTo(t.pos(2, 0, 0).getX() + 0.5, t.pos(2, 0, 0).getY(), t.pos(2, 0, 0).getZ() + 0.5);
+        t.level().addFreshEntity(pig);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        pig.setHealth(pig.getHealth() - 4);
+        pig.teleportTo(t.pos(-5, 0, 0).getX() + 0.5, t.pos(-5, 0, 0).getY(), t.pos(-5, 0, 0).getZ() + 0.5);
+        String why = failure(t, () -> area.assertEveryChangeSeen("a pig hurt unreported, then walking off"));
+        t.assertTrue(why.contains("health"), why);
+    }
+
+    @HadronTest
+    void aMachineReportingWhatItGaveAPlayerIsSeen(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos in = t.pos(2, 0, 0);
+        alice.teleport(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        ItemStack diamonds = new ItemStack(Items.DIAMOND, 3);
+        Actor machine = new Actor.Machine(t.level(), t.pos(3, 0, 0), Attribution.of(alice.uuid()));
+        Hadron.getPluginManager().callEvent(new InventoryChangeEvent(List.of(new InventoryChangeEvent.Change(
+                new InventoryHolder.Entity(alice.player()), 0, ItemStack.EMPTY, diamonds.copy())), machine));
+        alice.player().getInventory().setItem(0, diamonds.copy());
+        area.assertEveryChangeSeen("alice's machine handing her diamonds");
+    }
+
+    @HadronTest(timeout = 200)
+    void aHopperPickingUpIsSeen(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos hopper = t.pos(2, 0, 0);
+        t.setBlock(hopper, Blocks.HOPPER);
+        Actors.remember(t.level().getBlockEntity(hopper), Attribution.of(alice.uuid()));
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        ItemEntity item = new ItemEntity(t.level(), hopper.getX() + 0.5, hopper.getY() + 1.2, hopper.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND, 3));
+        t.level().addFreshEntity(item);
+        t.await("the hopper to pick the diamonds up", item::isRemoved, 60);
+        area.assertEveryChangeSeen("alice's hopper picking up diamonds");
     }
 }
