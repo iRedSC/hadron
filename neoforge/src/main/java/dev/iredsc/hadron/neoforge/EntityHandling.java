@@ -58,16 +58,20 @@ public final class EntityHandling {
      * nobody chose. The reason is what the caller said ({@link LeashDrop}), otherwise judged from the state before the
      * drop, while the holder and the entity are still as they were. A holder there means vanilla takes that lead off, so
      * it is reported even if something puts a new lead on during the drop (a listener on the dropped lead's spawn).
-     * Never for an entity already removed (see {@link #reportsBreaks}).
+     * Never for an entity already removed (see {@link #reportsBreaks}). The caller's cause is taken here, so it covers
+     * this lead only: one put on during the drop and dropped again is judged afresh.
      */
     public static void dropLeash(Entity entity, Runnable drop) {
+        EntityState state = (EntityState) entity;
+        LeashDrop cause = state.hadron$leashDrop();
+        state.hadron$setLeashDrop(LeashDrop.UNSAID);
         if (!(entity instanceof Leashable leashable) || !reportsBreaks(entity)) {
             drop.run();
             return;
         }
         Entity holder = leashable.getLeashHolder();
         EntityLeashBreakEvent.@Nullable Reason reason = holder == null ? null
-                : switch (((EntityState) entity).hadron$leashDrop()) {
+                : switch (cause) {
                     case CHOSEN -> null;
                     case LEAVING -> EntityLeashBreakEvent.Reason.ENTITY_GONE;
                     case UNSAID -> breakReason(entity, holder);

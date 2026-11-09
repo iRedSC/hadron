@@ -218,6 +218,38 @@ public final class LeashBreakTests {
 
     @HadronTest
     @Covers(EntityLeashBreakEvent.class)
+    void aLeadPutOnDuringAChosenUnleashStillBreaks(TestContext t) throws Exception {
+        TestPlayer alice = t.player("alice");
+        Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 0));
+        cow.setLeashedTo(alice.player(), true);
+        TestPlayer bob = t.player("bob");
+        BlockPos far = t.pos(16, 0, 0);
+        bob.player().teleportTo(far.getX() + 0.5, far.getY(), far.getZ() + 0.5); // past the ten blocks
+        Heard heard = listen(t);
+        boolean[] handed = {false};
+        // A mod that hands the cow to bob as alice's lead drops, and ticks it: bob's lead snaps for distance.
+        try (AutoCloseable mod = ModBus.listen("net.neoforged.neoforge.event.entity.EntityJoinLevelEvent", event -> {
+            Object joined;
+            try {
+                joined = event.getClass().getMethod("getEntity").invoke(event);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
+            if (joined instanceof ItemEntity item && item.getItem().is(Items.LEAD) && !handed[0]) {
+                handed[0] = true;
+                cow.setLeashedTo(bob.player(), true);
+                Leashable.tickLeash(cow);
+            }
+        })) {
+            alice.interact(cow);
+        }
+        EntityLeashBreakEvent e = one(t, heard);
+        t.assertEquals(Reason.DISTANCE, e.getReason(), "the reason bob's lead came off");
+        t.assertEquals(Optional.of(bob.player()), e.getHolder(), "the former holder");
+    }
+
+    @HadronTest
+    @Covers(EntityLeashBreakEvent.class)
     void aPortalHandsTheLeadToTheCopyAndReportsNothingYet(TestContext t) {
         TestPlayer alice = t.player("alice");
         Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 0));
