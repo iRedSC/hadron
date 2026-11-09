@@ -9,12 +9,13 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.util.RandomSource;
 import net.minecraft.world.level.BlockEventData;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.Fluid;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
 /**
  * Blocks' own ticks and weather, so what they change is reported as nature, or as an unknown mod; and vanilla blocks'
- * queued block events (a piston's push, a note block, a bell), which are vanilla's own working.
+ * queued block events (a piston's push, a note block, a bell) and fluids' ticks, which are vanilla's own working.
  */
 @Mixin(ServerLevel.class)
 public abstract class ServerLevelMixin {
@@ -55,12 +56,29 @@ public abstract class ServerLevelMixin {
     /** Vanilla's own: never an outsider's in a watched area. A mod's block event is left as its own. */
     @WrapMethod(method = "doBlockEvent")
     private boolean hadron$blockEvent(BlockEventData event, Operation<Boolean> original) {
-        if (BlockHooks.modded(event.block())) return original.call(event);
-        BlockHooks.enterVanillaMachine();
+        if (!BlockHooks.watched((ServerLevel) (Object) this) || BlockHooks.modded(event.block())) {
+            return original.call(event);
+        }
+        BlockHooks.enterVanillaWork();
         try {
             return original.call(event);
         } finally {
-            BlockHooks.exitVanillaMachine();
+            BlockHooks.exitVanillaWork();
+        }
+    }
+
+    /** A vanilla fluid flowing or drying up: vanilla's own. A mod's fluid is left as its own. */
+    @WrapMethod(method = "tickFluid")
+    private void hadron$fluidTick(BlockPos pos, Fluid fluid, Operation<Void> original) {
+        if (!BlockHooks.watched((ServerLevel) (Object) this) || BlockHooks.modded(fluid)) {
+            original.call(pos, fluid);
+            return;
+        }
+        BlockHooks.enterVanillaWork();
+        try {
+            original.call(pos, fluid);
+        } finally {
+            BlockHooks.exitVanillaWork();
         }
     }
 }

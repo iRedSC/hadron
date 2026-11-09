@@ -7,6 +7,7 @@ import dev.iredsc.hadron.common.PluginHost;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
@@ -20,7 +21,9 @@ final class AreasPort implements Areas.Backend {
     private AreasPort() {}
 
     static void register() {
-        NeoForge.EVENT_BUS.addListener((ServerStartingEvent e) -> Areas.Port.install(new AreasPort()));
+        // Before Hadron enables plugins on the same event, so onEnable can watch.
+        NeoForge.EVENT_BUS.addListener(EventPriority.HIGH,
+                (ServerStartingEvent e) -> Areas.Port.install(new AreasPort()));
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> Areas.Port.install(null));
         NeoForge.EVENT_BUS.addListener((LevelEvent.Unload e) -> {
             if (e.getLevel() instanceof ServerLevel level) AreaIndex.closeAll(level);

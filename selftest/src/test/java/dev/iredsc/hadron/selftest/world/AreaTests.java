@@ -2,6 +2,7 @@ package dev.iredsc.hadron.selftest.world;
 
 import dev.iredsc.hadron.api.Hadron;
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
@@ -11,6 +12,7 @@ import dev.iredsc.hadron.api.world.WorldCreator;
 import dev.iredsc.hadron.api.world.WorldGenerator;
 import dev.iredsc.hadron.api.world.Worlds;
 import dev.iredsc.hadron.checks.Nondeterministic;
+import dev.iredsc.hadron.selftest.SelfTestPlugin;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
@@ -21,7 +23,9 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
@@ -73,6 +77,14 @@ public final class AreaTests {
 
     @HadronTest
     @Covers(value = Areas.class, method = "watch")
+    void aPluginCanWatchInOnEnable(TestContext t) {
+        Area area = ((SelfTestPlugin) t.plugin()).startupArea();
+        t.assertTrue(area != null && area.isOpen(), "the area the plugin watched in onEnable should be open, but was "
+                + area);
+    }
+
+    @HadronTest
+    @Covers(value = Areas.class, method = "watch")
     void refusingAnUnknownChangeKeepsTheBlock(TestContext t) {
         Areas.watch(t.plugin(), t.level(), around(t));
         List<BlockEvent> seen = record(t, true);
@@ -107,6 +119,40 @@ public final class AreaTests {
         t.assertTrue(seen.get(0).getActor() instanceof Actor.Unknown, "a fire with nobody behind it in a watched "
                 + "area is an outsider's, not nature's, but was " + seen.get(0).getActor());
         t.assertBlock(t.pos(1, 1, 1), Blocks.AIR);
+    }
+
+    @HadronTest
+    @Covers(value = Areas.class, method = "watch")
+    void refusingAnUnknownIgnitionKeepsTheTntUnlit(TestContext t) {
+        BlockPos tnt = t.pos(4, 0, 0);
+        t.setBlock(tnt, Blocks.TNT);
+        Areas.watch(t.plugin(), t.level(), around(t));
+        List<BlockEvent> seen = record(t, true);
+        // Nobody behind the power, from just outside the area.
+        t.setBlock(tnt.east(), Blocks.REDSTONE_BLOCK);
+        t.tick();
+        t.assertBlock(tnt, Blocks.TNT);
+        t.assertTrue(t.level().getEntitiesOfClass(PrimedTnt.class, new AABB(tnt).inflate(3)).isEmpty(),
+                "a refused ignition should leave no primed TNT");
+        t.assertTrue(!unknown(seen).isEmpty(), "lighting TNT in a watched area with nobody behind it is Unknown");
+    }
+
+    @HadronTest
+    @Covers(value = Areas.class, method = "watch")
+    void aGolemBuiltIntoAWatchedAreaByNobodyIsRefused(TestContext t) {
+        BlockPos base = t.pos(0, 0, 0);
+        t.setBlock(base, Blocks.IRON_BLOCK);
+        t.setBlock(base.above(), Blocks.IRON_BLOCK);
+        t.setBlock(base.above().west(), Blocks.IRON_BLOCK);
+        t.setBlock(base.above().east(), Blocks.IRON_BLOCK);
+        // Only one arm is watched; the pumpkin that completes the golem lands outside it.
+        Areas.watch(t.plugin(), t.level(), BoundingBox.fromCorners(base.above().west(), base.above().west()));
+        List<BlockEvent> seen = record(t, true);
+        t.setBlock(base.above(2), Blocks.CARVED_PUMPKIN);
+        t.assertBlock(base.above().west(), Blocks.IRON_BLOCK);
+        t.assertTrue(t.level().getEntitiesOfClass(IronGolem.class, new AABB(base).inflate(4)).isEmpty(),
+                "a golem whose build was refused should not spawn");
+        t.assertEquals(1, unknown(seen).size(), "the Unknown events for the one watched block of the golem");
     }
 
     @HadronTest
@@ -230,8 +276,8 @@ public final class AreaTests {
 
     /**
      * Vanilla working on its own inside a watched area: a furnace lighting, a piston pushing and finishing its move,
-     * sand falling. None of it has a mod behind it, so none of it is an outsider's, and protection must never refuse
-     * it. The test's own set-up writes happen before the area is watched.
+     * sand falling, water drying up. None of it has a mod behind it, so none of it is an outsider's, and protection
+     * must never refuse it. The test's own writes that start it all run as the server, so no Unknown is allowed.
      */
     @HadronTest(timeout = 400)
     @Covers(value = Areas.class, method = "watch")
@@ -239,6 +285,7 @@ public final class AreaTests {
         BlockPos furnacePos = t.pos(-2, 1, 0);
         BlockPos piston = t.pos(2, 1, 0);
         BlockPos sand = t.pos(0, 5, 2);
+        BlockPos water = t.pos(-3, 0, -3);
         t.level().setChunkForced(piston.getX() >> 4, piston.getZ() >> 4, true);
         t.awaitAsync("the test world to tick", () -> t.level().isPositionEntityTicking(piston), 300);
         t.setBlock(furnacePos, Blocks.FURNACE);
@@ -247,18 +294,22 @@ public final class AreaTests {
         furnace.setItem(1, new ItemStack(Items.COAL));
         t.setBlock(piston, Blocks.PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST));
         t.setBlock(piston.east(), Blocks.STONE);
+        t.setBlock(water, Blocks.WATER);
+        t.await("the water to spread", () -> t.getBlock(water.east()).is(Blocks.WATER), 40);
 
         Areas.watch(t.plugin(), t.level(), around(t));
         List<BlockEvent> seen = record(t, false);
-        // The two writes that start the rest are the test's own, so the only Unknowns allowed are at their spots.
-        t.setBlock(piston.west(), Blocks.REDSTONE_BLOCK);
-        t.setBlock(sand, Blocks.SAND);
+        try (Actors.Scope ignored = Actors.push(new Actor.Server("the test"))) {
+            t.setBlock(piston.west(), Blocks.REDSTONE_BLOCK);
+            t.setBlock(sand, Blocks.SAND);
+            t.setBlock(water, Blocks.AIR);
+        }
         t.await("the furnace to light", () -> t.getBlock(furnacePos).getValue(FurnaceBlock.LIT), 40);
         t.await("the piston to finish its push", () -> t.getBlock(piston.east(2)).is(Blocks.STONE), 40);
         t.await("the sand to land", () -> t.getBlock(t.pos(0, 0, 2)).is(Blocks.SAND), 100);
+        t.await("the water to dry up", () -> t.getBlock(water.east()).isAir(), 100);
 
-        List<BlockEvent> strangers = unknown(seen).stream()
-                .filter(e -> !e.getPos().equals(piston.west()) && !e.getPos().equals(sand)).toList();
+        List<BlockEvent> strangers = unknown(seen);
         t.assertTrue(strangers.isEmpty(), "vanilla working on its own fired as Actor.Unknown: " + strangers.stream()
                 .map(e -> e.getClass().getSimpleName() + " at " + t.describe(e.getPos()) + " " + e.getBlocks())
                 .toList());

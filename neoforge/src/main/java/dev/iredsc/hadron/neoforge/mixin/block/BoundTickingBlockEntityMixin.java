@@ -38,11 +38,15 @@ public abstract class BoundTickingBlockEntityMixin {
             return;
         }
         if (hadron$origin == 1) {
-            BlockHooks.enterVanillaMachine();
+            if (!BlockHooks.watched(server)) {
+                original.call(ticker, level, pos, state, blockEntity);
+                return;
+            }
+            BlockHooks.enterVanillaWork();
             try {
                 original.call(ticker, level, pos, state, blockEntity);
             } finally {
-                BlockHooks.exitVanillaMachine();
+                BlockHooks.exitVanillaWork();
             }
             return;
         }
