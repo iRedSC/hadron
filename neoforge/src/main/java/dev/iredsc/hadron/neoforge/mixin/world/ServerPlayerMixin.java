@@ -2,15 +2,20 @@ package dev.iredsc.hadron.neoforge.mixin.world;
 
 import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.neoforge.AreaIndex;
 import dev.iredsc.hadron.neoforge.PlayerState;
 import dev.iredsc.hadron.neoforge.WorldHooks;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.entity.player.Abilities;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import java.util.Optional;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -95,6 +100,37 @@ public abstract class ServerPlayerMixin implements PlayerState {
         } finally {
             AreaIndex.exitVanillaWork(java.util.Objects.requireNonNullElse(hadron$tickLevel, level));
             hadron$tickLevel = null;
+        }
+    }
+
+    /**
+     * A menu closing: a barrel or trapped chest settling back closed. With nobody on the stack (the player leaving the
+     * game) it is vanilla's own work, silent in a watched area.
+     */
+    @WrapOperation(method = "doCloseContainer", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/inventory/AbstractContainerMenu;removed(Lnet/minecraft/world/entity/player/Player;)V"))
+    private void hadron$closeAsVanilla(AbstractContainerMenu menu, Player player, Operation<Void> original) {
+        ServerLevel level = hadron$self().serverLevel();
+        AreaIndex.enterVanillaWork(level);
+        try {
+            original.call(menu, player);
+        } finally {
+            AreaIndex.exitVanillaWork(level);
+        }
+    }
+
+    /**
+     * A respawn anchor's charge used up, in the world being respawned or returned to (leaving the End, from the
+     * player's tick in the End): vanilla's own work there.
+     */
+    @WrapMethod(method = "findRespawnAndUseSpawnBlock")
+    private static Optional<?> hadron$respawnAsVanilla(ServerLevel level, BlockPos pos, float angle, boolean forced,
+            boolean keepInventory, Operation<Optional<?>> original) {
+        AreaIndex.enterVanillaWork(level);
+        try {
+            return original.call(level, pos, angle, forced, keepInventory);
+        } finally {
+            AreaIndex.exitVanillaWork(level);
         }
     }
 

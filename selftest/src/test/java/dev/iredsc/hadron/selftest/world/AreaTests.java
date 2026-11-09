@@ -36,6 +36,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.BarrelBlock;
+import net.minecraft.world.level.block.RedStoneWireBlock;
+import net.minecraft.world.level.block.RespawnAnchorBlock;
 import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FurnaceBlock;
@@ -44,6 +48,7 @@ import net.minecraft.world.level.block.entity.FurnaceBlockEntity;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.levelgen.feature.EndPlatformFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.level.portal.DimensionTransition;
 import net.minecraft.world.phys.AABB;
 
 /**
@@ -262,6 +267,65 @@ public final class AreaTests {
             }
         });
         return strangers;
+    }
+
+    @HadronTest
+    @Covers(value = Areas.class, method = "watch")
+    void containersLeftOpenOnLeavingTheGameCloseInAWatchedArea(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        BlockPos barrel = t.pos(1, 0, 0);
+        BlockPos chest = t.pos(-1, 0, 0);
+        BlockPos wire = t.pos(-2, 0, 0);
+        t.setBlock(barrel, Blocks.BARREL);
+        t.setBlock(chest, Blocks.TRAPPED_CHEST);
+        t.setBlock(wire.below(), Blocks.STONE);
+        t.setBlock(wire, Blocks.REDSTONE_WIRE);
+        alice.useBlock(barrel);
+        bob.useBlock(chest);
+        t.assertTrue(t.getBlock(barrel).getValue(BarrelBlock.OPEN), "alice's barrel should be open");
+        t.assertTrue(t.getBlock(wire).getValue(RedStoneWireBlock.POWER) > 0, "bob's open trapped chest should power "
+                + "the wire");
+        Areas.watch(t.plugin(), t.level(), BoundingBox.fromCorners(t.pos(-4, -1, -4), t.pos(4, 6, 4)));
+        List<BlockEvent> strangers = refuseStrangers(t);
+        alice.disconnect();
+        bob.disconnect();
+        t.tick();
+        t.assertFalse(t.getBlock(barrel).getValue(BarrelBlock.OPEN), "the barrel should close once alice left");
+        t.assertEquals(0, t.getBlock(wire).getValue(RedStoneWireBlock.POWER), "the wire's power once bob left");
+        t.assertTrue(strangers.isEmpty(), "closing containers on leaving fired as Actor.Unknown: " + strangers);
+    }
+
+    @HadronTest
+    @Covers(value = Areas.class, method = "watch")
+    void aRespawnAnchorUsedFromAnotherWorldInAWatchedAreaIsVanillas(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ServerLevel nether = t.server().getLevel(Level.NETHER);
+        t.assertTrue(nether != null, "the test server should have a Nether");
+        // Far from anything another test touches; a floor and headroom to stand up on beside the anchor.
+        BlockPos anchor = new BlockPos(4000, 100, 4000);
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) {
+                nether.setBlockAndUpdate(anchor.offset(x, -1, z), Blocks.OBSIDIAN.defaultBlockState());
+                nether.setBlockAndUpdate(anchor.offset(x, 0, z), Blocks.AIR.defaultBlockState());
+                nether.setBlockAndUpdate(anchor.offset(x, 1, z), Blocks.AIR.defaultBlockState());
+            }
+        }
+        nether.setBlockAndUpdate(anchor, Blocks.RESPAWN_ANCHOR.defaultBlockState()
+                .setValue(RespawnAnchorBlock.CHARGE, 2));
+        Area area = Areas.watch(t.plugin(), nether, new BoundingBox(anchor).inflatedBy(2));
+        try {
+            List<BlockEvent> strangers = refuseStrangers(t);
+            alice.player().setRespawnPosition(Level.NETHER, anchor, 0, false, false);
+            // As leaving the End does, from alice's tick there, with nobody on the Nether's stack.
+            alice.player().findRespawnPositionAndUseSpawnBlock(false, DimensionTransition.DO_NOTHING);
+            t.assertEquals(1, nether.getBlockState(anchor).getValue(RespawnAnchorBlock.CHARGE),
+                    "the anchor's charge after alice respawned at it");
+            t.assertTrue(strangers.isEmpty(), "using a respawn anchor fired as Actor.Unknown: " + strangers);
+        } finally {
+            area.close();
+            nether.setBlockAndUpdate(anchor, Blocks.AIR.defaultBlockState());
+        }
     }
 
     /** Not a test: an event the test fires itself, with nobody behind it. */
