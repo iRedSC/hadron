@@ -1,0 +1,115 @@
+package dev.iredsc.hadron.selftest.bridges;
+
+import dev.iredsc.hadron.api.Hadron;
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Actors;
+import dev.iredsc.hadron.api.actor.Attribution;
+import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
+import dev.iredsc.hadron.test.Acceptance;
+import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.TestContext;
+import dev.iredsc.hadron.test.TestPlayer;
+import net.minecraft.core.BlockPos;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+
+/**
+ * The acceptance kit on vanilla blocks: it passes what core already covers, and each assertion fails, naming the
+ * right gap, when a change skips the events, a cancel is ignored, or nobody is behind an action. A kit that passed
+ * those would pass a bridge that covers nothing.
+ */
+public final class AcceptanceKitTests {
+    private static BoundingBox around(TestContext t) {
+        return BoundingBox.fromCorners(t.pos(1, 0, -2), t.pos(3, 2, 2));
+    }
+
+    /** The failure the assertion throws, or a failure of the test when it throws none. */
+    private static String failure(TestContext t, Runnable assertion) {
+        try {
+            assertion.run();
+        } catch (AssertionError e) {
+            return e.getMessage();
+        }
+        t.fail("the assertion passed, but the step left a gap it should have named");
+        return "";
+    }
+
+    @HadronTest
+    void anOutsidersBreakIsDeniedAndLeavesTheAreaAsItWas(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos stone = t.pos(2, 0, 0);
+        t.setBlock(stone, Blocks.STONE);
+        bob.hold(new ItemStack(Items.IRON_PICKAXE));
+        Acceptance area = t.acceptance(around(t));
+        bob.breakBlock(stone);
+        t.tick(2);
+        area.assertUnchanged("bob breaking stone in a region he isn't trusted in");
+        t.assertTrue(area.events().stream().anyMatch(s -> s.event() instanceof BlockBreakEvent && s.cancelled()),
+                "protection cancelled the break: " + area.events());
+    }
+
+    @HadronTest
+    void aTrustedPlayersChangesAreSeenAndActForThem(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos stone = t.pos(2, 0, 0);
+        t.setBlock(stone, Blocks.STONE);
+        alice.hold(new ItemStack(Items.IRON_PICKAXE));
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        alice.breakBlock(stone);
+        t.tick(2);
+        t.assertBlock(stone, Blocks.AIR);
+        area.assertEveryChangeSeen("alice breaking stone where she is trusted");
+        area.assertActingFor(alice, "alice breaking stone where she is trusted");
+        t.assertFalse(area.events().isEmpty(), "the break was recorded");
+    }
+
+    @HadronTest
+    void aChangeThatSkipsEveryChokepointIsAnInterceptionGap(TestContext t) {
+        BlockPos pos = t.pos(2, 0, 0);
+        Acceptance area = t.acceptance(around(t));
+        // A direct chunk write, as a mod that skips Level.setBlock makes: nothing fires for it.
+        t.level().getChunkAt(pos).setBlockState(pos, Blocks.GOLD_BLOCK.defaultBlockState(), false);
+        String unchanged = failure(t, () -> area.assertUnchanged("a mod's direct chunk write"));
+        t.assertTrue(unchanged.contains("no event fired for it. An interception gap"), unchanged);
+        String unseen = failure(t, () -> area.assertEveryChangeSeen("a mod's direct chunk write"));
+        t.assertTrue(unseen.contains("interception gap") && unseen.contains("gold_block"), unseen);
+    }
+
+    @HadronTest
+    void aChangeMadeDespiteACancelIsNamedAsTheCancelsResidue(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos pos = t.pos(2, 0, 0);
+        t.setBlock(pos, Blocks.STONE);
+        Acceptance area = t.acceptance(around(t));
+        // A bridge that fires, sees the cancel, and makes the change anyway.
+        BlockBreakEvent event = new BlockBreakEvent(t.level(), pos, Blocks.STONE.defaultBlockState(),
+                Blocks.AIR.defaultBlockState(), new Actor.Player(bob.player()));
+        t.assertTrue(Hadron.getPluginManager().callEvent(event), "protection cancelled bob's break");
+        t.level().getChunkAt(pos).setBlockState(pos, Blocks.AIR.defaultBlockState(), false);
+        String why = failure(t, () -> area.assertUnchanged("a bridge ignoring a cancel"));
+        t.assertTrue(why.contains("BlockBreakEvent") && why.contains("the cancel left this behind"), why);
+    }
+
+    @HadronTest
+    void unknownAndOwnerlessActorsAreAttributionGaps(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).trustNobody().trust(alice);
+        // Nobody on the actor stack in a watched area: core fires it as Unknown, and protection refuses it.
+        t.level().setBlock(t.pos(2, 0, 0), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+        // A machine nobody owns.
+        try (Actors.Scope s = Actors.push(new Actor.Machine(t.level(), t.pos(3, 0, 0), Attribution.none()))) {
+            t.level().setBlock(t.pos(2, 0, 1), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+        }
+        t.assertBlock(t.pos(2, 0, 0), Blocks.AIR);
+        t.assertBlock(t.pos(2, 0, 1), Blocks.AIR);
+        String why = failure(t, () -> area.assertActingFor(alice, "an unbridged mod's work"));
+        t.assertTrue(why.contains("Unknown, so nothing was on the actor stack"), why);
+        t.assertTrue(why.contains("nobody is responsible for it"), why);
+        area.assertUnchanged("an unbridged mod's work, refused");
+    }
+}

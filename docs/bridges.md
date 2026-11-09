@@ -1,12 +1,36 @@
 # Bridges
 
-A bridge makes one mod speak Hadron's events. Nothing here is built yet; this is the target the core and the first bridges are built toward.
+A bridge makes one mod speak Hadron's events. No bridge exists yet; this is the target the core and the first bridges are built toward. What is built: a bridge's claim on its mods and the firing that goes through it ([Claiming a mod](#claiming-a-mod)), and `bridge-depend:` for plugins.
 
 ## The goal
 
 **A server owner installs a plugin, and it acts on every mod's content without being edited, as long as the mods' bridges are installed.** A server owner running Hadron's regions plugin never wonders whether a mod's quarry, turret or drone is covered: either its bridge is installed and it is, or Hadron has told them which bridge to get.
 
 A bridge is done when it passes the acceptance test: run the mod's machines, weapons, tools, vehicles, storage and rituals inside a protected region, and a protection plugin denies what the region forbids while a logging plugin records the right player for each change, and an anti-dupe check finds every item and resource conserved. Neither plugin knows the mod exists. Cancelled actions must leave nothing behind: no consumed cost, no half-moved block entity, no fluid handed over while the block stays.
+
+### The acceptance kit
+
+A bridge runs the test as an in-game suite with its mod and itself in the test server (`hadronTest.mods`). `t.acceptance(box)` gives the protection plugin and the logger over one box, knowing no mod, and records the box to compare against:
+
+```java
+Acceptance area = t.acceptance(BoundingBox.fromCorners(t.pos(-3, 0, -3), t.pos(3, 4, 3)));
+// bob's digital miner, working in the box; nobody is trusted yet
+t.tick(200);
+area.assertUnchanged("bob's miner where he isn't trusted");
+
+area.trust(bob).mark();
+t.tick(200);
+area.assertEveryChangeSeen("bob's miner where he is trusted");
+area.assertActingFor(bob, "bob's miner where he is trusted");
+```
+
+- **`assertUnchanged`**, for a refused step: no block, block entity, block inventory or entity in the box changed, and no test player's inventory did either. Each change is named with what explains it: a cancelled event whose cancel left it behind, an event that went through, or no event at all (an interception gap).
+- **`assertEveryChangeSeen`**, for an allowed step: every block and block inventory that changed was covered by an event that went through, and so was every entity that appeared or left. Dropped items, experience orbs and falling blocks are exempt, because their contents come from a change reported elsewhere.
+- **`assertActingFor`**: every event in the box acts for that player. `Unknown` and ownerless actors are named as attribution gaps.
+
+Protection denies every cancellable block, inventory, resource, explosion or entity event in the box unless the server or a trusted player is behind it. An entity's own motion and attention (moving, teleporting, velocity, knockback, targeting, air) is neither protected nor logged. The box is watched, so a change with nobody behind it fires as `Unknown`. `AcceptanceKitTests` in the self-tests checks that each assertion fails, naming the right gap, when a change skips every chokepoint, a cancel is ignored, or nobody is behind an action.
+
+Not checked yet: whether items and resources are conserved in an allowed step (an anti-dupe ledger), and the energy, fluids and other resources a machine holds. Both wait for the design of running resource flows ([design](design.md#open-designs)), which the Mekanism bridge will shape. Set up the box before calling `t.acceptance`: once the box is watched, the test's own writes have nobody behind them and are refused as `Unknown`.
 
 ## Core intercepts, bridges translate
 
@@ -73,7 +97,17 @@ A bridge has two parts:
 
 [bridge-hooks.md](bridge-hooks.md) lists exactly what a bridge must hook: the events only bridges fire, and where core's coverage of an event stops.
 
-Each bridge owns exactly one mod id, so two bridges never compete to translate the same mod; a second bridge for a mod id fails to load, naming the first.
+### Claiming a mod
+
+Each mod id has at most one bridge, so two bridges never compete to translate the same mod. A bridge may claim several, since one mod often ships as several mod ids (Mekanism's generators and tools are their own mods). It claims them once, from its mod's constructor, and keeps the handle:
+
+```java
+BRIDGE = Bridge.claim("mekanism", "mekanismgenerators", "mekanismtools");
+```
+
+The loader reports which mod is constructing, so the claim names the real bridge, and a plugin can't claim one once the server runs. A second claim for a mod id fails the load, naming both bridges. Every event a bridge fires goes through the handle (`BRIDGE.listens`, `BRIDGE.fire`), which refuses an `EntityDataChangeEvent` whose kind isn't in one of the claimed mods' namespaces. Attribution needs no handle: `Actors` and `Operation` are the same for bridges and core.
+
+A plugin that needs a bridge lists it with `bridge-depend: [mekanism]`, and doesn't load without it, saying which bridge to add.
 
 ## Promotion: when bridges' events become core
 
@@ -92,7 +126,7 @@ Promote when all of these hold:
 
 Events under different Hadron parents aren't promoted together, since one listener couldn't handle them alike.
 
-Not built yet: refusing a data kind whose namespace isn't the firing bridge's mod id, which needs a bridge's identity at firing; and the build refusing a bridge API event that extends nothing of Hadron's, which lands with the first bridge API. A promotion changes `api`, so it gets `@FiredBy(core = NONE, ...)`, an acceptance-kit check and `@Covers` like any bridge event.
+A data kind outside the firing bridge's claimed mods is refused at firing. Not built yet: the build refusing a bridge API event that extends nothing of Hadron's, which lands with the first bridge API. A promotion changes `api`, so it gets `@FiredBy(core = NONE, ...)`, an acceptance-kit check and `@Covers` like any bridge event.
 
 ## Pilots
 
@@ -109,9 +143,10 @@ Two plugin integrations come with them:
 
 ## What's next
 
-1. The actor stack and core's events at their chokepoints. The chokepoint benchmark is done ([above](#the-chokepoint-cost)).
+1. ~~The actor stack and core's events at their chokepoints~~, with the chokepoint benchmark ([above](#the-chokepoint-cost)).
 2. ~~Areas of interest~~: done for block writes (`Areas.watch`, see "The chokepoint cost"). Entity moves in an area (`EntityMoveEvent`) come with the regions plugin.
-3. The coverage report and the official bridge list.
-4. The acceptance test as a kit any bridge can run.
-5. The three pilot bridges, then this document rewritten from what they taught.
-6. The grouped list of proposed leaves ([promotion](#promotion-when-bridges-events-become-core)), once the pilots give it something to group.
+3. ~~Claiming a mod~~ ([above](#claiming-a-mod)) and `bridge-depend:`.
+4. ~~The acceptance test as a kit any bridge can run~~ ([above](#the-acceptance-kit)), without the conservation ledger, which comes with the Mekanism bridge.
+5. The Mekanism bridge, then AE2 and Superb Warfare, then this document rewritten from what they taught.
+6. The coverage report and the official bridge list, once there is a bridge to list.
+7. The grouped list of proposed leaves ([promotion](#promotion-when-bridges-events-become-core)), once the pilots give it something to group.

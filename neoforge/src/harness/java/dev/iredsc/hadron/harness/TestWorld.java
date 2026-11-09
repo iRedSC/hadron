@@ -248,6 +248,12 @@ final class TestWorld implements TestContext {
     }
 
     @Override
+    public dev.iredsc.hadron.test.Acceptance acceptance(net.minecraft.world.level.levelgen.structure.BoundingBox box) {
+        requireIdle("start an acceptance area");
+        return new TestAcceptance(this, box);
+    }
+
+    @Override
     public void tick(int ticks) {
         requireIdle("tick");
         for (int i = 0; i < ticks; i++) {
