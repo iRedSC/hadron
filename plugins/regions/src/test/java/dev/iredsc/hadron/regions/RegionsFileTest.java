@@ -76,4 +76,19 @@ class RegionsFileTest {
             assertEquals(List.of("rg"), d.getCommands().get("region").aliases);
         }
     }
+
+    @Test
+    void bypassSurvivesSavingAndLoading() throws Exception {
+        java.util.Set<UUID> on = java.util.Set.of(new UUID(5, 6), new UUID(7, 8));
+        YamlConfiguration back = new YamlConfiguration();
+        back.loadFromString(Bypass.write(on).saveToString());
+        assertEquals(on, Bypass.read(back));
+    }
+
+    @Test
+    void aBadBypassLineIsRefused() throws Exception {
+        YamlConfiguration yaml = new YamlConfiguration();
+        yaml.loadFromString("players: [notauuid]\n");
+        assertThrows(RegionsFile.Problem.class, () -> Bypass.read(yaml));
+    }
 }

@@ -115,4 +115,50 @@ public final class RegionsTests {
         bob.breakBlock(t.pos(1, 0, 1));
         t.assertBlock(t.pos(1, 0, 1), Blocks.DIRT);
     }
+
+    @HadronTest
+    void anOpBuildsInRegionsOnlyWithBypassOn(TestContext t) {
+        t.setBlock(t.pos(1, 0, 1), Blocks.DIRT);
+        t.setBlock(t.pos(-1, 0, -1), Blocks.DIRT);
+        define(t, admin(t), "bypass-toggle", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        TestPlayer erin = t.player("erin");
+        erin.setOp(true);
+        erin.breakBlock(t.pos(1, 0, 1));
+        t.assertBlock(t.pos(1, 0, 1), Blocks.DIRT);
+        erin.command("rg bypass");
+        t.assertChat(erin, "Region bypass is on");
+        erin.breakBlock(t.pos(1, 0, 1));
+        t.assertBlock(t.pos(1, 0, 1), Blocks.AIR);
+        erin.command("rg bypass");
+        t.assertChat(erin, "Region bypass is off");
+        erin.breakBlock(t.pos(-1, 0, -1));
+        t.assertBlock(t.pos(-1, 0, -1), Blocks.DIRT);
+    }
+
+    @HadronTest
+    void bypassNeedsItsNode(TestContext t) {
+        TestPlayer frank = t.player("frank");
+        frank.command("rg bypass");
+        t.assertChat(frank, "You need regions.bypass");
+        t.assertNoChat(frank, "Region bypass is on");
+    }
+
+    @HadronTest
+    void anOwnerManagesTheirRegionButCantRemoveIt(TestContext t) {
+        t.setBlock(t.pos(1, 0, 1), Blocks.DIRT);
+        TestPlayer alice = admin(t);
+        define(t, alice, "owned-plot", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        define(t, alice, "someone-elses", t.pos(3, 0, -2), t.pos(4, 1, -1));
+        TestPlayer bob = t.player("bob");
+        TestPlayer carol = t.player("carol");
+        alice.command("rg addowner owned-plot bob");
+        bob.command("rg addmember owned-plot carol");
+        t.assertChat(bob, "carol is a member of owned-plot");
+        carol.breakBlock(t.pos(1, 0, 1));
+        t.assertBlock(t.pos(1, 0, 1), Blocks.AIR);
+        bob.command("rg remove owned-plot");
+        t.assertChat(bob, "You need regions.manage");
+        bob.command("rg flag someone-elses use allow");
+        t.assertChat(bob, "You don't own a region named someone-elses");
+    }
 }

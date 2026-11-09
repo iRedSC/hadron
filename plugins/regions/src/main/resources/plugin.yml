@@ -6,5 +6,5 @@ description: Protects areas of the world, against players and every bridged mod'
 commands:
   region:
     description: Make, change and look at regions
-    usage: /<command> <wand|define|redefine|remove|restore|list|info|show|flag|priority|addowner|addmember|removeplayer>
+    usage: /<command> <wand|define|redefine|remove|restore|bypass|list|info|show|flag|priority|addowner|addmember|removeplayer>
     aliases: [rg]

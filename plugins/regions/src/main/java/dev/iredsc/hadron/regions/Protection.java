@@ -1,6 +1,5 @@
 package dev.iredsc.hadron.regions;
 
-import dev.iredsc.hadron.api.Permissions;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import dev.iredsc.hadron.api.event.Cancellable;
@@ -41,10 +40,12 @@ import net.minecraft.world.entity.decoration.HangingEntity;
 final class Protection implements Listener {
     private final RegionStore store;
     private final Feedback feedback;
+    private final Bypass bypass;
 
-    Protection(RegionStore store, Feedback feedback) {
+    Protection(RegionStore store, Feedback feedback, Bypass bypass) {
         this.store = store;
         this.feedback = feedback;
+        this.bypass = bypass;
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
@@ -152,10 +153,10 @@ final class Protection implements Listener {
         return Rules.refusing(store.at(level, pos), flag, e.getActor().actingFor());
     }
 
-    /** The server, or a player allowed past every region. */
-    private static boolean trusted(ActionEvent e) {
+    /** The server, or a player with /region bypass on. */
+    private boolean trusted(ActionEvent e) {
         if (e.getActor() instanceof Actor.Server) return true;
-        return e.getActingPlayer().map(p -> Permissions.has(p, RegionsPlugin.BYPASS)).orElse(false);
+        return e.getActingPlayer().map(bypass::active).orElse(false);
     }
 
     /** Shows a player acting directly where they were refused; machines and mobs are refused quietly. */

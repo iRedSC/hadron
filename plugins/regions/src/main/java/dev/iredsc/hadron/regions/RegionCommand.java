@@ -26,20 +26,28 @@ import org.jspecify.annotations.Nullable;
 
 /** {@code /region} (alias {@code /rg}): every way to make, change and look at regions. */
 final class RegionCommand implements CommandExecutor, TabCompleter {
-    private static final List<String> SUBCOMMANDS = List.of("wand", "define", "redefine", "remove", "restore",
+    private static final List<String> SUBCOMMANDS = List.of("wand", "define", "redefine", "remove", "restore", "bypass",
             "list", "info", "show", "flag", "priority", "addowner", "addmember", "removeplayer");
+    /** What a region's owners may do to it without regions.manage. */
+    private static final List<String> OWNER = List.of("info", "show", "flag", "addowner", "addmember",
+            "removeplayer");
+    /** Subcommands that check their own permission, so anyone may type them. */
+    private static final List<String> ANYONE = List.of("list", "info", "show", "flag", "addowner", "addmember",
+            "removeplayer", "bypass");
     private static final String USAGE = "/region <" + String.join("|", SUBCOMMANDS) + ">";
 
     private final JavaPlugin plugin;
     private final RegionStore store;
     private final Wand wand;
     private final Feedback feedback;
+    private final Bypass bypass;
 
-    RegionCommand(JavaPlugin plugin, RegionStore store, Wand wand, Feedback feedback) {
+    RegionCommand(JavaPlugin plugin, RegionStore store, Wand wand, Feedback feedback, Bypass bypass) {
         this.plugin = plugin;
         this.store = store;
         this.wand = wand;
         this.feedback = feedback;
+        this.bypass = bypass;
     }
 
     /** A mistake in what was typed, with the fix. */
@@ -53,10 +61,6 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSourceStack sender, PluginCommand command, String label, String[] args) {
-        if (!Permissions.has(sender, RegionsPlugin.MANAGE)) {
-            sender.sendFailure(Component.literal("You need " + RegionsPlugin.MANAGE.id + " to manage regions"));
-            return true;
-        }
         try {
             run(sender, args);
         } catch (Refusal r) {
@@ -71,7 +75,16 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
     private void run(CommandSourceStack sender, String[] args) {
         if (args.length == 0) throw new Refusal(USAGE);
         String sub = args[0].toLowerCase(Locale.ROOT);
+        if (!ANYONE.contains(sub)) requireAdmin(sender);
         switch (sub) {
+            case "bypass" -> {
+                ServerPlayer p = player(sender);
+                if (!Permissions.has(p, RegionsPlugin.BYPASS)) {
+                    throw new Refusal("You need " + RegionsPlugin.BYPASS.id + " to bypass regions");
+                }
+                Component now = Bypass.status(bypass.toggle(p));
+                sender.sendSuccess(() -> now, false);
+            }
             case "wand" -> {
                 ServerPlayer p = player(sender);
                 if (!p.getInventory().add(Wand.make())) p.drop(Wand.make(), false);
@@ -95,7 +108,7 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
             case "list" -> list(sender);
             case "info" -> info(sender, args);
             case "show" -> {
-                Region r = region(arg(args, 1, "/region show <region>"));
+                Region r = managed(sender, arg(args, 1, "/region show <region>"));
                 feedback.outline(player(sender), r.box(), Feedback.Look.REGION);
             }
             case "flag" -> flag(sender, args);
@@ -113,13 +126,13 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
             }
             case "addowner", "addmember" -> {
                 boolean owner = sub.equals("addowner");
-                Region r = region(arg(args, 1, "/region " + sub + " <region> <player>"));
+                Region r = managed(sender, arg(args, 1, "/region " + sub + " <region> <player>"));
                 GameProfile who = profile(arg(args, 2, "/region " + sub + " " + r.id() + " <player>"));
                 store.put(owner ? r.withOwner(who.getId()) : r.withMember(who.getId()));
                 ok(sender, who.getName() + (owner ? " owns " : " is a member of ") + r.id());
             }
             case "removeplayer" -> {
-                Region r = region(arg(args, 1, "/region removeplayer <region> <player>"));
+                Region r = managed(sender, arg(args, 1, "/region removeplayer <region> <player>"));
                 GameProfile who = profile(arg(args, 2, "/region removeplayer " + r.id() + " <player>"));
                 if (!r.isMember(who.getId())) throw new Refusal(who.getName() + " isn't in " + r.id());
                 store.put(r.without(who.getId()));
@@ -154,7 +167,7 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
 
     private void flag(CommandSourceStack sender, String[] args) {
         String usage = "/region flag <region> <" + RegionsFile.flagList().replace(", ", "|") + "> [allow|deny]";
-        Region r = region(arg(args, 1, usage));
+        Region r = managed(sender, arg(args, 1, usage));
         String key = arg(args, 2, usage);
         Flag flag = Flag.parse(key).orElseThrow(() -> new Refusal("No flag " + key + "; the flags are "
                 + RegionsFile.flagList()));
@@ -169,9 +182,10 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
     }
 
     private void list(CommandSourceStack sender) {
-        List<Region> all = new ArrayList<>(store.all());
+        List<Region> all = new ArrayList<>(store.all().stream().filter(r -> canManage(sender, r)).toList());
         if (all.isEmpty()) {
-            ok(sender, "No regions yet: /region wand, then /region define <name>");
+            boolean admin = Permissions.has(sender, RegionsPlugin.MANAGE);
+            ok(sender, admin ? "No regions yet: /region wand, then /region define <name>" : "You own no regions");
             return;
         }
         all.sort(Comparator.comparing(Region::id));
@@ -183,11 +197,11 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
     private void info(CommandSourceStack sender, String[] args) {
         List<Region> which;
         if (args.length > 1) {
-            which = List.of(region(args[1]));
+            which = List.of(managed(sender, args[1]));
         } else {
             ServerPlayer p = player(sender);
-            which = store.at(p.serverLevel(), p.blockPosition());
-            if (which.isEmpty()) throw new Refusal("You aren't in a region; /region info <region> names one");
+            which = store.at(p.serverLevel(), p.blockPosition()).stream().filter(r -> canManage(sender, r)).toList();
+            if (which.isEmpty()) throw new Refusal("You aren't in a region you manage; /region info <region> names one");
         }
         for (Region r : which) {
             BoundingBox b = r.box();
@@ -204,14 +218,14 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
     @Override
     public @Nullable List<String> onTabComplete(CommandSourceStack sender, PluginCommand command, String label,
             String[] args) {
-        if (!Permissions.has(sender, RegionsPlugin.MANAGE)) return List.of();
+        boolean admin = Permissions.has(sender, RegionsPlugin.MANAGE);
         String last = args.length == 0 ? "" : args[args.length - 1].toLowerCase(Locale.ROOT);
         List<String> options = switch (args.length) {
-            case 0, 1 -> SUBCOMMANDS;
+            case 0, 1 -> admin ? SUBCOMMANDS : ANYONE;
             case 2 -> switch (args[0].toLowerCase(Locale.ROOT)) {
                 case "restore" -> List.copyOf(store.restorable());
                 case "wand", "list", "define" -> List.of();
-                default -> store.all().stream().map(Region::id).toList();
+                default -> store.all().stream().filter(r -> canManage(sender, r)).map(Region::id).toList();
             };
             case 3 -> switch (args[0].toLowerCase(Locale.ROOT)) {
                 case "flag" -> Arrays.stream(Flag.values()).map(Flag::key).toList();
@@ -227,6 +241,28 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
 
     private void showIfPlayer(CommandSourceStack sender, Region r) {
         if (sender.getEntity() instanceof ServerPlayer p) feedback.outline(p, r.box(), Feedback.Look.REGION);
+    }
+
+    /** Refuses anyone without {@code regions.manage}. */
+    private static void requireAdmin(CommandSourceStack sender) {
+        if (Permissions.has(sender, RegionsPlugin.MANAGE)) return;
+        throw new Refusal("You need " + RegionsPlugin.MANAGE.id + " for that; owners of a region can use "
+                + String.join(", ", OWNER));
+    }
+
+    /** Whether the sender may change this region: an admin, or one of its owners holding regions.manage.owned. */
+    private static boolean canManage(CommandSourceStack sender, Region r) {
+        if (Permissions.has(sender, RegionsPlugin.MANAGE)) return true;
+        return sender.getEntity() instanceof ServerPlayer p && r.owners().contains(p.getUUID())
+                && Permissions.has(p, RegionsPlugin.MANAGE_OWNED);
+    }
+
+    /** The region, if the sender may change it; another's region reads as missing, so ids don't leak. */
+    private Region managed(CommandSourceStack sender, String id) {
+        Optional<Region> r = store.get(id.toLowerCase(Locale.ROOT));
+        if (r.isPresent() && canManage(sender, r.get())) return r.get();
+        if (Permissions.has(sender, RegionsPlugin.MANAGE)) throw noSuch(id);
+        throw new Refusal("You don't own a region named " + id);
     }
 
     private Region region(String id) {
