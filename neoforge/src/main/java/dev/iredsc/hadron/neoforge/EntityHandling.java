@@ -101,13 +101,35 @@ public final class EntityHandling {
     }
 
     /**
-     * Why a lead is coming off, judged from the state alone; null when none of the reasons holds, which is a player or
-     * a mod taking it off on purpose. The order matters: a dead entity mounted on nothing is gone, not mounted.
+     * The holder of an entity about to be destroyed for the first time while still on a lead, or null: not leashed,
+     * already removed, nobody listening, or a removal that keeps the lead (unloading saves it, a portal hands it to the
+     * entity's copy).
+     */
+    public static @Nullable Entity leashHolderIfDestroyed(Entity entity, Entity.RemovalReason reason) {
+        if (!reason.shouldDestroy() || entity.isRemoved() || !(entity instanceof Leashable leashable)
+                || !(entity.level() instanceof ServerLevel) || !Hooks.listens(EntityLeashBreakEvent.class)) {
+            return null;
+        }
+        return leashable.getLeashHolder();
+    }
+
+    /**
+     * A leashed entity was destroyed without dropping its lead first (a conversion, a discard); vanilla leaves the
+     * leash data on the removed entity, so the entity being gone is what says the lead is.
+     */
+    public static void leashedEntityRemoved(Entity entity, Entity holder) {
+        Hooks.post(new EntityLeashBreakEvent(entity, holder, EntityLeashBreakEvent.Reason.ENTITY_GONE,
+                EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
+    }
+
+    /**
+     * Why a lead is coming off, judged from the state alone; null when none of the reasons holds: a player or a mod
+     * taking it off on purpose, or a portal, whose copy of the entity carries the lead on (and reports
+     * {@link EntityLeashBreakEvent.Reason#HOLDER_NOT_FOUND} if its holder never follows). The order matters: a dead
+     * entity mounted on nothing is gone, not mounted.
      */
     static EntityLeashBreakEvent.@Nullable Reason breakReason(Entity entity, Entity holder) {
-        if (entity.getRemovalReason() == Entity.RemovalReason.CHANGED_DIMENSION) {
-            return EntityLeashBreakEvent.Reason.CHANGED_DIMENSION;
-        }
+        if (entity.getRemovalReason() == Entity.RemovalReason.CHANGED_DIMENSION) return null;
         if (entity.isRemoved() || !entity.isAlive()) return EntityLeashBreakEvent.Reason.ENTITY_GONE;
         if (holder.isRemoved() || !holder.isAlive()) return EntityLeashBreakEvent.Reason.HOLDER_GONE;
         if (entity.isPassenger()) return EntityLeashBreakEvent.Reason.MOUNTED;

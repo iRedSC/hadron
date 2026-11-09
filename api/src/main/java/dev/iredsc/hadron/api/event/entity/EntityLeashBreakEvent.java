@@ -11,7 +11,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
  * A lead came off an entity without anyone taking it off: stretched too far, its holder gone or never found, the
- * entity dead, despawned, mounted or moved to another dimension. Bukkit's {@code EntityUnleashEvent} for those
+ * entity dead, despawned, destroyed or mounted. Bukkit's {@code EntityUnleashEvent} for those
  * reasons. Fired once the lead is off; not cancellable, so a plugin can't leave an entity tied to something that is
  * gone. A player taking a lead off is {@link EntityUnleashEvent}, which can be refused.
  *
@@ -21,8 +21,8 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
  * {@link EntityUnleashEvent} when someone chose it, and this when nobody did (its own despawn, a summon running out).
  */
 @FiredBy(core = PARTIAL,
-        coreSees = "leads snapping from distance, a holder dying, removed or never found after loading, and the entity "
-                + "dying, despawning, mounting or changing dimension",
+        coreSees = "leads snapping from distance, a holder dying, removed or never found after loading or a portal, and "
+                + "the entity dying, despawning, being destroyed or mounting",
         bridges = "the mod dropping a lead in its own code with nobody choosing it (its own despawn, a summon running "
                 + "out); a chosen removal is EntityUnleashEvent")
 public class EntityLeashBreakEvent extends EntityEvent {
@@ -33,14 +33,14 @@ public class EntityLeashBreakEvent extends EntityEvent {
         /** The holder died or left the world: a knot broken, a player dead or gone. */
         HOLDER_GONE,
         /**
-         * The entity came back from a save or another dimension and its holder wasn't there to take the lead up
-         * again: a player who logged off, a holder left behind in the old dimension. {@link #getHolder()} is empty.
+         * The entity came back from a save, or went through a portal, and its holder didn't turn up within five
+         * seconds to take the lead up again: a player who logged off, a holder left behind in the old dimension. A
+         * portal alone is no break: the entity's copy keeps the lead, and fires this only if the holder never follows.
+         * {@link #getHolder()} is empty.
          */
         HOLDER_NOT_FOUND,
-        /** The leashed entity died, despawned or was destroyed. */
+        /** The leashed entity died, despawned or was destroyed (a boat broken, a pig struck into a zombified piglin). */
         ENTITY_GONE,
-        /** The leashed entity went through a portal; its copy in the new dimension is free. */
-        CHANGED_DIMENSION,
         /** The leashed entity started riding something. */
         MOUNTED
     }

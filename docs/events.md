@@ -118,7 +118,7 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | `EntityMountEvent`, `EntityDismountEvent` | riding, including vehicles and a player carrying another | `startRiding`, `stopRiding` |
 | `EntityLeashEvent` | an entity is put on a lead, or a held one tied to a fence; the new holder (a player or the knot) | `Entity.interact`, `LeadItem.bindPlayerMobs`, the knot's `interact`; bridges for mods' leads |
 | `EntityUnleashEvent` | an actor takes a lead off | `Entity.interact`; bridges for mods' own unleashing |
-| `EntityLeashBreakEvent` *(after)* | a lead comes off with nobody choosing it; reason (distance, holder gone, holder never found after loading, entity gone, changed dimension, mounted) | `Leashable.dropLeash`, judged from the state; boats and trader llamas just before they leave; a saved holder given up on |
+| `EntityLeashBreakEvent` *(after)* | a lead comes off with nobody choosing it; reason (distance, holder gone, holder never found after loading or a portal, entity gone, mounted) | `Leashable.dropLeash`, judged from the state; boats and trader llamas just before they leave; `setRemoved` for a leashed entity destroyed; a saved holder given up on |
 | `EntityShearEvent` | a ready mob is sheared, by hand or by a dispenser; the shears | `IShearable` checks in `ShearsItem` and the dispenser's shears; bridges for auto-shearers |
 | `EntityTameEvent`, `EntityBreedEvent` | | `tame`, `spawnChildFromBreeding` |
 | `EntityTransformEvent` | an entity becomes another (zombie villager, a mod's conversion) | `convertTo` |

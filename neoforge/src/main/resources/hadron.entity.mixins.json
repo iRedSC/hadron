@@ -12,6 +12,7 @@
     "DeathMessageMixin",
     "EntityLeashMixin",
     "EntityMixin",
+    "EntityRemovedLeashMixin",
     "EntityTypeMixin",
     "EntityVelocityMixin",
     "FishingHookMixin",

@@ -16,6 +16,11 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.portal.DimensionTransition;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.Leashable;
 import net.minecraft.world.entity.EntityType;
@@ -38,7 +43,8 @@ public final class LeashBreakTests {
         t.registerEvents(new Listener() {
             @EventHandler
             void on(EntityLeashBreakEvent e) {
-                if (e.getEntity() instanceof Leashable l && l.isLeashed()) {
+                // A destroyed entity keeps its leash data in vanilla; being gone is what takes the lead off.
+                if (e.getEntity() instanceof Leashable l && l.isLeashed() && !e.getEntity().isRemoved()) {
                     heard.early().add(e.getEntity() + " still held by " + l.getLeashHolder());
                 }
                 heard.events().add(e);
@@ -158,5 +164,37 @@ public final class LeashBreakTests {
         t.assertEquals(Reason.HOLDER_NOT_FOUND, e.getReason(), "the reason");
         t.assertTrue(e.getHolder().isEmpty(), "a holder never loaded can't be named, but got " + e.getHolder());
         t.assertTrue(cow.getLeashData() == null, "the cow's leash data should be cleared");
+    }
+
+    @HadronTest
+    @Covers(EntityLeashBreakEvent.class)
+    void aLeashedMobDiscardedWithoutDroppingItsLeadIsGone(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 0));
+        cow.setLeashedTo(alice.player(), true);
+        Heard heard = listen(t);
+        cow.discard(); // as a conversion does: no dropLeash on the way out
+        t.tick();
+        EntityLeashBreakEvent e = one(t, heard);
+        t.assertEquals(Reason.ENTITY_GONE, e.getReason(), "the reason");
+        t.assertEquals(Optional.of(alice.player()), e.getHolder(), "the former holder");
+    }
+
+    @HadronTest
+    @Covers(EntityLeashBreakEvent.class)
+    void aPortalHandsTheLeadToTheCopyAndReportsNothingYet(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 0));
+        cow.setLeashedTo(alice.player(), true);
+        ServerLevel nether = t.server().getLevel(Level.NETHER);
+        if (nether == null) throw new AssertionError("the test server has no nether");
+        Heard heard = listen(t);
+        Entity copy = cow.changeDimension(new DimensionTransition(nether, new Vec3(0.5, 64, 0.5), Vec3.ZERO, 0, 0,
+                DimensionTransition.DO_NOTHING));
+        t.tick();
+        t.assertTrue(copy instanceof Leashable l && l.getLeashData() != null,
+                "the copy in the nether should carry the lead on, waiting for its holder, but has " + copy);
+        t.assertEquals(List.of(), heard.events(), "breaks reported for the portal itself");
+        if (copy != null) copy.discard(); // the test cleans up the overworld only
     }
 }
