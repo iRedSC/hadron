@@ -16,6 +16,7 @@ import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.LeadItem;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.phys.AABB;
 import org.jspecify.annotations.Nullable;
@@ -58,6 +59,11 @@ public final class EntityHandling {
             return false;
         }
         return Hooks.post(new EntityLeashEvent(entity, knot, EntityActors.of(player))).isCancelled();
+    }
+
+    /** Whether any mob is tied to the knot, looked for the way the knot itself looks for them. */
+    public static boolean holdsAny(LeashFenceKnotEntity knot) {
+        return !LeadItem.leashableInArea(knot.level(), knot.getPos(), l -> l.getLeashHolder() == knot).isEmpty();
     }
 
     /** Whether a knot is already on the fence, found the way {@code LeashFenceKnotEntity.getOrCreateKnot} looks. */

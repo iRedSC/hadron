@@ -288,6 +288,32 @@ public final class HandlingTests {
 
     @HadronTest
     @Covers(EntityLeashEvent.class)
+    void aRefusedTieKeepsTheKnotIfAListenerTiedSomethingElseToIt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        BlockPos fence = t.pos(2, 0, 0);
+        t.setBlock(fence, Blocks.OAK_FENCE.defaultBlockState());
+        Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 2));
+        cow.setLeashedTo(alice.player(), true);
+        Cow bobs = spawn(t, EntityType.COW, t.pos(0, 0, 2));
+        bobs.setLeashedTo(bob.player(), true);
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityLeashEvent e) {
+                if (e.getEntity() != cow) return;
+                bobs.setLeashedTo(e.getHolder(), true); // a plugin moving bob's cow to the same knot
+                e.setCancelled(true);
+            }
+        });
+        alice.useBlock(fence, Direction.UP);
+        t.tick();
+        t.assertEquals(alice.player(), cow.getLeashHolder(), "the refused cow's leash holder");
+        t.assertTrue(bobs.getLeashHolder() instanceof LeashFenceKnotEntity knot && !knot.isRemoved(),
+                "bob's cow should stay tied to a knot still on the fence, but is held by " + bobs.getLeashHolder());
+    }
+
+    @HadronTest
+    @Covers(EntityLeashEvent.class)
     void aRefusedTieKeepsAKnotThatWasAlreadyThere(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos fence = t.pos(2, 0, 0);

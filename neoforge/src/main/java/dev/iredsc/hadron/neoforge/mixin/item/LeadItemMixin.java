@@ -28,8 +28,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /**
  * Clicking a fence with a lead ties every mob the player holds to a knot there; each tie is asked on its own. The
  * click remembers whether it made the knot and how many ties went through, so a click whose ties were all refused
- * takes down only the knot it made, makes no placement sound or attach vibration, and ends failed
- * ({@code ServerPlayerGameModeClickMixin}) so no advancement counts it.
+ * makes no placement sound or attach vibration, and ends failed ({@code ServerPlayerGameModeClickMixin}) so no
+ * advancement counts it. A knot it made is taken down if nothing is tied to it at the end, whatever listeners did.
  */
 @Mixin(LeadItem.class)
 abstract class LeadItemMixin {
@@ -75,15 +75,14 @@ abstract class LeadItemMixin {
         return tied.get() > 0;
     }
 
-    /** A click whose ties were all refused takes down the knot it made, and ends failed so nothing counts it. */
+    /** A knot the click made that holds nothing comes down; a click whose ties were all refused ends failed. */
     @Inject(method = "bindPlayerMobs", at = @At("RETURN"), cancellable = true)
     private static void hadron$endRefused(Player player, Level level, BlockPos pos,
             CallbackInfoReturnable<InteractionResult> cir, @Share("made") LocalRef<LeashFenceKnotEntity> made,
             @Share("tied") LocalIntRef tied, @Share("refused") LocalIntRef refused) {
-        if (tied.get() > 0 || refused.get() == 0) return;
         LeashFenceKnotEntity knot = made.get();
-        if (knot != null) knot.discard();
-        cir.setReturnValue(InteractionResult.FAIL);
+        if (knot != null && !EntityHandling.holdsAny(knot)) knot.discard();
+        if (tied.get() == 0 && refused.get() > 0) cir.setReturnValue(InteractionResult.FAIL);
     }
 
     /**
