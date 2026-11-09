@@ -191,7 +191,9 @@ public final class AreaTests {
 
             @EventHandler
             void on(EntitySpawnEvent e) {
-                if (e.getEntity() instanceof IronGolem) seen.add(e);
+                if (!(e.getEntity() instanceof IronGolem)) return;
+                seen.add(e);
+                handlersActedAs.add(Actors.currentOr(Actor.Unknown.INSTANCE));
             }
         });
         t.setBlock(base.above(2), Blocks.CARVED_PUMPKIN);
@@ -201,8 +203,8 @@ public final class AreaTests {
         t.assertEquals(1L, operations.stream().distinct().count(), "a build's blocks and creature should be one "
                 + "operation, but were " + operations);
         Actor plugin = new Actor.Server("plugin " + t.plugin().getName());
-        t.assertEquals(List.of(plugin, plugin, plugin), handlersActedAs,
-                "who a handler acts as for an outsider's build: nobody is behind it, so its plugin");
+        t.assertEquals(List.of(plugin, plugin, plugin, plugin), handlersActedAs,
+                "who a handler acts as for an outsider's build and its golem: nobody is behind it, so its plugin");
     }
 
     /** Alice asleep in a bed at pos(1, 0, 0), at night, inside a watched area. Returns the overworld's time to put back. */

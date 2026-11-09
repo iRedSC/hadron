@@ -636,6 +636,18 @@ public final class BlockHooks {
     }
 
     /**
+     * Opens an outsider's build operation for making {@code entity}'s spawn event, when {@code entity} is the creature
+     * of an allowed build nobody is behind; 0 otherwise. The caller exits it before posting, so the spawn is in the
+     * build's operation while the handlers see nobody behind it and act as themselves, as for the build's blocks.
+     */
+    public static long enterOutsidersBuild(Entity entity) {
+        Context ctx = CONTEXT.get();
+        dev.iredsc.hadron.api.actor.Operation operation = ctx.buildOperation;
+        if (!ctx.building || ctx.builtCreature != entity || operation == null || ctx.buildScope != 0) return 0;
+        return Actors.Port.enter(operation.actor(), operation);
+    }
+
+    /**
      * A pattern build is about to clear its blocks to make {@code creature}. Each block's removal is asked about now,
      * before any is cleared, as the change the generic hook would report; true when one was refused, and then nothing
      * is cleared and nothing spawns. Allowed, the clearing that follows is not asked about again.
@@ -679,10 +691,7 @@ public final class BlockHooks {
                 }
                 if (Hooks.post(event).isCancelled()) return true;
             }
-            // Allowed: the outsider's operation is open for the creature's spawn.
-            if (ctx.buildOperation != null && ctx.buildScope == 0) {
-                ctx.buildScope = Actors.Port.enter(ctx.buildOperation.actor(), ctx.buildOperation);
-            }
+            // Allowed: the creature's spawn joins the outsider's operation through enterOutsidersBuild.
         }
         if (ctx.building) {
             ctx.built = blocks;
