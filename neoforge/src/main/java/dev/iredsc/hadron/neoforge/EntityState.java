@@ -39,6 +39,11 @@ public interface EntityState {
 
     void hadron$setDying(boolean dying);
 
+    /** Why the lead is coming off, while a caller that knows runs {@code dropLeash}; {@link LeashDrop#UNSAID} otherwise. */
+    LeashDrop hadron$leashDrop();
+
+    void hadron$setLeashDrop(LeashDrop cause);
+
     /** Experience held back from the vanilla drop until the death event decides it. */
     int hadron$deathExp();
 
