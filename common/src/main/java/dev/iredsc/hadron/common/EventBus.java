@@ -2,6 +2,8 @@ package dev.iredsc.hadron.common;
 
 import dev.iredsc.hadron.checks.Nondeterministic;
 import org.jspecify.annotations.Nullable;
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.EventHandler;
@@ -44,6 +46,8 @@ final class EventBus {
         private final MethodHandle handle;
         private final String where;
         private final Logger log;
+        /** Who the handler acts as when the event came with nobody behind it: its plugin. */
+        private final Actor.Server owner;
         private final AtomicInteger failures = new AtomicInteger();
         /** Admission and removal share this monitor; calls already in progress are tracked until they finish. */
         private boolean removed;
@@ -51,7 +55,7 @@ final class EventBus {
         private @Nullable EventBus bus;
 
         private Subscription(Listener listener, Class<?> type, EventHandler h, long order, MethodHandle handle,
-                String where, Logger log) {
+                String where, Logger log, String plugin) {
             this.listener = listener;
             this.type = type;
             this.priority = h.priority();
@@ -60,6 +64,7 @@ final class EventBus {
             this.handle = handle;
             this.where = where;
             this.log = log;
+            this.owner = new Actor.Server("plugin " + plugin);
         }
 
         void remove() {
@@ -101,6 +106,8 @@ final class EventBus {
                 if (removed) return;
                 calls.merge(thread, 1, Integer::sum);
             }
+            // A handler's own changes are its plugin's when nobody else is behind the event, as its tasks are.
+            long scope = Actors.isEmpty() ? Actors.Port.enter(owner) : 0;
             try {
                 if (ignoreCancelled && event instanceof Cancellable c && c.isCancelled()) return;
                 handle.invoke(event);
@@ -114,6 +121,7 @@ final class EventBus {
                     log.error(where + " has thrown " + n + " times; latest failure", t);
                 }
             } finally {
+                if (scope != 0) Actors.Port.exit(scope);
                 synchronized (this) {
                     int remaining = calls.getOrDefault(thread, 1) - 1;
                     if (remaining == 0) calls.remove(thread);
@@ -329,6 +337,6 @@ final class EventBus {
         } catch (IllegalAccessException | RuntimeException e) {
             throw new IllegalArgumentException(where + " can't be called by Hadron: " + e.getMessage(), e);
         }
-        return new Subscription(listener, params[0], h, registered.incrementAndGet(), handle, where, log);
+        return new Subscription(listener, params[0], h, registered.incrementAndGet(), handle, where, log, plugin);
     }
 }

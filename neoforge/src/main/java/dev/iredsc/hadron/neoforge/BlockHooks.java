@@ -146,8 +146,6 @@ public final class BlockHooks {
         long[] tickScopes = new long[8];
         int ticks;
         int forming;
-        /** Vanilla working on its own ({@link #enterVanillaWork}): a write in it is nobody's, never an outsider's. */
-        int vanillaWork;
         @Nullable Actor fertilizer;
         /**
          * A container's emptying a command put off until its replacement is decided (see {@link #deferClear}), and
@@ -306,10 +304,11 @@ public final class BlockHooks {
 
     /**
      * {@link Actor.Unknown} for a change at {@code pos} that nobody is behind, inside an area a plugin watches; null
-     * elsewhere, or while vanilla works on its own or a block ticks. The caller has already found no actor.
+     * elsewhere, or while vanilla works on its own ({@link AreaIndex#enterVanillaWork}) or a block ticks. The caller
+     * has already found no actor.
      */
     private static @Nullable Actor outsider(Context ctx, ServerLevel level, BlockPos pos) {
-        return ctx.vanillaWork == 0 && !ctx.ticking() && AreaIndex.covers(level, pos) ? Actor.Unknown.INSTANCE : null;
+        return !ctx.ticking() && AreaIndex.outsiderAt(level, pos) ? Actor.Unknown.INSTANCE : null;
     }
 
     /** Whether a registry id is outside the minecraft namespace; unregistered things count as modded. */
@@ -386,29 +385,6 @@ public final class BlockHooks {
         ctx.tickActors[i] = null;
         ctx.tickScopes[i] = 0;
         if (scope != 0) Actors.Port.exit(scope);
-    }
-
-    /**
-     * Whether vanilla's own work in {@code level} needs marking with {@link #enterVanillaWork}: only where an area
-     * could see it. One field read, so a level nobody watches pays nothing more per tick.
-     */
-    public static boolean watched(Level level) {
-        return level instanceof AreaLevel areas && areas.hadron$areas() != null;
-    }
-
-    /**
-     * Around vanilla working on its own with nobody on the stack: a vanilla block entity's tick or block event (a
-     * furnace lighting, a piston pushing), a fluid's tick (water drying up), a new chunk settling, the dragon fight.
-     * That stays silent even in a watched area: it is vanilla, already reported by its own events where it matters,
-     * not a mod with a missing bridge. A mod's code that vanilla calls from inside it is silent too; its writes would
-     * need their own bridge.
-     */
-    public static void enterVanillaWork() {
-        CONTEXT.get().vanillaWork++;
-    }
-
-    public static void exitVanillaWork() {
-        CONTEXT.get().vanillaWork--;
     }
 
     /** Weather forming snow and ice: every change while it runs is a {@link BlockFormEvent}. */
@@ -682,6 +658,10 @@ public final class BlockHooks {
                 BlockState before = block.getState();
                 Kind kind = actorKind(before, air);
                 if (who == null || kind == null || !Hooks.listens(type(kind))) continue;
+                // The first watched block makes it an outsider's build: its blocks and creature are one operation.
+                if (ctx.building && ctx.buildOperation == null) {
+                    ctx.buildOperation = dev.iredsc.hadron.api.actor.Operation.begin(who);
+                }
                 if (Hooks.post(build(kind, server, BlockChange.of(server, block.getPos(), before, air), NO_POS, who))
                         .isCancelled()) {
                     return true;

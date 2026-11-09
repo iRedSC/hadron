@@ -2,7 +2,7 @@ package dev.iredsc.hadron.neoforge.mixin.block;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
-import dev.iredsc.hadron.neoforge.BlockHooks;
+import dev.iredsc.hadron.neoforge.AreaIndex;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.chunk.LevelChunk;
 import org.spongepowered.asm.mixin.Final;
@@ -18,15 +18,11 @@ public abstract class LevelChunkMixin {
 
     @WrapMethod(method = "postProcessGeneration")
     private void hadron$settle(Operation<Void> original) {
-        if (!BlockHooks.watched(level)) {
-            original.call();
-            return;
-        }
-        BlockHooks.enterVanillaWork();
+        AreaIndex work = AreaIndex.enterVanillaWork(level);
         try {
             original.call();
         } finally {
-            BlockHooks.exitVanillaWork();
+            AreaIndex.exitVanillaWork(work);
         }
     }
 }

@@ -1,7 +1,11 @@
 package dev.iredsc.hadron.neoforge.mixin.world;
 
 import org.jspecify.annotations.Nullable;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Actors;
+import dev.iredsc.hadron.neoforge.EntityActors;
 import dev.iredsc.hadron.neoforge.PlayerState;
 import dev.iredsc.hadron.neoforge.WorldHooks;
 import net.minecraft.server.level.ServerPlayer;
@@ -74,6 +78,20 @@ public abstract class ServerPlayerMixin implements PlayerState {
         hadron$flySpeed = old.hadron$flySpeed;
         hadron$walkSpeed = old.hadron$walkSpeed;
         hadron$level = old.hadron$level;
+    }
+
+    /**
+     * A player's own tick runs from their connection, not the level's entity loop, so it is pushed here: what it
+     * changes (frosted ice under Frost Walker, a portal built on arrival) is the player's doing.
+     */
+    @WrapMethod(method = "doTick")
+    private void hadron$tickAsPlayer(Operation<Void> original) {
+        long scope = Actors.Port.enter(EntityActors.of(hadron$self()));
+        try {
+            original.call();
+        } finally {
+            Actors.Port.exit(scope);
+        }
     }
 
     @Inject(method = "doTick", at = @At("HEAD"))

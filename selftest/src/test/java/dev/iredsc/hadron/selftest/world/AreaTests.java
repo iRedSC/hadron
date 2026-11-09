@@ -3,9 +3,12 @@ package dev.iredsc.hadron.selftest.world;
 import dev.iredsc.hadron.api.Hadron;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
+import dev.iredsc.hadron.api.event.ActionEvent;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
+import dev.iredsc.hadron.api.event.block.BlockIgniteEvent;
+import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.world.Area;
 import dev.iredsc.hadron.api.world.Areas;
 import dev.iredsc.hadron.api.world.WorldCreator;
@@ -16,22 +19,29 @@ import dev.iredsc.hadron.selftest.SelfTestPlugin;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
+import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.enchantment.Enchantments;
+import net.minecraft.world.level.GameRules;
+import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.FurnaceBlock;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.entity.FurnaceBlockEntity;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
 
@@ -153,6 +163,154 @@ public final class AreaTests {
         t.assertTrue(t.level().getEntitiesOfClass(IronGolem.class, new AABB(base).inflate(4)).isEmpty(),
                 "a golem whose build was refused should not spawn");
         t.assertEquals(1, unknown(seen).size(), "the Unknown events for the one watched block of the golem");
+    }
+
+    @HadronTest
+    @Covers(value = Areas.class, method = "watch")
+    void aGolemBuiltIntoAWatchedAreaByNobodyIsOneOperation(TestContext t) {
+        BlockPos base = t.pos(0, 0, 0);
+        t.setBlock(base, Blocks.IRON_BLOCK);
+        t.setBlock(base.above(), Blocks.IRON_BLOCK);
+        t.setBlock(base.above().west(), Blocks.IRON_BLOCK);
+        t.setBlock(base.above().east(), Blocks.IRON_BLOCK);
+        Areas.watch(t.plugin(), t.level(), BoundingBox.fromCorners(base.above().west(), base.above().east()));
+        List<ActionEvent> seen = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockEvent e) {
+                seen.add(e);
+            }
+
+            @EventHandler
+            void on(EntitySpawnEvent e) {
+                if (e.getEntity() instanceof IronGolem) seen.add(e);
+            }
+        });
+        t.setBlock(base.above(2), Blocks.CARVED_PUMPKIN);
+        List<Long> operations = seen.stream().filter(e -> e.getActor() instanceof Actor.Unknown)
+                .map(e -> e.getOperation().id()).toList();
+        t.assertEquals(4, operations.size(), "Unknown events for the three watched blocks and the golem: " + seen);
+        t.assertEquals(1L, operations.stream().distinct().count(), "a build's blocks and creature should be one "
+                + "operation, but were " + operations);
+    }
+
+    @HadronTest(timeout = 400)
+    @Covers(value = Areas.class, method = "watch")
+    void sleepersWakeInAWatchedAreaThatRefusesOutsiders(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ServerLevel overworld = t.server().overworld(); // test worlds take their time from it
+        long time = overworld.getDayTime();
+        BlockPos foot = t.pos(1, 0, 0);
+        try {
+            overworld.setDayTime(18000);
+            t.setBlock(foot, Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST)
+                    .setValue(BedBlock.PART, BedPart.FOOT));
+            t.setBlock(foot.east(), Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST)
+                    .setValue(BedBlock.PART, BedPart.HEAD));
+            t.tick(); // the sky darkens on the world's tick
+            Areas.watch(t.plugin(), t.level(), around(t));
+            List<BlockEvent> strangers = new ArrayList<>();
+            t.registerEvents(new Listener() {
+                @EventHandler
+                void on(BlockEvent e) {
+                    if (!(e.getActor() instanceof Actor.Unknown)) return;
+                    strangers.add(e);
+                    if (e instanceof dev.iredsc.hadron.api.event.Cancellable c) c.setCancelled(true);
+                }
+            });
+            alice.useBlock(foot);
+            t.assertTrue(alice.player().isSleeping(), "alice should be asleep");
+            t.await("the night to pass", () -> !alice.player().isSleeping(), 300);
+            t.assertFalse(t.getBlock(foot).getValue(BedBlock.OCCUPIED), "the bed should be free once alice woke");
+            t.assertTrue(strangers.isEmpty(), "waking in the morning fired as Actor.Unknown: " + strangers);
+        } finally {
+            overworld.setDayTime(time);
+        }
+    }
+
+    /** Records Unknown block events and refuses them, as protection would. */
+    private static List<BlockEvent> refuseStrangers(TestContext t) {
+        List<BlockEvent> strangers = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockEvent e) {
+                if (!(e.getActor() instanceof Actor.Unknown)) return;
+                strangers.add(e);
+                if (e instanceof dev.iredsc.hadron.api.event.Cancellable c) c.setCancelled(true);
+            }
+        });
+        return strangers;
+    }
+
+    /** Not a test: an event the test fires itself, with nobody behind it. */
+    public static final class Nudge extends dev.iredsc.hadron.api.event.Event {}
+
+    @HadronTest
+    @Covers(value = Areas.class, method = "watch")
+    void aPluginsOwnHandlerForAnEventWithNobodyBehindItIsTheServer(TestContext t) {
+        Areas.watch(t.plugin(), t.level(), around(t));
+        List<BlockEvent> seen = record(t, false);
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(Nudge e) {
+                t.setBlock(t.pos(1, 1, 1), Blocks.STONE);
+            }
+        });
+        t.plugin().getServer().getPluginManager().callEvent(new Nudge());
+        t.assertEquals(1, seen.size(), "the number of block events for the handler's write");
+        t.assertEquals(new Actor.Server("plugin " + t.plugin().getName()), seen.get(0).getActor(),
+                "who a plugin's handler acts as when nobody is behind the event");
+    }
+
+    @HadronTest(timeout = 400)
+    @Covers(value = Areas.class, method = "watch")
+    void frostWalkerInAWatchedAreaIsThePlayers(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ItemStack boots = new ItemStack(Items.DIAMOND_BOOTS);
+        boots.enchant(t.level().registryAccess().registryOrThrow(Registries.ENCHANTMENT)
+                .getHolderOrThrow(Enchantments.FROST_WALKER), 2);
+        alice.player().setItemSlot(EquipmentSlot.FEET, boots);
+        // A two-block bedrock path through water: walking it freezes the water beside it.
+        BlockPos beside = t.pos(1, -1, 1);
+        t.setBlock(beside, Blocks.WATER);
+        t.setBlock(t.pos(-1, -1, 1), Blocks.WATER);
+        Areas.watch(t.plugin(), t.level(), BoundingBox.fromCorners(t.pos(-4, -1, -4), t.pos(4, 4, 4)));
+        List<BlockEvent> strangers = refuseStrangers(t);
+        alice.moveTo(t.pos(0, 0, 1));
+        t.await("the water beside alice to freeze", () -> t.getBlock(beside).is(Blocks.FROSTED_ICE), 40);
+        t.assertTrue(strangers.isEmpty(), "Frost Walker fired as Actor.Unknown: " + strangers);
+    }
+
+    @HadronTest(timeout = 600)
+    @Covers(value = Areas.class, method = "watch")
+    void lavaSettingFireInAWatchedAreaIsNature(TestContext t) {
+        t.player("alice"); // random ticks run only near a player
+        t.server().overworld().setWeatherParameters(24000, 0, false, false);
+        t.setBlock(t.pos(0, 0, 0), Blocks.LAVA);
+        for (int x = -1; x <= 1; x++) {
+            for (int z = -1; z <= 1; z++) t.setBlock(t.pos(x, 2, z), Blocks.OAK_PLANKS);
+        }
+        Areas.watch(t.plugin(), t.level(), around(t));
+        List<BlockEvent> strangers = refuseStrangers(t);
+        List<BlockIgniteEvent> fires = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockIgniteEvent e) {
+                fires.add(e);
+            }
+        });
+        GameRules.IntegerValue rule = t.server().getGameRules().getRule(GameRules.RULE_RANDOMTICKING);
+        int old = rule.get();
+        rule.set(1024, t.server());
+        try {
+            // Vanilla ticks lava twice per random pick, through its block and directly; several fires give both a turn.
+            t.await("lava to set fire eight times", () -> fires.size() + strangers.size() >= 8, 400);
+        } finally {
+            rule.set(old, t.server());
+        }
+        t.assertTrue(strangers.isEmpty(), "lava's fire fired as Actor.Unknown: " + strangers);
+        t.assertTrue(fires.get(0).getActor() instanceof Actor.Nature, "lava's fire should be nature's, but was "
+                + fires.get(0).getActor());
     }
 
     @HadronTest
