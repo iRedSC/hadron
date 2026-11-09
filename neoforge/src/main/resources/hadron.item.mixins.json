@@ -27,6 +27,7 @@
     "ItemEntityAccessor",
     "ItemEntityMixin",
     "ItemStackMixin",
+    "LeadItemMixin",
     "MerchantResultSlotAccessor",
     "MobEquipMixin",
     "MobMixin",
@@ -34,6 +35,8 @@
     "ResultSlotMixin",
     "ServerGamePacketListenerImplMixin",
     "ServerPlayerMixin",
+    "ShearsDispenseItemBehaviorMixin",
+    "ShearsItemMixin",
     "VanillaInventoryCodeHooksMixin"
   ],
   "injectors": {
