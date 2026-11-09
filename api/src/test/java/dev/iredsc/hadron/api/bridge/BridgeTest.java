@@ -109,8 +109,8 @@ class BridgeTest {
         claimAs("twice_bridge", "twice_a");
         IllegalStateException e = assertThrows(IllegalStateException.class,
                 () -> claimAs("twice_bridge", "twice_b"));
-        assertEquals("twice_bridge already claimed twice_a: claim every mod a bridge covers in one call, such as "
-                + "Bridge.claim(\"twice_b\", \"othermod\")", e.getMessage());
+        assertEquals("twice_bridge already claimed twice_a: claim every mod a bridge covers in one call, "
+                + "Bridge.claim(\"twice_a\", \"twice_b\")", e.getMessage());
         assertFalse(Bridge.isInstalled("twice_b"));
     }
 

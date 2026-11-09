@@ -64,10 +64,12 @@ public interface Acceptance {
     void assertUnchanged(String step);
 
     /**
-     * That every change in the area since the last {@link #mark} was reported by an event that went through: each
-     * block by a block event covering it, each block's inventory by an inventory event for it or a block event at it,
-     * each entity that appeared or left (other than dropped items, experience and falling blocks, whose contents
-     * come from a change reported elsewhere) by an entity event for it. A failure names each unreported change: an
+     * That every change in the area since the last {@link #mark} was reported by an event that went through and says
+     * it changed that thing: each block by a block event whose change there isn't empty (a use or a crack changes
+     * nothing), each block's inventory by an inventory change for it, each entity that appeared by its spawn or
+     * transformation, one that left by its removal, death or transformation, and one whose health changed by its
+     * damage or healing. Dropped items, experience and falling blocks are exempt, since their contents come from a
+     * change reported elsewhere; an entity walking in or out isn't a change. A failure names each unreported change: an
      * interception gap the bridge closes by firing the core event (docs/bridge-hooks.md). A block event explains its
      * block's inventory only when the block itself changed. Fails too when nothing changed, since then the step
      * proves nothing: the machine never ran.
@@ -75,8 +77,9 @@ public interface Acceptance {
     void assertEveryChangeSeen(String step);
 
     /**
-     * That every event in the area since the last {@link #mark} acts for {@code player}. A failure names each event
-     * that doesn't, and whether it is an attribution gap ({@link Actor.Unknown}, or an actor with no owner) or acts
+     * That every event in the area since the last {@link #mark} acts for {@code player}, leaving out the server's and
+     * nature's (water flowing, gravel falling), which are nobody's to attribute. A failure names each event that
+     * doesn't, and whether it is an attribution gap ({@link Actor.Unknown}, or an actor with no owner) or acts
      * for someone else.
      */
     void assertActingFor(TestPlayer player, String step);

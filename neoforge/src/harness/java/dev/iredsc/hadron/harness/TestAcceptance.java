@@ -233,7 +233,12 @@ final class TestAcceptance implements Acceptance, Listener {
             if (!stacks.isEmpty()) contents.put(pos, stacks);
         }
         Map<UUID, AcceptanceDiff.Thing> entities = new LinkedHashMap<>();
-        for (Entity e : level.getEntities((Entity) null, AABB.of(box), e -> !(e instanceof ServerPlayer))) {
+        Set<UUID> world = new HashSet<>();
+        for (Entity e : level.getAllEntities()) world.add(e.getUUID());
+        // By the block it stands in, as where() places its events, so an entity counted here is one whose events
+        // protection and the logger hear.
+        for (Entity e : level.getEntities((Entity) null, AABB.of(box).inflate(1),
+                e -> !(e instanceof ServerPlayer) && box.isInside(e.blockPosition()))) {
             ItemStack stack = e instanceof ItemEntity item ? item.getItem().copy() : ItemStack.EMPTY;
             boolean consequence = e instanceof ItemEntity || e instanceof ExperienceOrb
                     || e instanceof FallingBlockEntity;
@@ -250,7 +255,7 @@ final class TestAcceptance implements Acceptance, Listener {
             stacks.add(tp.player().containerMenu.getCarried().copy());
             players.put(tp.name(), stacks);
         }
-        return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, players);
+        return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, world, players);
     }
 
     /**

@@ -9,7 +9,13 @@ import dev.iredsc.hadron.test.Acceptance;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
+import dev.iredsc.hadron.api.event.block.BlockUseEvent;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
@@ -164,5 +170,70 @@ public final class AcceptanceKitTests {
         area.trust(alice).mark();
         String why = failure(t, () -> area.assertEveryChangeSeen("a machine that never started"));
         t.assertTrue(why.contains("nothing in the area changed since the last mark"), why);
+    }
+
+    @HadronTest
+    void aUseThatChangesNothingExplainsNoChange(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos pos = t.pos(2, 0, 0);
+        t.setBlock(pos, Blocks.STONE);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        // Alice right-clicks a machine, which then rewrites its own block with no event.
+        BlockState stone = Blocks.STONE.defaultBlockState();
+        Hadron.getPluginManager().callEvent(new BlockUseEvent(t.level(), pos, stone, InteractionHand.MAIN_HAND,
+                ItemStack.EMPTY, new BlockHitResult(Vec3.atCenterOf(pos), Direction.UP, pos, false),
+                new Actor.Player(alice.player())));
+        t.level().getChunkAt(pos).setBlockState(pos, Blocks.GOLD_BLOCK.defaultBlockState(), false);
+        String why = failure(t, () -> area.assertEveryChangeSeen("a machine rewriting itself after a use"));
+        t.assertTrue(why.contains("gold_block"), why);
+    }
+
+    @HadronTest
+    void aChangeMadeDespiteACancelIsNamedWhenCheckingAnAllowedStep(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos pos = t.pos(2, 0, 0);
+        t.setBlock(pos, Blocks.STONE);
+        Acceptance area = t.acceptance(around(t));
+        Hadron.getPluginManager().callEvent(new BlockBreakEvent(t.level(), pos, Blocks.STONE.defaultBlockState(),
+                Blocks.AIR.defaultBlockState(), new Actor.Player(bob.player())));
+        t.level().getChunkAt(pos).setBlockState(pos, Blocks.AIR.defaultBlockState(), false);
+        String why = failure(t, () -> area.assertEveryChangeSeen("a bridge ignoring a cancel"));
+        t.assertTrue(why.contains("fired here but was cancelled, and the change happened anyway"), why);
+    }
+
+    @HadronTest
+    void anAllowedChangeInARefusedStepIsNamedAsLetThrough(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos stone = t.pos(2, 0, 0);
+        t.setBlock(stone, Blocks.STONE);
+        alice.hold(new ItemStack(Items.IRON_PICKAXE));
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        alice.breakBlock(stone);
+        t.tick(2);
+        String why = failure(t, () -> area.assertUnchanged("a step expected to be refused"));
+        t.assertTrue(why.contains("BlockBreakEvent") && why.contains("went through: protection let it"), why);
+    }
+
+    @HadronTest
+    void anEntityWalkingOutIsNotAChangeAndNatureIsNobodysToAttribute(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos stone = t.pos(2, 0, 0);
+        t.setBlock(stone, Blocks.STONE);
+        Pig pig = EntityType.PIG.create(t.level());
+        pig.moveTo(t.pos(2, 0, 1).getX() + 0.5, t.pos(2, 0, 1).getY(), t.pos(2, 0, 1).getZ() + 0.5);
+        t.level().addFreshEntity(pig);
+        alice.hold(new ItemStack(Items.IRON_PICKAXE));
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        alice.breakBlock(stone);
+        pig.teleportTo(t.pos(-5, 0, 0).getX() + 0.5, t.pos(-5, 0, 0).getY(), t.pos(-5, 0, 0).getZ() + 0.5);
+        // Gravel falling or water flowing in the area: the world on its own.
+        Hadron.getPluginManager().callEvent(new BlockBreakEvent(t.level(), t.pos(3, 0, 0),
+                Blocks.AIR.defaultBlockState(), Blocks.AIR.defaultBlockState(), Actor.Nature.INSTANCE));
+        t.tick(2);
+        area.assertEveryChangeSeen("alice breaking stone while a pig wanders off");
+        area.assertActingFor(alice, "alice breaking stone beside nature at work");
     }
 }

@@ -205,6 +205,7 @@ final class HadronCommand {
         if (!d.getDepend().isEmpty()) line.accept("Needs " + String.join(", ", d.getDepend()));
         if (!d.getModDepend().isEmpty()) line.accept("Needs mods " + String.join(", ", d.getModDepend()));
         if (!d.getApiDepend().isEmpty()) line.accept("Uses the API of " + String.join(", ", d.getApiDepend()));
+        if (!d.getBridgeDepend().isEmpty()) line.accept("Needs the bridges for " + String.join(", ", d.getBridgeDepend()));
         if (!d.getSoftDepend().isEmpty()) line.accept("Uses, if present: " + String.join(", ", d.getSoftDepend()));
         line.accept("Built for Minecraft " + d.getMinecraft());
         line.accept("Jar: plugins/" + e.jar.getName());

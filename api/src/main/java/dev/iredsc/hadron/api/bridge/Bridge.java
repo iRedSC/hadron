@@ -84,9 +84,11 @@ public final class Bridge {
         synchronized (CLAIMS) {
             for (Bridge existing : CLAIMS.values()) {
                 if (existing.owner.equals(claimant)) {
+                    Set<String> all = new LinkedHashSet<>(existing.mods);
+                    all.addAll(wanted);
                     throw new IllegalStateException(claimant + " already claimed " + String.join(", ", existing.mods)
-                            + ": claim every mod a bridge covers in one call, such as Bridge.claim(\"" + modId
-                            + "\", \"othermod\")");
+                            + ": claim every mod a bridge covers in one call, Bridge.claim(\""
+                            + String.join("\", \"", all) + "\")");
                 }
             }
             for (String mod : wanted) {

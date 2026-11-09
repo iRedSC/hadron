@@ -3,7 +3,14 @@ package dev.iredsc.hadron.harness;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
+import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
+import dev.iredsc.hadron.api.event.entity.EntityDeathEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
+import dev.iredsc.hadron.api.event.entity.EntityRegainHealthEvent;
+import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
+import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
+import dev.iredsc.hadron.api.event.entity.EntityTransformEvent;
+import dev.iredsc.hadron.api.event.entity.HangingBreakEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -18,6 +25,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -31,8 +39,10 @@ final class AcceptanceDiff {
      */
     record Thing(UUID id, String type, ItemStack stack, float health, BlockPos pos, boolean consequence) {}
 
+    /** {@code world}: every entity in the test's world, so one walking in or out of the area isn't taken for new or gone. */
     record Snapshot(Map<BlockPos, BlockState> blocks, Map<BlockPos, String> blockEntities,
-            Map<BlockPos, List<ItemStack>> contents, Map<UUID, Thing> entities, Map<String, List<ItemStack>> players) {}
+            Map<BlockPos, List<ItemStack>> contents, Map<UUID, Thing> entities, Set<UUID> world,
+            Map<String, List<ItemStack>> players) {}
 
     /** One difference, and what an event would have to name to explain it. */
     private record Change(String text, Predicate<Seen> explains) {}
@@ -67,6 +77,8 @@ final class AcceptanceDiff {
     static List<String> notActingFor(UUID player, String name, List<Seen> seen) {
         List<String> out = new ArrayList<>();
         for (Seen s : seen) {
+            // The server is trusted and nature is the world on its own: neither is anyone's to attribute.
+            if (s.actor() instanceof Actor.Server || s.actor() instanceof Actor.Nature) continue;
             Optional<UUID> who = s.actor().actingFor();
             if (who.isPresent() && who.get().equals(player)) continue;
             if (s.actor() instanceof Actor.Unknown) {
@@ -119,7 +131,7 @@ final class AcceptanceDiff {
         for (BlockPos pos : containers) {
             String diff = stacks(before.contents().getOrDefault(pos, List.of()), after.contents().getOrDefault(pos, List.of()));
             if (diff == null) continue;
-            Predicate<Seen> inventory = s -> s.event() instanceof InventoryEvent i && holds(i, pos);
+            Predicate<Seen> inventory = s -> s.event() instanceof InventoryChangeEvent i && holds(i, pos);
             // A block event explains its inventory only when the block itself went or changed (a chest broken);
             // otherwise a machine could report one state change and then move items unreported.
             boolean blockChanged = !Objects.equals(before.blocks().get(pos), after.blocks().get(pos))
@@ -132,22 +144,34 @@ final class AcceptanceDiff {
         for (UUID id : ids) {
             Thing was = before.entities().get(id), is = after.entities().get(id);
             String what;
+            Predicate<Seen> explains;
             if (was == null && is != null) {
-                if (is.consequence() && !consequencesToo) continue;
+                if (is.consequence() && !consequencesToo || before.world().contains(id)) continue;
                 what = "a " + is.type() + describe(is) + " appeared at " + at(is.pos());
+                Thing born = is;
+                explains = s -> s.event() instanceof EntitySpawnEvent e && e.getEntity().getUUID().equals(id)
+                        || s.event() instanceof EntityTransformEvent x && born.type().equals(
+                                String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(x.getTransformedType())))
+                                && x.getEntity().blockPosition().closerThan(born.pos(), 2);
             } else if (was != null && is == null) {
-                if (was.consequence() && !consequencesToo) continue;
+                if (was.consequence() && !consequencesToo || after.world().contains(id)) continue;
                 what = "the " + was.type() + describe(was) + " at " + at(was.pos()) + " left";
+                explains = s -> names(s, id) && (s.event() instanceof EntityRemoveEvent
+                        || s.event() instanceof EntityDeathEvent || s.event() instanceof HangingBreakEvent
+                        || s.event() instanceof EntityTransformEvent);
             } else if (was != null && is != null && !ItemStack.matches(was.stack(), is.stack())) {
                 if (is.consequence() && !consequencesToo) continue;
                 what = "the " + is.type() + " at " + at(is.pos()) + " went from " + was.stack() + " to " + is.stack();
+                explains = s -> names(s, id);
             } else if (was != null && is != null && was.health() != is.health()) {
                 what = "the " + is.type() + " at " + at(is.pos()) + " went from " + was.health() + " to "
                         + is.health() + " health";
+                explains = s -> names(s, id) && (s.event() instanceof EntityDamageEvent
+                        || s.event() instanceof EntityRegainHealthEvent);
             } else {
                 continue;
             }
-            out.add(new Change(what, s -> s.event() instanceof EntityEvent ee && ee.getEntity().getUUID().equals(id)));
+            out.add(new Change(what, explains));
         }
         if (consequencesToo) {
             for (Map.Entry<String, List<ItemStack>> e : before.players().entrySet()) {
@@ -163,14 +187,23 @@ final class AcceptanceDiff {
         return out;
     }
 
+    /** Events that report a change at that position: a block used or damaged there changes nothing, so explains nothing. */
     private static Predicate<Seen> blockAt(BlockPos pos) {
-        return s -> s.event() instanceof BlockEvent b && covers(b, pos);
+        return s -> s.event() instanceof BlockEvent b && changes(b, pos);
     }
 
-    private static boolean covers(BlockEvent b, BlockPos pos) {
-        if (b.getPos().equals(pos)) return true;
-        for (BlockChange change : b.getBlocks()) if (change.getPos().equals(pos)) return true;
+    private static boolean changes(BlockEvent b, BlockPos pos) {
+        for (BlockChange change : b.getBlocks()) {
+            if (change.getPos().equals(pos)
+                    && (change.isChanged() || !change.getBeforeData().equals(change.getAfterData()))) {
+                return true;
+            }
+        }
         return false;
+    }
+
+    private static boolean names(Seen s, UUID id) {
+        return s.event() instanceof EntityEvent e && e.getEntity().getUUID().equals(id);
     }
 
     private static boolean holds(InventoryEvent event, BlockPos pos) {
