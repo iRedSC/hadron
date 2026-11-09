@@ -46,7 +46,6 @@ abstract class EntityMixin implements EntityState {
     @Unique private double hadron$trackedZ;
     @Unique private boolean hadron$converted;
     @Unique private boolean hadron$dying;
-    @Unique private boolean hadron$interactRefused;
     @Unique private int hadron$deathExp;
 
     @Override
@@ -117,16 +116,6 @@ abstract class EntityMixin implements EntityState {
     @Override
     public void hadron$setDying(boolean dying) {
         hadron$dying = dying;
-    }
-
-    @Override
-    public boolean hadron$interactRefused() {
-        return hadron$interactRefused;
-    }
-
-    @Override
-    public void hadron$setInteractRefused(boolean refused) {
-        hadron$interactRefused = refused;
     }
 
     @Override

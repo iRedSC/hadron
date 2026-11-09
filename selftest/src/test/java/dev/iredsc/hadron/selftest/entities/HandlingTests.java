@@ -163,6 +163,33 @@ public final class HandlingTests {
     }
 
     @HadronTest
+    @Covers(EntityLeashEvent.class)
+    void aTieRefusedInsideAnAllowedLeashDoesNotFailIt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Frog frog = spawn(t, EntityType.FROG, t.pos(2, 0, 0));
+        BlockPos fence = t.pos(0, 0, 2);
+        t.setBlock(fence, Blocks.OAK_FENCE.defaultBlockState());
+        Cow cow = spawn(t, EntityType.COW, t.pos(0, 0, 3));
+        cow.setLeashedTo(alice.player(), true);
+        alice.hold(new ItemStack(Items.LEAD));
+        UseOnContext tie = new UseOnContext(alice.player(), InteractionHand.MAIN_HAND,
+                new BlockHitResult(Vec3.atCenterOf(fence), Direction.UP, fence, false));
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityLeashEvent e) {
+                if (e.getEntity() == cow) {
+                    e.setCancelled(true);
+                } else {
+                    alice.player().getMainHandItem().useOn(tie); // a plugin tying the player's other mobs meanwhile
+                }
+            }
+        });
+        alice.interact(frog);
+        t.assertEquals(alice.player(), frog.getLeashHolder(), "the frog's leash holder");
+        t.assertTrue(frogLeashCounted(t, alice), "a leash should count even when a tie refused during it did not");
+    }
+
+    @HadronTest
     @Covers(EntityUnleashEvent.class)
     void aRefusedUnleashWithShearsInHandDoesNotShear(TestContext t) {
         TestPlayer alice = t.player("alice");

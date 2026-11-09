@@ -10,7 +10,6 @@ import com.llamalad7.mixinextras.sugar.ref.LocalBooleanRef;
 import com.llamalad7.mixinextras.sugar.ref.LocalIntRef;
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
 import dev.iredsc.hadron.neoforge.EntityHandling;
-import dev.iredsc.hadron.neoforge.EntityState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.world.InteractionResult;
@@ -84,7 +83,6 @@ abstract class LeadItemMixin {
         if (tied.get() > 0 || refused.get() == 0) return;
         LeashFenceKnotEntity knot = made.get();
         if (knot != null) knot.discard();
-        ((EntityState) player).hadron$setInteractRefused(true);
         cir.setReturnValue(InteractionResult.FAIL);
     }
 
