@@ -39,11 +39,11 @@ public abstract class BoundTickingBlockEntityMixin {
             return;
         }
         if (hadron$origin == 1) {
-            AreaIndex work = AreaIndex.enterVanillaWork(server);
+            AreaIndex.enterVanillaWork(server);
             try {
                 original.call(ticker, level, pos, state, blockEntity);
             } finally {
-                AreaIndex.exitVanillaWork(work);
+                AreaIndex.exitVanillaWork(server);
             }
             return;
         }

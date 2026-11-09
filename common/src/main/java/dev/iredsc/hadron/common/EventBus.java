@@ -4,6 +4,7 @@ import dev.iredsc.hadron.checks.Nondeterministic;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
+import dev.iredsc.hadron.api.event.ActionEvent;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.EventHandler;
@@ -46,7 +47,7 @@ final class EventBus {
         private final MethodHandle handle;
         private final String where;
         private final Logger log;
-        /** Who the handler acts as when the event came with nobody behind it: its plugin. */
+        /** Who the handler acts as when the event names nobody and nobody is on the stack: its plugin. */
         private final Actor.Server owner;
         private final AtomicInteger failures = new AtomicInteger();
         /** Admission and removal share this monitor; calls already in progress are tracked until they finish. */
@@ -64,7 +65,7 @@ final class EventBus {
             this.handle = handle;
             this.where = where;
             this.log = log;
-            this.owner = new Actor.Server("plugin " + plugin);
+            this.owner = PluginActors.of(plugin);
         }
 
         void remove() {
@@ -106,8 +107,10 @@ final class EventBus {
                 if (removed) return;
                 calls.merge(thread, 1, Integer::sum);
             }
-            // A handler's own changes are its plugin's when nobody else is behind the event, as its tasks are.
-            long scope = Actors.isEmpty() ? Actors.Port.enter(owner) : 0;
+            // A handler acts for whoever is behind the event (an Unknown change's reaction is an outsider's too), and
+            // as its own plugin when nobody is, as its tasks do.
+            long scope = Actors.isEmpty()
+                    ? Actors.Port.enter(event instanceof ActionEvent action ? action.getActor() : owner) : 0;
             try {
                 if (ignoreCancelled && event instanceof Cancellable c && c.isCancelled()) return;
                 handle.invoke(event);

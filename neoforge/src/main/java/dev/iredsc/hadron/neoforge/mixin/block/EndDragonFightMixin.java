@@ -18,11 +18,11 @@ public abstract class EndDragonFightMixin {
 
     @WrapMethod(method = "tick")
     private void hadron$fight(Operation<Void> original) {
-        AreaIndex work = AreaIndex.enterVanillaWork(level);
+        AreaIndex.enterVanillaWork(level);
         try {
             original.call();
         } finally {
-            AreaIndex.exitVanillaWork(work);
+            AreaIndex.exitVanillaWork(level);
         }
     }
 }

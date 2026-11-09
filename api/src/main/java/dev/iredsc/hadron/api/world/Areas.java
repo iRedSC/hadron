@@ -44,7 +44,10 @@ public final class Areas {
         return backend().watch(plugin, level, box);
     }
 
-    /** Whether any plugin watches this position: a change there with nobody behind it fires as Unknown. */
+    /**
+     * Whether any plugin watches this position: a change there with nobody behind it fires as Unknown, unless it is
+     * vanilla working on its own (a furnace, a piston, water flowing).
+     */
     public static boolean isWatched(ServerLevel level, BlockPos pos) {
         return backend().isWatched(level, pos);
     }

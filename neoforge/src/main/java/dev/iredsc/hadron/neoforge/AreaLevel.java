@@ -7,4 +7,9 @@ public interface AreaLevel {
     @Nullable AreaIndex hadron$areas();
 
     void hadron$setAreas(@Nullable AreaIndex areas);
+
+    /** How deep vanilla's own work runs in this level now ({@link AreaIndex#enterVanillaWork}). */
+    int hadron$vanillaWork();
+
+    void hadron$setVanillaWork(int depth);
 }

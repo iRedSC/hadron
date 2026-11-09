@@ -194,37 +194,53 @@ public final class AreaTests {
                 + "operation, but were " + operations);
     }
 
+    /** Alice asleep in a bed at pos(1, 0, 0), at night, inside a watched area. Returns the overworld's time to put back. */
+    private static long asleepInAWatchedArea(TestContext t, TestPlayer alice) {
+        ServerLevel overworld = t.server().overworld(); // test worlds take their time from it
+        long time = overworld.getDayTime();
+        overworld.setDayTime(18000);
+        BlockPos foot = t.pos(1, 0, 0);
+        t.setBlock(foot, Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST)
+                .setValue(BedBlock.PART, BedPart.FOOT));
+        t.setBlock(foot.east(), Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST)
+                .setValue(BedBlock.PART, BedPart.HEAD));
+        t.tick(); // the sky darkens on the world's tick
+        Areas.watch(t.plugin(), t.level(), around(t));
+        alice.useBlock(foot);
+        t.assertTrue(alice.player().isSleeping(), "alice should be asleep");
+        return time;
+    }
+
     @HadronTest(timeout = 400)
     @Covers(value = Areas.class, method = "watch")
     void sleepersWakeInAWatchedAreaThatRefusesOutsiders(TestContext t) {
         TestPlayer alice = t.player("alice");
-        ServerLevel overworld = t.server().overworld(); // test worlds take their time from it
-        long time = overworld.getDayTime();
-        BlockPos foot = t.pos(1, 0, 0);
+        long time = asleepInAWatchedArea(t, alice);
         try {
-            overworld.setDayTime(18000);
-            t.setBlock(foot, Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST)
-                    .setValue(BedBlock.PART, BedPart.FOOT));
-            t.setBlock(foot.east(), Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST)
-                    .setValue(BedBlock.PART, BedPart.HEAD));
-            t.tick(); // the sky darkens on the world's tick
-            Areas.watch(t.plugin(), t.level(), around(t));
-            List<BlockEvent> strangers = new ArrayList<>();
-            t.registerEvents(new Listener() {
-                @EventHandler
-                void on(BlockEvent e) {
-                    if (!(e.getActor() instanceof Actor.Unknown)) return;
-                    strangers.add(e);
-                    if (e instanceof dev.iredsc.hadron.api.event.Cancellable c) c.setCancelled(true);
-                }
-            });
-            alice.useBlock(foot);
-            t.assertTrue(alice.player().isSleeping(), "alice should be asleep");
+            List<BlockEvent> strangers = refuseStrangers(t);
             t.await("the night to pass", () -> !alice.player().isSleeping(), 300);
-            t.assertFalse(t.getBlock(foot).getValue(BedBlock.OCCUPIED), "the bed should be free once alice woke");
+            t.assertFalse(t.getBlock(t.pos(1, 0, 0)).getValue(BedBlock.OCCUPIED), "the bed should be free once alice "
+                    + "woke");
             t.assertTrue(strangers.isEmpty(), "waking in the morning fired as Actor.Unknown: " + strangers);
         } finally {
-            overworld.setDayTime(time);
+            t.server().overworld().setDayTime(time);
+        }
+    }
+
+    @HadronTest
+    @Covers(value = Areas.class, method = "watch")
+    void aSleeperLeavingTheGameFreesTheirBedInAWatchedArea(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        long time = asleepInAWatchedArea(t, alice);
+        try {
+            List<BlockEvent> strangers = refuseStrangers(t);
+            alice.disconnect();
+            t.tick();
+            t.assertFalse(t.getBlock(t.pos(1, 0, 0)).getValue(BedBlock.OCCUPIED), "the bed should be free once alice "
+                    + "left");
+            t.assertTrue(strangers.isEmpty(), "leaving the game asleep fired as Actor.Unknown: " + strangers);
+        } finally {
+            t.server().overworld().setDayTime(time);
         }
     }
 
@@ -262,6 +278,23 @@ public final class AreaTests {
                 "who a plugin's handler acts as when nobody is behind the event");
     }
 
+    @HadronTest
+    @Covers(value = Areas.class, method = "watch")
+    void aPluginReactingToAnOutsidersChangeIsAnOutsiderToo(TestContext t) {
+        Areas.watch(t.plugin(), t.level(), around(t));
+        List<BlockEvent> seen = record(t, false);
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockEvent e) {
+                if (e.getPos().equals(t.pos(1, 1, 1))) t.setBlock(t.pos(2, 1, 1), Blocks.STONE);
+            }
+        });
+        t.setBlock(t.pos(1, 1, 1), Blocks.STONE);
+        t.assertEquals(2, seen.size(), "block events for the outsider's write and the handler's reaction: " + seen);
+        t.assertTrue(seen.get(1).getActor() instanceof Actor.Unknown, "a handler reacting to an outsider's change "
+                + "acts for the outsider, so protection still refuses it, but was " + seen.get(1).getActor());
+    }
+
     @HadronTest(timeout = 400)
     @Covers(value = Areas.class, method = "watch")
     void frostWalkerInAWatchedAreaIsThePlayers(TestContext t) {
@@ -276,9 +309,12 @@ public final class AreaTests {
         t.setBlock(t.pos(-1, -1, 1), Blocks.WATER);
         Areas.watch(t.plugin(), t.level(), BoundingBox.fromCorners(t.pos(-4, -1, -4), t.pos(4, 4, 4)));
         List<BlockEvent> strangers = refuseStrangers(t);
+        List<BlockEvent> seen = record(t, false);
         alice.moveTo(t.pos(0, 0, 1));
         t.await("the water beside alice to freeze", () -> t.getBlock(beside).is(Blocks.FROSTED_ICE), 40);
         t.assertTrue(strangers.isEmpty(), "Frost Walker fired as Actor.Unknown: " + strangers);
+        List<Actor> freezers = seen.stream().filter(e -> e.getPos().equals(beside)).map(BlockEvent::getActor).toList();
+        t.assertEquals(List.of(new Actor.Player(alice.player())), freezers, "who froze the water beside alice");
     }
 
     @HadronTest(timeout = 600)

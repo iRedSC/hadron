@@ -12,6 +12,8 @@ import org.spongepowered.asm.mixin.Unique;
 public abstract class AreasServerLevelMixin implements AreaLevel {
     @Unique
     private @Nullable AreaIndex hadron$areas;
+    @Unique
+    private int hadron$vanillaWork;
 
     @Override
     public @Nullable AreaIndex hadron$areas() {
@@ -21,5 +23,15 @@ public abstract class AreasServerLevelMixin implements AreaLevel {
     @Override
     public void hadron$setAreas(@Nullable AreaIndex areas) {
         hadron$areas = areas;
+    }
+
+    @Override
+    public int hadron$vanillaWork() {
+        return hadron$vanillaWork;
+    }
+
+    @Override
+    public void hadron$setVanillaWork(int depth) {
+        hadron$vanillaWork = depth;
     }
 }

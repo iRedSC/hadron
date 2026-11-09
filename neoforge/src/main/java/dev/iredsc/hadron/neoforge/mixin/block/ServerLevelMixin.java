@@ -60,22 +60,11 @@ public abstract class ServerLevelMixin {
     @WrapMethod(method = "doBlockEvent")
     private boolean hadron$blockEvent(BlockEventData event, Operation<Boolean> original) {
         if (BlockHooks.modded(event.block())) return original.call(event);
-        AreaIndex work = AreaIndex.enterVanillaWork((ServerLevel) (Object) this);
+        AreaIndex.enterVanillaWork((ServerLevel) (Object) this);
         try {
             return original.call(event);
         } finally {
-            AreaIndex.exitVanillaWork(work);
-        }
-    }
-
-    /** Morning: every sleeper gets up and their beds are freed. Vanilla's own, though no entity is ticking. */
-    @WrapMethod(method = "wakeUpAllPlayers")
-    private void hadron$wakeUp(Operation<Void> original) {
-        AreaIndex work = AreaIndex.enterVanillaWork((ServerLevel) (Object) this);
-        try {
-            original.call();
-        } finally {
-            AreaIndex.exitVanillaWork(work);
+            AreaIndex.exitVanillaWork((ServerLevel) (Object) this);
         }
     }
 
@@ -86,11 +75,11 @@ public abstract class ServerLevelMixin {
             original.call(pos, fluid);
             return;
         }
-        AreaIndex work = AreaIndex.enterVanillaWork((ServerLevel) (Object) this);
+        AreaIndex.enterVanillaWork((ServerLevel) (Object) this);
         try {
             original.call(pos, fluid);
         } finally {
-            AreaIndex.exitVanillaWork(work);
+            AreaIndex.exitVanillaWork((ServerLevel) (Object) this);
         }
     }
 

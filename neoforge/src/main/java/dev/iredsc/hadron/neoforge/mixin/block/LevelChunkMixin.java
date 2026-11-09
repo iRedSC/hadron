@@ -18,11 +18,11 @@ public abstract class LevelChunkMixin {
 
     @WrapMethod(method = "postProcessGeneration")
     private void hadron$settle(Operation<Void> original) {
-        AreaIndex work = AreaIndex.enterVanillaWork(level);
+        AreaIndex.enterVanillaWork(level);
         try {
             original.call();
         } finally {
-            AreaIndex.exitVanillaWork(work);
+            AreaIndex.exitVanillaWork(level);
         }
     }
 }

@@ -29,8 +29,6 @@ public final class AreaIndex {
     private final Long2ObjectOpenHashMap<Watched[]> byChunk = new Long2ObjectOpenHashMap<>();
     private Watched[] wide = NONE;
     private final List<Watched> all = new ArrayList<>();
-    /** How deep vanilla's own work runs in this level now ({@link #enterVanillaWork}). */
-    private int vanillaWork;
 
     private AreaIndex(ServerLevel level) {
         this.level = level;
@@ -44,28 +42,27 @@ public final class AreaIndex {
 
     /** Whether a change at {@code pos} with nobody behind it is an outsider's: watched, and not vanilla working. */
     static boolean outsiderAt(ServerLevel level, BlockPos pos) {
-        AreaIndex index = ((AreaLevel) level).hadron$areas();
-        return index != null && index.vanillaWork == 0 && index.contains(pos);
+        AreaLevel areas = (AreaLevel) level;
+        AreaIndex index = areas.hadron$areas();
+        return index != null && areas.hadron$vanillaWork() == 0 && index.contains(pos);
     }
 
     /**
      * Around vanilla working on its own with nobody on the stack: a vanilla block entity's tick or block event (a
-     * furnace lighting, a piston pushing), a fluid's tick (water drying up), players waking in the morning, a new
+     * furnace lighting, a piston pushing), a fluid's tick (water drying up), a sleeper getting up (in the morning, or leaving the game), a new
      * chunk settling, the dragon fight. That stays silent even in a watched area: it is vanilla, already reported by
      * its own events where it matters, not a mod with a missing bridge. A mod's code that vanilla calls from inside it
      * is silent too; its writes would need their own bridge.
      *
-     * <p>Kept on the level's index, so a level nobody watches pays one field read and marks nothing. Returns what to
-     * hand {@link #exitVanillaWork}.
+     * <p>Kept on the level, not its index, so areas watched or closed mid-work don't lose count; a field
+     * increment, with no ThreadLocal.
      */
-    public static @Nullable AreaIndex enterVanillaWork(Level level) {
-        AreaIndex index = level instanceof AreaLevel areas ? areas.hadron$areas() : null;
-        if (index != null) index.vanillaWork++;
-        return index;
+    public static void enterVanillaWork(Level level) {
+        if (level instanceof AreaLevel areas) areas.hadron$setVanillaWork(areas.hadron$vanillaWork() + 1);
     }
 
-    public static void exitVanillaWork(@Nullable AreaIndex index) {
-        if (index != null) index.vanillaWork--;
+    public static void exitVanillaWork(Level level) {
+        if (level instanceof AreaLevel areas) areas.hadron$setVanillaWork(areas.hadron$vanillaWork() - 1);
     }
 
     private boolean contains(BlockPos pos) {
