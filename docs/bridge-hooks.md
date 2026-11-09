@@ -63,6 +63,7 @@ Core fires these for vanilla's paths; the bridge covers its mod's.
 | `BlockMoveEvent` | pistons, through its piston leaves | contraptions and ships within one level, as `StructureMoveEvent` |
 | `ArmorStandManipulateEvent` | right-clicking a stand, by players and fake players | the mod moving items on or off a stand in its own code (an editing screen) |
 | `EntityCaptureEvent` | water buckets, for vanilla's and mods' fish, axolotls and tadpoles | the mod storing an entity in an item, a block or a player's arms (mob catchers, jars, Carry On) |
+| `EntityLeashBreakEvent` | leads snapping from distance, a holder dying or removed, the entity dying, mounting or changing dimension | the mod dropping a lead in its own code for any other reason, as EntityUnleashEvent |
 | `EntityLeashEvent` | players putting a lead on a mob or boat, and tying the ones they hold to a fence | the mod leashing in its own code (its own lead items, leashing what it spawns) |
 | `EntityRemoveEvent` | /kill on entities that don't die (boats, minecarts, items, armor stands, the ender dragon) | the mod removing an entity in its own code: dismissing a summon, an instant kill, its own conversion |
 | `EntityShearEvent` | shears used by hand or by a dispenser, on any mob NeoForge can shear | the mod shearing in its own code (an auto-shearer, its own shears) |

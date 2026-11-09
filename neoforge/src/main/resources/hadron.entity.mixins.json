@@ -7,6 +7,7 @@
     "AbstractHorseMixin",
     "ArmorStandMixin",
     "BlockAttachedEntityMixin",
+    "BoatLeashMixin",
     "BucketableMixin",
     "DeathMessageMixin",
     "EntityLeashMixin",
@@ -17,6 +18,7 @@
     "HangingEntityItemMixin",
     "KillCommandMixin",
     "LeashFenceKnotEntityMixin",
+    "LeashableMixin",
     "LivingEntityMixin",
     "MobMixin",
     "PlayerInteractMixin",
@@ -25,7 +27,8 @@
     "ServerPlayerGameModeClickMixin",
     "ServerPlayerGameModeMixin",
     "ServerPlayerMixin",
-    "TamableAnimalMixin"
+    "TamableAnimalMixin",
+    "TraderLlamaLeashMixin"
   ],
   "injectors": {
     "defaultRequire": 1

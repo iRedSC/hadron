@@ -2,6 +2,7 @@ package dev.iredsc.hadron.neoforge;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.entity.ArmorStandManipulateEvent;
+import dev.iredsc.hadron.api.event.entity.EntityLeashBreakEvent;
 import dev.iredsc.hadron.api.event.entity.EntityLeashEvent;
 import dev.iredsc.hadron.api.event.entity.EntityShearEvent;
 import dev.iredsc.hadron.api.event.entity.EntityUnleashEvent;
@@ -50,6 +51,61 @@ public final class EntityHandling {
         boolean refused = Hooks.post(new EntityLeashEvent(entity, player, EntityActors.of(player))).isCancelled();
         if (refused) ItemHooks.resync(player); // the client used up its lead already
         return refused;
+    }
+
+    /**
+     * Runs {@code Leashable}'s one method that takes a lead off, and reports it as broken when it came off for a reason
+     * nobody chose. Asked before the drop, when the holder and the entity are still as they were.
+     */
+    public static void dropLeash(Entity entity, Runnable drop) {
+        if (!(entity.level() instanceof ServerLevel) || !(entity instanceof Leashable leashable)
+                || !Hooks.listens(EntityLeashBreakEvent.class)) {
+            drop.run();
+            return;
+        }
+        Entity holder = leashable.getLeashHolder();
+        EntityLeashBreakEvent.@Nullable Reason reason = holder == null ? null : breakReason(entity, holder);
+        drop.run();
+        if (holder != null && reason != null && !leashable.isLeashed()) {
+            Hooks.post(new EntityLeashBreakEvent(entity, holder, reason,
+                    EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
+        }
+    }
+
+    /**
+     * A boat or a trader's llama dropping its lead just before it leaves the world, which the state can't show yet:
+     * reported as {@link EntityLeashBreakEvent.Reason#ENTITY_GONE}, unless {@link #dropLeash} reports it already.
+     */
+    public static void dropLeashLeaving(Entity entity, Runnable drop) {
+        if (!(entity.level() instanceof ServerLevel) || !(entity instanceof Leashable leashable)
+                || !Hooks.listens(EntityLeashBreakEvent.class)) {
+            drop.run();
+            return;
+        }
+        Entity holder = leashable.getLeashHolder();
+        boolean reportedInside = holder == null || breakReason(entity, holder) != null;
+        drop.run();
+        if (holder != null && !reportedInside && !leashable.isLeashed()) {
+            Hooks.post(new EntityLeashBreakEvent(entity, holder, EntityLeashBreakEvent.Reason.ENTITY_GONE,
+                    EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
+        }
+    }
+
+    /**
+     * Why a lead is coming off, judged from the state alone; null when none of the reasons holds, which is a player or
+     * a mod taking it off on purpose. The order matters: a dead entity mounted on nothing is gone, not mounted.
+     */
+    static EntityLeashBreakEvent.@Nullable Reason breakReason(Entity entity, Entity holder) {
+        if (entity.getRemovalReason() == Entity.RemovalReason.CHANGED_DIMENSION) {
+            return EntityLeashBreakEvent.Reason.CHANGED_DIMENSION;
+        }
+        if (entity.isRemoved() || !entity.isAlive()) return EntityLeashBreakEvent.Reason.ENTITY_GONE;
+        if (holder.isRemoved() || !holder.isAlive()) return EntityLeashBreakEvent.Reason.HOLDER_GONE;
+        if (entity.isPassenger()) return EntityLeashBreakEvent.Reason.MOUNTED;
+        if (holder.level() == entity.level() && entity.distanceTo(holder) > Leashable.LEASH_TOO_FAR_DIST) {
+            return EntityLeashBreakEvent.Reason.DISTANCE;
+        }
+        return null;
     }
 
     /** A leashed entity the player holds is about to be tied to the knot; true leaves it with the player. */

@@ -117,7 +117,8 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | `EntityUseEvent` | an actor right-clicks an entity | `interact` |
 | `EntityMountEvent`, `EntityDismountEvent` | riding, including vehicles and a player carrying another | `startRiding`, `stopRiding` |
 | `EntityLeashEvent` | an entity is put on a lead, or a held one tied to a fence; the new holder (a player or the knot) | `Entity.interact`, `LeadItem.bindPlayerMobs`, the knot's `interact`; bridges for mods' leads |
-| `EntityUnleashEvent` | an actor takes a lead off; a lead breaking on its own isn't one: see "Not shipped yet" | `Entity.interact`; bridges for mods' own unleashing |
+| `EntityUnleashEvent` | an actor takes a lead off | `Entity.interact`; bridges for mods' own unleashing |
+| `EntityLeashBreakEvent` *(after)* | a lead comes off with nobody choosing it; reason (distance, holder gone, entity gone, changed dimension, mounted) | `Leashable.dropLeash`, judged from the state; boats and trader llamas just before they leave |
 | `EntityShearEvent` | a ready mob is sheared, by hand or by a dispenser; the shears | `IShearable` checks in `ShearsItem` and the dispenser's shears; bridges for auto-shearers |
 | `EntityTameEvent`, `EntityBreedEvent` | | `tame`, `spawnChildFromBreeding` |
 | `EntityTransformEvent` | an entity becomes another (zombie villager, a mod's conversion) | `convertTo` |
@@ -234,7 +235,6 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 Designed but not in `api`, because core can't yet fire them for every actor without breaking rule 7 or making a cancel unsafe. A plugin can't listen for them, so none of them can look like coverage.
 
 - Removal by expiry (a mob despawning, a timed summon, a temporary portal): will be an *(after)* event, so a cancel can't make it permanent. `EntityRemoveEvent` shipped without it, and core fires it only for `/kill` and buckets: refusing in Minecraft's one removal method could duplicate (a cancelled arrow pickup), so each cause needs its own hook.
-- A lead breaking on its own (stretched too far, its holder gone, the entity mounting or changing dimension): will be an *(after)* event, so a cancel can't leave an entity tied to nothing. `EntityUnleashEvent` shipped without it, and core fires it only for a player taking a lead off.
 - `EntityAttributeChangeEvent`, `EntityRelationshipChangeEvent`, `FoodLevelChangeEvent`: the vanilla classes that change don't know their entity.
 - `BiomeChangeEvent`: biome writes are too hot and scattered for one hook.
 - `ResourceTransferEvent` from the port's energy and fluid capabilities: no single point sees both ends; bridges fire it meanwhile.

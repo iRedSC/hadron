@@ -14,8 +14,9 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
  * An actor is about to take the lead off an entity. Bukkit's {@code PlayerUnleashEntityEvent}. Cancel it and the
  * entity stays on the lead and no lead drops.
  *
- * <p>Not fired when a lead breaks on its own: stretched too far, its holder gone (a knot broken, a player dead), the
- * entity mounting something or changing dimension. Those can't be refused without leaving an entity tied to nothing.
+ * <p>Not fired when a lead breaks on its own (stretched too far, its holder gone, the entity dead, mounted or moved to
+ * another dimension): that is {@link EntityLeashBreakEvent}, after the fact, since refusing would leave an entity tied
+ * to nothing.
  *
  * <p><b>Core fires it for a player taking the lead off an entity they hold.</b> A mod that unleashes in its own code
  * needs its bridge to fire this.
