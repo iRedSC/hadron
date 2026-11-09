@@ -8,6 +8,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.entity.EntityLeashBreakEvent;
 import dev.iredsc.hadron.api.event.entity.EntityLeashBreakEvent.Reason;
 import dev.iredsc.hadron.api.event.entity.EntityUnleashEvent;
+import dev.iredsc.hadron.selftest.platform.ModBus;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
@@ -27,7 +28,9 @@ import net.minecraft.world.entity.Leashable;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Cow;
 import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 
 /** Leads coming off with nobody choosing it: one after-the-fact event each, with the reason. */
@@ -179,6 +182,37 @@ public final class LeashBreakTests {
         t.tick();
         EntityLeashBreakEvent e = one(t, heard);
         t.assertEquals(Reason.ENTITY_GONE, e.getReason(), "the reason");
+        t.assertEquals(Optional.of(alice.player()), e.getHolder(), "the former holder");
+    }
+
+    @HadronTest
+    @Covers(EntityLeashBreakEvent.class)
+    void aLeadPutBackOnDuringTheDropStillReportsTheBreak(TestContext t) throws Exception {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 0));
+        cow.setLeashedTo(alice.player(), true);
+        BlockPos far = t.pos(16, 0, 0);
+        alice.player().teleportTo(far.getX() + 0.5, far.getY(), far.getZ() + 0.5); // past the ten blocks
+        Heard heard = listen(t);
+        // A mod that hands the cow to bob as the snapped lead drops.
+        try (AutoCloseable mod = ModBus.listen("net.neoforged.neoforge.event.entity.EntityJoinLevelEvent", event -> {
+            Object joined;
+            try {
+                joined = event.getClass().getMethod("getEntity").invoke(event);
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
+            if (joined instanceof ItemEntity item && item.getItem().is(Items.LEAD)) {
+                cow.setLeashedTo(bob.player(), true);
+            }
+        })) {
+            Leashable.tickLeash(cow);
+        }
+        t.assertEquals(bob.player(), cow.getLeashHolder(), "the cow's holder after the mod put a new lead on");
+        t.assertEquals(1, heard.events().size(), "the number of EntityLeashBreakEvents fired (" + heard.events() + ")");
+        EntityLeashBreakEvent e = heard.events().get(0); // fired with bob's new lead already on, so not one()
+        t.assertEquals(Reason.DISTANCE, e.getReason(), "the reason");
         t.assertEquals(Optional.of(alice.player()), e.getHolder(), "the former holder");
     }
 

@@ -56,8 +56,9 @@ public final class EntityHandling {
     /**
      * Runs {@code Leashable}'s one method that takes a lead off, and reports it as broken when it came off for a reason
      * nobody chose. The reason is what the caller said ({@link LeashDrop}), otherwise judged from the state before the
-     * drop, while the holder and the entity are still as they were. Never for an entity already removed (see
-     * {@link #reportsBreaks}).
+     * drop, while the holder and the entity are still as they were. A holder there means vanilla takes that lead off, so
+     * it is reported even if something puts a new lead on during the drop (a listener on the dropped lead's spawn).
+     * Never for an entity already removed (see {@link #reportsBreaks}).
      */
     public static void dropLeash(Entity entity, Runnable drop) {
         if (!(entity instanceof Leashable leashable) || !reportsBreaks(entity)) {
@@ -72,7 +73,7 @@ public final class EntityHandling {
                     case UNSAID -> breakReason(entity, holder);
                 };
         drop.run();
-        if (holder != null && reason != null && !leashable.isLeashed()) {
+        if (reason != null) {
             Hooks.post(new EntityLeashBreakEvent(entity, holder, reason,
                     EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
         }
