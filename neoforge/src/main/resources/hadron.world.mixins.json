@@ -7,6 +7,7 @@
     "AreasServerLevelMixin",
     "BuildContextsUnboundMixin",
     "CommandsMixin",
+    "EndPlatformFeatureMixin",
     "ExplosionAccessor",
     "ExplosionMixin",
     "ForcedChunkManagerMixin",

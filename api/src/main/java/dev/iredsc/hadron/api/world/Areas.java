@@ -47,6 +47,8 @@ public final class Areas {
     /**
      * Whether any plugin watches this position: a change there with nobody behind it fires as Unknown, unless it is
      * vanilla working on its own (a furnace, a piston, water flowing).
+     *
+     * @throws IllegalStateException if called off the server thread.
      */
     public static boolean isWatched(ServerLevel level, BlockPos pos) {
         return backend().isWatched(level, pos);

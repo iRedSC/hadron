@@ -49,8 +49,8 @@ public final class AreaIndex {
 
     /**
      * Around vanilla working on its own with nobody on the stack: a vanilla block entity's tick or block event (a
-     * furnace lighting, a piston pushing), a fluid's tick (water drying up), a sleeper getting up (in the morning, or leaving the game), a new
-     * chunk settling, the dragon fight. That stays silent even in a watched area: it is vanilla, already reported by
+     * furnace lighting, a piston pushing), a fluid's tick (water drying up), a sleeper getting up (in the morning, or leaving the game), a
+     * player's own tick, a portal or End platform built on arrival, a new chunk settling, the dragon fight. That stays silent even in a watched area: it is vanilla, already reported by
      * its own events where it matters, not a mod with a missing bridge. A mod's code that vanilla calls from inside it
      * is silent too; its writes would need their own bridge.
      *
@@ -98,8 +98,8 @@ public final class AreaIndex {
         }
     }
 
-    /** The level is unloading: every area in it closes. */
-    static void closeAll(ServerLevel level) {
+    /** The level is closing: every area in it closes. */
+    public static void closeAll(ServerLevel level) {
         AreaIndex index = ((AreaLevel) level).hadron$areas();
         if (index == null) return;
         for (Watched w : List.copyOf(index.all)) w.close();

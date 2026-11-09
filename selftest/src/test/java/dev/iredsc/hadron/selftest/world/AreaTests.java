@@ -42,6 +42,7 @@ import net.minecraft.world.level.block.FurnaceBlock;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.entity.FurnaceBlockEntity;
 import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.levelgen.feature.EndPlatformFeature;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.AABB;
 
@@ -175,10 +176,12 @@ public final class AreaTests {
         t.setBlock(base.above().east(), Blocks.IRON_BLOCK);
         Areas.watch(t.plugin(), t.level(), BoundingBox.fromCorners(base.above().west(), base.above().east()));
         List<ActionEvent> seen = new ArrayList<>();
+        List<Actor> handlersActedAs = new ArrayList<>();
         t.registerEvents(new Listener() {
             @EventHandler
             void on(BlockEvent e) {
                 seen.add(e);
+                handlersActedAs.add(Actors.currentOr(Actor.Unknown.INSTANCE));
             }
 
             @EventHandler
@@ -192,6 +195,9 @@ public final class AreaTests {
         t.assertEquals(4, operations.size(), "Unknown events for the three watched blocks and the golem: " + seen);
         t.assertEquals(1L, operations.stream().distinct().count(), "a build's blocks and creature should be one "
                 + "operation, but were " + operations);
+        Actor plugin = new Actor.Server("plugin " + t.plugin().getName());
+        t.assertEquals(List.of(plugin, plugin, plugin), handlersActedAs,
+                "who a handler acts as for an outsider's build: nobody is behind it, so its plugin");
     }
 
     /** Alice asleep in a bed at pos(1, 0, 0), at night, inside a watched area. Returns the overworld's time to put back. */
@@ -297,21 +303,21 @@ public final class AreaTests {
 
     @HadronTest
     @Covers(value = Areas.class, method = "watch")
-    void aPortalBuiltOnArrivalIsAskedOnceNotBlockByBlock(TestContext t) {
-        TestPlayer alice = t.player("alice");
-        List<BlockEvent> seen = record(t, true);
-        java.util.Optional<?> built;
-        try (Actors.Scope ignored = Actors.push(new Actor.Player(alice.player()))) {
-            built = t.level().getPortalForcer().createPortal(t.pos(0, 1, 0), Direction.Axis.X);
-        }
-        t.assertTrue(built.isPresent(), "the portal should be built");
-        t.assertTrue(seen.isEmpty(), "a portal's blocks shouldn't be asked one by one once it is allowed, but "
-                + seen.size() + " block events fired");
+    void anArrivalPortalOrEndPlatformBuiltInAWatchedAreaIsVanillas(TestContext t) {
+        Areas.watch(t.plugin(), t.level(), BoundingBox.fromCorners(t.pos(-16, -2, -16), t.pos(16, 8, 16)));
+        List<BlockEvent> strangers = refuseStrangers(t);
+        // Built by a traveller's tick in the world they left, so nobody is on this world's stack.
+        java.util.Optional<?> built = t.level().getPortalForcer().createPortal(t.pos(0, 1, 0), Direction.Axis.X);
+        t.assertTrue(built.isPresent(), "the arrival portal should be built");
+        BlockPos platform = t.pos(8, 3, 8);
+        EndPlatformFeature.createEndPlatform(t.level(), platform, true);
+        t.assertBlock(platform.below(), Blocks.OBSIDIAN);
+        t.assertTrue(strangers.isEmpty(), "an arrival portal or End platform fired as Actor.Unknown: " + strangers);
     }
 
     @HadronTest(timeout = 400)
     @Covers(value = Areas.class, method = "watch")
-    void frostWalkerInAWatchedAreaIsThePlayers(TestContext t) {
+    void frostWalkerInAWatchedAreaIsVanillas(TestContext t) {
         TestPlayer alice = t.player("alice");
         ItemStack boots = new ItemStack(Items.DIAMOND_BOOTS);
         boots.enchant(t.level().registryAccess().registryOrThrow(Registries.ENCHANTMENT)
@@ -323,12 +329,9 @@ public final class AreaTests {
         t.setBlock(t.pos(-1, -1, 1), Blocks.WATER);
         Areas.watch(t.plugin(), t.level(), BoundingBox.fromCorners(t.pos(-4, -1, -4), t.pos(4, 4, 4)));
         List<BlockEvent> strangers = refuseStrangers(t);
-        List<BlockEvent> seen = record(t, false);
         alice.moveTo(t.pos(0, 0, 1));
         t.await("the water beside alice to freeze", () -> t.getBlock(beside).is(Blocks.FROSTED_ICE), 40);
         t.assertTrue(strangers.isEmpty(), "Frost Walker fired as Actor.Unknown: " + strangers);
-        List<Actor> freezers = seen.stream().filter(e -> e.getPos().equals(beside)).map(BlockEvent::getActor).toList();
-        t.assertEquals(List.of(new Actor.Player(alice.player())), freezers, "who froze the water beside alice");
     }
 
     @HadronTest(timeout = 600)

@@ -159,7 +159,9 @@ public final class BlockHooks {
         /** The build's blocks as they were, once allowed; null before then or if it was refused. */
         @Nullable List<BlockSnapshot> built;
         @Nullable Entity builtCreature;
-        Actors.@Nullable Scope buildOperation;
+        /** The build's one operation, and the {@link Actors.Port#enter} handle holding it open (0 while not). */
+        dev.iredsc.hadron.api.actor.@Nullable Operation buildOperation;
+        long buildScope;
         /** Putting a refused build's blocks back, whose placing would otherwise find the pattern and build again. */
         boolean unbuilding;
         int lastUser = -1;
@@ -599,11 +601,13 @@ public final class BlockHooks {
         boolean outerBuilding = ctx.building;
         List<BlockSnapshot> outerBuilt = ctx.built;
         Entity outerCreature = ctx.builtCreature;
-        Actors.Scope outerOperation = ctx.buildOperation;
+        dev.iredsc.hadron.api.actor.Operation outerOperation = ctx.buildOperation;
+        long outerScope = ctx.buildScope;
         ctx.building = true;
         ctx.built = null;
         ctx.builtCreature = null;
         ctx.buildOperation = null;
+        ctx.buildScope = 0;
         try {
             work.run();
             List<BlockSnapshot> built = ctx.built;
@@ -622,11 +626,12 @@ public final class BlockHooks {
             }
         } finally {
             if (ctx.built != null) unsuppress(); // the build threw after it was allowed
-            if (ctx.buildOperation != null) ctx.buildOperation.close();
+            if (ctx.buildScope != 0) Actors.Port.exit(ctx.buildScope);
             ctx.building = outerBuilding;
             ctx.built = outerBuilt;
             ctx.builtCreature = outerCreature;
             ctx.buildOperation = outerOperation;
+            ctx.buildScope = outerScope;
         }
     }
 
@@ -649,7 +654,8 @@ public final class BlockHooks {
         Actor actor = current();
         if (ctx.suppressed <= ctx.suppressedFloor) {
             if (actor != null && ctx.building && ctx.buildOperation == null) {
-                ctx.buildOperation = dev.iredsc.hadron.api.actor.Operation.begin(actor);
+                ctx.buildOperation = dev.iredsc.hadron.api.actor.Operation.single(actor);
+                ctx.buildScope = Actors.Port.enter(actor, ctx.buildOperation);
             }
             BlockState air = Blocks.AIR.defaultBlockState();
             for (BlockSnapshot block : blocks) {
@@ -658,14 +664,24 @@ public final class BlockHooks {
                 BlockState before = block.getState();
                 Kind kind = actorKind(before, air);
                 if (who == null || kind == null || !Hooks.listens(type(kind))) continue;
-                // The first watched block makes it an outsider's build: its blocks and creature are one operation.
+                // The first watched block makes it an outsider's build: its blocks and creature are one operation,
+                // open only while each event is made, so the handlers see nobody behind it and act as themselves.
                 if (ctx.building && ctx.buildOperation == null) {
-                    ctx.buildOperation = dev.iredsc.hadron.api.actor.Operation.begin(who);
+                    ctx.buildOperation = dev.iredsc.hadron.api.actor.Operation.single(who);
                 }
-                if (Hooks.post(build(kind, server, BlockChange.of(server, block.getPos(), before, air), NO_POS, who))
-                        .isCancelled()) {
-                    return true;
+                long making = ctx.buildScope == 0 && ctx.buildOperation != null
+                        ? Actors.Port.enter(who, ctx.buildOperation) : 0;
+                BlockChangeEvent event;
+                try {
+                    event = build(kind, server, BlockChange.of(server, block.getPos(), before, air), NO_POS, who);
+                } finally {
+                    if (making != 0) Actors.Port.exit(making);
                 }
+                if (Hooks.post(event).isCancelled()) return true;
+            }
+            // Allowed: the outsider's operation is open for the creature's spawn.
+            if (ctx.buildOperation != null && ctx.buildScope == 0) {
+                ctx.buildScope = Actors.Port.enter(ctx.buildOperation.actor(), ctx.buildOperation);
             }
         }
         if (ctx.building) {

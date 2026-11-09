@@ -4,10 +4,10 @@ import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.iredsc.hadron.api.actor.Actor;
-import dev.iredsc.hadron.api.actor.Actors;
-import dev.iredsc.hadron.neoforge.EntityActors;
+import dev.iredsc.hadron.neoforge.AreaIndex;
 import dev.iredsc.hadron.neoforge.PlayerState;
 import dev.iredsc.hadron.neoforge.WorldHooks;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.entity.player.Abilities;
@@ -32,6 +32,8 @@ public abstract class ServerPlayerMixin implements PlayerState {
     @Unique private float hadron$flySpeed;
     @Unique private float hadron$walkSpeed;
     @Unique private int hadron$level = Integer.MIN_VALUE;
+    /** The level marked as vanilla working for the player's own tick, while it runs; null otherwise. */
+    @Unique private @Nullable ServerLevel hadron$tickLevel;
 
     @Unique
     private ServerPlayer hadron$self() {
@@ -81,17 +83,29 @@ public abstract class ServerPlayerMixin implements PlayerState {
     }
 
     /**
-     * A player's own tick runs from their connection, not the level's entity loop, so it is pushed here: what it
-     * changes (frosted ice under Frost Walker, a portal built on arrival) is the player's doing.
+     * A player's own tick runs from their connection with nobody on the stack. What it changes (frosted ice under
+     * Frost Walker, an End gateway's exit) is vanilla's own work, silent in a watched area as it is everywhere else.
      */
     @WrapMethod(method = "doTick")
-    private void hadron$tickAsPlayer(Operation<Void> original) {
-        long scope = Actors.Port.enter(EntityActors.of(hadron$self()));
+    private void hadron$tickAsVanilla(Operation<Void> original) {
+        ServerLevel level = hadron$tickLevel = hadron$self().serverLevel();
+        AreaIndex.enterVanillaWork(level);
         try {
             original.call();
         } finally {
-            Actors.Port.exit(scope);
+            AreaIndex.exitVanillaWork(java.util.Objects.requireNonNullElse(hadron$tickLevel, level));
+            hadron$tickLevel = null;
         }
+    }
+
+    /** A dimension change mid-tick: the rest of the tick (Frost Walker on arrival) is vanilla's in the new level. */
+    @Inject(method = "setServerLevel", at = @At("TAIL"))
+    private void hadron$tickMoves(ServerLevel level, CallbackInfo ci) {
+        ServerLevel from = hadron$tickLevel;
+        if (from == null || from == level) return;
+        AreaIndex.exitVanillaWork(from);
+        AreaIndex.enterVanillaWork(level);
+        hadron$tickLevel = level;
     }
 
     @Inject(method = "doTick", at = @At("HEAD"))

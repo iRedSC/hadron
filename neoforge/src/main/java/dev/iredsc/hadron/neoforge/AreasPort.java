@@ -9,13 +9,12 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.level.LevelEvent;
 import net.neoforged.neoforge.event.server.ServerStartingEvent;
 import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 
 /**
  * The NeoForge side of {@link Areas}. The areas themselves live on their levels ({@link AreaIndex}), so this holds
- * nothing: a level that unloads takes its areas with it, and a plugin that disables has its areas closed.
+ * nothing: a level that closes takes its areas with it ({@code AreasServerLevelMixin}), and a plugin that disables has its areas closed.
  */
 final class AreasPort implements Areas.Backend {
     private AreasPort() {}
@@ -25,9 +24,6 @@ final class AreasPort implements Areas.Backend {
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGH,
                 (ServerStartingEvent e) -> Areas.Port.install(new AreasPort()));
         NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> Areas.Port.install(null));
-        NeoForge.EVENT_BUS.addListener((LevelEvent.Unload e) -> {
-            if (e.getLevel() instanceof ServerLevel level) AreaIndex.closeAll(level);
-        });
         PluginHost.onPluginDisable(plugin -> {
             PluginHost host = Hooks.host();
             if (host == null) return;
