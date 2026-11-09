@@ -29,3 +29,6 @@ include("plugins:luckperms")
 
 // Hadron's own tests: a plugin whose src/test/java checks Hadron's events and APIs with the harness plugin authors use.
 include("selftest")
+
+// Hadron's benchmarks: a plugin whose src/test/java times Hadron's hot paths on a real server. Never part of build.
+include("bench")

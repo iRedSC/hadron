@@ -148,7 +148,7 @@ val releaseJarCheck = tasks.register("releaseJarCheck") {
     inputs.file(jar)
     inputs.files(testOutputs)
     val prefixes = listOf("dev/iredsc/hadron/harness/", "dev/iredsc/hadron/test/", "dev/iredsc/hadron/selftest/",
-            "dev/iredsc/hadron/examples/", "META-INF/hadron-tests.txt")
+            "dev/iredsc/hadron/bench/", "dev/iredsc/hadron/examples/", "META-INF/hadron-tests.txt")
     doLast {
         val forbidden = testOutputs.files.filter { it.isDirectory }.flatMap { root ->
             root.walkTopDown().filter { it.isFile }.map { it.relativeTo(root).invariantSeparatorsPath }.toList()

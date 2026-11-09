@@ -213,6 +213,12 @@ python3 scripts/regression_replay.py list           # entries and guards, nothin
 - **A new entry** is a manifest entry plus its patch: undo the fix by hand in `build/regression-replay/tree` and `save <id>`, or `refresh <id> --from-fix`. Undo only the fix: when a guard calls something the fix added, keep it and undo what it does.
 - It runs in the release workflow, after the release checks: every in-game entry boots a server, so a full replay took 22 minutes on a busy 4-core machine for 42 entries.
 
+## Benchmarks
+
+`bench/` is a plugin like `selftest` whose `@HadronTest`s time Hadron's hot paths instead of checking them, so they run on the same headless server with the same `TestContext`. `./gradlew :bench:chokepointBench` runs them, prints each case's median cost per call, and keeps the table in `bench/build/bench/chokepoint.txt`. A bench may read the clock: `bench` allows `@Nondeterministic` the way `selftest` does, and a timing printed for people is one of the uses it's meant for.
+
+Benches never run in `build` or `check`, because a timing says how busy the machine was, not whether Hadron is right. Each one still fails when the path it timed isn't the one it names (an event that should fire every call didn't, or one that shouldn't did), so a number never quietly comes from code that returned early.
+
 ## Mutation testing
 
 Coverage says every claim has a test; mutation testing says the tests would notice if the code were wrong. PIT makes hundreds of small breaks in `api`'s and `common`'s main code (a `<` turned into `<=`, a condition negated, a call removed, a return replaced by null or zero), runs the fast tests that reach each one, and counts the breaks no test noticed.

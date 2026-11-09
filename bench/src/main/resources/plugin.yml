@@ -1,0 +1,5 @@
+name: HadronBench
+version: ${version}
+minecraft: ${minecraft}
+main: dev.iredsc.hadron.bench.BenchPlugin
+description: Hadron's benchmarks; holds nothing but them.

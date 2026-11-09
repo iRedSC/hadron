@@ -30,7 +30,9 @@ While a modded block entity or entity ticks, core makes it the actor, with no ow
 
 ### The chokepoint cost
 
-`Level.setBlock` and its neighbours run millions of times. An event fires only when someone listens and either an actor is on the stack or the position matters to a listener (a region, a logged area). Otherwise a server without bridges would get slower for nothing. This gets a benchmark before any bridge is built.
+`Level.setBlock` and its neighbours run millions of times. An event fires only when someone listens and either an actor is on the stack or the position matters to a listener (a region, a logged area). Otherwise a server without bridges would get slower for nothing.
+
+`./gradlew :bench:chokepointBench` measures it (`bench/src/test/java/.../ChokepointBench.java`). **A whole `setBlock` costs about 1.2 µs. Hadron's hook adds 20 to 30 ns (2 to 3%) when it fires nothing, and about 250 ns (20%) when an actor is on the stack and an event goes to a listener.** A listener without an actor costs nothing more than nobody listening, because nothing fires yet. That path is what areas of interest will add a position lookup to, so the lookup has to fit in tens of nanoseconds to keep an unbridged write under about 5%. The figures come from one shared, busy machine and move about 30% between runs; compare cases within one run, not runs with each other.
 
 **Not built yet: listeners can't name the positions that matter to them.** Until they can, a write with no actor on the stack (an unbridged mod's queued task calling `setBlock` directly) fires nothing even while a region plugin listens, so it is an interception gap, not an `Unknown` action that protection could deny. Regions need this before they ship.
 
@@ -105,7 +107,7 @@ Two plugin integrations come with them:
 
 ## What's next
 
-1. The actor stack and core's events at their chokepoints, with the chokepoint benchmark.
+1. The actor stack and core's events at their chokepoints. The chokepoint benchmark is done ([above](#the-chokepoint-cost)).
 2. Areas of interest: a way for a listener to name the positions that matter to it, so actorless writes there fire as `Unknown` (see "The chokepoint cost").
 3. The coverage report and the official bridge list.
 4. The acceptance test as a kit any bridge can run.
