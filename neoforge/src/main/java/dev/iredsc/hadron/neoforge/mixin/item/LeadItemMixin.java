@@ -19,7 +19,6 @@ import net.minecraft.world.entity.Leashable;
 import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.LeadItem;
-import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.gameevent.GameEvent;
 import org.spongepowered.asm.mixin.Mixin;
@@ -93,9 +92,17 @@ abstract class LeadItemMixin {
      * A sneaking click uses the lead on the fence directly, and vanilla's {@code useOn} ignores what the binding said;
      * a click whose ties were all refused fails here too, before NeoForge counts it as a use of the lead.
      */
+    @WrapOperation(method = "useOn", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/item/LeadItem;bindPlayerMobs(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/level/Level;Lnet/minecraft/core/BlockPos;)Lnet/minecraft/world/InteractionResult;"))
+    private InteractionResult hadron$bind(Player player, Level level, BlockPos pos, Operation<InteractionResult> original,
+            @Share("bound") LocalRef<InteractionResult> bound) {
+        bound.set(original.call(player, level, pos));
+        return bound.get();
+    }
+
     @ModifyReturnValue(method = "useOn", at = @At("RETURN"))
-    private InteractionResult hadron$refusedUse(InteractionResult result, @Local(argsOnly = true) UseOnContext context) {
-        Player player = context.getPlayer();
-        return player != null && ((EntityState) player).hadron$interactRefused() ? InteractionResult.FAIL : result;
+    private InteractionResult hadron$refusedUse(InteractionResult result,
+            @Share("bound") LocalRef<InteractionResult> bound) {
+        return bound.get() == InteractionResult.FAIL ? InteractionResult.FAIL : result;
     }
 }

@@ -14,9 +14,8 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * A click on a block that a plugin refused inside the block or the item (every tie to a fence refused) ends there,
- * failed: vanilla would count a fence's success toward advancements, or try the lead in hand on the fence again.
- * Creative mode's stack restore after the item's use is skipped too, which is fine: a refused click changed nothing.
+ * A click on a block that a plugin refused inside the block (every tie to a fence refused) ends there, failed:
+ * vanilla would otherwise try the item in hand next, placing a block or tying the mobs again with a lead.
  */
 @Mixin(ServerPlayerGameMode.class)
 abstract class ServerPlayerGameModeClickMixin {
@@ -26,10 +25,8 @@ abstract class ServerPlayerGameModeClickMixin {
         ((EntityState) player).hadron$setInteractRefused(false);
     }
 
-    /** Right after the block's own use and the item's: a refusal inside either ends the click before it counts. */
-    @Inject(method = "useItemOn", cancellable = true, at = {
-            @At(value = "INVOKE", shift = At.Shift.AFTER, target = "Lnet/minecraft/world/level/block/state/BlockState;useWithoutItem(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/phys/BlockHitResult;)Lnet/minecraft/world/InteractionResult;"),
-            @At(value = "INVOKE", shift = At.Shift.AFTER, target = "Lnet/minecraft/world/item/ItemStack;useOn(Lnet/minecraft/world/item/context/UseOnContext;)Lnet/minecraft/world/InteractionResult;")})
+    @Inject(method = "useItemOn", cancellable = true, at = @At(value = "INVOKE", shift = At.Shift.AFTER,
+            target = "Lnet/minecraft/world/level/block/state/BlockState;useWithoutItem(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/phys/BlockHitResult;)Lnet/minecraft/world/InteractionResult;"))
     private void hadron$endRefused(ServerPlayer player, Level level, ItemStack stack, InteractionHand hand,
             BlockHitResult hit, CallbackInfoReturnable<InteractionResult> cir) {
         EntityState state = (EntityState) player;

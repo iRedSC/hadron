@@ -26,6 +26,7 @@ import net.minecraft.network.protocol.game.ClientboundAnimatePacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.animal.Cow;
@@ -36,11 +37,14 @@ import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.DispenserBlock;
 import net.minecraft.world.level.block.SculkSensorBlock;
 import net.minecraft.world.level.block.state.properties.SculkSensorPhase;
 import net.minecraft.world.level.block.entity.DispenserBlockEntity;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 
 /** Leads, shears and armor stands: each asked once, before anything changes, and fully undone when refused. */
 public final class HandlingTests {
@@ -395,6 +399,32 @@ public final class HandlingTests {
             t.assertFalse(itemUses.counted(), "a refused tie should count for no advancement");
             t.assertEquals(alice.player(), cow.getLeashHolder(), "the cow's leash holder");
         }
+    }
+
+    @HadronTest
+    @Covers(EntityLeashEvent.class)
+    void aRefusedDirectTieDoesNotFailTheNextOne(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos fence = t.pos(2, 0, 0);
+        t.setBlock(fence, Blocks.OAK_FENCE.defaultBlockState());
+        Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 2));
+        cow.setLeashedTo(alice.player(), true);
+        ItemStack lead = new ItemStack(Items.LEAD);
+        alice.hold(lead);
+        boolean[] refuse = {true};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityLeashEvent e) {
+                e.setCancelled(refuse[0]);
+            }
+        });
+        // How a fake player (a turtle, a drone) uses an item: straight on the stack, not through a click.
+        UseOnContext use = new UseOnContext(alice.player(), InteractionHand.MAIN_HAND,
+                new BlockHitResult(Vec3.atCenterOf(fence), Direction.UP, fence, false));
+        t.assertEquals(InteractionResult.FAIL, lead.useOn(use), "the refused direct use");
+        refuse[0] = false;
+        t.assertTrue(lead.useOn(use).consumesAction(), "an allowed direct use after a refused one should succeed");
+        t.assertTrue(cow.getLeashHolder() instanceof LeashFenceKnotEntity, "the cow should be tied to the fence");
     }
 
     @HadronTest
