@@ -14,7 +14,8 @@ import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 
 /**
  * The NeoForge side of {@link Areas}. The areas themselves live on their levels ({@link AreaIndex}), so this holds
- * nothing: a level that closes takes its areas with it ({@code AreasServerLevelMixin}), and a plugin that disables has its areas closed.
+ * nothing: a level that closes takes its areas with it ({@code AreasServerLevelMixin}), and a plugin that disables
+ * has its areas closed.
  */
 final class AreasPort implements Areas.Backend {
     private AreasPort() {}
