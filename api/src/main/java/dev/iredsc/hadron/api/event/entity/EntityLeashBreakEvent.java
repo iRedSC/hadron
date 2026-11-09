@@ -3,24 +3,28 @@ package dev.iredsc.hadron.api.event.entity;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
+import java.util.Optional;
 import net.minecraft.world.entity.Entity;
+import org.jspecify.annotations.Nullable;
 
 import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 
 /**
- * A lead came off an entity without anyone taking it off: stretched too far, its holder gone, the entity dead,
- * mounted or moved to another dimension. Bukkit's {@code EntityUnleashEvent} for those reasons. After the fact and not
- * cancellable, so a plugin can't leave an entity tied to something that is gone. A player taking a lead off is
- * {@link EntityUnleashEvent}, which can be refused.
+ * A lead came off an entity without anyone taking it off: stretched too far, its holder gone or never found, the
+ * entity dead, despawned, mounted or moved to another dimension. Bukkit's {@code EntityUnleashEvent} for those
+ * reasons. Fired once the lead is off; not cancellable, so a plugin can't leave an entity tied to something that is
+ * gone. A player taking a lead off is {@link EntityUnleashEvent}, which can be refused.
  *
  * <p>The actor is whoever is on the stack when it happens (a player whose click removed the knot), otherwise nature.
  *
- * <p><b>Core fires it for every reason below.</b> A lead a mod drops in its own code with none of these true (a
- * despawn, its own unleashing) fires nothing unless its bridge fires {@link EntityUnleashEvent}.
+ * <p><b>Core fires it for every reason below.</b> A mod that drops a lead in its own code fires
+ * {@link EntityUnleashEvent} when someone chose it, and this when nobody did (its own despawn, a summon running out).
  */
 @FiredBy(core = PARTIAL,
-        coreSees = "leads snapping from distance, a holder dying or removed, the entity dying, mounting or changing dimension",
-        bridges = "the mod dropping a lead in its own code for any other reason, as EntityUnleashEvent")
+        coreSees = "leads snapping from distance, a holder dying, removed or never found after loading, and the entity "
+                + "dying, despawning, mounting or changing dimension",
+        bridges = "the mod dropping a lead in its own code with nobody choosing it (its own despawn, a summon running "
+                + "out); a chosen removal is EntityUnleashEvent")
 public class EntityLeashBreakEvent extends EntityEvent {
     /** Why the lead came off. */
     public enum Reason {
@@ -28,7 +32,12 @@ public class EntityLeashBreakEvent extends EntityEvent {
         DISTANCE,
         /** The holder died or left the world: a knot broken, a player dead or gone. */
         HOLDER_GONE,
-        /** The leashed entity died or left the world. */
+        /**
+         * The entity came back from a save or another dimension and its holder wasn't there to take the lead up
+         * again: a player who logged off, a holder left behind in the old dimension. {@link #getHolder()} is empty.
+         */
+        HOLDER_NOT_FOUND,
+        /** The leashed entity died, despawned or was destroyed. */
         ENTITY_GONE,
         /** The leashed entity went through a portal; its copy in the new dimension is free. */
         CHANGED_DIMENSION,
@@ -36,18 +45,29 @@ public class EntityLeashBreakEvent extends EntityEvent {
         MOUNTED
     }
 
-    private final Entity holder;
+    private final @Nullable Entity holder;
     private final Reason reason;
 
-    public EntityLeashBreakEvent(Entity entity, Entity holder, Reason reason, Actor actor) {
+    /**
+     * @param holder what held the lead; null only for {@link Reason#HOLDER_NOT_FOUND}, whose holder was never loaded
+     */
+    public EntityLeashBreakEvent(Entity entity, @Nullable Entity holder, Reason reason, Actor actor) {
         super(entity, actor);
-        this.holder = Objects.requireNonNull(holder, "holder");
         this.reason = Objects.requireNonNull(reason, "reason");
+        if ((holder == null) != (reason == Reason.HOLDER_NOT_FOUND)) {
+            throw new IllegalArgumentException("Pass the holder for every reason except HOLDER_NOT_FOUND, and null "
+                    + "for that one: its holder was never loaded, so there is none to pass (got " + holder + " for "
+                    + reason + ")");
+        }
+        this.holder = holder;
     }
 
-    /** What held the lead until now: a player, a knot on a fence, a wandering trader. */
-    public Entity getHolder() {
-        return holder;
+    /**
+     * What held the lead until now: a player, a knot on a fence, a wandering trader. Empty only for
+     * {@link Reason#HOLDER_NOT_FOUND}.
+     */
+    public Optional<Entity> getHolder() {
+        return Optional.ofNullable(holder);
     }
 
     public Reason getReason() {

@@ -64,7 +64,9 @@ public final class EntityHandling {
             return;
         }
         Entity holder = leashable.getLeashHolder();
-        EntityLeashBreakEvent.@Nullable Reason reason = holder == null ? null : breakReason(entity, holder);
+        EntityLeashBreakEvent.@Nullable Reason reason = holder == null ? null
+                : ((EntityState) entity).hadron$leaving() ? EntityLeashBreakEvent.Reason.ENTITY_GONE
+                : breakReason(entity, holder);
         drop.run();
         if (holder != null && reason != null && !leashable.isLeashed()) {
             Hooks.post(new EntityLeashBreakEvent(entity, holder, reason,
@@ -73,22 +75,29 @@ public final class EntityHandling {
     }
 
     /**
-     * A boat or a trader's llama dropping its lead just before it leaves the world, which the state can't show yet:
-     * reported as {@link EntityLeashBreakEvent.Reason#ENTITY_GONE}, unless {@link #dropLeash} reports it already.
+     * A boat or a trader's llama dropping its lead just before it leaves the world, which its state can't show yet:
+     * marks it as leaving while the drop runs, so {@link #dropLeash} reports
+     * {@link EntityLeashBreakEvent.Reason#ENTITY_GONE} whatever else is true (a boat far from its holder is still
+     * destroyed, not stretched).
      */
     public static void dropLeashLeaving(Entity entity, Runnable drop) {
-        if (!(entity.level() instanceof ServerLevel) || !(entity instanceof Leashable leashable)
-                || !Hooks.listens(EntityLeashBreakEvent.class)) {
+        EntityState state = (EntityState) entity;
+        state.hadron$setLeaving(true);
+        try {
             drop.run();
-            return;
+        } finally {
+            state.hadron$setLeaving(false);
         }
-        Entity holder = leashable.getLeashHolder();
-        boolean reportedInside = holder == null || breakReason(entity, holder) != null;
-        drop.run();
-        if (holder != null && !reportedInside && !leashable.isLeashed()) {
-            Hooks.post(new EntityLeashBreakEvent(entity, holder, EntityLeashBreakEvent.Reason.ENTITY_GONE,
-                    EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
-        }
+    }
+
+    /**
+     * An entity back from a save or another dimension gave up waiting for its holder and dropped its lead; the holder
+     * was never loaded, so there is none to name.
+     */
+    public static void leashHolderNotFound(Entity entity) {
+        if (!(entity.level() instanceof ServerLevel) || !Hooks.listens(EntityLeashBreakEvent.class)) return;
+        Hooks.post(new EntityLeashBreakEvent(entity, null, EntityLeashBreakEvent.Reason.HOLDER_NOT_FOUND,
+                EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
     }
 
     /**
