@@ -76,7 +76,7 @@ final class TestAcceptance implements Acceptance, Listener {
     private final BoundingBox box;
     private final Set<UUID> trusted = new HashSet<>();
     private final List<Seen> seen = new ArrayList<>();
-    /** Entities spawned or removed outside the box this step: one of them in the box at only one end crossed its edge. */
+    /** Entities born or gone outside the box this step: one in the box at only one end crossed its edge. */
     private final Set<UUID> crossing = new HashSet<>();
     /** What each heard event said it changes, copied as it fired. */
     private final Map<Event, AcceptanceDiff.Report> reports = new IdentityHashMap<>();
@@ -193,7 +193,8 @@ final class TestAcceptance implements Acceptance, Listener {
     private record Where(Optional<BlockPos> pos) {}
 
     private Optional<Where> where(Event event) {
-        if (MOTION.contains(event.getClass())) return Optional.empty();
+        // Subclasses too: a player's move is a PlayerMoveEvent.
+        for (Class<? extends Event> motion : MOTION) if (motion.isInstance(event)) return Optional.empty();
         if (event instanceof BlockEvent b) {
             if (b.getLevel() != level) return Optional.empty();
             if (box.isInside(b.getPos())) return Optional.of(new Where(Optional.of(b.getPos())));
@@ -275,11 +276,14 @@ final class TestAcceptance implements Acceptance, Listener {
         Map<BlockPos, BlockState> blocks = new LinkedHashMap<>();
         Map<BlockPos, String> blockEntities = new LinkedHashMap<>();
         Map<BlockPos, Map<String, ItemStack>> contents = new LinkedHashMap<>();
-        for (BlockPos p : BlockPos.betweenClosed(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ())) {
+        for (BlockPos p : BlockPos.betweenClosed(box.minX(), box.minY(), box.minZ(),
+                box.maxX(), box.maxY(), box.maxZ())) {
             BlockPos pos = p.immutable();
             blocks.put(pos, level.getBlockState(pos));
             BlockEntity be = level.getBlockEntity(pos);
-            if (be != null) blockEntities.put(pos, String.valueOf(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType())));
+            if (be != null) {
+                blockEntities.put(pos, String.valueOf(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType())));
+            }
             Map<String, ItemStack> stacks = items(pos, be);
             if (!stacks.isEmpty()) contents.put(pos, stacks);
         }
@@ -291,11 +295,15 @@ final class TestAcceptance implements Acceptance, Listener {
         for (Entity e : level.getEntities((Entity) null, AABB.of(box).inflate(1),
                 e -> !(e instanceof ServerPlayer) && box.isInside(e.blockPosition()))) {
             ItemStack stack = e instanceof ItemEntity item ? item.getItem().copy() : ItemStack.EMPTY;
+            Map<String, ItemStack> held = new LinkedHashMap<>();
+            if (e instanceof Container c) {
+                for (int i = 0; i < c.getContainerSize(); i++) held.put("slot " + i, c.getItem(i).copy());
+            }
             boolean consequence = e instanceof ItemEntity || e instanceof ExperienceOrb
                     || e instanceof FallingBlockEntity;
             float health = e instanceof LivingEntity living ? living.getHealth() : -1;
             entities.put(e.getUUID(), new AcceptanceDiff.Thing(e.getUUID(),
-                    String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(e.getType())), stack, health,
+                    String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(e.getType())), stack, health, held,
                     e.blockPosition(), consequence));
         }
         Map<String, List<ItemStack>> players = new LinkedHashMap<>();

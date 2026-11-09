@@ -15,11 +15,12 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * A bridge's claim on the mods it translates, and the only way it fires Hadron's events. A bridge mod claims every
- * mod it covers once, in its mod's constructor, and keeps the handle:
+ * mod it covers once, in its mod's constructor, and keeps the handle. The first mod is the one the bridge needs; the
+ * rest are addons it covers when they are installed:
  *
  * <pre>{@code
  * public MekanismBridge(IEventBus modBus) {
- *     BRIDGE = Bridge.claim("mekanism", "mekanismgenerators");
+ *     BRIDGE = Bridge.claim("mekanism", "mekanismgenerators", "mekanismtools", "mekanismadditions");
  * }
  * ...
  * if (BRIDGE.listens(ExplosionEvent.class) && BRIDGE.fire(new ExplosionEvent(...)).isCancelled()) return;
@@ -33,7 +34,8 @@ public final class Bridge {
     private static final Pattern MOD_ID = Pattern.compile("[a-z][a-z0-9_]{1,63}");
     private static final Set<String> NOT_BRIDGEABLE = Set.of("minecraft", "hadron", "neoforge", "fabric");
 
-    @StaticState(reason = "bridges claim their mods once, while mods construct; mods never unload, so a claim lasts the JVM")
+    @StaticState(reason = "bridges claim their mods once, while mods construct; mods never unload, so a claim lasts "
+            + "the JVM")
     private static final Map<String, Bridge> CLAIMS = new HashMap<>();
 
     @StaticState(reason = "the loader port installs itself once when Hadron's mod constructs")
@@ -50,14 +52,15 @@ public final class Bridge {
     }
 
     /**
-     * Claims {@code modId}, and any more mods this bridge covers (Mekanism's generators and tools ship as their own
-     * mods), for the bridge mod being constructed now. Call it once, from your mod's constructor.
+     * Claims {@code modId}, which must be installed, and each of {@code alsoIfInstalled} that is (Mekanism's
+     * generators and tools are optional addons, each its own mod), for the bridge mod being constructed now. Call it
+     * once, from your mod's constructor. {@link #mods()} says which were claimed.
      *
      * @throws IllegalStateException when called outside your mod's constructor, before Hadron loads, a second time
      *         from one bridge, or for a mod another bridge already claimed.
-     * @throws IllegalArgumentException for a mod id that isn't installed or can't be bridged.
+     * @throws IllegalArgumentException when {@code modId} isn't installed, or any id isn't a mod id a bridge can claim.
      */
-    public static Bridge claim(String modId, String... moreModIds) {
+    public static Bridge claim(String modId, String... alsoIfInstalled) {
         Backend port = backend;
         if (port == null) {
             throw new IllegalStateException("Hadron hasn't loaded yet, so it can't take a bridge's claim: make your "
@@ -71,16 +74,23 @@ public final class Bridge {
         }
         Set<String> wanted = new LinkedHashSet<>();
         wanted.add(Objects.requireNonNull(modId, "modId"));
-        for (String more : moreModIds) {
-            if (!wanted.add(Objects.requireNonNull(more, "moreModIds"))) {
+        for (String more : alsoIfInstalled) {
+            if (!wanted.add(Objects.requireNonNull(more, "alsoIfInstalled"))) {
                 throw new IllegalArgumentException(claimant + " names " + more + " twice in Bridge.claim: list each "
                         + "mod once");
             }
         }
         for (String mod : wanted) {
-            String why = unbridgeable(mod, claimant, port);
+            String why = unbridgeable(mod, claimant);
             if (why != null) throw new IllegalArgumentException(why);
         }
+        if (!port.isModLoaded(modId)) {
+            throw new IllegalArgumentException(claimant + " claims " + modId + ", which isn't installed: make " + modId
+                    + " a required dependency of your bridge, so the loader refuses the bridge without it. An addon "
+                    + "the bridge covers only when it's there goes after the first id, Bridge.claim(\"mainmod\", \""
+                    + modId + "\")");
+        }
+        wanted.removeIf(mod -> !port.isModLoaded(mod));
         synchronized (CLAIMS) {
             for (Bridge existing : CLAIMS.values()) {
                 if (existing.owner.equals(claimant)) {
@@ -105,7 +115,7 @@ public final class Bridge {
     }
 
     /** Why {@code mod} can't be claimed by {@code claimant}, or null when it can. */
-    private static @Nullable String unbridgeable(String mod, String claimant, Backend port) {
+    private static @Nullable String unbridgeable(String mod, String claimant) {
         if (!MOD_ID.matcher(mod).matches()) {
             return "'" + mod + "' isn't a mod id: claim the id the mod is installed under, such as mekanism";
         }
@@ -116,11 +126,12 @@ public final class Bridge {
         if (mod.equals(claimant)) {
             return claimant + " claims itself: claim the mod your bridge translates, such as mekanism";
         }
-        if (!port.isModLoaded(mod)) {
-            return claimant + " claims " + mod + ", which isn't installed: make " + mod + " a required dependency "
-                    + "of your bridge, so the loader refuses the bridge without it";
-        }
         return null;
+    }
+
+    /** Whether core covers this mod id itself (Minecraft, the loader, Hadron), so no bridge for it can exist. */
+    public static boolean isCoveredByCore(String modId) {
+        return NOT_BRIDGEABLE.contains(modId);
     }
 
     /** Whether a bridge for that mod id is loaded. A plugin that needs one lists it under bridge-depend. */

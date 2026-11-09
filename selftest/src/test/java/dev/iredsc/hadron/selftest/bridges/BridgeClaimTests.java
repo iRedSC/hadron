@@ -45,8 +45,8 @@ public final class BridgeClaimTests {
 
     @HadronTest
     @Covers(value = Bridge.class, method = "fire")
-    void aBridgeFiresDataKindsOnlyInItsOwnModsNamespace(TestContext t) {
-        Bridge bridge = (Bridge) System.getProperties().get("hadron.test.bridge");
+    void aBridgeFiresDataKindsOnlyInItsOwnModsNamespace(TestContext t) throws ReflectiveOperationException {
+        Bridge bridge = (Bridge) Class.forName("dev.iredsc.hadron.harness.HarnessMod").getField("bridge").get(null);
         List<EntityDataChangeEvent> heard = new ArrayList<>();
         t.registerEvents(new Listener() {
             @EventHandler

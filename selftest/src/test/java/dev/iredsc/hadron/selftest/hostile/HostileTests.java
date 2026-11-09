@@ -261,10 +261,21 @@ public final class HostileTests {
     @HadronTest(timeout = 1200)
     void aMissingBridgeSaysWhichToAdd(TestContext t) throws Exception {
         try (Hostile h = Hostile.open(t)) {
+            // hadron_test is installed, and nothing bridges it.
+            h.hostile(JAR, Hostile.HOSTILE, HostilePlugin.class, "bridge-depend: [hadron_test]\n");
+            String line = h.awaitAnnounced(200, Hostile.HOSTILE + " didn't enable");
+            h.assertSays(line, "uses Hadron's bridge for hadron_test, which isn't installed",
+                    "add the Hadron bridge for hadron_test to mods/");
+            h.assertHealthy();
+        }
+    }
+
+    @HadronTest(timeout = 1200)
+    void aBridgeDependOnCoreSaysToRemoveIt(TestContext t) throws Exception {
+        try (Hostile h = Hostile.open(t)) {
             h.hostile(JAR, Hostile.HOSTILE, HostilePlugin.class, "bridge-depend: [neoforge]\n");
             String line = h.awaitAnnounced(200, Hostile.HOSTILE + " didn't enable");
-            h.assertSays(line, "uses Hadron's bridge for neoforge, which isn't installed",
-                    "add the Hadron bridge for neoforge to mods/");
+            h.assertSays(line, "core covers neoforge itself", "remove neoforge from bridge-depend");
             h.assertHealthy();
         }
     }

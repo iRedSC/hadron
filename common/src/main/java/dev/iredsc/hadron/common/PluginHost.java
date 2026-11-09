@@ -812,6 +812,10 @@ public final class PluginHost implements PluginManager {
             }
         }
         for (String mod : e.description.getBridgeDepend()) {
+            if (Bridge.isCoveredByCore(mod)) {
+                return "lists " + mod + " under bridge-depend, but core covers " + mod + " itself and no bridge for "
+                        + "it exists: remove " + mod + " from bridge-depend";
+            }
             String why = missingBridge(mod, platform.isModLoaded(mod), Bridge.isInstalled(mod));
             if (why != null) return why;
         }

@@ -29,6 +29,7 @@ import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.vehicle.MinecartChest;
 
 /**
  * The acceptance kit on vanilla blocks: it passes what core already covers, and each assertion fails, naming the
@@ -387,5 +388,28 @@ public final class AcceptanceKitTests {
         alice.clickSlot(0);
         t.assertTrue(alice.player().containerMenu.getCarried().is(Items.DIAMOND), "alice took the diamonds");
         area.assertEveryChangeSeen("alice taking diamonds from a chest");
+    }
+
+    @HadronTest
+    void anOutsiderWalksThroughTheAreaFreelyAndUnlogged(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Acceptance area = t.acceptance(around(t));
+        BlockPos inside = t.pos(2, 0, 0);
+        bob.moveTo(inside);
+        t.tick(2);
+        t.assertEquals(inside, bob.player().blockPosition(), "where bob stands");
+        t.assertTrue(area.events().isEmpty(), "bob's walk was logged: " + area.events());
+    }
+
+    @HadronTest
+    void aCartEmptiedWithNoEventIsNamed(TestContext t) {
+        BlockPos at = t.pos(2, 0, 0);
+        MinecartChest cart = new MinecartChest(t.level(), at.getX() + 0.5, at.getY(), at.getZ() + 0.5);
+        cart.setItem(0, new ItemStack(Items.DIAMOND, 3));
+        t.level().addFreshEntity(cart);
+        Acceptance area = t.acceptance(around(t));
+        cart.setItem(0, ItemStack.EMPTY);
+        String why = failure(t, () -> area.assertUnchanged("a pipe draining a chest minecart"));
+        t.assertTrue(why.contains("chest_minecart") && why.contains("slot 0") && why.contains("diamond"), why);
     }
 }

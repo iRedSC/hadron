@@ -24,17 +24,20 @@ import net.minecraft.core.BlockPos;
  * }</pre>
  *
  * <p>What it protects and logs: every block, inventory and resource event at a place in the area, every explosion
- * in it or breaking a block in it, every item event by someone in it, and every entity event for an entity in it except an entity's own motion and attention (moving, teleporting,
- * velocity, knockback, targeting, air). Protection denies each that is cancellable unless the server or a trusted
- * player is behind it, so {@link Actor.Unknown}, ownerless machines and other players are outsiders, as
- * {@link Actor} says protection should treat them. The area is watched ({@code Areas.watch}), so a change with nobody
- * behind it fires as Unknown there.
+ * in it or breaking a block in it, every item event by someone in it, and every entity event for an entity in it,
+ * except an entity's own motion and attention (moving, teleporting, velocity, knockback, targeting, air), so anyone
+ * may walk through. Protection denies each that is cancellable unless the server or a trusted player is behind it,
+ * so {@link Actor.Unknown}, ownerless machines and other players are outsiders, as {@link Actor} says protection
+ * should treat them. The area is watched ({@code Areas.watch}), so a change with nobody behind it fires as Unknown
+ * there.
  *
- * <p>What it compares: block states and which block entity is where; the items in every inventory a block in the
- * area exposes, on any face; which entities are in it (by id and type, a dropped item's stack, a living entity's
- * health); and every test player's inventory and health, wherever they stand. Not compared: a block entity's other data (a
- * machine's progress, settings or filters), and energy, fluids and other resources a machine holds. Those wait for
- * Hadron's design for running resource flows, since a machine's own data also changes while it merely ticks.
+ * <p>What it compares, slot by slot where there are slots: block states and which block entity is where; the items in
+ * every inventory a block in the area exposes, on any face; which entities are in it (by id and type, a dropped
+ * item's stack, a living entity's health, a container entity's slots, such as a chest minecart's); and every test
+ * player's inventory and health. Not compared: a block entity's other data (a machine's progress, settings or
+ * filters), mobs' equipment and inventories that aren't containers, and energy, fluids and other resources a machine
+ * holds. Those wait for Hadron's design for running resource flows, since a machine's own data also changes while it
+ * merely ticks.
  *
  * <p>Get one with {@link TestContext#acceptance}. It lasts until the test ends.
  */
@@ -65,15 +68,23 @@ public interface Acceptance {
 
     /**
      * That every change in the area since the last {@link #mark} was reported by an event that went through and says
-     * it changed that thing: each block by a block event whose change there isn't empty (a use or a crack changes
-     * nothing) or an explosion listing it, each block's inventory by an inventory change for it, each entity that appeared by its spawn or
-     * transformation, one that left by its removal, death or transformation, and one whose health changed by its
-     * damage or healing, and a test player standing in the area's inventory and health by what they did or what hurt
-     * or healed them. Dropped items, experience and falling blocks are exempt, since their contents come from a
-     * change reported elsewhere; an entity walking in or out, or born or gone outside the area, isn't a change. A failure names each unreported change: an
-     * interception gap the bridge closes by firing the core event (docs/bridge-hooks.md). A block event explains its
-     * block's inventory only when the block itself changed. Fails too when nothing changed, since then the step
-     * proves nothing: the machine never ran.
+     * it changed that thing:
+     *
+     * <ul>
+     *   <li>a block, by a block event whose change there isn't empty (a use or a crack changes nothing), or an
+     *       explosion listing it;
+     *   <li>a slot of a block's or a container entity's inventory, by an inventory change or a click naming that
+     *       slot, or, when the block itself went or changed, by the block event;
+     *   <li>an entity that appeared, by its spawn or transformation; one that left, by its removal, death or
+     *       transformation; one whose health changed, by its damage or healing;
+     *   <li>a test player standing in the area, their inventory by what they did and their health by what hurt or
+     *       healed them.
+     * </ul>
+     *
+     * Dropped items, experience and falling blocks are exempt, since their contents come from a change reported
+     * elsewhere; an entity walking in or out, or born or gone outside the area, isn't a change. A failure names each
+     * unreported change: an interception gap the bridge closes by firing the core event (docs/bridge-hooks.md). Fails
+     * too when nothing changed, since then the step proves nothing: the machine never ran.
      */
     void assertEveryChangeSeen(String step);
 

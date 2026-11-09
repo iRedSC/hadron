@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.harness;
 
+import dev.iredsc.hadron.checks.StaticState;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 
@@ -11,13 +12,16 @@ import net.neoforged.fml.common.Mod;
 @Mod(HarnessMod.MOD_ID)
 public final class HarnessMod {
     public static final String MOD_ID = "hadron_test";
-    /** The system property holding the harness's {@code Bridge} for {@code hadron_test_target}. */
-    public static final String BRIDGE_PROPERTY = "hadron.test.bridge";
+    /**
+     * The harness's claim on {@code hadron_test_target}, for self-tests to fire through. They can't compile against
+     * the harness, so they read it by reflection.
+     */
+    @StaticState(reason = "claimed once in the harness mod's constructor; mods never unload")
+    public static volatile dev.iredsc.hadron.api.bridge.@org.jspecify.annotations.Nullable Bridge bridge;
 
     public HarnessMod(IEventBus modBus) {
         TestRunner.register(modBus);
         // Claimed here, in a mod's constructor, as a real bridge claims, so BridgeClaimTests sees the loader's path.
-        // The handle goes where self-tests, which can't see the harness's classes, can fire through it.
-        System.getProperties().put(BRIDGE_PROPERTY, dev.iredsc.hadron.api.bridge.Bridge.claim(TargetMod.MOD_ID));
+        bridge = dev.iredsc.hadron.api.bridge.Bridge.claim(TargetMod.MOD_ID);
     }
 }

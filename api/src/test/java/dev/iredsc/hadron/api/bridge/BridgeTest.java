@@ -142,11 +142,13 @@ class BridgeTest {
         loader.constructing = "picky_bridge";
         loader.installed.add("picky_bridge");
         assertEquals("picky_bridge claims absent, which isn't installed: make absent a required dependency of your "
-                + "bridge, so the loader refuses the bridge without it",
+                + "bridge, so the loader refuses the bridge without it. An addon the bridge covers only when it's "
+                + "there goes after the first id, Bridge.claim(\"mainmod\", \"absent\")",
                 assertThrows(IllegalArgumentException.class, () -> Bridge.claim("absent")).getMessage());
         loader.installed.add("minecraft");
         assertEquals("minecraft isn't a mod a bridge can claim: core covers it. Claim the third-party mod your bridge "
-                + "translates", assertThrows(IllegalArgumentException.class, () -> Bridge.claim("minecraft")).getMessage());
+                + "translates",
+                assertThrows(IllegalArgumentException.class, () -> Bridge.claim("minecraft")).getMessage());
         assertEquals("picky_bridge claims itself: claim the mod your bridge translates, such as mekanism",
                 assertThrows(IllegalArgumentException.class, () -> Bridge.claim("picky_bridge")).getMessage());
         assertEquals("'Mek' isn't a mod id: claim the id the mod is installed under, such as mekanism",
@@ -155,6 +157,25 @@ class BridgeTest {
         assertEquals("picky_bridge names dup twice in Bridge.claim: list each mod once",
                 assertThrows(IllegalArgumentException.class, () -> Bridge.claim("dup", "dup")).getMessage());
         assertFalse(Bridge.isInstalled("dup"));
+    }
+
+    @Covers(value = Bridge.class, method = "claim")
+    @Covers(value = Bridge.class, method = "mods")
+    @Test
+    void anAddonThatIsntInstalledIsLeftOut() {
+        loader.constructing = "addon_bridge";
+        loader.installed.addAll(List.of("addon_bridge", "addon_main", "addon_one"));
+        Bridge bridge = Bridge.claim("addon_main", "addon_one", "addon_absent");
+        assertEquals(List.of("addon_main", "addon_one"), bridge.mods());
+        assertFalse(Bridge.isInstalled("addon_absent"), "an absent addon stays free for a bridge installed later");
+    }
+
+    @Covers(value = Bridge.class, method = "isCoveredByCore")
+    @Test
+    void coreCoversMinecraftTheLoaderAndHadron() {
+        assertTrue(Bridge.isCoveredByCore("minecraft") && Bridge.isCoveredByCore("neoforge")
+                && Bridge.isCoveredByCore("hadron"));
+        assertFalse(Bridge.isCoveredByCore("mekanism"));
     }
 
     @Covers(value = Bridge.class, method = "listens")

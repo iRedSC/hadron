@@ -19,8 +19,8 @@ import java.util.regex.Pattern;
  * without mod-depend runs on every loader. {@code api-depend} lists mods, also by mod id, that must be installed for the
  * plugin's own pure-Java API (LuckPerms' {@code net.luckperms.api}), which is the same on every loader, so it needs no
  * {@code loader}. {@code bridge-depend} lists mods whose Hadron bridge must be installed, for the events and API that
- * bridge publishes; that keeps the plugin write-once too. Anything malformed fails the load with a message naming the key, so a typo
- * can't quietly drop a command or a dependency.
+ * bridge publishes; that keeps the plugin write-once too. Anything malformed fails the load with a message naming the
+ * key, so a typo can't quietly drop a command or a dependency.
  */
 public final class PluginDescription {
     private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_.-]+");

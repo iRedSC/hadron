@@ -28,7 +28,7 @@ area.assertActingFor(bob, "bob's miner where he is trusted");
 - **`assertEveryChangeSeen`**, for an allowed step: every block and block inventory that changed was covered by an event that went through, and so was every entity that appeared, left or changed health. A block event covers its block's inventory only when the block itself changed. Dropped items, experience orbs and falling blocks are exempt, because their contents come from a change reported elsewhere. Explosions count for the blocks they list, and a test player standing in the box counts like any entity. A step where nothing changed fails, since it proves nothing.
 - **`assertActingFor`**: every event in the box acts for that player, except the server's and nature's, and at least one does. `Unknown` and ownerless actors are named as attribution gaps.
 
-Protection denies every cancellable block, inventory, resource, explosion or entity event in the box unless the server or a trusted player is behind it. An entity's own motion and attention (moving, teleporting, velocity, knockback, targeting, air) is neither protected nor logged. The box is watched, so a change with nobody behind it fires as `Unknown`. `AcceptanceKitTests` in the self-tests checks that each assertion fails, naming the right gap, when a change skips every chokepoint, a cancel is ignored, or nobody is behind an action.
+Protection denies every cancellable block, inventory, resource, explosion, item or entity event in the box unless the server or a trusted player is behind it. An entity's own motion and attention (moving, teleporting, velocity, knockback, targeting, air) is neither protected nor logged. The box is watched, so a change with nobody behind it fires as `Unknown`. `AcceptanceKitTests` in the self-tests checks that each assertion fails, naming the right gap, when a change skips every chokepoint, a cancel is ignored, or nobody is behind an action.
 
 Not checked yet: whether items and resources are conserved in an allowed step (an anti-dupe ledger, which would also catch a dropped item made from nothing), a block entity's data besides its inventory, and the energy, fluids and other resources a machine holds. Both wait for the design of running resource flows ([design](design.md#open-designs)), which the Mekanism bridge will shape. Set up the box before calling `t.acceptance`: once the box is watched, the test's own writes have nobody behind them and are refused as `Unknown`.
 
@@ -99,10 +99,10 @@ A bridge has two parts:
 
 ### Claiming a mod
 
-Each mod id has at most one bridge, so two bridges never compete to translate the same mod. A bridge may claim several, since one mod often ships as several mod ids (Mekanism's generators and tools are their own mods). It claims them once, from its mod's constructor, and keeps the handle:
+Each mod id has at most one bridge, so two bridges never compete to translate the same mod. A bridge may claim several, since one mod often ships as several mod ids (Mekanism's generators and tools are optional addons, each its own mod). It claims them once, from its mod's constructor, and keeps the handle. The first id must be installed; the rest are claimed when they are:
 
 ```java
-BRIDGE = Bridge.claim("mekanism", "mekanismgenerators", "mekanismtools");
+BRIDGE = Bridge.claim("mekanism", "mekanismgenerators", "mekanismtools", "mekanismadditions");
 ```
 
 The loader reports which mod is constructing, so the claim names the real bridge, and a plugin can't claim one once the server runs. A second claim for a mod id fails the load, naming both bridges. Every event a bridge fires goes through the handle (`BRIDGE.listens`, `BRIDGE.fire`), which refuses an `EntityDataChangeEvent` whose kind isn't in one of the claimed mods' namespaces. Attribution needs no handle: `Actors` and `Operation` are the same for bridges and core.
