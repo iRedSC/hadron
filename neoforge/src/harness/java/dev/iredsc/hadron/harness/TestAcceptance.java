@@ -248,30 +248,31 @@ final class TestAcceptance implements Acceptance, Listener {
                     e.blockPosition(), consequence));
         }
         Map<String, List<ItemStack>> players = new LinkedHashMap<>();
+        Map<String, Float> health = new LinkedHashMap<>();
         for (TestPlayer tp : t.players()) {
             Inventory inv = tp.player().getInventory();
             List<ItemStack> stacks = new ArrayList<>();
             for (int i = 0; i < inv.getContainerSize(); i++) stacks.add(inv.getItem(i).copy());
             stacks.add(tp.player().containerMenu.getCarried().copy());
             players.put(tp.name(), stacks);
+            health.put(tp.name(), tp.player().getHealth());
         }
-        return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, world, players);
+        return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, world, players, health);
     }
 
     /**
-     * Every slot a block exposes: its sideless item handler, or, for a machine that offers handlers only on some
-     * faces, each distinct face's in turn. Empty when it has none.
+     * Every slot a block exposes: its sideless item handler, then each distinct face's in turn. A wrapper made afresh
+     * per face lists the same slots again, which only repeats them. Empty when it has none.
      */
     private List<ItemStack> items(BlockPos pos) {
         List<IItemHandler> handlers = new ArrayList<>();
-        @Nullable IItemHandler sideless = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null);
-        if (sideless != null) {
-            handlers.add(sideless);
-        } else {
-            for (Direction side : Direction.values()) {
-                @Nullable IItemHandler faced = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, side);
-                if (faced != null && handlers.stream().noneMatch(h -> h == faced)) handlers.add(faced);
-            }
+        // Every face as well as the sideless one: a block may keep a separate store behind one face.
+        List<@Nullable Direction> sides = new ArrayList<>();
+        sides.add(null);
+        sides.addAll(List.of(Direction.values()));
+        for (@Nullable Direction side : sides) {
+            @Nullable IItemHandler h = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, side);
+            if (h != null && handlers.stream().noneMatch(seen -> seen == h)) handlers.add(h);
         }
         List<ItemStack> stacks = new ArrayList<>();
         for (IItemHandler h : handlers) {

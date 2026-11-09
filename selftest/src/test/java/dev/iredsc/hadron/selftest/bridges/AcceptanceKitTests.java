@@ -236,4 +236,26 @@ public final class AcceptanceKitTests {
         area.assertEveryChangeSeen("alice breaking stone while a pig wanders off");
         area.assertActingFor(alice, "alice breaking stone beside nature at work");
     }
+
+    @HadronTest
+    void aPlayerHurtWithNoEventIsNamed(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Acceptance area = t.acceptance(around(t));
+        alice.player().setHealth(10);
+        String why = failure(t, () -> area.assertUnchanged("a weapon setting a player's health directly"));
+        t.assertTrue(why.contains("alice's health went from 20.0 to 10.0"), why);
+    }
+
+    @HadronTest
+    void openingAChestExplainsNoChangeToIt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos pos = t.pos(2, 0, 0);
+        t.setBlock(pos, Blocks.CHEST);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        alice.useBlock(pos);
+        ((ChestBlockEntity) t.level().getBlockEntity(pos)).setItem(0, new ItemStack(Items.DIAMOND, 3));
+        String why = failure(t, () -> area.assertEveryChangeSeen("a machine filling a chest someone opened"));
+        t.assertTrue(why.contains("the inventory at") && why.contains("diamond"), why);
+    }
 }

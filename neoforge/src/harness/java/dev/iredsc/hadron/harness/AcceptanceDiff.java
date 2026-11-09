@@ -42,7 +42,7 @@ final class AcceptanceDiff {
     /** {@code world}: every entity in the test's world, so one walking in or out of the area isn't taken for new or gone. */
     record Snapshot(Map<BlockPos, BlockState> blocks, Map<BlockPos, String> blockEntities,
             Map<BlockPos, List<ItemStack>> contents, Map<UUID, Thing> entities, Set<UUID> world,
-            Map<String, List<ItemStack>> players) {}
+            Map<String, List<ItemStack>> players, Map<String, Float> playerHealth) {}
 
     /** One difference, and what an event would have to name to explain it. */
     private record Change(String text, Predicate<Seen> explains) {}
@@ -182,6 +182,15 @@ final class AcceptanceDiff {
                     String name = e.getKey();
                     out.add(new Change(name + "'s inventory " + diff, s -> s.actor() instanceof Actor.Player p && p.player().getGameProfile().getName().equals(name)));
                 }
+            }
+            for (Map.Entry<String, Float> e : before.playerHealth().entrySet()) {
+                Float now = after.playerHealth().get(e.getKey());
+                if (now == null || now.floatValue() == e.getValue().floatValue()) continue;
+                String name = e.getKey();
+                out.add(new Change(name + "'s health went from " + e.getValue() + " to " + now,
+                        s -> (s.event() instanceof EntityDamageEvent || s.event() instanceof EntityRegainHealthEvent)
+                                && ((EntityEvent) s.event()).getEntity() instanceof net.minecraft.server.level.ServerPlayer p
+                                && p.getGameProfile().getName().equals(name)));
             }
         }
         return out;

@@ -32,7 +32,7 @@ import net.minecraft.core.BlockPos;
  *
  * <p>What it compares: block states and which block entity is where; the items in every inventory a block in the
  * area exposes, on any face; which entities are in it (by id and type, a dropped item's stack, a living entity's
- * health); and every test player's inventory, wherever they stand. Not compared: a block entity's other data (a
+ * health); and every test player's inventory and health, wherever they stand. Not compared: a block entity's other data (a
  * machine's progress, settings or filters), and energy, fluids and other resources a machine holds. Those wait for
  * Hadron's design for running resource flows, since a machine's own data also changes while it merely ticks.
  *
