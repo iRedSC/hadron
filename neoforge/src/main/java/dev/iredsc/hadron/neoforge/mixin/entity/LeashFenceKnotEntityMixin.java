@@ -8,6 +8,8 @@ import com.llamalad7.mixinextras.sugar.Share;
 import com.llamalad7.mixinextras.sugar.ref.LocalIntRef;
 import dev.iredsc.hadron.neoforge.EntityHandling;
 import net.minecraft.core.Holder;
+import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.Leashable;
 import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
@@ -16,11 +18,13 @@ import net.minecraft.world.level.gameevent.GameEvent;
 import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Clicking a knot while holding leashed mobs ties them to it, each tie asked on its own. Vanilla counts a refused tie
- * as tied, so it keeps the knot and the mobs already on it; only the attach vibration is held back when every tie was
- * refused.
+ * as tied, so it keeps the knot and the mobs already on it; when every tie was refused the attach vibration is held
+ * back and the click fails, so nothing counts it as an interaction.
  */
 @Mixin(LeashFenceKnotEntity.class)
 abstract class LeashFenceKnotEntityMixin {
@@ -42,5 +46,12 @@ abstract class LeashFenceKnotEntityMixin {
     private boolean hadron$attachSignal(LeashFenceKnotEntity self, Holder<GameEvent> event, @Nullable Entity cause,
             @Share("tied") LocalIntRef tied, @Share("refused") LocalIntRef refused) {
         return refused.get() == 0 || tied.get() > 0;
+    }
+
+    /** Every tie refused: the click fails, so the packet handler doesn't count it as an interaction. */
+    @Inject(method = "interact", at = @At("RETURN"), cancellable = true)
+    private void hadron$endRefused(Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir,
+            @Share("tied") LocalIntRef tied, @Share("refused") LocalIntRef refused) {
+        if (tied.get() == 0 && refused.get() > 0) cir.setReturnValue(InteractionResult.FAIL);
     }
 }

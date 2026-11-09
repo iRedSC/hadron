@@ -22,6 +22,7 @@
     "PlayerInteractMixin",
     "ProjectileMixin",
     "ServerLevelMixin",
+    "ServerPlayerGameModeClickMixin",
     "ServerPlayerGameModeMixin",
     "ServerPlayerMixin",
     "TamableAnimalMixin"

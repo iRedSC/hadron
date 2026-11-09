@@ -341,6 +341,62 @@ public final class HandlingTests {
 
     @HadronTest
     @Covers(EntityLeashEvent.class)
+    void aRefusedTieAtAFenceCountsForNothingAndIsAskedOnce(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos fence = t.pos(2, 0, 0);
+        t.setBlock(fence, Blocks.OAK_FENCE.defaultBlockState());
+        Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 2));
+        cow.setLeashedTo(alice.player(), true);
+        alice.hold(new ItemStack(Items.LEAD)); // vanilla tries the lead on the fence too if the fence's use fails
+        boolean[] refuse = {true};
+        int[] asked = {0};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityLeashEvent e) {
+                asked[0]++;
+                e.setCancelled(refuse[0]);
+            }
+        });
+        try (CriterionWatch<?> blockUses = CriterionWatch.blockUses(alice);
+                CriterionWatch<?> itemUses = CriterionWatch.itemsOnBlocks(alice)) {
+            alice.useBlock(fence, Direction.UP);
+            t.assertEquals(1, asked[0], "EntityLeashEvents for one refused click");
+            t.assertFalse(blockUses.counted() || itemUses.counted(), "a refused tie should count for no advancement");
+            refuse[0] = false;
+            alice.useBlock(fence, Direction.UP);
+            t.assertTrue(blockUses.counted() || itemUses.counted(), "a tie should count as a use of the fence");
+        }
+    }
+
+    @HadronTest
+    @Covers(EntityLeashEvent.class)
+    void aRefusedTieToAKnotCountsForNothing(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos fence = t.pos(2, 0, 0);
+        t.setBlock(fence, Blocks.OAK_FENCE.defaultBlockState());
+        LeashFenceKnotEntity knot = LeashFenceKnotEntity.getOrCreateKnot(t.level(), fence);
+        Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 2));
+        cow.setLeashedTo(alice.player(), true);
+        boolean[] refuse = {true};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityLeashEvent e) {
+                e.setCancelled(refuse[0]);
+            }
+        });
+        try (CriterionWatch<?> clicks = CriterionWatch.entityClicks(alice)) {
+            alice.interact(knot);
+            t.assertEquals(alice.player(), cow.getLeashHolder(), "the cow's leash holder after the refused tie");
+            t.assertFalse(clicks.counted(), "a refused tie should count for no advancement");
+            refuse[0] = false;
+            alice.interact(knot);
+            t.assertEquals(knot, cow.getLeashHolder(), "the cow's leash holder after the tie");
+            t.assertTrue(clicks.counted(), "a tie should count as an interaction");
+        }
+    }
+
+    @HadronTest
+    @Covers(EntityLeashEvent.class)
     void aRefusedTieToAKnotKeepsTheKnotAndItsMobs(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos fence = t.pos(2, 0, 0);

@@ -40,8 +40,8 @@ public interface EntityState {
     void hadron$setDying(boolean dying);
 
     /**
-     * Set on a player whose click on an entity a plugin just refused (a lead put on or taken off), so the click ends
-     * there: not counted as an interaction, and not passed on to the held item.
+     * Set on a player whose click a plugin just refused (a lead put on or taken off, every tie to a fence or knot), so
+     * the click ends there, failed: not counted toward advancements, and not passed on to the held item.
      */
     boolean hadron$interactRefused();
 

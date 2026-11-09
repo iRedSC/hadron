@@ -9,6 +9,7 @@ import com.llamalad7.mixinextras.sugar.ref.LocalBooleanRef;
 import com.llamalad7.mixinextras.sugar.ref.LocalIntRef;
 import com.llamalad7.mixinextras.sugar.ref.LocalRef;
 import dev.iredsc.hadron.neoforge.EntityHandling;
+import dev.iredsc.hadron.neoforge.EntityState;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.world.InteractionResult;
@@ -27,7 +28,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /**
  * Clicking a fence with a lead ties every mob the player holds to a knot there; each tie is asked on its own. The
  * click remembers whether it made the knot and how many ties went through, so a click whose ties were all refused
- * takes down only the knot it made, and makes no placement sound or attach vibration.
+ * takes down only the knot it made, makes no placement sound or attach vibration, and ends failed
+ * ({@code ServerPlayerGameModeClickMixin}) so no advancement counts it.
  */
 @Mixin(LeadItem.class)
 abstract class LeadItemMixin {
@@ -54,8 +56,11 @@ abstract class LeadItemMixin {
             target = "Lnet/minecraft/world/entity/Leashable;setLeashedTo(Lnet/minecraft/world/entity/Entity;Z)V"))
     private static void hadron$tie(Leashable leashable, Entity knot, boolean broadcast, Operation<Void> original,
             @Local(argsOnly = true) Player player, @Share("tied") LocalIntRef tied,
-            @Share("soundHeld") LocalBooleanRef soundHeld) {
-        if (EntityHandling.refuseTie(leashable, knot, player)) return;
+            @Share("refused") LocalIntRef refused, @Share("soundHeld") LocalBooleanRef soundHeld) {
+        if (EntityHandling.refuseTie(leashable, knot, player)) {
+            refused.set(refused.get() + 1);
+            return;
+        }
         original.call(leashable, knot, broadcast);
         if (tied.get() == 0 && soundHeld.get() && knot instanceof LeashFenceKnotEntity placed) {
             placed.playPlacementSound();
@@ -70,11 +75,15 @@ abstract class LeadItemMixin {
         return tied.get() > 0;
     }
 
-    @Inject(method = "bindPlayerMobs", at = @At("RETURN"))
-    private static void hadron$dropUnusedKnot(Player player, Level level, BlockPos pos,
+    /** A click whose ties were all refused takes down the knot it made, and ends failed so nothing counts it. */
+    @Inject(method = "bindPlayerMobs", at = @At("RETURN"), cancellable = true)
+    private static void hadron$endRefused(Player player, Level level, BlockPos pos,
             CallbackInfoReturnable<InteractionResult> cir, @Share("made") LocalRef<LeashFenceKnotEntity> made,
-            @Share("tied") LocalIntRef tied) {
+            @Share("tied") LocalIntRef tied, @Share("refused") LocalIntRef refused) {
+        if (tied.get() > 0 || refused.get() == 0) return;
         LeashFenceKnotEntity knot = made.get();
-        if (knot != null && tied.get() == 0) knot.discard();
+        if (knot != null) knot.discard();
+        ((EntityState) player).hadron$setInteractRefused(true);
+        cir.setReturnValue(InteractionResult.FAIL);
     }
 }
