@@ -5,6 +5,8 @@ import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
+import dev.iredsc.hadron.api.world.Area;
+import dev.iredsc.hadron.api.world.Areas;
 import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.neoforge.BlockHooks;
 import dev.iredsc.hadron.test.HadronTest;
@@ -24,12 +26,14 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 /**
  * What Hadron adds to {@code Level.setBlock}, which runs millions of times a second on a busy modded server
  * (docs/bridges.md, "The chokepoint cost"). Times Hadron's hook alone and whole setBlocks, with nobody listening, with a
  * protection-style listener on every {@link BlockEvent} but no actor (an unbridged mod's queued write: today it fires
- * nothing), and with an actor on the stack (a bridged machine: one event per write).
+ * nothing), and with an actor on the stack (a bridged machine: one event per write). Then the same without an actor
+ * in a world with a watched area: elsewhere (the lookup misses), and around the writes (each fires as Unknown).
  *
  * <p>The blocks swap between two stained glasses, which light and heightmaps treat alike, so no light work piles up
  * and a write costs what the block change itself costs. Each case counts what its listener heard and fails unless
@@ -79,6 +83,20 @@ public final class ChokepointBench {
         t.registerEvents(new Protection());
         run(listening, nanos, calls);
 
+        // A region far off: this world now has areas, but none covers the grid.
+        Area elsewhere = Areas.watch(t.plugin(), level,
+                BoundingBox.fromCorners(t.pos(-1000, 0, -1000), t.pos(-990, 10, -990)));
+        run(List.of(
+                new Case("hook alone, area elsewhere", HOOK_CALLS, false, () -> hook(level, grid, HOOK_CALLS)),
+                new Case("setBlock, area elsewhere", WRITES, false, () -> writes(level, grid, WRITES))), nanos, calls);
+        Area around = Areas.watch(t.plugin(), level, BoundingBox.fromCorners(grid[0], grid[grid.length - 1]));
+        run(List.of(
+                new Case("hook alone, inside an area", HOOK_EVENT_CALLS, true,
+                        () -> hook(level, grid, HOOK_EVENT_CALLS)),
+                new Case("setBlock, inside an area", WRITES, true, () -> writes(level, grid, WRITES))), nanos, calls);
+        around.close();
+        elsewhere.close();
+
         String table = table(nanos, calls);
         write(t, table);
         t.plugin().getLogger().info("\n" + table);
@@ -116,7 +134,7 @@ public final class ChokepointBench {
         for (int i = 0; i < n; i++) {
             if (BlockHooks.cancelSetBlock(level, grid[i % grid.length], RED)) refused++;
         }
-        if (refused != 0) throw new AssertionError("Nothing listens to refuse, yet the hook refused " + refused + ".");
+        if (refused != 0) throw new AssertionError("Nothing refuses, yet the hook refused " + refused + ".");
     }
 
     /** Real writes: each pass over the grid turns every block to the other glass. */
@@ -147,7 +165,8 @@ public final class ChokepointBench {
             double ns = perCall(nanos.get(name), calls.get(name));
             out.append(String.format(Locale.ROOT, "%-34s %12.1f %13.1f%%%n", name, ns, 100 * ns / base));
         }
-        out.append("\n\"of a setBlock\" compares each case with a whole setBlock nobody listens to.\n");
+        out.append("\n\"of a setBlock\" compares each case with a whole setBlock nobody listens to. Every case after the\n"
+                + "first two has a BlockEvent listener; \"inside an area\" writes fire as Actor.Unknown.\n");
         return out.toString();
     }
 

@@ -35,9 +35,9 @@ Many effects are one action with many parts: a spell hits ten entities, a gadget
 | `FakePlayer` | a fake player | Mekanism's digital miner, a deployer |
 | `Machine` | a block entity at a position | a quarry, a turret block, a pump, a quest submission block |
 | `EntityActor` | an identifiable entity | a drone, a vehicle, a projectile, a summon, a seagull stealing food, a boss |
-| `Server` | the server on an operator's orders; trusted by protection | the console, RCON, a command block, a datapack function |
+| `Server` | the server on an operator's orders; trusted by protection | the console, RCON, a command block, a datapack function, a plugin's own task, `onEnable`, `onDisable` or handler for an event nobody is behind (`plugin <name>`) |
 | `Nature` | the world on its own, with no entity behind it | fire spreading, water flowing, crops growing |
-| `Unknown` | a mod acted and nothing said who | an unbridged mod's scheduled task |
+| `Unknown` | a mod acted and nothing said who | an unbridged mod's scheduled task, for a block change, seen only in a [watched area](bridges.md#the-chokepoint-cost); also a spawner's mob, a container moved with nobody behind it, and other actions Hadron can't trace |
 
 Every actor except `Server`, `Nature` and `Unknown` carries up to three people, as UUIDs so they work while offline:
 

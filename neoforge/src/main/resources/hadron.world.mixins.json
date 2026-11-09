@@ -4,8 +4,10 @@
   "package": "dev.iredsc.hadron.neoforge.mixin.world",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "AreasServerLevelMixin",
     "BuildContextsUnboundMixin",
     "CommandsMixin",
+    "EndPlatformFeatureMixin",
     "ExplosionAccessor",
     "ExplosionMixin",
     "ForcedChunkManagerMixin",

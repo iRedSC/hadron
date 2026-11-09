@@ -1,6 +1,9 @@
 package dev.iredsc.hadron.neoforge.mixin.world;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.iredsc.hadron.api.event.world.PortalCreateEvent;
+import dev.iredsc.hadron.neoforge.AreaIndex;
 import dev.iredsc.hadron.neoforge.WorldHooks;
 import java.util.Optional;
 import net.minecraft.BlockUtil;
@@ -35,6 +38,18 @@ public abstract class PortalForcerMixin {
                 pos.getX() + SEARCH, level.getMaxBuildHeight() - 1, pos.getZ() + SEARCH);
         if (WorldHooks.portalDenied(level, area, PortalCreateEvent.CreateReason.NETHER_PAIR)) {
             cir.setReturnValue(Optional.empty());
+        }
+    }
+
+    /** Built in the world being arrived in, by the traveller's tick in the one they left: vanilla's own work there. */
+    @WrapMethod(method = "createPortal")
+    private Optional<BlockUtil.FoundRectangle> hadron$vanilla(BlockPos pos, Direction.Axis axis,
+            Operation<Optional<BlockUtil.FoundRectangle>> original) {
+        AreaIndex.enterVanillaWork(level);
+        try {
+            return original.call(pos, axis);
+        } finally {
+            AreaIndex.exitVanillaWork(level);
         }
     }
 }

@@ -4,7 +4,11 @@ import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.server.ServerLoadEvent;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
+import dev.iredsc.hadron.api.world.Area;
+import dev.iredsc.hadron.api.world.Areas;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.MinecraftServer;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -17,11 +21,21 @@ public final class SelfTestPlugin extends JavaPlugin implements Listener {
     private volatile boolean enabledAtStartup;
     private volatile int serverLoads;
     private volatile @Nullable MinecraftServer loadedServer;
+    private volatile @Nullable Area startupArea;
 
     @Override
     public void onEnable() {
         enabledAtStartup = getServer().getMinecraftServer().getTickCount() == 0;
+        // Where regions plugins watch their regions: onEnable, which on a cold start runs while the server starts.
+        // Far from anything a test touches.
+        startupArea = Areas.watch(this, getServer().getMinecraftServer().overworld(),
+                BoundingBox.fromCorners(new BlockPos(900_000, 0, 900_000), new BlockPos(900_001, 1, 900_001)));
         getServer().getPluginManager().registerEvents(this, this);
+    }
+
+    /** The area this copy watched in onEnable. */
+    public @Nullable Area startupArea() {
+        return startupArea;
     }
 
     /** Whether this copy was enabled as the server started, rather than by a reload afterwards. */

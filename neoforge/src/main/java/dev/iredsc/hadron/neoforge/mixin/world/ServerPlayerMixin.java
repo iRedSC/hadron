@@ -1,12 +1,21 @@
 package dev.iredsc.hadron.neoforge.mixin.world;
 
 import org.jspecify.annotations.Nullable;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.neoforge.AreaIndex;
 import dev.iredsc.hadron.neoforge.PlayerState;
 import dev.iredsc.hadron.neoforge.WorldHooks;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
 import net.minecraft.world.entity.player.Abilities;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import java.util.Optional;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.Unique;
@@ -28,6 +37,8 @@ public abstract class ServerPlayerMixin implements PlayerState {
     @Unique private float hadron$flySpeed;
     @Unique private float hadron$walkSpeed;
     @Unique private int hadron$level = Integer.MIN_VALUE;
+    /** The level marked as vanilla working for the player's own tick, while it runs; null otherwise. */
+    @Unique private @Nullable ServerLevel hadron$tickLevel;
 
     @Unique
     private ServerPlayer hadron$self() {
@@ -74,6 +85,63 @@ public abstract class ServerPlayerMixin implements PlayerState {
         hadron$flySpeed = old.hadron$flySpeed;
         hadron$walkSpeed = old.hadron$walkSpeed;
         hadron$level = old.hadron$level;
+    }
+
+    /**
+     * A player's own tick runs from their connection with nobody on the stack. What it changes (frosted ice under
+     * Frost Walker, an End gateway's exit) is vanilla's own work, silent in a watched area as it is everywhere else.
+     */
+    @WrapMethod(method = "doTick")
+    private void hadron$tickAsVanilla(Operation<Void> original) {
+        ServerLevel level = hadron$tickLevel = hadron$self().serverLevel();
+        AreaIndex.enterVanillaWork(level);
+        try {
+            original.call();
+        } finally {
+            AreaIndex.exitVanillaWork(java.util.Objects.requireNonNullElse(hadron$tickLevel, level));
+            hadron$tickLevel = null;
+        }
+    }
+
+    /**
+     * A menu closing: a barrel or trapped chest settling back closed. With nobody on the stack (the player leaving the
+     * game) it is vanilla's own work, silent in a watched area.
+     */
+    @WrapOperation(method = "doCloseContainer", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/inventory/AbstractContainerMenu;removed(Lnet/minecraft/world/entity/player/Player;)V"))
+    private void hadron$closeAsVanilla(AbstractContainerMenu menu, Player player, Operation<Void> original) {
+        ServerLevel level = hadron$self().serverLevel();
+        AreaIndex.enterVanillaWork(level);
+        try {
+            original.call(menu, player);
+        } finally {
+            AreaIndex.exitVanillaWork(level);
+        }
+    }
+
+    /**
+     * A respawn anchor's charge used up, in the world being respawned or returned to (leaving the End, from the
+     * player's tick in the End): vanilla's own work there.
+     */
+    @WrapMethod(method = "findRespawnAndUseSpawnBlock")
+    private static Optional<?> hadron$respawnAsVanilla(ServerLevel level, BlockPos pos, float angle, boolean forced,
+            boolean keepInventory, Operation<Optional<?>> original) {
+        AreaIndex.enterVanillaWork(level);
+        try {
+            return original.call(level, pos, angle, forced, keepInventory);
+        } finally {
+            AreaIndex.exitVanillaWork(level);
+        }
+    }
+
+    /** A dimension change mid-tick: the rest of the tick (Frost Walker on arrival) is vanilla's in the new level. */
+    @Inject(method = "setServerLevel", at = @At("TAIL"))
+    private void hadron$tickMoves(ServerLevel level, CallbackInfo ci) {
+        ServerLevel from = hadron$tickLevel;
+        if (from == null || from == level) return;
+        AreaIndex.exitVanillaWork(from);
+        AreaIndex.enterVanillaWork(level);
+        hadron$tickLevel = level;
     }
 
     @Inject(method = "doTick", at = @At("HEAD"))

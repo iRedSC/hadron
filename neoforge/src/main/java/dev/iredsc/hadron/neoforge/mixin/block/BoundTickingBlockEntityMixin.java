@@ -5,6 +5,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
+import dev.iredsc.hadron.neoforge.AreaIndex;
 import dev.iredsc.hadron.neoforge.BlockHooks;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
@@ -33,8 +34,17 @@ public abstract class BoundTickingBlockEntityMixin {
     private void hadron$tickAsMachine(BlockEntityTicker<BlockEntity> ticker, Level level, BlockPos pos,
             BlockState state, BlockEntity blockEntity, Operation<Void> original) {
         if (hadron$origin == 0) hadron$origin = BlockHooks.modded(blockEntity.getType()) ? (byte) 2 : (byte) 1;
-        if (hadron$origin != 2 || !(level instanceof ServerLevel server)) {
+        if (!(level instanceof ServerLevel server)) {
             original.call(ticker, level, pos, state, blockEntity);
+            return;
+        }
+        if (hadron$origin == 1) {
+            AreaIndex.enterVanillaWork(server);
+            try {
+                original.call(ticker, level, pos, state, blockEntity);
+            } finally {
+                AreaIndex.exitVanillaWork(server);
+            }
             return;
         }
         hadron$machine = BlockHooks.machine(hadron$machine, server, blockEntity);

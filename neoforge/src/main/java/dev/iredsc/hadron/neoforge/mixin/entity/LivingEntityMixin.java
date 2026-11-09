@@ -3,6 +3,7 @@ package dev.iredsc.hadron.neoforge.mixin.entity;
 import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import dev.iredsc.hadron.neoforge.AreaIndex;
 import dev.iredsc.hadron.neoforge.EntityActors;
 import dev.iredsc.hadron.neoforge.EntityDeaths;
 import dev.iredsc.hadron.neoforge.EntitySpawnRefunds;
@@ -11,6 +12,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -23,6 +25,21 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  */
 @Mixin(LivingEntity.class)
 abstract class LivingEntityMixin implements EntityActors.Hurting {
+    /**
+     * A sleeper getting up frees their bed: in the morning, on leaving the game, or woken. Vanilla's own, never an
+     * outsider's in a watched area, whoever or whatever is on the stack.
+     */
+    @WrapMethod(method = "stopSleeping")
+    private void hadron$getUp(Operation<Void> original) {
+        Level level = ((LivingEntity) (Object) this).level();
+        AreaIndex.enterVanillaWork(level);
+        try {
+            original.call();
+        } finally {
+            AreaIndex.exitVanillaWork(level);
+        }
+    }
+
     @Unique private @Nullable DamageSource hadron$hurting;
 
     @Override

@@ -78,6 +78,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.level.block.entity.SignBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.material.Fluid;
 import net.minecraft.world.level.block.state.pattern.BlockPattern;
 import net.minecraft.world.level.block.state.properties.BlockStateProperties;
 import net.minecraft.world.level.material.FlowingFluid;
@@ -158,7 +159,9 @@ public final class BlockHooks {
         /** The build's blocks as they were, once allowed; null before then or if it was refused. */
         @Nullable List<BlockSnapshot> built;
         @Nullable Entity builtCreature;
-        Actors.@Nullable Scope buildOperation;
+        /** The build's one operation, and the {@link Actors.Port#enter} handle holding it open (0 while not). */
+        dev.iredsc.hadron.api.actor.@Nullable Operation buildOperation;
+        long buildScope;
         /** Putting a refused build's blocks back, whose placing would otherwise find the pattern and build again. */
         boolean unbuilding;
         int lastUser = -1;
@@ -209,6 +212,7 @@ public final class BlockHooks {
             return ctx.decidedCancelled; // already asked by the item use that lit it
         }
         Actor actor = actorOrStack(igniter);
+        if (actor == null) actor = outsider(ctx, server, pos);
         if (actor == null || !Hooks.listens(BlockBreakEvent.class)) return false;
         boolean cancelled = Hooks.post(new BlockBreakEvent(server, pos, state,
                 level.getFluidState(pos).createLegacyBlock(), actor)).isCancelled();
@@ -300,6 +304,15 @@ public final class BlockHooks {
         return ctx.ticking() ? ctx.tickActor() : null;
     }
 
+    /**
+     * {@link Actor.Unknown} for a change at {@code pos} that nobody is behind, inside an area a plugin watches; null
+     * elsewhere, or while vanilla works on its own ({@link AreaIndex#enterVanillaWork}) or a block ticks. The caller
+     * has already found no actor.
+     */
+    private static @Nullable Actor outsider(Context ctx, ServerLevel level, BlockPos pos) {
+        return !ctx.ticking() && AreaIndex.outsiderAt(level, pos) ? Actor.Unknown.INSTANCE : null;
+    }
+
     /** Whether a registry id is outside the minecraft namespace; unregistered things count as modded. */
     static boolean modded(ResourceLocation id) {
         return id == null || !id.getNamespace().equals(ResourceLocation.DEFAULT_NAMESPACE);
@@ -312,8 +325,14 @@ public final class BlockHooks {
     }
 
     /** Whether a block is a mod's. Two field reads, no registry lookup, so it is cheap enough for every tick. */
-    static boolean modded(Block block) {
+    public static boolean modded(Block block) {
         var holder = block.builtInRegistryHolder();
+        return !holder.isBound() || modded(holder.key().location());
+    }
+
+    /** Whether a fluid is a mod's, as {@link #modded(Block)}. */
+    public static boolean modded(Fluid fluid) {
+        var holder = fluid.builtInRegistryHolder();
         return !holder.isBound() || modded(holder.key().location());
     }
 
@@ -504,7 +523,12 @@ public final class BlockHooks {
         Actor actor = EntityActors.current();
         boolean ticking = ctx.ticking() && (actor == null || actor == ctx.tickActor());
         boolean fire = isFire(after);
-        if (actor == null && !ticking && ctx.forming == 0 && !fire) return false;
+        if (actor == null && !ticking && ctx.forming == 0) {
+            // Nobody is behind this write: inside an area a plugin watches, it is an outsider's. Elsewhere it matters
+            // only if it starts a fire, which is nature's.
+            actor = outsider(ctx, server, pos);
+            if (actor == null && !fire) return false;
+        }
 
         BlockState before = level.getBlockState(pos);
         if (before == after) return false;
@@ -577,11 +601,13 @@ public final class BlockHooks {
         boolean outerBuilding = ctx.building;
         List<BlockSnapshot> outerBuilt = ctx.built;
         Entity outerCreature = ctx.builtCreature;
-        Actors.Scope outerOperation = ctx.buildOperation;
+        dev.iredsc.hadron.api.actor.Operation outerOperation = ctx.buildOperation;
+        long outerScope = ctx.buildScope;
         ctx.building = true;
         ctx.built = null;
         ctx.builtCreature = null;
         ctx.buildOperation = null;
+        ctx.buildScope = 0;
         try {
             work.run();
             List<BlockSnapshot> built = ctx.built;
@@ -600,12 +626,25 @@ public final class BlockHooks {
             }
         } finally {
             if (ctx.built != null) unsuppress(); // the build threw after it was allowed
-            if (ctx.buildOperation != null) ctx.buildOperation.close();
+            if (ctx.buildScope != 0) Actors.Port.exit(ctx.buildScope);
             ctx.building = outerBuilding;
             ctx.built = outerBuilt;
             ctx.builtCreature = outerCreature;
             ctx.buildOperation = outerOperation;
+            ctx.buildScope = outerScope;
         }
+    }
+
+    /**
+     * Opens an outsider's build operation for making {@code entity}'s spawn event, when {@code entity} is the creature
+     * of an allowed build nobody is behind; 0 otherwise. The caller exits it before posting, so the spawn is in the
+     * build's operation while the handlers see nobody behind it and act as themselves, as for the build's blocks.
+     */
+    public static long enterOutsidersBuild(Entity entity) {
+        Context ctx = CONTEXT.get();
+        dev.iredsc.hadron.api.actor.Operation operation = ctx.buildOperation;
+        if (!ctx.building || ctx.builtCreature != entity || operation == null || ctx.buildScope != 0) return 0;
+        return Actors.Port.enter(operation.actor(), operation);
     }
 
     /**
@@ -625,20 +664,34 @@ public final class BlockHooks {
             }
         }
         Actor actor = current();
-        if (actor != null && ctx.suppressed <= ctx.suppressedFloor) {
-            if (ctx.building && ctx.buildOperation == null) {
-                ctx.buildOperation = dev.iredsc.hadron.api.actor.Operation.begin(actor);
+        if (ctx.suppressed <= ctx.suppressedFloor) {
+            if (actor != null && ctx.building && ctx.buildOperation == null) {
+                ctx.buildOperation = dev.iredsc.hadron.api.actor.Operation.single(actor);
+                ctx.buildScope = Actors.Port.enter(actor, ctx.buildOperation);
             }
             BlockState air = Blocks.AIR.defaultBlockState();
             for (BlockSnapshot block : blocks) {
+                // Nobody behind the build: only the blocks inside a watched area are anyone's business.
+                Actor who = actor != null ? actor : outsider(ctx, server, block.getPos());
                 BlockState before = block.getState();
                 Kind kind = actorKind(before, air);
-                if (kind == null || !Hooks.listens(type(kind))) continue;
-                if (Hooks.post(build(kind, server, BlockChange.of(server, block.getPos(), before, air), NO_POS, actor))
-                        .isCancelled()) {
-                    return true;
+                if (who == null || kind == null || !Hooks.listens(type(kind))) continue;
+                // The first watched block makes it an outsider's build: its blocks and creature are one operation,
+                // open only while each event is made, so the handlers see nobody behind it and act as themselves.
+                if (ctx.building && ctx.buildOperation == null) {
+                    ctx.buildOperation = dev.iredsc.hadron.api.actor.Operation.single(who);
                 }
+                long making = ctx.buildScope == 0 && ctx.buildOperation != null
+                        ? Actors.Port.enter(who, ctx.buildOperation) : 0;
+                BlockChangeEvent event;
+                try {
+                    event = build(kind, server, BlockChange.of(server, block.getPos(), before, air), NO_POS, who);
+                } finally {
+                    if (making != 0) Actors.Port.exit(making);
+                }
+                if (Hooks.post(event).isCancelled()) return true;
             }
+            // Allowed: the creature's spawn joins the outsider's operation through enterOutsidersBuild.
         }
         if (ctx.building) {
             ctx.built = blocks;
@@ -680,6 +733,8 @@ public final class BlockHooks {
             actor = ctx.tickActor();
             kind = actor instanceof Actor.Nature ? Kind.FADE : Kind.BREAK;
         } else if (actor != null) {
+            kind = Kind.BREAK;
+        } else if ((actor = outsider(ctx, server, pos)) != null) {
             kind = Kind.BREAK;
         } else {
             return false;

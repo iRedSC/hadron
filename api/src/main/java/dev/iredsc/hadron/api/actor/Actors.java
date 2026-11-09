@@ -247,6 +247,17 @@ public final class Actors {
             return ((long) index << 40) | token;
         }
 
+        /**
+         * As {@link #enter(Actor)}, inside {@code operation}: for one operation held open across steps with other
+         * code running between them, such as a build whose events are posted with nobody behind them.
+         */
+        public static long enter(Actor actor, Operation operation) {
+            Stack stack = STACK.get();
+            int index = stack.depth;
+            long token = stack.push(checked(actor), Objects.requireNonNull(operation, "operation"));
+            return ((long) index << 40) | token;
+        }
+
         /** Pops what {@link #enter} pushed, and anything left open above it. */
         public static void exit(long handle) {
             STACK.get().close((int) (handle >>> 40), handle & TOKEN_MASK);

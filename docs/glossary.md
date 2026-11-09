@@ -40,6 +40,7 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 
 ## Gaps and coverage
 
+- **Watched area**: a box a plugin named with `Areas.watch`; a block change with nobody behind it fires there as `Unknown` instead of not at all. ([bridges](bridges.md#the-chokepoint-cost))
 - **Attribution gap**: an action Hadron sees but can't tie to a person (`Unknown`, or no owner). Fails closed: protection treats it as an outsider. ([bridges](bridges.md#two-kinds-of-gap))
 - **Interception gap**: an effect that skips every chokepoint, so no event fires and nothing can deny it. Only a bridge closes it.
 - **Fail closed**: an uncertain actor is denied where outsiders are denied, so a missing bridge shows up as a machine that won't work, never as silent griefing.

@@ -46,6 +46,7 @@ public final class HadronMod {
         DataPort.register();
         NetPort.register();
         WorldsPort.register();
+        AreasPort.register();
     }
 
     private static void aboutToStart(ServerAboutToStartEvent event) {

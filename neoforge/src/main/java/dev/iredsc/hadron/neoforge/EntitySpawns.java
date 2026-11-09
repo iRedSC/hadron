@@ -54,13 +54,19 @@ public final class EntitySpawns {
         Class<? extends Event> type = entity instanceof Projectile ? ProjectileLaunchEvent.class
                 : entity instanceof HangingEntity ? HangingPlaceEvent.class : EntitySpawnEvent.class;
         if (!Hooks.listens(type)) return true;
-        EntitySpawnEvent event = switch (entity) {
-            case Projectile p -> new ProjectileLaunchEvent(p, p.getOwner() != null
-                    ? EntityActors.of(p.getOwner()) : EntityActors.fromStack(p, Actor.Unknown.INSTANCE));
-            case HangingEntity h -> new HangingPlaceEvent(h, EntityActors.fromStack(h, Actor.Unknown.INSTANCE));
-            default -> new EntitySpawnEvent(entity, entity instanceof Mob mob ? mob.getSpawnType() : null,
-                    EntityActors.fromStack(entity, fallback(entity)));
-        };
+        long build = BlockHooks.enterOutsidersBuild(entity);
+        EntitySpawnEvent event;
+        try {
+            event = switch (entity) {
+                case Projectile p -> new ProjectileLaunchEvent(p, p.getOwner() != null
+                        ? EntityActors.of(p.getOwner()) : EntityActors.fromStack(p, Actor.Unknown.INSTANCE));
+                case HangingEntity h -> new HangingPlaceEvent(h, EntityActors.fromStack(h, Actor.Unknown.INSTANCE));
+                default -> new EntitySpawnEvent(entity, entity instanceof Mob mob ? mob.getSpawnType() : null,
+                        EntityActors.fromStack(entity, fallback(entity)));
+            };
+        } finally {
+            if (build != 0) Actors.Port.exit(build);
+        }
         attempts++;
         boolean cancelled = Hooks.post(event).isCancelled();
         if (cancelled) refused++;
