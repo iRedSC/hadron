@@ -19,6 +19,7 @@
     "LeashFenceKnotEntityMixin",
     "LivingEntityMixin",
     "MobMixin",
+    "PlayerInteractMixin",
     "ProjectileMixin",
     "ServerLevelMixin",
     "ServerPlayerGameModeMixin",

@@ -18,13 +18,18 @@ import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
 import java.util.List;
+import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.advancements.CriterionProgress;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.network.protocol.game.ClientboundAnimatePacket;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.animal.Cow;
 import net.minecraft.world.entity.animal.Sheep;
+import net.minecraft.world.entity.animal.frog.Frog;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.decoration.LeashFenceKnotEntity;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -109,6 +114,76 @@ public final class HandlingTests {
         t.assertEquals(alice.player(), e.getHolder(), "the holder it is taken from");
         assertPlayer(t, e.getActor(), alice, "Unleashing the cow");
         t.assertFalse(cow.isLeashed(), "the cow should be free");
+    }
+
+    /** A click the server counts as done makes the player swing, as it counts it for advancements. */
+    private static void assertNoSwing(TestContext t, TestPlayer player, String what) {
+        t.assertEquals(List.of(), player.received(ClientboundAnimatePacket.class), what + " should not swing "
+                + "the arm or count as an interaction");
+    }
+
+    /** Whether leashing a temperate frog counted toward vanilla's "leash every frog" advancement. */
+    private static boolean frogLeashCounted(TestContext t, TestPlayer player) {
+        AdvancementHolder frogs = t.server().getAdvancements()
+                .get(ResourceLocation.withDefaultNamespace("husbandry/leash_all_frog_variants"));
+        if (frogs == null) throw new AssertionError("vanilla's husbandry/leash_all_frog_variants advancement is missing");
+        CriterionProgress temperate = player.player().getAdvancements().getOrStartProgress(frogs)
+                .getCriterion("minecraft:temperate");
+        if (temperate == null) throw new AssertionError("the frog advancement has no minecraft:temperate criterion");
+        return temperate.isDone();
+    }
+
+    @HadronTest
+    @Covers(EntityLeashEvent.class)
+    void aRefusedLeashIsNotCountedAsAnInteraction(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Frog frog = spawn(t, EntityType.FROG, t.pos(2, 0, 0));
+        alice.hold(new ItemStack(Items.LEAD));
+        boolean[] refuse = {true};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityLeashEvent e) {
+                e.setCancelled(refuse[0]);
+            }
+        });
+        t.tick();
+        alice.clearReceived();
+        alice.interact(frog);
+        t.tick();
+        assertNoSwing(t, alice, "A refused leash");
+        t.assertFalse(frogLeashCounted(t, alice), "a refused leash should not count toward an advancement");
+        refuse[0] = false;
+        alice.interact(frog);
+        t.assertTrue(frogLeashCounted(t, alice), "a leash should count toward the frog advancement");
+    }
+
+    @HadronTest
+    @Covers(EntityUnleashEvent.class)
+    void aRefusedUnleashWithShearsInHandDoesNotShear(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Sheep sheep = spawn(t, EntityType.SHEEP, t.pos(2, 0, 0));
+        sheep.setLeashedTo(alice.player(), true);
+        alice.hold(new ItemStack(Items.SHEARS));
+        int[] sheared = {0};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityUnleashEvent e) {
+                e.setCancelled(true);
+            }
+
+            @EventHandler
+            void on(EntityShearEvent e) {
+                sheared[0]++;
+            }
+        });
+        t.tick();
+        alice.clearReceived();
+        alice.interact(sheep);
+        t.tick();
+        t.assertEquals(alice.player(), sheep.getLeashHolder(), "the sheep's leash holder");
+        t.assertFalse(sheep.isSheared(), "the refused click should not fall through to shearing");
+        t.assertEquals(0, sheared[0], "EntityShearEvents fired");
+        assertNoSwing(t, alice, "A refused unleash");
     }
 
     @HadronTest

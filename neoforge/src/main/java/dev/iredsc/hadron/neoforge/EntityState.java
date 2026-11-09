@@ -39,6 +39,14 @@ public interface EntityState {
 
     void hadron$setDying(boolean dying);
 
+    /**
+     * Set on a player whose click on an entity a plugin just refused (a lead put on or taken off), so the click ends
+     * there: not counted as an interaction, and not passed on to the held item.
+     */
+    boolean hadron$interactRefused();
+
+    void hadron$setInteractRefused(boolean refused);
+
     /** Experience held back from the vanilla drop until the death event decides it. */
     int hadron$deathExp();
 
