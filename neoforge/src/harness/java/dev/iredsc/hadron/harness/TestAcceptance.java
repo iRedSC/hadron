@@ -35,11 +35,13 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.ExperienceOrb;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.FallingBlockEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
@@ -112,7 +114,13 @@ final class TestAcceptance implements Acceptance, Listener {
 
     @Override
     public void assertEveryChangeSeen(String step) {
-        List<String> problems = AcceptanceDiff.unseen(before, snapshot(), seen);
+        AcceptanceDiff.Snapshot after = snapshot();
+        if (!AcceptanceDiff.anyChange(before, after)) {
+            throw new AssertionError(step + ": nothing in the area changed since the last mark, so this proves "
+                    + "nothing. Check the machine ran (power, fuel, an owner, enough ticks), or use assertUnchanged "
+                    + "for a step that should change nothing.");
+        }
+        List<String> problems = AcceptanceDiff.unseen(before, after, seen);
         if (!problems.isEmpty()) {
             throw new AssertionError(step + ": " + problems.size() + " change(s) in the area fired no event a plugin "
                     + "could act on. Each is an interception gap: the bridge fires the core event before the change "
@@ -221,21 +229,18 @@ final class TestAcceptance implements Acceptance, Listener {
             blocks.put(pos, level.getBlockState(pos));
             BlockEntity be = level.getBlockEntity(pos);
             if (be != null) blockEntities.put(pos, String.valueOf(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType())));
-            @Nullable IItemHandler items = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null);
-            if (items != null) {
-                List<ItemStack> stacks = new ArrayList<>();
-                for (int i = 0; i < items.getSlots(); i++) stacks.add(items.getStackInSlot(i).copy());
-                contents.put(pos, stacks);
-            }
+            List<ItemStack> stacks = items(pos);
+            if (!stacks.isEmpty()) contents.put(pos, stacks);
         }
         Map<UUID, AcceptanceDiff.Thing> entities = new LinkedHashMap<>();
         for (Entity e : level.getEntities((Entity) null, AABB.of(box), e -> !(e instanceof ServerPlayer))) {
             ItemStack stack = e instanceof ItemEntity item ? item.getItem().copy() : ItemStack.EMPTY;
             boolean consequence = e instanceof ItemEntity || e instanceof ExperienceOrb
                     || e instanceof FallingBlockEntity;
+            float health = e instanceof LivingEntity living ? living.getHealth() : -1;
             entities.put(e.getUUID(), new AcceptanceDiff.Thing(e.getUUID(),
-                    String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(e.getType())), stack, e.blockPosition(),
-                    consequence));
+                    String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(e.getType())), stack, health,
+                    e.blockPosition(), consequence));
         }
         Map<String, List<ItemStack>> players = new LinkedHashMap<>();
         for (TestPlayer tp : t.players()) {
@@ -246,5 +251,27 @@ final class TestAcceptance implements Acceptance, Listener {
             players.put(tp.name(), stacks);
         }
         return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, players);
+    }
+
+    /**
+     * Every slot a block exposes: its sideless item handler, or, for a machine that offers handlers only on some
+     * faces, each distinct face's in turn. Empty when it has none.
+     */
+    private List<ItemStack> items(BlockPos pos) {
+        List<IItemHandler> handlers = new ArrayList<>();
+        @Nullable IItemHandler sideless = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null);
+        if (sideless != null) {
+            handlers.add(sideless);
+        } else {
+            for (Direction side : Direction.values()) {
+                @Nullable IItemHandler faced = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, side);
+                if (faced != null && handlers.stream().noneMatch(h -> h == faced)) handlers.add(faced);
+            }
+        }
+        List<ItemStack> stacks = new ArrayList<>();
+        for (IItemHandler h : handlers) {
+            for (int i = 0; i < h.getSlots(); i++) stacks.add(h.getStackInSlot(i).copy());
+        }
+        return stacks;
     }
 }

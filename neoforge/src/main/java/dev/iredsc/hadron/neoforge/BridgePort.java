@@ -16,7 +16,7 @@ final class BridgePort implements Bridge.Backend {
     }
 
     @Override
-    public @Nullable String constructingMod() {
+    public @Nullable String loadingMod() {
         // FML sets the active container while a mod constructs or handles its loading events, and reports minecraft
         // outside them; ModList is null before mods are listed.
         if (ModList.get() == null) return null;

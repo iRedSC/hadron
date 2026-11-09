@@ -64,7 +64,7 @@ public final class Bridge {
                     + "bridge depend on hadron, loading after it (in neoforge.mods.toml, a [[dependencies.<your mod "
                     + "id>]] entry with modId = \"hadron\", type = \"required\", ordering = \"AFTER\")");
         }
-        String claimant = port.constructingMod();
+        String claimant = port.loadingMod();
         if (claimant == null) {
             throw new IllegalStateException("Bridge.claim was called outside a mod's constructor, so Hadron can't tell "
                     + "which bridge is claiming: call it from your bridge mod's constructor");
@@ -175,8 +175,11 @@ public final class Bridge {
 
     /** What a bridge needs from the loader port. */
     public interface Backend {
-        /** The mod whose constructor is running on this thread, or null outside one. */
-        @Nullable String constructingMod();
+        /**
+         * The mod whose loading code is running on this thread (its constructor, or a handler for one of its loading
+         * events), or null outside mod loading: once the server runs, never a mod.
+         */
+        @Nullable String loadingMod();
 
         boolean isModLoaded(String modId);
 
@@ -190,8 +193,18 @@ public final class Bridge {
     public static final class Port {
         private Port() {}
 
-        public static void install(Backend installed) {
-            backend = Objects.requireNonNull(installed, "backend");
+        /**
+         * Installs the port's backend, once: a second install would let other code decide which mod is claiming.
+         *
+         * @throws IllegalStateException if one is installed already.
+         */
+        public static synchronized void install(Backend installed) {
+            Objects.requireNonNull(installed, "backend");
+            if (backend != null) {
+                throw new IllegalStateException("Bridge's backend is installed already, by Hadron's loader port; "
+                        + "nothing else installs one");
+            }
+            backend = installed;
         }
     }
 }

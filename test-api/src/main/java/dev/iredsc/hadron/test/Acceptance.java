@@ -31,9 +31,10 @@ import net.minecraft.core.BlockPos;
  * behind it fires as Unknown there.
  *
  * <p>What it compares: block states and which block entity is where; the items in every inventory a block in the
- * area exposes; which entities are in it (by id and type, and a dropped item's stack); and every test player's
- * inventory, wherever they stand. Not yet: energy, fluids and other resources a machine holds, which wait for
- * Hadron's design for running resource flows.
+ * area exposes, on any face; which entities are in it (by id and type, a dropped item's stack, a living entity's
+ * health); and every test player's inventory, wherever they stand. Not compared: a block entity's other data (a
+ * machine's progress, settings or filters), and energy, fluids and other resources a machine holds. Those wait for
+ * Hadron's design for running resource flows, since a machine's own data also changes while it merely ticks.
  *
  * <p>Get one with {@link TestContext#acceptance}. It lasts until the test ends.
  */
@@ -67,7 +68,9 @@ public interface Acceptance {
      * block by a block event covering it, each block's inventory by an inventory event for it or a block event at it,
      * each entity that appeared or left (other than dropped items, experience and falling blocks, whose contents
      * come from a change reported elsewhere) by an entity event for it. A failure names each unreported change: an
-     * interception gap the bridge closes by firing the core event (docs/bridge-hooks.md).
+     * interception gap the bridge closes by firing the core event (docs/bridge-hooks.md). A block event explains its
+     * block's inventory only when the block itself changed. Fails too when nothing changed, since then the step
+     * proves nothing: the machine never ran.
      */
     void assertEveryChangeSeen(String step);
 

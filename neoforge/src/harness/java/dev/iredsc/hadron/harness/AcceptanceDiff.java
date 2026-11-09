@@ -25,8 +25,11 @@ import net.minecraft.world.level.block.state.BlockState;
 final class AcceptanceDiff {
     private AcceptanceDiff() {}
 
-    /** An entity in the area. {@code consequence}: a dropped item, orb or falling block, made by a change elsewhere. */
-    record Thing(UUID id, String type, ItemStack stack, BlockPos pos, boolean consequence) {}
+    /**
+     * An entity in the area. {@code health} is -1 for an entity that has none. {@code consequence}: a dropped item,
+     * orb or falling block, made by a change elsewhere.
+     */
+    record Thing(UUID id, String type, ItemStack stack, float health, BlockPos pos, boolean consequence) {}
 
     record Snapshot(Map<BlockPos, BlockState> blocks, Map<BlockPos, String> blockEntities,
             Map<BlockPos, List<ItemStack>> contents, Map<UUID, Thing> entities, Map<String, List<ItemStack>> players) {}
@@ -45,6 +48,11 @@ final class AcceptanceDiff {
         List<String> out = new ArrayList<>();
         for (Change c : changes(before, after, true)) out.add(c.text() + ": " + explain(c, seen));
         return out;
+    }
+
+    /** Whether anything in the area or a test player's inventory changed. */
+    static boolean anyChange(Snapshot before, Snapshot after) {
+        return !changes(before, after, true).isEmpty();
     }
 
     /** Each change no event that went through reports. */
@@ -110,10 +118,14 @@ final class AcceptanceDiff {
         containers.addAll(after.contents().keySet());
         for (BlockPos pos : containers) {
             String diff = stacks(before.contents().getOrDefault(pos, List.of()), after.contents().getOrDefault(pos, List.of()));
-            if (diff != null) {
-                out.add(new Change("the inventory at " + at(pos) + " " + diff,
-                        blockAt(pos).or(s -> s.event() instanceof InventoryEvent i && holds(i, pos))));
-            }
+            if (diff == null) continue;
+            Predicate<Seen> inventory = s -> s.event() instanceof InventoryEvent i && holds(i, pos);
+            // A block event explains its inventory only when the block itself went or changed (a chest broken);
+            // otherwise a machine could report one state change and then move items unreported.
+            boolean blockChanged = !Objects.equals(before.blocks().get(pos), after.blocks().get(pos))
+                    || !Objects.equals(before.blockEntities().get(pos), after.blockEntities().get(pos));
+            out.add(new Change("the inventory at " + at(pos) + " " + diff,
+                    blockChanged ? blockAt(pos).or(inventory) : inventory));
         }
         Set<UUID> ids = new LinkedHashSet<>(before.entities().keySet());
         ids.addAll(after.entities().keySet());
@@ -129,6 +141,9 @@ final class AcceptanceDiff {
             } else if (was != null && is != null && !ItemStack.matches(was.stack(), is.stack())) {
                 if (is.consequence() && !consequencesToo) continue;
                 what = "the " + is.type() + " at " + at(is.pos()) + " went from " + was.stack() + " to " + is.stack();
+            } else if (was != null && is != null && was.health() != is.health()) {
+                what = "the " + is.type() + " at " + at(is.pos()) + " went from " + was.health() + " to "
+                        + is.health() + " health";
             } else {
                 continue;
             }

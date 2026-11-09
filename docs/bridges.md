@@ -24,13 +24,13 @@ area.assertEveryChangeSeen("bob's miner where he is trusted");
 area.assertActingFor(bob, "bob's miner where he is trusted");
 ```
 
-- **`assertUnchanged`**, for a refused step: no block, block entity, block inventory or entity in the box changed, and no test player's inventory did either. Each change is named with what explains it: a cancelled event whose cancel left it behind, an event that went through, or no event at all (an interception gap).
-- **`assertEveryChangeSeen`**, for an allowed step: every block and block inventory that changed was covered by an event that went through, and so was every entity that appeared or left. Dropped items, experience orbs and falling blocks are exempt, because their contents come from a change reported elsewhere.
+- **`assertUnchanged`**, for a refused step: no block, block entity, block inventory (on any face), entity or living entity's health in the box changed, and no test player's inventory did either. Each change is named with what explains it: a cancelled event whose cancel left it behind, an event that went through, or no event at all (an interception gap).
+- **`assertEveryChangeSeen`**, for an allowed step: every block and block inventory that changed was covered by an event that went through, and so was every entity that appeared, left or changed health. A block event covers its block's inventory only when the block itself changed. Dropped items, experience orbs and falling blocks are exempt, because their contents come from a change reported elsewhere. A step where nothing changed fails, since it proves nothing.
 - **`assertActingFor`**: every event in the box acts for that player. `Unknown` and ownerless actors are named as attribution gaps.
 
 Protection denies every cancellable block, inventory, resource, explosion or entity event in the box unless the server or a trusted player is behind it. An entity's own motion and attention (moving, teleporting, velocity, knockback, targeting, air) is neither protected nor logged. The box is watched, so a change with nobody behind it fires as `Unknown`. `AcceptanceKitTests` in the self-tests checks that each assertion fails, naming the right gap, when a change skips every chokepoint, a cancel is ignored, or nobody is behind an action.
 
-Not checked yet: whether items and resources are conserved in an allowed step (an anti-dupe ledger), and the energy, fluids and other resources a machine holds. Both wait for the design of running resource flows ([design](design.md#open-designs)), which the Mekanism bridge will shape. Set up the box before calling `t.acceptance`: once the box is watched, the test's own writes have nobody behind them and are refused as `Unknown`.
+Not checked yet: whether items and resources are conserved in an allowed step (an anti-dupe ledger, which would also catch a dropped item made from nothing), a block entity's data besides its inventory, and the energy, fluids and other resources a machine holds. Both wait for the design of running resource flows ([design](design.md#open-designs)), which the Mekanism bridge will shape. Set up the box before calling `t.acceptance`: once the box is watched, the test's own writes have nobody behind them and are refused as `Unknown`.
 
 ## Core intercepts, bridges translate
 

@@ -31,7 +31,7 @@ class BridgeTest {
         final List<Event> fired = new ArrayList<>();
 
         @Override
-        public @Nullable String constructingMod() {
+        public @Nullable String loadingMod() {
             return constructing;
         }
 
@@ -51,11 +51,28 @@ class BridgeTest {
         }
     }
 
-    private final Loader loader = new Loader();
+    /** The backend installs once per JVM, as the port's does; each test starts it afresh. */
+    private static final Loader LOADER = new Loader();
+
+    static {
+        Bridge.Port.install(LOADER);
+    }
+
+    private final Loader loader = LOADER;
 
     @BeforeEach
-    void install() {
-        Bridge.Port.install(loader);
+    void reset() {
+        loader.constructing = null;
+        loader.installed.clear();
+        loader.heard.clear();
+        loader.fired.clear();
+    }
+
+    @Test
+    void aSecondBackendIsRefused() {
+        IllegalStateException e = assertThrows(IllegalStateException.class, () -> Bridge.Port.install(new Loader()));
+        assertEquals("Bridge's backend is installed already, by Hadron's loader port; nothing else installs one",
+                e.getMessage());
     }
 
     private Bridge claimAs(String bridge, String mod, String... more) {

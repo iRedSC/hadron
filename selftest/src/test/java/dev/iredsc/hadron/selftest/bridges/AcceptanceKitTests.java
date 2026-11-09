@@ -14,7 +14,10 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.animal.Pig;
 
 /**
  * The acceptance kit on vanilla blocks: it passes what core already covers, and each assertion fails, naming the
@@ -76,7 +79,9 @@ public final class AcceptanceKitTests {
         String unchanged = failure(t, () -> area.assertUnchanged("a mod's direct chunk write"));
         t.assertTrue(unchanged.contains("no event fired for it. An interception gap"), unchanged);
         String unseen = failure(t, () -> area.assertEveryChangeSeen("a mod's direct chunk write"));
-        t.assertTrue(unseen.contains("interception gap") && unseen.contains("gold_block"), unseen);
+        String at = pos.getX() + " " + pos.getY() + " " + pos.getZ();
+        t.assertTrue(unseen.contains("interception gap") && unseen.contains(at + " went from")
+                && unseen.contains("gold_block"), unseen);
     }
 
     @HadronTest
@@ -98,7 +103,7 @@ public final class AcceptanceKitTests {
     void unknownAndOwnerlessActorsAreAttributionGaps(TestContext t) {
         TestPlayer alice = t.player("alice");
         Acceptance area = t.acceptance(around(t));
-        area.trust(alice).trustNobody().trust(alice);
+        area.trust(alice);
         // Nobody on the actor stack in a watched area: core fires it as Unknown, and protection refuses it.
         t.level().setBlock(t.pos(2, 0, 0), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
         // A machine nobody owns.
@@ -111,5 +116,53 @@ public final class AcceptanceKitTests {
         t.assertTrue(why.contains("Unknown, so nothing was on the actor stack"), why);
         t.assertTrue(why.contains("nobody is responsible for it"), why);
         area.assertUnchanged("an unbridged mod's work, refused");
+    }
+
+    @HadronTest
+    void aBlockEventExplainsItsInventoryOnlyWhenTheBlockChanged(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos pos = t.pos(2, 0, 0);
+        t.setBlock(pos, Blocks.CHEST);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        // A machine reports a change at its own block, then fills the chest there with no inventory event.
+        Hadron.getPluginManager().callEvent(new BlockBreakEvent(t.level(), pos, Blocks.CHEST.defaultBlockState(),
+                Blocks.CHEST.defaultBlockState(), new Actor.Player(alice.player())));
+        ((ChestBlockEntity) t.level().getBlockEntity(pos)).setItem(0, new ItemStack(Items.DIAMOND, 3));
+        String why = failure(t, () -> area.assertEveryChangeSeen("a machine filling a chest unreported"));
+        t.assertTrue(why.contains("the inventory at") && why.contains("diamond"), why);
+    }
+
+    @HadronTest
+    void aHurtThatSkipsTheEventsIsNamed(TestContext t) {
+        Pig pig = EntityType.PIG.create(t.level());
+        pig.moveTo(t.pos(2, 0, 0).getX() + 0.5, t.pos(2, 0, 0).getY(), t.pos(2, 0, 0).getZ() + 0.5);
+        t.level().addFreshEntity(pig);
+        Acceptance area = t.acceptance(around(t));
+        pig.setHealth(pig.getHealth() - 4);
+        String why = failure(t, () -> area.assertUnchanged("a weapon setting health directly"));
+        t.assertTrue(why.contains("health") && why.contains("no event fired for it"), why);
+    }
+
+    @HadronTest
+    void trustingNobodyDeniesAPlayerTrustedBefore(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos stone = t.pos(2, 0, 0);
+        t.setBlock(stone, Blocks.STONE);
+        alice.hold(new ItemStack(Items.IRON_PICKAXE));
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).trustNobody().mark();
+        alice.breakBlock(stone);
+        t.tick(2);
+        area.assertUnchanged("alice breaking stone after trust was withdrawn");
+    }
+
+    @HadronTest
+    void aStepWhereNothingChangedProvesNothing(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        String why = failure(t, () -> area.assertEveryChangeSeen("a machine that never started"));
+        t.assertTrue(why.contains("nothing in the area changed since the last mark"), why);
     }
 }

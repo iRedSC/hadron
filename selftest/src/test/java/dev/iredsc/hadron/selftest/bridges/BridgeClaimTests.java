@@ -15,12 +15,12 @@ public final class BridgeClaimTests {
     void aPluginCannotClaimABridgeWhileTheServerRuns(TestContext t) {
         String refused = "no refusal: the claim went through";
         try {
-            Bridge.claim("neoforge_test_absent");
+            Bridge.claim("any_mod");
         } catch (IllegalStateException e) {
             refused = e.getMessage();
         }
         t.assertEquals("Bridge.claim was called outside a mod's constructor, so Hadron can't tell which bridge is "
                 + "claiming: call it from your bridge mod's constructor", refused, "the refusal");
-        t.assertFalse(Bridge.isInstalled("neoforge_test_absent"), "nothing was claimed");
+        t.assertFalse(Bridge.isInstalled("any_mod"), "nothing was claimed");
     }
 }
