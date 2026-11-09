@@ -91,4 +91,19 @@ class RegionsFileTest {
         yaml.loadFromString("players: [notauuid]\n");
         assertThrows(RegionsFile.Problem.class, () -> Bypass.read(yaml));
     }
+
+    private static void refused(String region, String expect) {
+        String text = "regions:\n  spawn: {world: 'minecraft:overworld', min: [0, 0, 0], max: [1, 1, 1], " + region + "}\n";
+        RegionsFile.Problem p = assertThrows(RegionsFile.Problem.class, () -> read(text), region);
+        assertTrue(p.getMessage().contains(expect), p.getMessage());
+    }
+
+    @Test
+    void aWronglyTypedFieldIsRefusedNotDropped() {
+        refused("flags: [{pvp: deny}]", "flags");
+        refused("owners: 5f2b", "owners");
+        refused("members: [12]", "members");
+        refused("priority: 4294967296", "priority");
+        refused("owner: []", "owner");
+    }
 }

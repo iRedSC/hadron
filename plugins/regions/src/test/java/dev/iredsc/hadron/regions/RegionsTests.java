@@ -4,10 +4,13 @@ import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.projectile.ThrownEnderpearl;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.phys.AABB;
 
 /** Regions as an operator makes them and as players and the world meet them. */
 public final class RegionsTests {
@@ -160,5 +163,35 @@ public final class RegionsTests {
         t.assertChat(bob, "You need regions.manage");
         bob.command("rg flag someone-elses use allow");
         t.assertChat(bob, "You don't own a region named someone-elses");
+    }
+
+    @HadronTest
+    void anOutsiderCantPlaceAnArmorStand(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "armor-stand-place", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        alice.command("rg flag armor-stand-place use allow");
+        TestPlayer bob = t.player("bob");
+        bob.hold(new ItemStack(Items.ARMOR_STAND));
+        bob.useBlock(t.pos(1, -1, 1));
+        t.tick(2);
+        t.assertTrue(t.level().getEntitiesOfClass(ArmorStand.class, new AABB(t.pos(1, 0, 1)).inflate(3)).isEmpty(),
+                "an outsider's armor stand should not appear in a region that denies building");
+    }
+
+    @HadronTest
+    void anEnderPearlCantCarryAnOutsiderIn(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "pearl-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        alice.command("rg flag pearl-vault entry deny");
+        TestPlayer bob = t.player("bob");
+        ThrownEnderpearl pearl = new ThrownEnderpearl(t.level(), bob.player());
+        BlockPos inside = t.pos(3, 1, 0);
+        pearl.setPos(inside.getX() + 0.5, inside.getY() + 0.5, inside.getZ() + 0.5);
+        pearl.setDeltaMovement(0, -0.5, 0);
+        t.level().addFreshEntity(pearl);
+        t.await("the pearl to land", pearl::isRemoved, 40);
+        t.tick(2);
+        t.assertTrue(bob.player().getBlockX() < t.pos(2, 0, 0).getX(),
+                "bob should not have been carried into the vault, but stands at " + bob.player().blockPosition());
     }
 }

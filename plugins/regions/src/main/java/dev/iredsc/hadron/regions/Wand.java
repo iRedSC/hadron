@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.regions;
 
+import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.event.Listener;
@@ -71,19 +72,19 @@ final class Wand implements Listener {
 
     @EventHandler(priority = EventPriority.LOWEST)
     private void left(BlockBreakEvent e) {
-        e.getPlayer().filter(p -> is(p.getMainHandItem())).ifPresent(p -> {
-            e.setCancelled(true);
-            pick(p, e.getPos(), true);
-        });
+        // Only the player's own click: a machine whose owner holds the wand keeps breaking.
+        if (!(e.getActor() instanceof Actor.Player a) || !is(a.player().getMainHandItem())) return;
+        e.setCancelled(true);
+        pick(a.player(), e.getPos(), true);
     }
 
     @EventHandler(priority = EventPriority.LOWEST)
     private void right(BlockUseEvent e) {
-        if (!is(e.getItem())) return;
+        if (!(e.getActor() instanceof Actor.Player a) || !is(e.getItem())) return;
         e.setCancelled(true);
         // Vanilla tries the off hand after the main hand; one click picks one corner.
         if (e.getHand() != InteractionHand.MAIN_HAND) return;
-        e.getPlayer().ifPresent(p -> pick(p, e.getPos(), false));
+        pick(a.player(), e.getPos(), false);
     }
 
     @EventHandler

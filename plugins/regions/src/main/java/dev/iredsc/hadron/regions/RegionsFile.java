@@ -55,6 +55,15 @@ final class RegionsFile {
             throw new Problem("regions.yml says format " + format + ", but this Regions reads format " + FORMAT
                     + ". Update the Regions plugin, or restore the file from a backup made for this version");
         }
+        for (String key : yaml.getKeys(false)) {
+            if (!key.equals("format") && !key.equals("regions")) {
+                throw new Problem("regions.yml: \"" + key + "\" isn't a setting; the file holds only format and "
+                        + "regions");
+            }
+        }
+        if (yaml.contains("format") && !(yaml.get("format") instanceof Integer)) {
+            throw new Problem("regions.yml: format must be a whole number, but was " + yaml.get("format"));
+        }
         Map<String, Region> regions = new LinkedHashMap<>();
         ConfigurationSection all = yaml.getConfigurationSection("regions");
         if (all == null) {
@@ -70,8 +79,22 @@ final class RegionsFile {
         return regions;
     }
 
+    /** The keys a region may have; anything else is a typo that would otherwise drop what it meant to set. */
+    private static boolean known(String key) {
+        return switch (key) {
+            case "world", "min", "max", "priority", "owners", "members", "flags" -> true;
+            default -> false;
+        };
+    }
+
     private static Region region(String id, ConfigurationSection s) throws Problem {
-        String worldText = s.getString("world");
+        for (String key : s.getKeys(false)) {
+            if (!known(key)) {
+                throw new Problem(at(id, key) + "isn't a region setting; a region has world, min, max, priority, "
+                        + "owners, members and flags");
+            }
+        }
+        String worldText = s.get("world") instanceof String text ? text : null;
         ResourceLocation world = worldText == null ? null : ResourceLocation.tryParse(worldText);
         if (world == null) {
             throw new Problem(at(id, "world") + "must be a world id such as minecraft:overworld, but was " + worldText);
@@ -80,6 +103,13 @@ final class RegionsFile {
         BlockPos max = pos(id, s, "max");
         Map<Flag, Boolean> flags = new EnumMap<>(Flag.class);
         ConfigurationSection f = s.getConfigurationSection("flags");
+        if (f == null && s.contains("flags")) {
+            throw new Problem(at(id, "flags") + "must be a map such as {pvp: deny}, but was " + s.get("flags"));
+        }
+        if (s.contains("priority") && !(s.get("priority") instanceof Integer)) {
+            throw new Problem(at(id, "priority") + "must be a whole number from " + Integer.MIN_VALUE + " to "
+                    + Integer.MAX_VALUE + ", but was " + s.get("priority"));
+        }
         if (f != null) {
             for (String key : f.getKeys(false)) {
                 Flag flag = Flag.parse(key).orElseThrow(() -> new Problem(at(id, "flags." + key)
@@ -106,8 +136,13 @@ final class RegionsFile {
 
     private static Set<UUID> people(String id, ConfigurationSection s, String key) throws Problem {
         Set<UUID> out = new LinkedHashSet<>();
-        for (String text : s.getStringList(key)) {
+        if (!s.contains(key)) return out;
+        List<?> raw = s.isList(key) ? s.getList(key) : null;
+        if (raw == null) throw new Problem(at(id, key) + "must be a list of player UUIDs, but was " + s.get(key));
+        for (Object item : raw) {
+            String text = String.valueOf(item);
             try {
+                if (!(item instanceof String)) throw new IllegalArgumentException();
                 out.add(UUID.fromString(text));
             } catch (IllegalArgumentException e) {
                 throw new Problem(at(id, key) + "holds \"" + text + "\", which isn't a player UUID. Add players "

@@ -12,13 +12,14 @@ import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.LinkedHashSet;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.network.chat.Component;
-import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.GameProfileCache;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -61,15 +62,20 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
 
     @Override
     public boolean onCommand(CommandSourceStack sender, PluginCommand command, String label, String[] args) {
+        guarded(sender, () -> run(sender, args));
+        return true;
+    }
+
+    /** Runs it, telling the sender what stopped it. */
+    private void guarded(CommandSourceStack sender, Runnable action) {
         try {
-            run(sender, args);
+            action.run();
         } catch (Refusal r) {
             sender.sendFailure(Component.literal(r.getMessage()));
         } catch (UncheckedIOException e) {
             sender.sendFailure(Component.literal(e.getMessage()));
-            plugin.getLogger().error("Couldn't save regions.yml", e);
+            plugin.getLogger().error("Couldn't save a Regions file", e);
         }
-        return true;
     }
 
     private void run(CommandSourceStack sender, String[] args) {
@@ -127,16 +133,15 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
             case "addowner", "addmember" -> {
                 boolean owner = sub.equals("addowner");
                 Region r = managed(sender, arg(args, 1, "/region " + sub + " <region> <player>"));
-                GameProfile who = profile(arg(args, 2, "/region " + sub + " " + r.id() + " <player>"));
-                store.put(owner ? r.withOwner(who.getId()) : r.withMember(who.getId()));
-                ok(sender, who.getName() + (owner ? " owns " : " is a member of ") + r.id());
+                String name = arg(args, 2, "/region " + sub + " " + r.id() + " <player>");
+                lookUp(sender, name, who -> add(sender, r.id(), who, owner));
             }
             case "removeplayer" -> {
                 Region r = managed(sender, arg(args, 1, "/region removeplayer <region> <player>"));
-                GameProfile who = profile(arg(args, 2, "/region removeplayer " + r.id() + " <player>"));
-                if (!r.isMember(who.getId())) throw new Refusal(who.getName() + " isn't in " + r.id());
-                store.put(r.without(who.getId()));
-                ok(sender, who.getName() + " left " + r.id());
+                String name = arg(args, 2, "/region removeplayer " + r.id() + " <player>");
+                UUID who = inRegion(r, name);
+                store.put(r.without(who));
+                ok(sender, name + " left " + r.id());
             }
             default -> throw new Refusal("No /region " + sub + ". " + USAGE);
         }
@@ -275,26 +280,65 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
                 : "; there are " + String.join(", ", ids)));
     }
 
-    private GameProfile profile(String name) {
-        MinecraftServer server = plugin.getServer().getMinecraftServer();
+    /**
+     * Finds the player by name and hands them to {@code then} on the server thread. Someone online answers at once;
+     * anyone else is looked up off the server thread, since a name the server hasn't cached asks Mojang, and a wait
+     * there would stall the world.
+     */
+    private void lookUp(CommandSourceStack sender, String name, Consumer<GameProfile> then) {
         ServerPlayer online = plugin.getServer().getPlayer(name);
-        if (online != null) return online.getGameProfile();
-        GameProfileCache cache = server.getProfileCache();
-        Optional<GameProfile> known = cache == null ? Optional.empty() : cache.get(name);
-        return known.orElseThrow(() -> new Refusal("No player named " + name + " has played here; they need to "
-                + "join once first"));
+        if (online != null) {
+            then.accept(online.getGameProfile());
+            return;
+        }
+        GameProfileCache cache = plugin.getServer().getMinecraftServer().getProfileCache();
+        if (cache == null) throw new Refusal(unknownPlayer(name));
+        cache.getAsync(name).whenComplete((found, error) -> {
+            if (!plugin.isEnabled()) return;
+            try {
+                plugin.getServer().getScheduler().runTask(plugin, () -> guarded(sender, () -> {
+                    if (error != null || found == null || found.isEmpty()) throw new Refusal(unknownPlayer(name));
+                    then.accept(found.get());
+                }));
+            } catch (IllegalStateException disabledMeanwhile) {
+                // The plugin stopped while the lookup ran; there's nothing left to change.
+            }
+        });
+    }
+
+    /** Adds them, checking again that the sender may still change the region, since a lookup can take a while. */
+    private void add(CommandSourceStack sender, String id, GameProfile who, boolean owner) {
+        Region r = managed(sender, id);
+        store.put(owner ? r.withOwner(who.getId()) : r.withMember(who.getId()));
+        ok(sender, who.getName() + (owner ? " owns " : " is a member of ") + r.id());
+    }
+
+    /** An owner or member of the region by name or UUID, from what the server already knows: no lookup. */
+    private UUID inRegion(Region r, String name) {
+        Set<UUID> people = new LinkedHashSet<>(r.owners());
+        people.addAll(r.members());
+        for (UUID id : people) {
+            if (id.toString().equalsIgnoreCase(name) || name.equalsIgnoreCase(nameOf(id))) return id;
+        }
+        throw new Refusal(name + " isn't in " + r.id());
+    }
+
+    private static String unknownPlayer(String name) {
+        return "No player is named " + name;
+    }
+
+    /** Their name if the server knows it, from those online and its own cache; otherwise their UUID. */
+    private String nameOf(UUID id) {
+        ServerPlayer online = plugin.getServer().getPlayer(id);
+        if (online != null) return online.getGameProfile().getName();
+        GameProfileCache cache = plugin.getServer().getMinecraftServer().getProfileCache();
+        return cache == null ? id.toString() : cache.get(id).map(GameProfile::getName).orElse(id.toString());
     }
 
     private String names(Set<UUID> people) {
         if (people.isEmpty()) return "none";
-        GameProfileCache cache = plugin.getServer().getMinecraftServer().getProfileCache();
         List<String> out = new ArrayList<>();
-        for (UUID id : people) {
-            ServerPlayer online = plugin.getServer().getPlayer(id);
-            String name = online != null ? online.getGameProfile().getName()
-                    : cache == null ? null : cache.get(id).map(GameProfile::getName).orElse(null);
-            out.add(name != null ? name : id.toString());
-        }
+        for (UUID id : people) out.add(nameOf(id));
         out.sort(String.CASE_INSENSITIVE_ORDER);
         return String.join(", ", out);
     }

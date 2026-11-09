@@ -12,6 +12,7 @@ import java.io.IOException;
 import java.io.UncheckedIOException;
 import java.util.Collection;
 import java.util.LinkedHashSet;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import net.minecraft.ChatFormatting;
@@ -48,8 +49,16 @@ final class Bypass implements Listener {
 
     static Set<UUID> read(YamlConfiguration yaml) throws RegionsFile.Problem {
         Set<UUID> out = new LinkedHashSet<>();
-        for (String text : yaml.getStringList("players")) {
+        if (!yaml.contains("players")) return out;
+        List<?> raw = yaml.isList("players") ? yaml.getList("players") : null;
+        if (raw == null) {
+            throw new RegionsFile.Problem("bypass.yml: players must be a list of player UUIDs, but was "
+                    + yaml.get("players"));
+        }
+        for (Object item : raw) {
+            String text = String.valueOf(item);
             try {
+                if (!(item instanceof String)) throw new IllegalArgumentException();
                 out.add(UUID.fromString(text));
             } catch (IllegalArgumentException e) {
                 throw new RegionsFile.Problem("bypass.yml, players: \"" + text + "\" isn't a player UUID; remove "

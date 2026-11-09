@@ -17,8 +17,10 @@ import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityUseEvent;
 import dev.iredsc.hadron.api.event.entity.HangingBreakEvent;
-import dev.iredsc.hadron.api.event.entity.HangingPlaceEvent;
+import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
+import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -30,6 +32,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.decoration.HangingEntity;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.entity.vehicle.VehicleEntity;
 
 /**
  * Refuses what regions forbid, through Hadron's events, so it covers every mod whose bridge is installed and treats
@@ -100,6 +105,28 @@ final class Protection implements Listener {
         e.getActingPlayer().ifPresent(p -> feedback.refused(p, e.getToBlock(), no.get()));
     }
 
+    /**
+     * Teleports in (an ender pearl, chorus fruit, a portal, a plugin) are held to entry as walking in is: movement
+     * tracking starts over after a teleport, so {@link #move} never sees them.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    private void teleport(EntityTeleportEvent e) {
+        Optional<UUID> who = traveller(e.getEntity());
+        if (who.isEmpty() || trusted(e)) return;
+        Optional<Region> no = Rules.refusingEntry(store.at(e.getFromLevel(), BlockPos.containing(e.getFrom())),
+                store.at(e.getToLevel(), BlockPos.containing(e.getTo())), who);
+        if (no.isEmpty()) return;
+        e.setCancelled(true);
+        e.getActingPlayer().ifPresent(p -> feedback.refused(p, BlockPos.containing(e.getTo()), no.get()));
+    }
+
+    /** Who entry asks about: a player, or whoever drives the vehicle; empty for anything else. */
+    private static Optional<UUID> traveller(Entity entity) {
+        if (entity instanceof ServerPlayer p) return Optional.of(p.getUUID());
+        if (entity.getControllingPassenger() instanceof Player driver) return Optional.of(driver.getUUID());
+        return Optional.empty();
+    }
+
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void damage(EntityDamageEvent e) {
         Entity victim = e.getEntity();
@@ -108,16 +135,23 @@ final class Protection implements Listener {
             return;
         }
         if (!(victim instanceof ServerPlayer hurt)) return;
-        Optional<ServerPlayer> attacker = e.getActingPlayer().filter(a -> a != hurt);
-        if (attacker.isEmpty()) return;
+        // Whoever answers for it, online or not: a turret keeps its owner while they're away.
+        Optional<UUID> who = e.getActor().actingFor().filter(id -> !id.equals(hurt.getUUID()));
+        if (who.isEmpty()) return;
         // Both sides count: nobody fights out of a safe zone or into one.
         ServerLevel level = e.getLevel();
-        Optional<UUID> who = e.getActor().actingFor();
-        Optional<Region> no = Rules.refusing(store.at(level, hurt.blockPosition()), Flag.PVP, who)
-                .or(() -> Rules.refusing(store.at(level, attacker.get().blockPosition()), Flag.PVP, who));
-        if (no.isEmpty()) return;
-        e.setCancelled(true);
-        tell(e, hurt.blockPosition(), no.get());
+        List<BlockPos> sides = new ArrayList<>(3);
+        sides.add(hurt.blockPosition());
+        e.getActingPlayer().filter(a -> a.level() == level).ifPresent(a -> sides.add(a.blockPosition()));
+        e.getDamager().filter(d -> d.level() == level).ifPresent(d -> sides.add(d.blockPosition()));
+        for (BlockPos side : sides) {
+            Optional<Region> no = Rules.refusing(store.at(level, side), Flag.PVP, who);
+            if (no.isPresent()) {
+                e.setCancelled(true);
+                tell(e, hurt.blockPosition(), no.get());
+                return;
+            }
+        }
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
@@ -132,9 +166,17 @@ final class Protection implements Listener {
         entityChange(e, e, e.getEntity(), Flag.BUILD);
     }
 
+    /**
+     * Placing an object is building: item frames and paintings, armor stands, boats and minecarts, end crystals. Mobs
+     * aren't: regions don't decide what spawns.
+     */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void hangingPlace(HangingPlaceEvent e) {
-        entityChange(e, e, e.getEntity(), Flag.BUILD);
+    private void spawn(EntitySpawnEvent e) {
+        Entity placed = e.getEntity();
+        if (placed instanceof HangingEntity || placed instanceof ArmorStand || placed instanceof VehicleEntity
+                || placed instanceof EndCrystal) {
+            entityChange(e, e, placed, Flag.BUILD);
+        }
     }
 
     private void entityChange(ActionEvent e, Cancellable c, Entity target, Flag flag) {

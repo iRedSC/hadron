@@ -40,13 +40,17 @@ final class Rules {
     /**
      * Whether the world on its own may carry a change from {@code source} into {@code target}: water flowing, a piston
      * pushing, grass spreading. It may within the regions it starts in, and into any region that lets outsiders build;
-     * so a piston outside can't push into spawn, and a member's piston door inside it still works.
+     * so a piston outside can't push into spawn, and a member's piston door inside it still works. Only the
+     * highest priority at the target decides, as for a player building there.
      *
      * @return the region it would cross into and that refuses, or empty when allowed.
      */
     static Optional<Region> refusingCrossing(Collection<Region> source, Collection<Region> target) {
+        // As for anyone building: only the highest priority at the target decides.
+        int top = Integer.MIN_VALUE;
+        for (Region r : target) top = Math.max(top, r.priority());
         for (Region r : target) {
-            if (source.contains(r)) continue;
+            if (r.priority() != top || source.contains(r)) continue;
             if (!r.flag(Flag.BUILD).orElse(Flag.BUILD.outsiderDefault)) return Optional.of(r);
         }
         return Optional.empty();

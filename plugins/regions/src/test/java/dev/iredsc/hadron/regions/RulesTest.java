@@ -97,4 +97,13 @@ class RulesTest {
         assertTrue(r.withOwner(alice).members().isEmpty());
         assertTrue(!r.without(alice).isMember(alice));
     }
+
+    @Test
+    void natureFollowsTheHighestPriorityToo() {
+        Region town = region("town");
+        Region plot = region("plot").withPriority(1).withFlag(Flag.BUILD, true);
+        assertTrue(Rules.refusingCrossing(List.of(), List.of(town, plot)).isEmpty(),
+                "water may flow into an open plot inside a closed town, as anyone may build there");
+        assertEquals(Optional.of(town), Rules.refusingCrossing(List.of(), List.of(town)));
+    }
 }
