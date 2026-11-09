@@ -1,6 +1,9 @@
 package dev.iredsc.hadron.neoforge.mixin.world;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import dev.iredsc.hadron.api.event.world.PortalCreateEvent;
+import dev.iredsc.hadron.neoforge.BlockHooks;
 import dev.iredsc.hadron.neoforge.WorldHooks;
 import java.util.Optional;
 import net.minecraft.BlockUtil;
@@ -13,9 +16,6 @@ import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.Shadow;
-import org.spongepowered.asm.mixin.injection.At;
-import org.spongepowered.asm.mixin.injection.Inject;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * The exit portal built when someone reaches a world with none nearby. Refusing it makes vanilla report that no
@@ -28,13 +28,18 @@ public abstract class PortalForcerMixin {
 
     @Shadow @Final protected ServerLevel level;
 
-    @Inject(method = "createPortal", at = @At("HEAD"), cancellable = true)
-    private void hadron$create(BlockPos pos, Direction.Axis axis,
-            CallbackInfoReturnable<Optional<BlockUtil.FoundRectangle>> cir) {
+    /** Asked once as a whole; once allowed, its blocks aren't asked one by one, so it is never left half built. */
+    @WrapMethod(method = "createPortal")
+    private Optional<BlockUtil.FoundRectangle> hadron$create(BlockPos pos, Direction.Axis axis,
+            Operation<Optional<BlockUtil.FoundRectangle>> original) {
         BoundingBox area = new BoundingBox(pos.getX() - SEARCH, level.getMinBuildHeight(), pos.getZ() - SEARCH,
                 pos.getX() + SEARCH, level.getMaxBuildHeight() - 1, pos.getZ() + SEARCH);
-        if (WorldHooks.portalDenied(level, area, PortalCreateEvent.CreateReason.NETHER_PAIR)) {
-            cir.setReturnValue(Optional.empty());
+        if (WorldHooks.portalDenied(level, area, PortalCreateEvent.CreateReason.NETHER_PAIR)) return Optional.empty();
+        BlockHooks.suppress();
+        try {
+            return original.call(pos, axis);
+        } finally {
+            BlockHooks.unsuppress();
         }
     }
 }

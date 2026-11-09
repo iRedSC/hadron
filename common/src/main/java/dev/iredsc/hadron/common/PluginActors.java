@@ -3,7 +3,6 @@ package dev.iredsc.hadron.common;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Operation;
-import dev.iredsc.hadron.api.plugin.JavaPlugin;
 
 /** Who is behind a plugin's own code. */
 final class PluginActors {
@@ -16,8 +15,8 @@ final class PluginActors {
      * even over an actor already there: a player running /plugins enable doesn't own what the plugin's onEnable
      * builds, and a rollback of the player's command mustn't take it.
      */
-    static void asPlugin(JavaPlugin plugin, Runnable work) {
-        try (Actors.Scope ignored = Operation.begin(of(plugin.getName()))) {
+    static void asPlugin(String plugin, Runnable work) {
+        try (Actors.Scope ignored = Operation.begin(of(plugin))) {
             work.run();
         }
     }

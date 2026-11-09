@@ -96,7 +96,7 @@ final class TaskScheduler implements Scheduler {
             if (isAsync && !started(owner)) return;
             try {
                 if (cancelled || !host.isActive(owner)) return;
-                PluginActors.asPlugin(owner, body);
+                PluginActors.asPlugin(owner.getName(), body);
             } catch (Throwable t) {
                 // As for a listener: a plugin's bug costs that task its run, not the server its log. A timer that
                 // throws every tick would otherwise write a stack trace twenty times a second.

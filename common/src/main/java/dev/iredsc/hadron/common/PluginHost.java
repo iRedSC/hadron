@@ -776,7 +776,7 @@ public final class PluginHost implements PluginManager {
             loader.enable();
             step = "onEnable";
             JavaPlugin enabling = loader.attached();
-            PluginActors.asPlugin(enabling, enabling::onEnable);
+            PluginActors.asPlugin(enabling.getName(), enabling::onEnable);
             step = "registering its commands";
             for (PluginCommand c : loader.commands().values()) {
                 running.undo.push(commands.register(c, loader.logger()));
@@ -903,7 +903,7 @@ public final class PluginHost implements PluginManager {
             runBeforeDisableHooks(plugin, deadline);
             if (callOnDisable && running instanceof State.Enabled) {
                 try {
-                    PluginActors.asPlugin(plugin, plugin::onDisable);
+                    PluginActors.asPlugin(plugin.getName(), plugin::onDisable);
                 } catch (Throwable t) {
                     LOG.error(e.name + " threw while disabling", t);
                 }

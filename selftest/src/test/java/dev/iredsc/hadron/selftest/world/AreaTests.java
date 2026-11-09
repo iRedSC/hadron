@@ -280,7 +280,7 @@ public final class AreaTests {
 
     @HadronTest
     @Covers(value = Areas.class, method = "watch")
-    void aPluginReactingToAnOutsidersChangeIsAnOutsiderToo(TestContext t) {
+    void aPluginReactingToAnOutsidersChangeActsAsItself(TestContext t) {
         Areas.watch(t.plugin(), t.level(), around(t));
         List<BlockEvent> seen = record(t, false);
         t.registerEvents(new Listener() {
@@ -291,8 +291,22 @@ public final class AreaTests {
         });
         t.setBlock(t.pos(1, 1, 1), Blocks.STONE);
         t.assertEquals(2, seen.size(), "block events for the outsider's write and the handler's reaction: " + seen);
-        t.assertTrue(seen.get(1).getActor() instanceof Actor.Unknown, "a handler reacting to an outsider's change "
-                + "acts for the outsider, so protection still refuses it, but was " + seen.get(1).getActor());
+        t.assertEquals(new Actor.Server("plugin " + t.plugin().getName()), seen.get(1).getActor(),
+                "a handler's own reaction is its plugin's, whoever was behind the event");
+    }
+
+    @HadronTest
+    @Covers(value = Areas.class, method = "watch")
+    void aPortalBuiltOnArrivalIsAskedOnceNotBlockByBlock(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        List<BlockEvent> seen = record(t, true);
+        java.util.Optional<?> built;
+        try (Actors.Scope ignored = Actors.push(new Actor.Player(alice.player()))) {
+            built = t.level().getPortalForcer().createPortal(t.pos(0, 1, 0), Direction.Axis.X);
+        }
+        t.assertTrue(built.isPresent(), "the portal should be built");
+        t.assertTrue(seen.isEmpty(), "a portal's blocks shouldn't be asked one by one once it is allowed, but "
+                + seen.size() + " block events fired");
     }
 
     @HadronTest(timeout = 400)
