@@ -18,14 +18,14 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 abstract class EntityRemovedLeashMixin {
     @Inject(method = "setRemoved", at = @At("HEAD"))
     private void hadron$holder(Entity.RemovalReason reason, CallbackInfo ci,
-            @Share("holder") LocalRef<Entity> holder) {
-        holder.set(EntityHandling.leashHolderIfDestroyed((Entity) (Object) this, reason));
+            @Share("lead") LocalRef<EntityHandling.LostLead> lead) {
+        lead.set(EntityHandling.leadIfDestroyed((Entity) (Object) this, reason));
     }
 
     @Inject(method = "setRemoved", at = @At("TAIL"))
     private void hadron$report(Entity.RemovalReason reason, CallbackInfo ci,
-            @Share("holder") LocalRef<Entity> holder) {
-        Entity was = holder.get();
-        if (was != null) EntityHandling.leashedEntityRemoved((Entity) (Object) this, was);
+            @Share("lead") LocalRef<EntityHandling.LostLead> lead) {
+        EntityHandling.LostLead lost = lead.get();
+        if (lost != null) EntityHandling.leashedEntityRemoved((Entity) (Object) this, lost);
     }
 }

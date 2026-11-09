@@ -7,6 +7,7 @@ import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.entity.EntityLeashBreakEvent;
 import dev.iredsc.hadron.api.event.entity.EntityLeashBreakEvent.Reason;
+import dev.iredsc.hadron.api.event.entity.EntityUnleashEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
@@ -196,5 +197,43 @@ public final class LeashBreakTests {
                 "the copy in the nether should carry the lead on, waiting for its holder, but has " + copy);
         t.assertEquals(List.of(), heard.events(), "breaks reported for the portal itself");
         if (copy != null) copy.discard(); // the test cleans up the overworld only
+    }
+
+    @HadronTest
+    @Covers(EntityLeashBreakEvent.class)
+    void aChosenUnleashIsNeverABreakWhereverTheMobEndsUp(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 0));
+        cow.setLeashedTo(alice.player(), true);
+        BlockPos far = t.pos(16, 0, 0);
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityUnleashEvent e) {
+                e.getEntity().teleportTo(far.getX() + 0.5, far.getY(), far.getZ() + 0.5); // past the ten blocks
+            }
+        });
+        Heard heard = listen(t);
+        alice.interact(cow);
+        t.tick();
+        t.assertFalse(cow.isLeashed(), "the click should take the lead off");
+        t.assertEquals(List.of(), heard.events(), "breaks reported for a chosen unleash");
+    }
+
+    @HadronTest
+    @Covers(EntityLeashBreakEvent.class)
+    void aMobDestroyedWhileWaitingForItsSavedHolderIsGoneWithNoHolder(TestContext t) {
+        t.player("alice");
+        Cow cow = spawn(t, EntityType.COW, t.pos(2, 0, 0));
+        CompoundTag saved = new CompoundTag();
+        CompoundTag holder = new CompoundTag();
+        holder.putUUID("UUID", new UUID(0x4ad0, 0x1eaf)); // nobody in the world
+        saved.put("leash", holder);
+        cow.setLeashData(cow.readLeashData(saved));
+        Heard heard = listen(t);
+        cow.discard();
+        t.tick();
+        EntityLeashBreakEvent e = one(t, heard);
+        t.assertEquals(Reason.ENTITY_GONE, e.getReason(), "the reason");
+        t.assertTrue(e.getHolder().isEmpty(), "a holder never loaded can't be named, but got " + e.getHolder());
     }
 }

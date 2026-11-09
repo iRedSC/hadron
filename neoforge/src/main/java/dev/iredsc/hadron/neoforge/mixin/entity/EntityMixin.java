@@ -8,6 +8,7 @@ import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityCombustEvent;
 import dev.iredsc.hadron.neoforge.EntityActors;
 import dev.iredsc.hadron.neoforge.EntityState;
+import dev.iredsc.hadron.neoforge.LeashDrop;
 import dev.iredsc.hadron.neoforge.EntityTeleports;
 import dev.iredsc.hadron.neoforge.Hooks;
 import java.util.Set;
@@ -46,7 +47,7 @@ abstract class EntityMixin implements EntityState {
     @Unique private double hadron$trackedZ;
     @Unique private boolean hadron$converted;
     @Unique private boolean hadron$dying;
-    @Unique private boolean hadron$leaving;
+    @Unique private LeashDrop hadron$leashDrop = LeashDrop.UNSAID;
     @Unique private int hadron$deathExp;
 
     @Override
@@ -120,13 +121,13 @@ abstract class EntityMixin implements EntityState {
     }
 
     @Override
-    public boolean hadron$leaving() {
-        return hadron$leaving;
+    public LeashDrop hadron$leashDrop() {
+        return hadron$leashDrop;
     }
 
     @Override
-    public void hadron$setLeaving(boolean leaving) {
-        hadron$leaving = leaving;
+    public void hadron$setLeashDrop(LeashDrop cause) {
+        hadron$leashDrop = cause;
     }
 
     @Override

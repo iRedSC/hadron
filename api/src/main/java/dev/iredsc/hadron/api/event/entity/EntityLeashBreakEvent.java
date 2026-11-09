@@ -49,22 +49,24 @@ public class EntityLeashBreakEvent extends EntityEvent {
     private final Reason reason;
 
     /**
-     * @param holder what held the lead; null only for {@link Reason#HOLDER_NOT_FOUND}, whose holder was never loaded
+     * @param holder what held the lead; null when it never loaded: always for {@link Reason#HOLDER_NOT_FOUND}, and for
+     *     {@link Reason#ENTITY_GONE} when the entity was destroyed while still waiting for a saved holder
      */
     public EntityLeashBreakEvent(Entity entity, @Nullable Entity holder, Reason reason, Actor actor) {
         super(entity, actor);
         this.reason = Objects.requireNonNull(reason, "reason");
-        if ((holder == null) != (reason == Reason.HOLDER_NOT_FOUND)) {
-            throw new IllegalArgumentException("Pass the holder for every reason except HOLDER_NOT_FOUND, and null "
-                    + "for that one: its holder was never loaded, so there is none to pass (got " + holder + " for "
-                    + reason + ")");
+        if (reason == Reason.HOLDER_NOT_FOUND ? holder != null : holder == null && reason != Reason.ENTITY_GONE) {
+            throw new IllegalArgumentException("Pass the holder unless it never loaded: null for HOLDER_NOT_FOUND, "
+                    + "and null for ENTITY_GONE only when the entity was still waiting for a saved holder (got "
+                    + holder + " for " + reason + ")");
         }
         this.holder = holder;
     }
 
     /**
-     * What held the lead until now: a player, a knot on a fence, a wandering trader. Empty only for
-     * {@link Reason#HOLDER_NOT_FOUND}.
+     * What held the lead until now: a player, a knot on a fence, a wandering trader. Empty when the holder never
+     * loaded: always for {@link Reason#HOLDER_NOT_FOUND}, and for {@link Reason#ENTITY_GONE} when the entity was
+     * destroyed while still waiting for a saved holder.
      */
     public Optional<Entity> getHolder() {
         return Optional.ofNullable(holder);

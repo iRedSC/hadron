@@ -55,7 +55,8 @@ public final class EntityHandling {
 
     /**
      * Runs {@code Leashable}'s one method that takes a lead off, and reports it as broken when it came off for a reason
-     * nobody chose. Asked before the drop, when the holder and the entity are still as they were.
+     * nobody chose. The reason is what the caller said ({@link LeashDrop}), otherwise judged from the state before the
+     * drop, while the holder and the entity are still as they were.
      */
     public static void dropLeash(Entity entity, Runnable drop) {
         if (!(entity.level() instanceof ServerLevel) || !(entity instanceof Leashable leashable)
@@ -65,8 +66,11 @@ public final class EntityHandling {
         }
         Entity holder = leashable.getLeashHolder();
         EntityLeashBreakEvent.@Nullable Reason reason = holder == null ? null
-                : ((EntityState) entity).hadron$leaving() ? EntityLeashBreakEvent.Reason.ENTITY_GONE
-                : breakReason(entity, holder);
+                : switch (((EntityState) entity).hadron$leashDrop()) {
+                    case CHOSEN -> null;
+                    case LEAVING -> EntityLeashBreakEvent.Reason.ENTITY_GONE;
+                    case UNSAID -> breakReason(entity, holder);
+                };
         drop.run();
         if (holder != null && reason != null && !leashable.isLeashed()) {
             Hooks.post(new EntityLeashBreakEvent(entity, holder, reason,
@@ -74,19 +78,14 @@ public final class EntityHandling {
         }
     }
 
-    /**
-     * A boat or a trader's llama dropping its lead just before it leaves the world, which its state can't show yet:
-     * marks it as leaving while the drop runs, so {@link #dropLeash} reports
-     * {@link EntityLeashBreakEvent.Reason#ENTITY_GONE} whatever else is true (a boat far from its holder is still
-     * destroyed, not stretched).
-     */
-    public static void dropLeashLeaving(Entity entity, Runnable drop) {
+    /** Runs a drop whose cause the caller knows better than the entity's state can show. */
+    public static void dropLeashBecause(Entity entity, LeashDrop cause, Runnable drop) {
         EntityState state = (EntityState) entity;
-        state.hadron$setLeaving(true);
+        state.hadron$setLeashDrop(cause);
         try {
             drop.run();
         } finally {
-            state.hadron$setLeaving(false);
+            state.hadron$setLeashDrop(LeashDrop.UNSAID);
         }
     }
 
@@ -100,25 +99,30 @@ public final class EntityHandling {
                 EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
     }
 
+    /** A lead on an entity about to be destroyed: who held it, if the holder ever loaded. */
+    public record LostLead(@Nullable Entity holder) {}
+
     /**
-     * The holder of an entity about to be destroyed for the first time while still on a lead, or null: not leashed,
-     * already removed, nobody listening, or a removal that keeps the lead (unloading saves it, a portal hands it to the
-     * entity's copy).
+     * The lead on an entity about to be destroyed for the first time, or null when there is nothing to report: not on
+     * a lead, already removed, nobody listening, or a removal that keeps the lead (unloading saves it, a portal hands
+     * it to the entity's copy). A lead still waiting for a saved holder counts, with no holder: the entity won't tick
+     * again to give up on it.
      */
-    public static @Nullable Entity leashHolderIfDestroyed(Entity entity, Entity.RemovalReason reason) {
+    public static @Nullable LostLead leadIfDestroyed(Entity entity, Entity.RemovalReason reason) {
         if (!reason.shouldDestroy() || entity.isRemoved() || !(entity instanceof Leashable leashable)
-                || !(entity.level() instanceof ServerLevel) || !Hooks.listens(EntityLeashBreakEvent.class)) {
+                || leashable.getLeashData() == null || !(entity.level() instanceof ServerLevel)
+                || !Hooks.listens(EntityLeashBreakEvent.class)) {
             return null;
         }
-        return leashable.getLeashHolder();
+        return new LostLead(leashable.getLeashHolder());
     }
 
     /**
      * A leashed entity was destroyed without dropping its lead first (a conversion, a discard); vanilla leaves the
      * leash data on the removed entity, so the entity being gone is what says the lead is.
      */
-    public static void leashedEntityRemoved(Entity entity, Entity holder) {
-        Hooks.post(new EntityLeashBreakEvent(entity, holder, EntityLeashBreakEvent.Reason.ENTITY_GONE,
+    public static void leashedEntityRemoved(Entity entity, LostLead lead) {
+        Hooks.post(new EntityLeashBreakEvent(entity, lead.holder(), EntityLeashBreakEvent.Reason.ENTITY_GONE,
                 EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
     }
 
