@@ -134,8 +134,11 @@ public final class Bridge {
         return NOT_BRIDGEABLE.contains(modId);
     }
 
-    /** Whether a bridge for that mod id is loaded. A plugin that needs one lists it under bridge-depend. */
-    public static boolean isInstalled(String modId) {
+    /**
+     * Whether a bridge for that mod is loaded: the bridged mod's id, such as {@code mekanism}, not the bridge's own. A
+     * plugin that needs one lists it under bridge-depend.
+     */
+    public static boolean isBridged(String modId) {
         synchronized (CLAIMS) {
             return CLAIMS.containsKey(modId);
         }

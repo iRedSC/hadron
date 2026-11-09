@@ -111,17 +111,17 @@ class BridgeTest {
                 () -> claimAs("twice_bridge", "twice_b"));
         assertEquals("twice_bridge already claimed twice_a: claim every mod a bridge covers in one call, "
                 + "Bridge.claim(\"twice_a\", \"twice_b\")", e.getMessage());
-        assertFalse(Bridge.isInstalled("twice_b"));
+        assertFalse(Bridge.isBridged("twice_b"));
     }
 
     @Covers(value = Bridge.class, method = "claim")
-    @Covers(value = Bridge.class, method = "isInstalled")
+    @Covers(value = Bridge.class, method = "isBridged")
     @Test
     void aRefusedClaimClaimsNothing() {
         claimAs("taker", "taken");
         assertThrows(IllegalStateException.class, () -> claimAs("greedy", "free_one", "taken"));
-        assertFalse(Bridge.isInstalled("free_one"), "the claim was all or nothing");
-        assertTrue(Bridge.isInstalled("taken"));
+        assertFalse(Bridge.isBridged("free_one"), "the claim was all or nothing");
+        assertTrue(Bridge.isBridged("taken"));
         assertEquals(List.of("free_one"), claimAs("greedy", "free_one").mods(), "and greedy can still claim");
     }
 
@@ -133,7 +133,7 @@ class BridgeTest {
         IllegalStateException e = assertThrows(IllegalStateException.class, () -> Bridge.claim("lonely"));
         assertEquals("Bridge.claim was called outside a mod's constructor, so Hadron can't tell which bridge is "
                 + "claiming: call it from your bridge mod's constructor", e.getMessage());
-        assertFalse(Bridge.isInstalled("lonely"));
+        assertFalse(Bridge.isBridged("lonely"));
     }
 
     @Covers(value = Bridge.class, method = "claim")
@@ -156,7 +156,7 @@ class BridgeTest {
         loader.installed.add("dup");
         assertEquals("picky_bridge names dup twice in Bridge.claim: list each mod once",
                 assertThrows(IllegalArgumentException.class, () -> Bridge.claim("dup", "dup")).getMessage());
-        assertFalse(Bridge.isInstalled("dup"));
+        assertFalse(Bridge.isBridged("dup"));
     }
 
     @Covers(value = Bridge.class, method = "claim")
@@ -167,7 +167,7 @@ class BridgeTest {
         loader.installed.addAll(List.of("addon_bridge", "addon_main", "addon_one"));
         Bridge bridge = Bridge.claim("addon_main", "addon_one", "addon_absent");
         assertEquals(List.of("addon_main", "addon_one"), bridge.mods());
-        assertFalse(Bridge.isInstalled("addon_absent"), "an absent addon stays free for a bridge installed later");
+        assertFalse(Bridge.isBridged("addon_absent"), "an absent addon stays free for a bridge installed later");
     }
 
     @Covers(value = Bridge.class, method = "isCoveredByCore")

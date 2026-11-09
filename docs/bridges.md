@@ -24,7 +24,7 @@ area.assertEveryChangeSeen("bob's miner where he is trusted");
 area.assertActingFor(bob, "bob's miner where he is trusted");
 ```
 
-- **`assertUnchanged`**, for a refused step: no block, block entity, block inventory (on any face), entity or living entity's health in the box changed, and no test player's inventory did either. Each change is named with what explains it: a cancelled event whose cancel left it behind, an event that went through, or no event at all (an interception gap).
+- **`assertUnchanged`**, for a refused step: no block, block entity, block inventory (on any face), entity, container entity's slots or living entity's health in the box changed, no entity born elsewhere this step arrived, and no test player's inventory or health changed either. Each change is named with what explains it: a cancelled event whose cancel left it behind, an event that went through, or no event at all (an interception gap).
 - **`assertEveryChangeSeen`**, for an allowed step: every block and block inventory that changed was covered by an event that went through, and so was every entity that appeared, left or changed health. A block event covers its block's inventory only when the block itself changed. Dropped items, experience orbs and falling blocks are exempt, because their contents come from a change reported elsewhere. Explosions count for the blocks they list, and a test player standing in the box counts like any entity. A step where nothing changed fails, since it proves nothing.
 - **`assertActingFor`**: every event in the box acts for that player, except the server's and nature's, and at least one does. `Unknown` and ownerless actors are named as attribution gaps.
 

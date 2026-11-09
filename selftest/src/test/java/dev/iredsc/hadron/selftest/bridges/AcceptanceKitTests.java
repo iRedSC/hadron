@@ -12,12 +12,16 @@ import dev.iredsc.hadron.test.TestPlayer;
 import dev.iredsc.hadron.api.event.block.BlockUseEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTransformEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import java.util.List;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.inventory.ChestMenu;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
@@ -537,5 +541,50 @@ public final class AcceptanceKitTests {
         chest.setItem(0, new ItemStack(Items.EMERALD, 2));
         String why = failure(t, () -> area.assertEveryChangeSeen("a backpack filled and a chest slot written"));
         t.assertTrue(why.contains("slot 0") && why.contains("emerald") && !why.contains("slot 5"), why);
+    }
+
+    @HadronTest
+    void aClickInAMenuOverAMachinesHandlerIsSeen(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos pos = t.pos(2, 0, 0);
+        t.setBlock(pos, Blocks.CHEST);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        // A modded machine's menu: its slots sit over a stand-in container (NeoForge's SlotItemHandler passes an
+        // empty SimpleContainer), not over the block, so only the click's holder says whose inventory it is.
+        ChestMenu menu = ChestMenu.threeRows(1, alice.player().getInventory(), new SimpleContainer(27));
+        Hadron.getPluginManager().callEvent(new InventoryClickEvent(alice.player(),
+                new InventoryHolder.Block(t.level(), pos), menu, 0, 0, ClickType.PICKUP, new Actor.Player(alice.player())));
+        ((ChestBlockEntity) t.level().getBlockEntity(pos)).setItem(0, new ItemStack(Items.IRON_ORE, 4));
+        area.assertEveryChangeSeen("alice putting ore into a machine by hand");
+    }
+
+    @HadronTest
+    void aSpawnReportedOutsideTheAreaDoesNotExcuseAMobInIt(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Acceptance area = t.acceptance(around(t));
+        Pig pig = EntityType.PIG.create(t.level());
+        // A bridge firing the spawn before placing its mob, so the event says where the mob isn't.
+        pig.moveTo(t.pos(-5, 0, 0).getX() + 0.5, t.pos(-5, 0, 0).getY(), t.pos(-5, 0, 0).getZ() + 0.5);
+        try (Actors.Scope s = Actors.push(new Actor.Player(bob.player()))) {
+            t.level().addFreshEntity(pig);
+        }
+        pig.teleportTo(t.pos(2, 0, 0).getX() + 0.5, t.pos(2, 0, 0).getY(), t.pos(2, 0, 0).getZ() + 0.5);
+        String why = failure(t, () -> area.assertUnchanged("bob's mob placed in an area he isn't trusted in"));
+        t.assertTrue(why.contains("minecraft:pig appeared"), why);
+    }
+
+    @HadronTest
+    void anInventoryEventWithNoHolderSaysToNameIt(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos pos = t.pos(2, 0, 0);
+        t.setBlock(pos, Blocks.CHEST);
+        Acceptance area = t.acceptance(around(t));
+        Hadron.getPluginManager().callEvent(new InventoryChangeEvent(List.of(new InventoryChangeEvent.Change(
+                InventoryHolder.Unknown.INSTANCE, 0, ItemStack.EMPTY, new ItemStack(Items.DIAMOND))),
+                new Actor.Player(bob.player())));
+        ((ChestBlockEntity) t.level().getBlockEntity(pos)).setItem(0, new ItemStack(Items.DIAMOND));
+        String why = failure(t, () -> area.assertUnchanged("a pipe that can't say which chest it filled"));
+        t.assertTrue(why.contains("fired with an Unknown holder") && why.contains("name the holder"), why);
     }
 }

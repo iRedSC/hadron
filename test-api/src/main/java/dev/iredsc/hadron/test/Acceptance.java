@@ -62,7 +62,9 @@ public interface Acceptance {
     List<Seen> events();
 
     /**
-     * That nothing in the area, and no test player's inventory, changed since the last {@link #mark}. For a step
+     * That nothing in the area (blocks, inventories, entities with their health and container slots, nor any entity
+     * arriving that was born elsewhere this step), and no test player's inventory or health, changed since the last
+     * {@link #mark}. For a step
      * protection denies. A failure lists each change with what explains it: a cancelled event there whose cancel
      * left it behind, an event that went through, or no event at all, which is an interception gap.
      *

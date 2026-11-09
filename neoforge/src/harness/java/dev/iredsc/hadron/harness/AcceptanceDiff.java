@@ -77,10 +77,11 @@ final class AcceptanceDiff {
     }
 
     /**
-     * What a step heard: its events, each one's report, and the entities born or gone outside the box (so one crossing
-     * its edge isn't new or gone).
+     * What a step heard: its events, each one's report, the entities born or gone outside the box (so one crossing its
+     * edge isn't new or gone in an allowed step), and the inventory events whose holder was {@code Unknown}, which can't
+     * be placed anywhere.
      */
-    record Step(List<Seen> seen, Map<Event, Report> reports, Set<UUID> crossing) {
+    record Step(List<Seen> seen, Map<Event, Report> reports, Set<UUID> crossing, List<Event> unplaced) {
         Report of(Seen s) {
             return reports.getOrDefault(s.event(), Report.NONE);
         }
@@ -133,6 +134,10 @@ final class AcceptanceDiff {
                     if (be.getLevel() == level) slots.computeIfAbsent(be.getBlockPos(), p -> new HashSet<>()).add(label);
                 } else if (slot.container instanceof net.minecraft.world.entity.Entity e) {
                     entitySlots.computeIfAbsent(e.getUUID(), id -> new HashSet<>()).add(label);
+                } else {
+                    // A slot over something that isn't the block or entity itself (NeoForge's SlotItemHandler over a
+                    // machine's item handler): its number is the handler's, so it names the click's holder whole.
+                    name(click.getHolder(), ANY_SLOT, level, slots, entitySlots);
                 }
             }
         }
@@ -186,7 +191,9 @@ final class AcceptanceDiff {
     /** Each change, for a step protection should have refused entirely, with what explains it. */
     static List<String> unchanged(Snapshot before, Snapshot after, Step step) {
         List<String> out = new ArrayList<>();
-        for (Change c : changes(before, after, true, step)) out.add(c.text() + ": " + explain(c, step.seen()));
+        for (Change c : changes(before, after, true, step)) {
+            out.add(c.text() + ": " + explain(c, step.seen()) + unplacedHint(c, step));
+        }
         return out;
     }
 
@@ -200,7 +207,7 @@ final class AcceptanceDiff {
         List<String> out = new ArrayList<>();
         for (Change c : changes(before, after, false, step)) {
             if (step.seen().stream().noneMatch(s -> !s.cancelled() && c.explains().test(s))) {
-                out.add(c.text() + explainUnseen(c, step.seen()));
+                out.add(c.text() + explainUnseen(c, step.seen()) + unplacedHint(c, step));
             }
         }
         return out;
@@ -236,6 +243,13 @@ final class AcceptanceDiff {
         }
         return "no event fired for it. An interception gap: the bridge fires the core event before this change, so "
                 + "protection can refuse it (docs/bridge-hooks.md)";
+    }
+
+    /** For an inventory change nothing explains, when an inventory event with no holder fired: name the holder. */
+    private static String unplacedHint(Change c, Step step) {
+        if (!c.text().contains("inventory") && !c.text().contains(" slot ") || step.unplaced().isEmpty()) return "";
+        return ". " + step.unplaced().get(0).getEventName() + " fired with an Unknown holder this step, so nothing could "
+                + "place it: name the holder (InventoryHolder.Block or InventoryHolder.Entity)";
     }
 
     private static String explainUnseen(Change c, List<Seen> seen) {
@@ -316,7 +330,9 @@ final class AcceptanceDiff {
             // Only what was in the area at either end; once there, it is followed wherever it goes.
             if (!(was != null && was.inBox() || is != null && is.inBox())) continue;
             if (was == null && is != null) {
-                if (is.consequence() && !refused || crossing.contains(id)) continue;
+                // Born outside and walked in: fine in an allowed step, but in a refused one a spawn reported outside
+                // the area (before the entity was placed) is how a mob gets in unrefused.
+                if (is.consequence() && !refused || crossing.contains(id) && !refused) continue;
                 Optional<Seen> from = transforms.stream().filter(s -> is.type().equals(String.valueOf(
                         BuiltInRegistries.ENTITY_TYPE.getKey(((EntityTransformEvent) s.event()).getTransformedType()))))
                         .findFirst();

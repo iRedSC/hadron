@@ -816,7 +816,7 @@ public final class PluginHost implements PluginManager {
                 return "lists " + mod + " under bridge-depend, but core covers " + mod + " itself and no bridge for "
                         + "it exists: remove " + mod + " from bridge-depend";
             }
-            String why = missingBridge(mod, platform.isModLoaded(mod), Bridge.isInstalled(mod));
+            String why = missingBridge(mod, platform.isModLoaded(mod), Bridge.isBridged(mod));
             if (why != null) return why;
         }
         for (String need : e.description.getDepend()) {

@@ -80,6 +80,8 @@ final class TestAcceptance implements Acceptance, Listener {
     private final Set<UUID> crossing = new HashSet<>();
     /** What each heard event said it changes, copied as it fired. */
     private final Map<Event, AcceptanceDiff.Report> reports = new IdentityHashMap<>();
+    /** Inventory events whose holder is Unknown: nothing can place them, so a failure says to name the holder. */
+    private final List<Event> unplaced = new ArrayList<>();
     private AcceptanceDiff.Snapshot before;
 
     TestAcceptance(TestContext t, BoundingBox box) {
@@ -109,6 +111,7 @@ final class TestAcceptance implements Acceptance, Listener {
         seen.clear();
         crossing.clear();
         reports.clear();
+        unplaced.clear();
     }
 
     @Override
@@ -167,7 +170,7 @@ final class TestAcceptance implements Acceptance, Listener {
     }
 
     private AcceptanceDiff.Step step() {
-        return new AcceptanceDiff.Step(seen, reports, crossing);
+        return new AcceptanceDiff.Step(seen, reports, crossing, unplaced);
     }
 
     // ---- Listening ------------------------------------------------------------------------------------------------
@@ -183,6 +186,10 @@ final class TestAcceptance implements Acceptance, Listener {
         if (!(event instanceof ActionEvent a)) return;
         Optional<Where> at = where(event);
         if (at.isEmpty()) {
+            if (event instanceof InventoryEvent i && AcceptanceDiff.holders(i).stream()
+                    .anyMatch(h -> h instanceof InventoryHolder.Unknown)) {
+                unplaced.add(event);
+            }
             boolean bornOrGone = event instanceof EntitySpawnEvent || event instanceof EntityRemoveEvent
                     || event instanceof EntityDeathEvent;
             if (bornOrGone && !(event instanceof Cancellable c && c.isCancelled())) {
