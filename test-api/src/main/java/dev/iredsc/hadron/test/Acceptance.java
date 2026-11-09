@@ -34,7 +34,9 @@ import net.minecraft.core.BlockPos;
  * <p>What it compares, slot by slot where there are slots: block states and which block entity is where; the items in
  * every inventory a block in the area exposes, on any face; which entities are in it (by id and type, a dropped
  * item's stack, a living entity's health, a container entity's slots, such as a chest minecart's); and every test
- * player's inventory and health. Not compared: a block entity's other data (a machine's progress, settings or
+ * player's inventory and health. A block's other item handlers (its sideless one if it is a container, each face's)
+ * may be separate stores no event can name, so only {@link #assertUnchanged} compares them: an allowed step can't
+ * vouch for them. Not compared: a block entity's other data (a machine's progress, settings or
  * filters), mobs' equipment and inventories that aren't containers, and energy, fluids and other resources a machine
  * holds. Those wait for Hadron's design for running resource flows, since a machine's own data also changes while it
  * merely ticks.

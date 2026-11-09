@@ -338,9 +338,10 @@ final class TestAcceptance implements Acceptance, Listener {
     }
 
     /**
-     * Every slot a block exposes, labelled so an event can name it: {@code slot 3} for the block's own inventory (a
-     * container block entity's slots, or else its sideless item handler's), then, for a block that isn't a container,
-     * {@code north slot 3} for each face whose handler is another object. Empty when it has none.
+     * Every slot a block exposes, labelled so an event can name it. {@code slot 3}: the block's own inventory, a
+     * container block entity's slots or else its sideless item handler's. Then every other handler it offers (the
+     * sideless one of a container, each face's), as {@code unsided slot 3} or {@code north slot 3}: they may be views
+     * of its own slots or separate stores, which only a refused step checks. Empty when it has none.
      */
     private Map<String, ItemStack> items(BlockPos pos, @Nullable BlockEntity be) {
         Map<String, ItemStack> out = new LinkedHashMap<>();
@@ -348,6 +349,11 @@ final class TestAcceptance implements Acceptance, Listener {
         @Nullable IItemHandler sideless = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null);
         if (be instanceof Container c) {
             for (int i = 0; i < c.getContainerSize(); i++) out.put("slot " + i, c.getItem(i).copy());
+            if (sideless != null) {
+                for (int i = 0; i < sideless.getSlots(); i++) {
+                    out.put("unsided slot " + i, sideless.getStackInSlot(i).copy());
+                }
+            }
         } else if (sideless != null) {
             for (int i = 0; i < sideless.getSlots(); i++) out.put("slot " + i, sideless.getStackInSlot(i).copy());
         }
@@ -356,9 +362,6 @@ final class TestAcceptance implements Acceptance, Listener {
             @Nullable IItemHandler h = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, side);
             if (h == null || handlers.stream().anyMatch(seen -> seen == h)) continue;
             handlers.add(h);
-            // A container's faces are views of its own slots (vanilla's sided wrappers); another block's may be a
-            // separate store, or a view a mod made afresh, which only lists the same slots again under its face.
-            if (be instanceof Container) continue;
             for (int i = 0; i < h.getSlots(); i++) out.put(side.getName() + " slot " + i, h.getStackInSlot(i).copy());
         }
         return out;

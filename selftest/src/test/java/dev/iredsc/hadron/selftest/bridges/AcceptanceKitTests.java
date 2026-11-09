@@ -10,6 +10,7 @@ import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import dev.iredsc.hadron.api.event.block.BlockUseEvent;
+import dev.iredsc.hadron.api.event.entity.EntityTransformEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import java.util.List;
@@ -28,7 +29,10 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.core.component.DataComponents;
 import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.monster.ZombifiedPiglin;
+import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.vehicle.MinecartChest;
 
@@ -494,5 +498,44 @@ public final class AcceptanceKitTests {
         t.level().addFreshEntity(item);
         t.await("the hopper to pick the diamonds up", item::isRemoved, 60);
         area.assertEveryChangeSeen("alice's hopper picking up diamonds");
+    }
+
+    @HadronTest
+    void aTransformedMobThatWalksOffIsStillItsTransformation(TestContext t) {
+        Pig pig = EntityType.PIG.create(t.level());
+        pig.moveTo(t.pos(1, 0, -2).getX() + 0.5, t.pos(1, 0, -2).getY(), t.pos(1, 0, -2).getZ() + 0.5);
+        t.level().addFreshEntity(pig);
+        Acceptance area = t.acceptance(around(t));
+        ZombifiedPiglin piglin;
+        // As vanilla's callers do before converting (a lightning strike): the event, then the conversion.
+        Actor ritual = new Actor.Server("a ritual");
+        t.assertFalse(Hadron.getPluginManager().callEvent(new EntityTransformEvent(pig, EntityType.ZOMBIFIED_PIGLIN,
+                ritual)), "the server's transformation went through");
+        try (Actors.Scope s = Actors.push(ritual)) {
+            piglin = pig.convertTo(EntityType.ZOMBIFIED_PIGLIN, false);
+        }
+        t.assertTrue(piglin != null, "the pig converted");
+        piglin.teleportTo(t.pos(3, 0, 2).getX() + 0.5, t.pos(3, 0, 2).getY(), t.pos(3, 0, 2).getZ() + 0.5);
+        area.assertEveryChangeSeen("a pig turned into a piglin that wandered across the area");
+    }
+
+    @HadronTest
+    void aChangeInsideAnItemCountsForTheSlotHoldingIt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos pos = t.pos(2, 0, 0);
+        t.setBlock(pos, Blocks.CHEST);
+        ChestBlockEntity chest = (ChestBlockEntity) t.level().getBlockEntity(pos);
+        chest.setItem(5, new ItemStack(Items.SHULKER_BOX));
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        ItemStack box = chest.getItem(5);
+        ItemStack diamonds = new ItemStack(Items.DIAMOND, 3);
+        Hadron.getPluginManager().callEvent(new InventoryChangeEvent(List.of(new InventoryChangeEvent.Change(
+                new InventoryHolder.Item(new InventoryHolder.Block(t.level(), pos), box), 0, ItemStack.EMPTY,
+                diamonds.copy())), new Actor.Player(alice.player())));
+        box.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(List.of(diamonds.copy())));
+        chest.setItem(0, new ItemStack(Items.EMERALD, 2));
+        String why = failure(t, () -> area.assertEveryChangeSeen("a backpack filled and a chest slot written"));
+        t.assertTrue(why.contains("slot 0") && why.contains("emerald") && !why.contains("slot 5"), why);
     }
 }

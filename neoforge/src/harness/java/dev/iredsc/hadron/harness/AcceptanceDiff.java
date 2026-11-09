@@ -32,6 +32,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.Container;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -150,10 +151,28 @@ final class AcceptanceDiff {
                     entitySlots.computeIfAbsent(e.entity().getUUID(), id -> new HashSet<>()).add(label);
                 }
             }
-            case InventoryHolder.Item i -> name(i.outer(), label, level, slots, entitySlots);
+            // A change inside an item (a backpack) changes the slot of the inventory that holds the item.
+            case InventoryHolder.Item i -> slotHolding(i.outer(), i.stack(), level)
+                    .ifPresent(outer -> name(i.outer(), outer, level, slots, entitySlots));
             case InventoryHolder.PerPlayer p -> name(p.at(), label, level, slots, entitySlots);
             default -> { }
         }
+    }
+
+    /** The label of the slot in {@code holder} that holds that very stack, if it is in a container there. */
+    private static Optional<String> slotHolding(InventoryHolder holder, ItemStack stack, ServerLevel level) {
+        Container container = switch (holder) {
+            case InventoryHolder.Block b when b.level() == level
+                    && b.level().getBlockEntity(b.pos()) instanceof Container c -> c;
+            case InventoryHolder.Entity e when e.entity() instanceof Container c -> c;
+            case InventoryHolder.Entity e when e.entity() instanceof ServerPlayer p -> p.getInventory();
+            default -> null;
+        };
+        if (container == null) return Optional.empty();
+        for (int k = 0; k < container.getContainerSize(); k++) {
+            if (container.getItem(k) == stack) return Optional.of("slot " + k);
+        }
+        return Optional.empty();
     }
 
     private static boolean dataChanged(BlockChange c) {
@@ -269,15 +288,16 @@ final class AcceptanceDiff {
             for (String label : labels) {
                 ItemStack a = was.getOrDefault(label, ItemStack.EMPTY), b = is.getOrDefault(label, ItemStack.EMPTY);
                 if (ItemStack.matches(a, b)) continue;
-                // A face's separate store has no slot numbers an event could name, so any slot reported at the block
-                // covers it in an allowed step; a refused step lists it whatever happened.
-                boolean faceStore = !label.startsWith("slot ");
+                // A store behind one face has no slot an event could name, so only a refused step, where any change
+                // is wrong, checks it; Acceptance says an allowed step can't vouch for it.
+                if (!label.startsWith("slot ") && !refused) continue;
                 out.add(new Change("the inventory at " + at(pos) + ", " + label + ": " + a + " -> " + b, s -> {
                     Report r = step.of(s);
                     if (blockChanged && r.blocks().contains(pos)) return true;
                     Set<String> named = r.slots().getOrDefault(pos, Set.of());
+                    // In a refused step a view's change is the same change as its own slot's, so name that event.
                     return named.contains(label) || named.contains(ANY_SLOT)
-                            || faceStore && !refused && !named.isEmpty();
+                            || !label.startsWith("slot ") && !named.isEmpty();
                 }));
             }
         }
@@ -287,49 +307,52 @@ final class AcceptanceDiff {
         Set<UUID> crossing = step.crossing();
         Set<UUID> ids = new LinkedHashSet<>(before.entities().keySet());
         ids.addAll(after.entities().keySet());
+        // Each transformation that went through accounts for one new entity of its result's type: core fires no spawn
+        // for the result, and the event doesn't name it, so pairing them one to one is all that can be known.
+        List<Seen> transforms = new ArrayList<>(step.seen().stream()
+                .filter(s -> !s.cancelled() && s.event() instanceof EntityTransformEvent).toList());
         for (UUID id : ids) {
             Thing was = before.entities().get(id), is = after.entities().get(id);
             // Only what was in the area at either end; once there, it is followed wherever it goes.
             if (!(was != null && was.inBox() || is != null && is.inBox())) continue;
-            String what;
-            Predicate<Seen> explains;
             if (was == null && is != null) {
                 if (is.consequence() && !refused || crossing.contains(id)) continue;
-                what = "a " + is.type() + describe(is) + " appeared at " + at(is.pos());
-                Thing born = is;
-                explains = s -> s.event() instanceof EntitySpawnEvent e && e.getEntity().getUUID().equals(id)
-                        || s.event() instanceof EntityTransformEvent x && born.type().equals(
-                                String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(x.getTransformedType())))
-                                && x.getEntity().blockPosition().closerThan(born.pos(), 2);
-            } else if (was != null && is == null) {
-                if (was.consequence() && !refused || crossing.contains(id)) continue;
-                what = "the " + was.type() + describe(was) + " at " + at(was.pos()) + " left";
-                explains = s -> names(s, id) && (s.event() instanceof EntityRemoveEvent
-                        || s.event() instanceof EntityDeathEvent || s.event() instanceof HangingBreakEvent
-                        || s.event() instanceof EntityTransformEvent);
-            } else if (was != null && is != null && !ItemStack.matches(was.stack(), is.stack())) {
-                if (is.consequence() && !refused) continue;
-                what = "the " + is.type() + " at " + at(is.pos()) + " went from " + was.stack() + " to " + is.stack();
-                explains = s -> names(s, id);
-            } else if (was != null && is != null && !labelsDiffering(was.contents(), is.contents()).isEmpty()) {
-                for (String label : labelsDiffering(was.contents(), is.contents())) {
-                    out.add(new Change("the " + is.type() + " at " + at(is.pos()) + ", " + label + ": "
-                            + was.contents().getOrDefault(label, ItemStack.EMPTY) + " -> "
-                            + is.contents().getOrDefault(label, ItemStack.EMPTY), s -> {
-                                Set<String> named = step.of(s).entitySlots().getOrDefault(id, Set.of());
-                                return named.contains(label) || named.contains(ANY_SLOT);
-                            }));
-                }
-                continue;
-            } else if (was != null && is != null && was.health() != is.health()) {
-                what = "the " + is.type() + " at " + at(is.pos()) + " went from " + was.health() + " to "
-                        + is.health() + " health";
-                explains = s -> names(s, id) && (s.event() instanceof EntityDamageEvent
-                        || s.event() instanceof EntityRegainHealthEvent);
-            } else {
+                Optional<Seen> from = transforms.stream().filter(s -> is.type().equals(String.valueOf(
+                        BuiltInRegistries.ENTITY_TYPE.getKey(((EntityTransformEvent) s.event()).getTransformedType()))))
+                        .findFirst();
+                from.ifPresent(transforms::remove);
+                out.add(new Change("a " + is.type() + describe(is) + " appeared at " + at(is.pos()),
+                        s -> s.event() instanceof EntitySpawnEvent e && e.getEntity().getUUID().equals(id)
+                                || from.isPresent() && s == from.get()));
                 continue;
             }
-            out.add(new Change(what, explains));
+            if (was != null && is == null) {
+                if (was.consequence() && !refused || crossing.contains(id)) continue;
+                out.add(new Change("the " + was.type() + describe(was) + " at " + at(was.pos()) + " left",
+                        s -> names(s, id) && (s.event() instanceof EntityRemoveEvent
+                                || s.event() instanceof EntityDeathEvent || s.event() instanceof HangingBreakEvent
+                                || s.event() instanceof EntityTransformEvent)));
+                continue;
+            }
+            if (was == null || is == null) continue;
+            // Each of these on its own: a reported change to one hides nothing about another.
+            if (!ItemStack.matches(was.stack(), is.stack()) && (refused || !is.consequence())) {
+                out.add(new Change("the " + is.type() + " at " + at(is.pos()) + " went from " + was.stack() + " to "
+                        + is.stack(), s -> names(s, id)));
+            }
+            for (String label : labelsDiffering(was.contents(), is.contents())) {
+                out.add(new Change("the " + is.type() + " at " + at(is.pos()) + ", " + label + ": "
+                        + was.contents().getOrDefault(label, ItemStack.EMPTY) + " -> "
+                        + is.contents().getOrDefault(label, ItemStack.EMPTY), s -> {
+                            Set<String> named = step.of(s).entitySlots().getOrDefault(id, Set.of());
+                            return named.contains(label) || named.contains(ANY_SLOT);
+                        }));
+            }
+            if (was.health() != is.health()) {
+                out.add(new Change("the " + is.type() + " at " + at(is.pos()) + " went from " + was.health() + " to "
+                        + is.health() + " health", s -> names(s, id) && (s.event() instanceof EntityDamageEvent
+                                || s.event() instanceof EntityRegainHealthEvent)));
+            }
         }
     }
 
