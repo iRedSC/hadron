@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import java.util.function.Supplier;
+import dev.iredsc.hadron.api.bridge.Bridge;
 import dev.iredsc.hadron.api.Default;
 import dev.iredsc.hadron.api.Node;
 import dev.iredsc.hadron.api.Permissions;
@@ -810,6 +811,10 @@ public final class PluginHost implements PluginManager {
                         + "remove this plugin";
             }
         }
+        for (String mod : e.description.getBridgeDepend()) {
+            String why = missingBridge(mod, platform.isModLoaded(mod), Bridge.isInstalled(mod));
+            if (why != null) return why;
+        }
         for (String need : e.description.getDepend()) {
             Entry n = entries.get(need);
             if (n == null) {
@@ -819,6 +824,17 @@ public final class PluginHost implements PluginManager {
             if (!(n.state instanceof State.Running)) return "needs " + n.name + ", which " + describeState(n.state);
         }
         return null;
+    }
+
+    /** Why a bridge-depend on {@code mod} can't be met, or null when its bridge is loaded. */
+    static @Nullable String missingBridge(String mod, boolean modLoaded, boolean bridgeLoaded) {
+        if (bridgeLoaded) return null;
+        if (!modLoaded) {
+            return "uses Hadron's bridge for the " + mod + " mod, but " + mod + " isn't installed: add " + mod
+                    + " and its Hadron bridge to mods/, or remove this plugin";
+        }
+        return "uses Hadron's bridge for " + mod + ", which isn't installed: add the Hadron bridge for " + mod
+                + " to mods/, or remove this plugin";
     }
 
     /**
