@@ -24,7 +24,7 @@ import net.minecraft.core.BlockPos;
  * }</pre>
  *
  * <p>What it protects and logs: every block, inventory and resource event at a place in the area, every explosion
- * in it, and every entity event for an entity in it except an entity's own motion and attention (moving, teleporting,
+ * in it or breaking a block in it, every item event by someone in it, and every entity event for an entity in it except an entity's own motion and attention (moving, teleporting,
  * velocity, knockback, targeting, air). Protection denies each that is cancellable unless the server or a trusted
  * player is behind it, so {@link Actor.Unknown}, ownerless machines and other players are outsiders, as
  * {@link Actor} says protection should treat them. The area is watched ({@code Areas.watch}), so a change with nobody
@@ -66,10 +66,11 @@ public interface Acceptance {
     /**
      * That every change in the area since the last {@link #mark} was reported by an event that went through and says
      * it changed that thing: each block by a block event whose change there isn't empty (a use or a crack changes
-     * nothing), each block's inventory by an inventory change for it, each entity that appeared by its spawn or
+     * nothing) or an explosion listing it, each block's inventory by an inventory change for it, each entity that appeared by its spawn or
      * transformation, one that left by its removal, death or transformation, and one whose health changed by its
-     * damage or healing. Dropped items, experience and falling blocks are exempt, since their contents come from a
-     * change reported elsewhere; an entity walking in or out isn't a change. A failure names each unreported change: an
+     * damage or healing, and a test player standing in the area's inventory and health by what they did or what hurt
+     * or healed them. Dropped items, experience and falling blocks are exempt, since their contents come from a
+     * change reported elsewhere; an entity walking in or out, or born or gone outside the area, isn't a change. A failure names each unreported change: an
      * interception gap the bridge closes by firing the core event (docs/bridge-hooks.md). A block event explains its
      * block's inventory only when the block itself changed. Fails too when nothing changed, since then the step
      * proves nothing: the machine never ran.

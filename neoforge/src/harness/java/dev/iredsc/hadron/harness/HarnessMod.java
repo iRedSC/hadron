@@ -14,5 +14,7 @@ public final class HarnessMod {
 
     public HarnessMod(IEventBus modBus) {
         TestRunner.register(modBus);
+        // Claimed here, in a mod's constructor, as a real bridge claims, so BridgeClaimTests sees the loader's path.
+        dev.iredsc.hadron.api.bridge.Bridge.claim(TargetMod.MOD_ID);
     }
 }

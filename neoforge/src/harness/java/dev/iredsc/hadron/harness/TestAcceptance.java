@@ -10,7 +10,10 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
+import dev.iredsc.hadron.api.event.entity.EntityDeathEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
+import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
+import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTargetEvent;
@@ -18,6 +21,7 @@ import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityVelocityEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.event.item.ItemEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
@@ -27,6 +31,7 @@ import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -69,6 +74,9 @@ final class TestAcceptance implements Acceptance, Listener {
     private final BoundingBox box;
     private final Set<UUID> trusted = new HashSet<>();
     private final List<Seen> seen = new ArrayList<>();
+    /** Entities spawned or removed outside the box this step: one of them in the box at only one end crossed its edge. */
+    private final Set<UUID> crossing = new HashSet<>();
+    private final Map<Event, List<BlockPos>> blasts = new IdentityHashMap<>();
     private AcceptanceDiff.Snapshot before;
 
     TestAcceptance(TestContext t, BoundingBox box) {
@@ -96,6 +104,8 @@ final class TestAcceptance implements Acceptance, Listener {
     public void mark() {
         before = snapshot();
         seen.clear();
+        crossing.clear();
+        blasts.clear();
     }
 
     @Override
@@ -105,7 +115,7 @@ final class TestAcceptance implements Acceptance, Listener {
 
     @Override
     public void assertUnchanged(String step) {
-        List<String> problems = AcceptanceDiff.unchanged(before, snapshot(), seen);
+        List<String> problems = AcceptanceDiff.unchanged(before, snapshot(), step());
         if (!problems.isEmpty()) {
             throw new AssertionError(step + " should have changed nothing in the protected area, but "
                     + problems.size() + " thing(s) changed:\n  " + String.join("\n  ", problems));
@@ -115,12 +125,12 @@ final class TestAcceptance implements Acceptance, Listener {
     @Override
     public void assertEveryChangeSeen(String step) {
         AcceptanceDiff.Snapshot after = snapshot();
-        if (!AcceptanceDiff.anyChange(before, after)) {
+        if (!AcceptanceDiff.anyChange(before, after, step())) {
             throw new AssertionError(step + ": nothing in the area changed since the last mark, so this proves "
                     + "nothing. Check the machine ran (power, fuel, an owner, enough ticks), or use assertUnchanged "
                     + "for a step that should change nothing.");
         }
-        List<String> problems = AcceptanceDiff.unseen(before, after, seen);
+        List<String> problems = AcceptanceDiff.unseen(before, after, step());
         if (!problems.isEmpty()) {
             throw new AssertionError(step + ": " + problems.size() + " change(s) in the area fired no event a plugin "
                     + "could act on. Each is an interception gap: the bridge fires the core event before the change "
@@ -135,10 +145,15 @@ final class TestAcceptance implements Acceptance, Listener {
             throw new AssertionError(step + ": " + problems.size() + " event(s) in the area don't act for "
                     + player.name() + ":\n  " + String.join("\n  ", problems));
         }
-        if (seen.isEmpty()) {
-            throw new AssertionError(step + ": no event fired in the area, so nothing shows who acted. If the step "
-                    + "changed something, that is an interception gap; if it shouldn't have, assert that instead.");
+        if (seen.stream().allMatch(s -> s.actor() instanceof Actor.Server || s.actor() instanceof Actor.Nature)) {
+            throw new AssertionError(step + ": no event in the area acts for anyone (any there are the server's or "
+                    + "nature's), so nothing shows " + player.name() + " acted. A machine " + player.name()
+                    + " owns should act for them; if the step changed something, an event is missing.");
         }
+    }
+
+    private AcceptanceDiff.Step step() {
+        return new AcceptanceDiff.Step(seen, crossing, blasts);
     }
 
     // ---- Listening ------------------------------------------------------------------------------------------------
@@ -153,7 +168,15 @@ final class TestAcceptance implements Acceptance, Listener {
     void record(Event event) {
         if (!(event instanceof ActionEvent a)) return;
         Optional<Where> at = where(event);
-        if (at.isEmpty()) return;
+        if (at.isEmpty()) {
+            boolean bornOrGone = event instanceof EntitySpawnEvent || event instanceof EntityRemoveEvent
+                    || event instanceof EntityDeathEvent;
+            if (bornOrGone && !(event instanceof Cancellable c && c.isCancelled())) {
+                crossing.add(((EntityEvent) event).getEntity().getUUID());
+            }
+            return;
+        }
+        if (event instanceof ExplosionEvent x) blasts.put(x, List.copyOf(x.blockList()));
         seen.add(new Seen(event, a.getActor(), event instanceof Cancellable c && c.isCancelled(), at.get().pos()));
     }
 
@@ -177,7 +200,15 @@ final class TestAcceptance implements Acceptance, Listener {
             return Optional.empty();
         }
         if (event instanceof EntityEvent e) return at(e.getLevel(), e.getPosition());
-        if (event instanceof ExplosionEvent x) return at(x.getLevel(), x.getLocation());
+        if (event instanceof ExplosionEvent x) {
+            // Its blocks too: a blast just outside the box still breaks blocks in it.
+            if (x.getLevel() != level) return Optional.empty();
+            Optional<Where> centre = at(level, x.getLocation());
+            if (centre.isPresent()) return centre;
+            for (BlockPos p : x.blockList()) if (box.isInside(p)) return inBox(p);
+            return Optional.empty();
+        }
+        if (event instanceof ItemEvent i) return i.getLevel() == level ? actorAt(i.getActor()) : Optional.empty();
         if (event instanceof InventoryEvent i) {
             for (InventoryHolder holder : AcceptanceDiff.holders(i)) {
                 Optional<Where> w = holderAt(holder);
@@ -197,6 +228,18 @@ final class TestAcceptance implements Acceptance, Listener {
             }
         }
         return Optional.empty();
+    }
+
+    /** An item event has no place of its own: it happens where whoever did it is. */
+    private Optional<Where> actorAt(Actor actor) {
+        return switch (actor) {
+            case Actor.Player p -> at(p.player().serverLevel(), p.player().position());
+            case Actor.FakePlayer f -> at(f.fake().serverLevel(), f.fake().position());
+            case Actor.Machine m -> m.level() == level ? inBox(m.pos()) : Optional.empty();
+            case Actor.EntityActor e -> e.entity().level() instanceof ServerLevel l
+                    ? at(l, e.entity().position()) : Optional.empty();
+            default -> Optional.empty();
+        };
     }
 
     private Optional<Where> holderAt(InventoryHolder holder) {
@@ -249,15 +292,17 @@ final class TestAcceptance implements Acceptance, Listener {
         }
         Map<String, List<ItemStack>> players = new LinkedHashMap<>();
         Map<String, Float> health = new LinkedHashMap<>();
+        Set<String> inBox = new HashSet<>();
         for (TestPlayer tp : t.players()) {
             Inventory inv = tp.player().getInventory();
             List<ItemStack> stacks = new ArrayList<>();
             for (int i = 0; i < inv.getContainerSize(); i++) stacks.add(inv.getItem(i).copy());
             stacks.add(tp.player().containerMenu.getCarried().copy());
             players.put(tp.name(), stacks);
+            if (box.isInside(tp.player().blockPosition())) inBox.add(tp.name());
             health.put(tp.name(), tp.player().getHealth());
         }
-        return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, world, players, health);
+        return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, world, players, health, inBox);
     }
 
     /**

@@ -23,4 +23,12 @@ public final class BridgeClaimTests {
                 + "claiming: call it from your bridge mod's constructor", refused, "the refusal");
         t.assertFalse(Bridge.isInstalled("any_mod"), "nothing was claimed");
     }
+
+    @HadronTest
+    @Covers(value = Bridge.class, method = "isInstalled")
+    void aBridgeClaimedInItsModsConstructorIsInstalled(TestContext t) {
+        // The harness claims hadron_test_target from its constructor, as a real bridge does.
+        t.assertTrue(Bridge.isInstalled("hadron_test_target"), "the harness's claim should be installed");
+        t.assertFalse(Bridge.isInstalled("hadron_test"), "the claimant isn't itself bridged");
+    }
 }

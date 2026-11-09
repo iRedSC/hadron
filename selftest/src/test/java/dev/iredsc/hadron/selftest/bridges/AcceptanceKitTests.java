@@ -10,6 +10,7 @@ import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import dev.iredsc.hadron.api.event.block.BlockUseEvent;
+import dev.iredsc.hadron.api.event.world.ExplosionEvent;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.InteractionHand;
@@ -18,6 +19,7 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
@@ -257,5 +259,83 @@ public final class AcceptanceKitTests {
         ((ChestBlockEntity) t.level().getBlockEntity(pos)).setItem(0, new ItemStack(Items.DIAMOND, 3));
         String why = failure(t, () -> area.assertEveryChangeSeen("a machine filling a chest someone opened"));
         t.assertTrue(why.contains("the inventory at") && why.contains("diamond"), why);
+    }
+
+    @HadronTest
+    void aPlayerInTheAreaHurtWithNoEventFailsAnAllowedStep(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        alice.teleport(t.pos(2, 0, 0).getX() + 0.5, t.pos(2, 0, 0).getY(), t.pos(2, 0, 0).getZ() + 0.5);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        alice.player().setHealth(10);
+        String why = failure(t, () -> area.assertEveryChangeSeen("a drain on a player standing in the area"));
+        t.assertTrue(why.contains("alice's health went from 20.0 to 10.0"), why);
+    }
+
+    @HadronTest
+    void anAllowedExplosionReportsItsBlocks(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos dirt = t.pos(2, 0, 0);
+        t.setBlock(dirt, Blocks.DIRT);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        try (Actors.Scope s = Actors.push(new Actor.Player(alice.player()))) {
+            t.level().explode(null, dirt.getX() + 0.5, dirt.getY() + 0.5, dirt.getZ() + 0.5, 2f,
+                    Level.ExplosionInteraction.TNT);
+        }
+        t.tick(2);
+        t.assertBlock(dirt, Blocks.AIR);
+        area.assertEveryChangeSeen("alice's blast in an area she is trusted in");
+        area.assertActingFor(alice, "alice's blast in an area she is trusted in");
+    }
+
+    @HadronTest
+    void aBlastJustOutsideTheAreaIsRefusedForTheBlocksInIt(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos dirt = t.pos(1, 0, 0);
+        t.setBlock(dirt, Blocks.DIRT);
+        Acceptance area = t.acceptance(around(t));
+        try (Actors.Scope s = Actors.push(new Actor.Player(bob.player()))) {
+            BlockPos outside = t.pos(0, 0, 0);
+            t.level().explode(null, outside.getX() + 0.5, outside.getY() + 0.5, outside.getZ() + 0.5, 2f,
+                    Level.ExplosionInteraction.TNT);
+        }
+        t.tick(2);
+        area.assertUnchanged("bob's blast beside an area he isn't trusted in");
+        // The blast reached into the area: protection placed it there, by a block of its list inside the box.
+        t.assertTrue(area.events().stream().anyMatch(e -> e.event() instanceof ExplosionEvent && e.cancelled()
+                && e.pos().isPresent()), "protection refused the blast reaching into the area: " + area.events());
+        t.assertBlock(dirt, Blocks.DIRT);
+    }
+
+    @HadronTest
+    void eventsOnlyTheServerIsBehindShowNobodyActed(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        try (Actors.Scope s = Actors.push(new Actor.Server("a bridge hiding its owner"))) {
+            t.level().setBlock(t.pos(2, 0, 0), Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+        }
+        String why = failure(t, () -> area.assertActingFor(alice, "a machine acting as the server"));
+        t.assertTrue(why.contains("no event in the area acts for anyone"), why);
+    }
+
+    @HadronTest
+    void anEntityBornOutsideThatWalksInIsNotAChange(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos stone = t.pos(2, 0, 0);
+        t.setBlock(stone, Blocks.STONE);
+        alice.hold(new ItemStack(Items.IRON_PICKAXE));
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        Pig pig = EntityType.PIG.create(t.level());
+        pig.moveTo(t.pos(-5, 0, 0).getX() + 0.5, t.pos(-5, 0, 0).getY(), t.pos(-5, 0, 0).getZ() + 0.5);
+        try (Actors.Scope s = Actors.push(new Actor.Player(alice.player()))) {
+            t.level().addFreshEntity(pig);
+        }
+        pig.teleportTo(t.pos(2, 0, 1).getX() + 0.5, t.pos(2, 0, 1).getY(), t.pos(2, 0, 1).getZ() + 0.5);
+        alice.breakBlock(stone);
+        t.tick(2);
+        area.assertEveryChangeSeen("alice breaking stone as a pig born outside walks in");
     }
 }

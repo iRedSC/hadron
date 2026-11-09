@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.harness;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
@@ -14,6 +15,8 @@ import dev.iredsc.hadron.api.event.entity.HangingBreakEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.event.item.ItemEvent;
+import dev.iredsc.hadron.api.event.world.ExplosionEvent;
 import dev.iredsc.hadron.test.Acceptance.Seen;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -23,9 +26,11 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.state.BlockState;
 
@@ -42,7 +47,13 @@ final class AcceptanceDiff {
     /** {@code world}: every entity in the test's world, so one walking in or out of the area isn't taken for new or gone. */
     record Snapshot(Map<BlockPos, BlockState> blocks, Map<BlockPos, String> blockEntities,
             Map<BlockPos, List<ItemStack>> contents, Map<UUID, Thing> entities, Set<UUID> world,
-            Map<String, List<ItemStack>> players, Map<String, Float> playerHealth) {}
+            Map<String, List<ItemStack>> players, Map<String, Float> playerHealth, Set<String> playersInBox) {}
+
+    /**
+     * What a step heard: its events, the entities born or gone outside the box (so one crossing its edge isn't new or
+     * gone), and each explosion's blocks as they stood when it fired, since the explosion empties its live list later.
+     */
+    record Step(List<Seen> seen, Set<UUID> crossing, Map<Event, List<BlockPos>> blasts) {}
 
     /** One difference, and what an event would have to name to explain it. */
     private record Change(String text, Predicate<Seen> explains) {}
@@ -54,21 +65,22 @@ final class AcceptanceDiff {
     }
 
     /** Each change, for a step protection should have refused entirely, with what explains it. */
-    static List<String> unchanged(Snapshot before, Snapshot after, List<Seen> seen) {
+    static List<String> unchanged(Snapshot before, Snapshot after, Step step) {
         List<String> out = new ArrayList<>();
-        for (Change c : changes(before, after, true)) out.add(c.text() + ": " + explain(c, seen));
+        for (Change c : changes(before, after, true, step)) out.add(c.text() + ": " + explain(c, step.seen()));
         return out;
     }
 
     /** Whether anything in the area or a test player's inventory changed. */
-    static boolean anyChange(Snapshot before, Snapshot after) {
-        return !changes(before, after, true).isEmpty();
+    static boolean anyChange(Snapshot before, Snapshot after, Step step) {
+        return !changes(before, after, true, step).isEmpty();
     }
 
     /** Each change no event that went through reports. */
-    static List<String> unseen(Snapshot before, Snapshot after, List<Seen> seen) {
+    static List<String> unseen(Snapshot before, Snapshot after, Step step) {
+        List<Seen> seen = step.seen();
         List<String> out = new ArrayList<>();
-        for (Change c : changes(before, after, false)) {
+        for (Change c : changes(before, after, false, step)) {
             if (seen.stream().noneMatch(s -> !s.cancelled() && c.explains().test(s))) out.add(c.text() + explainUnseen(c, seen));
         }
         return out;
@@ -112,18 +124,24 @@ final class AcceptanceDiff {
         return " (" + refused.get(0) + " fired here but was cancelled, and the change happened anyway)";
     }
 
-    private static List<Change> changes(Snapshot before, Snapshot after, boolean consequencesToo) {
+    /**
+     * {@code consequencesToo}: for a refused step, also dropped items, orbs and falling blocks, and every test player
+     * wherever they stand; otherwise only the players standing in the box at either end.
+     */
+    private static List<Change> changes(Snapshot before, Snapshot after, boolean consequencesToo, Step step) {
+        Set<UUID> crossing = step.crossing();
+        Function<BlockPos, Predicate<Seen>> blockAt = pos -> blockAt(pos, step.blasts());
         List<Change> out = new ArrayList<>();
         for (Map.Entry<BlockPos, BlockState> e : before.blocks().entrySet()) {
             BlockPos pos = e.getKey();
             BlockState now = after.blocks().get(pos);
             if (!Objects.equals(e.getValue(), now)) {
-                out.add(new Change(at(pos) + " went from " + e.getValue() + " to " + now, blockAt(pos)));
+                out.add(new Change(at(pos) + " went from " + e.getValue() + " to " + now, blockAt.apply(pos)));
                 continue;
             }
             String beBefore = before.blockEntities().get(pos), beAfter = after.blockEntities().get(pos);
             if (!Objects.equals(beBefore, beAfter)) {
-                out.add(new Change(at(pos) + "'s block entity went from " + beBefore + " to " + beAfter, blockAt(pos)));
+                out.add(new Change(at(pos) + "'s block entity went from " + beBefore + " to " + beAfter, blockAt.apply(pos)));
             }
         }
         Set<BlockPos> containers = new LinkedHashSet<>(before.contents().keySet());
@@ -137,7 +155,7 @@ final class AcceptanceDiff {
             boolean blockChanged = !Objects.equals(before.blocks().get(pos), after.blocks().get(pos))
                     || !Objects.equals(before.blockEntities().get(pos), after.blockEntities().get(pos));
             out.add(new Change("the inventory at " + at(pos) + " " + diff,
-                    blockChanged ? blockAt(pos).or(inventory) : inventory));
+                    blockChanged ? blockAt.apply(pos).or(inventory) : inventory));
         }
         Set<UUID> ids = new LinkedHashSet<>(before.entities().keySet());
         ids.addAll(after.entities().keySet());
@@ -146,7 +164,7 @@ final class AcceptanceDiff {
             String what;
             Predicate<Seen> explains;
             if (was == null && is != null) {
-                if (is.consequence() && !consequencesToo || before.world().contains(id)) continue;
+                if (is.consequence() && !consequencesToo || before.world().contains(id) || crossing.contains(id)) continue;
                 what = "a " + is.type() + describe(is) + " appeared at " + at(is.pos());
                 Thing born = is;
                 explains = s -> s.event() instanceof EntitySpawnEvent e && e.getEntity().getUUID().equals(id)
@@ -154,7 +172,7 @@ final class AcceptanceDiff {
                                 String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(x.getTransformedType())))
                                 && x.getEntity().blockPosition().closerThan(born.pos(), 2);
             } else if (was != null && is == null) {
-                if (was.consequence() && !consequencesToo || after.world().contains(id)) continue;
+                if (was.consequence() && !consequencesToo || after.world().contains(id) || crossing.contains(id)) continue;
                 what = "the " + was.type() + describe(was) + " at " + at(was.pos()) + " left";
                 explains = s -> names(s, id) && (s.event() instanceof EntityRemoveEvent
                         || s.event() instanceof EntityDeathEvent || s.event() instanceof HangingBreakEvent
@@ -173,32 +191,38 @@ final class AcceptanceDiff {
             }
             out.add(new Change(what, explains));
         }
-        if (consequencesToo) {
-            for (Map.Entry<String, List<ItemStack>> e : before.players().entrySet()) {
-                List<ItemStack> now = after.players().get(e.getKey());
-                if (now == null) continue;
-                String diff = stacks(e.getValue(), now);
-                if (diff != null) {
-                    String name = e.getKey();
-                    out.add(new Change(name + "'s inventory " + diff, s -> s.actor() instanceof Actor.Player p && p.player().getGameProfile().getName().equals(name)));
-                }
+        Predicate<String> counted = name -> consequencesToo || before.playersInBox().contains(name)
+                || after.playersInBox().contains(name);
+        for (Map.Entry<String, List<ItemStack>> e : before.players().entrySet()) {
+            String name = e.getKey();
+            List<ItemStack> now = after.players().get(name);
+            if (now == null || !counted.test(name)) continue;
+            String diff = stacks(e.getValue(), now);
+            // By something the player did that spends or gains items (a tool wearing on a break, a block placed, an
+            // item used or picked up), or a change to their inventory: not a use or an open, which changes nothing.
+            if (diff != null) {
+                out.add(new Change(name + "'s inventory " + diff, s -> isPlayer(s.actor(), name)
+                        && (s.event() instanceof ItemEvent || s.event() instanceof InventoryChangeEvent
+                                || s.event() instanceof BlockEvent b && b.getBlocks().stream().anyMatch(BlockChange::isChanged)
+                                || s.event() instanceof EntityDamageEvent || s.event() instanceof EntitySpawnEvent)));
             }
-            for (Map.Entry<String, Float> e : before.playerHealth().entrySet()) {
-                Float now = after.playerHealth().get(e.getKey());
-                if (now == null || now.floatValue() == e.getValue().floatValue()) continue;
-                String name = e.getKey();
-                out.add(new Change(name + "'s health went from " + e.getValue() + " to " + now,
-                        s -> (s.event() instanceof EntityDamageEvent || s.event() instanceof EntityRegainHealthEvent)
-                                && ((EntityEvent) s.event()).getEntity() instanceof net.minecraft.server.level.ServerPlayer p
-                                && p.getGameProfile().getName().equals(name)));
-            }
+        }
+        for (Map.Entry<String, Float> e : before.playerHealth().entrySet()) {
+            String name = e.getKey();
+            Float now = after.playerHealth().get(name);
+            if (now == null || now.floatValue() == e.getValue().floatValue() || !counted.test(name)) continue;
+            out.add(new Change(name + "'s health went from " + e.getValue() + " to " + now,
+                    s -> (s.event() instanceof EntityDamageEvent || s.event() instanceof EntityRegainHealthEvent)
+                            && ((EntityEvent) s.event()).getEntity() instanceof ServerPlayer p
+                            && p.getGameProfile().getName().equals(name)));
         }
         return out;
     }
 
     /** Events that report a change at that position: a block used or damaged there changes nothing, so explains nothing. */
-    private static Predicate<Seen> blockAt(BlockPos pos) {
-        return s -> s.event() instanceof BlockEvent b && changes(b, pos);
+    private static Predicate<Seen> blockAt(BlockPos pos, Map<Event, List<BlockPos>> blasts) {
+        return s -> s.event() instanceof BlockEvent b && changes(b, pos)
+                || s.event() instanceof ExplosionEvent && blasts.getOrDefault(s.event(), List.of()).contains(pos);
     }
 
     private static boolean changes(BlockEvent b, BlockPos pos) {
@@ -209,6 +233,10 @@ final class AcceptanceDiff {
             }
         }
         return false;
+    }
+
+    private static boolean isPlayer(Actor actor, String name) {
+        return actor instanceof Actor.Player p && p.player().getGameProfile().getName().equals(name);
     }
 
     private static boolean names(Seen s, UUID id) {
