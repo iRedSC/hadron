@@ -232,6 +232,8 @@ public final class LeashBreakTests {
         cow.setLeashData(cow.readLeashData(saved));
         Heard heard = listen(t);
         cow.discard();
+        cow.tickCount = 101; // past vanilla's wait for a saved holder
+        Leashable.tickLeash(cow); // a conversion ticks the removed mob once more, which gives up on the holder
         t.tick();
         EntityLeashBreakEvent e = one(t, heard);
         t.assertEquals(Reason.ENTITY_GONE, e.getReason(), "the reason");

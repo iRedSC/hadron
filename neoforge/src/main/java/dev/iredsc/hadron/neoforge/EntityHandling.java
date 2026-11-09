@@ -56,20 +56,16 @@ public final class EntityHandling {
     /**
      * Runs {@code Leashable}'s one method that takes a lead off, and reports it as broken when it came off for a reason
      * nobody chose. The reason is what the caller said ({@link LeashDrop}), otherwise judged from the state before the
-     * drop, while the holder and the entity are still as they were.
+     * drop, while the holder and the entity are still as they were. Never for an entity already removed (see
+     * {@link #reportsBreaks}).
      */
     public static void dropLeash(Entity entity, Runnable drop) {
-        if (!(entity.level() instanceof ServerLevel) || !(entity instanceof Leashable leashable)
-                || !Hooks.listens(EntityLeashBreakEvent.class)) {
+        if (!(entity instanceof Leashable leashable) || !reportsBreaks(entity)) {
             drop.run();
             return;
         }
         Entity holder = leashable.getLeashHolder();
-        Entity.RemovalReason removed = entity.getRemovalReason();
-        // A destroyed entity's lead was reported as it was removed (leashedEntityRemoved); a conversion can still tick
-        // the removed entity once and drop it again.
-        boolean reportedAtRemoval = removed != null && removed.shouldDestroy();
-        EntityLeashBreakEvent.@Nullable Reason reason = holder == null || reportedAtRemoval ? null
+        EntityLeashBreakEvent.@Nullable Reason reason = holder == null ? null
                 : switch (((EntityState) entity).hadron$leashDrop()) {
                     case CHOSEN -> null;
                     case LEAVING -> EntityLeashBreakEvent.Reason.ENTITY_GONE;
@@ -98,9 +94,18 @@ public final class EntityHandling {
      * was never loaded, so there is none to name.
      */
     public static void leashHolderNotFound(Entity entity) {
-        if (!(entity.level() instanceof ServerLevel) || !Hooks.listens(EntityLeashBreakEvent.class)) return;
+        if (!reportsBreaks(entity)) return;
         Hooks.post(new EntityLeashBreakEvent(entity, null, EntityLeashBreakEvent.Reason.HOLDER_NOT_FOUND,
                 EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
+    }
+
+    /**
+     * Whether a lead coming off this entity is reported. Never once the entity is removed: a destroyed entity's lead was
+     * reported as it was removed ({@link #leashedEntityRemoved}), even if a conversion ticks it again or its saved holder
+     * turns up, and a portal's copy carries the lead on. Each lead is then reported at most once.
+     */
+    private static boolean reportsBreaks(Entity entity) {
+        return entity.level() instanceof ServerLevel && !entity.isRemoved() && Hooks.listens(EntityLeashBreakEvent.class);
     }
 
     /** A lead on an entity about to be destroyed: who held it, if the holder ever loaded. */
@@ -131,14 +136,11 @@ public final class EntityHandling {
     }
 
     /**
-     * Why a lead is coming off, judged from the state alone; null when none of the reasons holds: a player or a mod
-     * taking it off on purpose, or a portal, whose copy of the entity carries the lead on (and reports
-     * {@link EntityLeashBreakEvent.Reason#HOLDER_NOT_FOUND} if its holder never follows). The order matters: a dead
-     * entity mounted on nothing is gone, not mounted.
+     * Why a lead is coming off a live entity, judged from the state alone; null when none of the reasons holds: a
+     * player or a mod taking it off on purpose. The order matters: a dead entity mounted on nothing is gone, not mounted.
      */
     static EntityLeashBreakEvent.@Nullable Reason breakReason(Entity entity, Entity holder) {
-        if (entity.getRemovalReason() == Entity.RemovalReason.CHANGED_DIMENSION) return null;
-        if (entity.isRemoved() || !entity.isAlive()) return EntityLeashBreakEvent.Reason.ENTITY_GONE;
+        if (!entity.isAlive()) return EntityLeashBreakEvent.Reason.ENTITY_GONE;
         if (holder.isRemoved() || !holder.isAlive()) return EntityLeashBreakEvent.Reason.HOLDER_GONE;
         if (entity.isPassenger()) return EntityLeashBreakEvent.Reason.MOUNTED;
         if (holder.level() == entity.level() && entity.distanceTo(holder) > Leashable.LEASH_TOO_FAR_DIST) {
