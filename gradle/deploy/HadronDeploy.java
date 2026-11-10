@@ -83,7 +83,7 @@ public final class HadronDeploy {
         if (!args.jar().isFile()) {
             throw new Failure("There is no jar at " + args.jar() + " to deploy: build it first (./gradlew jar).");
         }
-        String plugin = pluginName(args.jar());
+        requirePluginYml(args.jar());
         Rcon.Settings rcon = Rcon.Settings.read(args.serverDir());
         File plugins = new File(args.serverDir(), "plugins");
         try (Rcon connection = Rcon.open(rcon)) {
@@ -95,7 +95,7 @@ public final class HadronDeploy {
                     StandardOpenOption.CREATE, StandardOpenOption.WRITE);
                     FileLock ignored = lock(channel, plugins)) {
                 Version version = install(args.jar(), new File(plugins, args.installAs()));
-                return awaitLoaded(args, plugin, connection, rcon, version);
+                return awaitLoaded(args, connection, rcon, version);
             }
         } catch (IOException e) {
             throw new Failure("Deploying " + args.installAs() + " failed: " + e + ". Check that " + plugins
@@ -113,7 +113,7 @@ public final class HadronDeploy {
     }
 
     /** Asks the server until it reports exactly {@code version}: enabled, or why not; fails after the timeout. */
-    private static String awaitLoaded(Args args, String plugin, Rcon connection, Rcon.Settings rcon, Version version)
+    private static String awaitLoaded(Args args, Rcon connection, Rcon.Settings rcon, Version version)
             throws Failure, IOException {
         long start = System.nanoTime();
         String last = "nothing about " + args.installAs();
@@ -126,9 +126,9 @@ public final class HadronDeploy {
             }
             Status mine = Status.of(lines, args.installAs(), version);
             if (mine != null) {
-                switch (Status.verdict(mine, plugin, args.installAs())) {
+                switch (Status.verdict(mine, args.installAs())) {
                     case Verdict.Done done -> {
-                        return plugin + " enabled on the dev server (" + args.installAs() + ", sha256 "
+                        return mine.name(args.installAs()) + " enabled on the dev server (" + args.installAs() + ", sha256 "
                                 + version.sha256().substring(0, 12) + ", "
                                 + (System.nanoTime() - start) / 1_000_000 + " ms)";
                     }
@@ -155,23 +155,20 @@ public final class HadronDeploy {
         }
     }
 
-    /** The plugin.yml name inside the jar, for messages. */
-    static String pluginName(File jar) throws Failure {
+    /**
+     * Refuses a jar with no plugin.yml before anything is copied: the host would refuse it too. Nothing else of the
+     * descriptor is read here (not even its name): the host's own YAML reading decides what it accepts, and its status
+     * line names the plugin.
+     */
+    static void requirePluginYml(File jar) throws Failure {
         try (ZipFile zip = new ZipFile(jar)) {
-            ZipEntry entry = zip.getEntry("plugin.yml");
-            if (entry == null) {
+            if (zip.getEntry("plugin.yml") == null) {
                 throw new Failure(jar.getName() + " has no plugin.yml, so Hadron can't load it. Put one in "
                         + "src/main/resources with name:, version:, minecraft: and main:.");
-            }
-            try (InputStream in = zip.getInputStream(entry)) {
-                for (String line : new String(in.readAllBytes(), StandardCharsets.UTF_8).split("\\R")) {
-                    if (line.startsWith("name:")) return line.substring("name:".length()).strip().replaceAll("^['\"]|['\"]$", "");
-                }
             }
         } catch (IOException e) {
             throw new Failure(jar + " can't be read as a jar (" + e.getMessage() + "): rebuild it with ./gradlew jar.");
         }
-        throw new Failure(jar.getName() + "'s plugin.yml has no name:. Add name: MyPlugin.");
     }
 
     /** The exact file version written: what the host must report back before it counts. */
@@ -264,7 +261,13 @@ public final class HadronDeploy {
             return null;
         }
 
-        static Verdict verdict(Status s, String plugin, String jar) {
+        /** The plugin's name as the host knows it; a refused jar has none, so it is named by its file. */
+        String name(String jar) {
+            return plugin.isEmpty() ? jar : plugin;
+        }
+
+        static Verdict verdict(Status s, String jar) {
+            String plugin = s.name(jar);
             return switch (s.state) {
                 case "enabled" -> new Verdict.Done();
                 case "failed" -> new Verdict.Rejected(plugin + " failed to load: " + s.why);
@@ -345,9 +348,14 @@ public final class HadronDeploy {
         private int nextId = 10;
 
         private Rcon(Socket socket) throws IOException {
+            this(socket, socket.getInputStream(), socket.getOutputStream());
+        }
+
+        /** Over any pair of streams (a test drives one without a network); {@code socket} may be null then. */
+        Rcon(Socket socket, InputStream in, OutputStream out) {
             this.socket = socket;
-            this.in = new DataInputStream(socket.getInputStream());
-            this.out = socket.getOutputStream();
+            this.in = new DataInputStream(in);
+            this.out = out;
         }
 
         static Rcon open(Settings settings) throws Failure {
@@ -456,7 +464,7 @@ public final class HadronDeploy {
 
         @Override
         public void close() {
-            closeQuietly(socket);
+            if (socket != null) closeQuietly(socket);
         }
     }
 }

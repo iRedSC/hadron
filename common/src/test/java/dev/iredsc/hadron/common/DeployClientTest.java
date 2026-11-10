@@ -14,7 +14,6 @@ import java.io.OutputStream;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
@@ -174,6 +173,98 @@ class DeployClientTest {
         Run run = launch(jar("Hello", true), "online-mode=false\nenable-rcon=false\n", 1);
         assertEquals(1, run.exit);
         assertTrue(run.stderr.contains("RCON is off") && run.stderr.contains("enable-rcon=true"), run.stderr);
+    }
+
+    @Test
+    void everyPluginYmlTheHostsYamlParserAcceptsIsDeployed() throws Exception {
+        // The host reads plugin.yml as YAML, so quoted keys, spaces before the colon and flow mappings all load; the
+        // deploy must never refuse a plugin the host would take (it names the plugin from the host's own answer).
+        for (String yml : List.of("\"name\": Hello\nmain: x.Main\n", "name : Hello\nmain: x.Main\n",
+                "{name: Hello, version: \"1\", main: x.Main}\n", "'name': 'Hello'\nmain: x.Main\n")) {
+            Path jar = dir.resolve("build/yml/Hello.jar");
+            Files.createDirectories(jar.getParent());
+            try (ZipOutputStream zip = new ZipOutputStream(Files.newOutputStream(jar))) {
+                zip.putNextEntry(new ZipEntry("plugin.yml"));
+                zip.write(yml.getBytes(StandardCharsets.UTF_8));
+                zip.closeEntry();
+            }
+            try (Fake server = new Fake("hadron", (asked, installed, sha) ->
+                    List.of(line(PluginStatus.State.ENABLED, installed, sha, null)))) {
+                Run run = launch(jar, properties(server.port, "hadron"), 5);
+                assertEquals(0, run.exit, yml + " -> " + run.stderr);
+                assertTrue(run.stdout.startsWith("Hello enabled on the dev server"), yml + " -> " + run.stdout);
+            }
+        }
+    }
+
+    @Test
+    void endMarkerIsSentOnlyAfterTheFirstReplyPacket() throws Exception {
+        // No timing: the client's streams are scripted. A read by the client means it has sent everything it will
+        // send until something arrives, so the frames written by then are exactly what it sent without waiting.
+        ByteArrayOutputStream written = new ByteArrayOutputStream();
+        int[] framesWhenFirstReading = {-1};
+        int[] answered = {0};
+        InputStream replies = new InputStream() {
+            private byte[] pending = new byte[0];
+            private int at;
+
+            @Override
+            public int read() throws IOException {
+                byte[] one = new byte[1];
+                return read(one, 0, 1) < 0 ? -1 : one[0] & 0xff;
+            }
+
+            @Override
+            public int read(byte[] into, int off, int len) throws IOException {
+                if (at == pending.length) {
+                    List<int[]> frames = frames(written.toByteArray());
+                    if (framesWhenFirstReading[0] < 0) framesWhenFirstReading[0] = frames.size();
+                    if (answered[0] >= frames.size()) throw new IOException("the client waits for a reply nobody owes it");
+                    int[] frame = frames.get(answered[0]++);
+                    pending = frame[1] == 2 ? reply(frame[0], "first ", "second") : reply(frame[0], "Unknown request 0");
+                    at = 0;
+                }
+                int n = Math.min(len, pending.length - at);
+                System.arraycopy(pending, at, into, off, n);
+                at += n;
+                return n;
+            }
+        };
+        Class<?> rcon = Class.forName("HadronDeploy$Rcon", true, client().getClassLoader());
+        var constructor = rcon.getDeclaredConstructor(Socket.class, InputStream.class, OutputStream.class);
+        constructor.setAccessible(true);
+        Object connection = constructor.newInstance(null, replies, written);
+        var run = rcon.getDeclaredMethod("run", String.class);
+        run.setAccessible(true);
+        assertEquals("first second", run.invoke(connection, "hadron status"));
+        assertEquals(1, framesWhenFirstReading[0], "only the command was sent before the client waited for the server: "
+                + "Minecraft's RCON hangs up on a second frame read together with the first");
+        assertEquals(2, answered[0], "the end marker followed once the first reply packet had arrived");
+    }
+
+    /** The request frames in what a client wrote: {id, type} of each. */
+    private static List<int[]> frames(byte[] bytes) {
+        List<int[]> out = new java.util.ArrayList<>();
+        ByteBuffer buf = ByteBuffer.wrap(bytes).order(ByteOrder.LITTLE_ENDIAN);
+        while (buf.remaining() >= 4) {
+            int length = buf.getInt();
+            int id = buf.getInt();
+            int type = buf.getInt();
+            buf.position(buf.position() + length - 8);
+            out.add(new int[] {id, type});
+        }
+        return out;
+    }
+
+    /** One reply packet per body, as Minecraft sends a long reply. */
+    private static byte[] reply(int id, String... bodies) {
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        for (String body : bodies) {
+            byte[] bytes = body.getBytes(StandardCharsets.UTF_8);
+            out.writeBytes(ByteBuffer.allocate(14 + bytes.length).order(ByteOrder.LITTLE_ENDIAN)
+                    .putInt(10 + bytes.length).putInt(id).putInt(0).put(bytes).put((byte) 0).put((byte) 0).array());
+        }
+        return out.toByteArray();
     }
 
     @Test
@@ -436,18 +527,10 @@ class DeployClientTest {
             byte[] read = new byte[1460];
             while (true) {
                 // As Minecraft's RconClient: one request per socket read, and a read holding anything but exactly one
-                // frame disconnects. A busy server's read finds whatever the client has sent by then, so the stand-in
-                // takes a short moment to read: a client that sends a second frame before the reply to the first
-                // has it read together with the first, and is hung up on.
-                client.setSoTimeout(0);
+                // frame disconnects. (That a client waits for the first reply before sending its end marker is
+                // checked without any timing, by endMarkerIsSentOnlyAfterTheFirstReplyPacket.)
                 int n = in.read(read);
                 if (n < 0) return;
-                client.setSoTimeout(150);
-                try {
-                    if (in.read(new byte[1460]) != 0) return; // more bytes (or the end) arrived with this request
-                } catch (SocketTimeoutException alone) {
-                    // nothing else came: the read held one request
-                }
                 if (n < 10 || ByteBuffer.wrap(read, 0, 4).order(ByteOrder.LITTLE_ENDIAN).getInt() != n - 4) return;
                 int length = n - 4;
                 byte[] data = Arrays.copyOfRange(read, 4, n);

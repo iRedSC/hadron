@@ -122,6 +122,69 @@ public final class HostLifecycleTests {
         }
     }
 
+    /** The plain-text lines of {@code /hadron status}, as an op's console would read them. */
+    private static List<String> statusLines(TestContext t, TestPlayer op) {
+        op.clearReceived();
+        op.command("hadron status");
+        return op.chat().stream().filter(l -> l.startsWith("plugin=") || l.startsWith("refused\t")).toList();
+    }
+
+    private static String sha256(File file) throws Exception {
+        return java.util.HexFormat.of().formatHex(
+                java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file.toPath())));
+    }
+
+    /**
+     * A replacement the host refuses leaves the old version running, so {@code /hadron status} keeps naming the jar
+     * that runs (its file version and hash) and reports the refused one on a line of its own: a deploy of the
+     * replacement then fails with the refusal, instead of matching an identity that is no file's.
+     */
+    @HadronTest(timeout = 1200)
+    void aRefusedReplacementIsReportedApartFromTheJarStillRunning(TestContext t) throws Exception {
+        TestPlayer admin = t.player("admin");
+        admin.setOp(true);
+        PluginManager plugins = t.plugin().getServer().getPluginManager();
+        File folder = t.plugin().getServer().getPluginsFolder();
+        File jar = new File(folder, "selftest-hostprobe.jar");
+        try {
+            writeJar(jar, t.server().getServerVersion());
+            t.await("Hadron to enable the probe", () -> plugins.isPluginEnabled(NAME), 300);
+            String runningSha = sha256(jar);
+            long runningModified = jar.lastModified();
+
+            File partial = new File(folder, "selftest-hostprobe.jar.part");
+            try (OutputStream file = Files.newOutputStream(partial.toPath()); ZipOutputStream zip = new ZipOutputStream(file)) {
+                zip.putNextEntry(new ZipEntry("not-a-plugin.txt"));
+                zip.write("no plugin.yml in this jar".getBytes(StandardCharsets.UTF_8));
+            }
+            t.assertTrue(partial.setLastModified(runningModified + 60_000), "give the replacement its own file version");
+            Files.move(partial.toPath(), jar.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            String refusedSha = sha256(jar);
+            long refusedModified = jar.lastModified();
+
+            t.await("Hadron to refuse the replacement", () -> statusLines(t, admin).stream()
+                    .anyMatch(l -> l.startsWith("refused\t")), 300);
+            List<String> lines = statusLines(t, admin);
+            t.assertTrue(plugins.isPluginEnabled(NAME), "a refused replacement leaves the old version running");
+            String running = lines.stream().filter(l -> l.startsWith("plugin=" + NAME + "\t")).findFirst().orElse("");
+            t.assertEquals("plugin=" + NAME + "\tstate=enabled\tjar=selftest-hostprobe.jar\tmodified=" + runningModified
+                    + "\tsha256=" + runningSha, running, "the running plugin is named by the jar it loaded, not the "
+                    + "refused replacement (modified " + refusedModified + ", sha256 " + refusedSha + "); lines: " + lines);
+            String refused = lines.stream().filter(l -> l.startsWith("refused\t")).findFirst().orElse("");
+            t.assertTrue(refused.startsWith("refused\tstate=refused\tjar=selftest-hostprobe.jar\tmodified="
+                    + refusedModified + "\tsha256=" + refusedSha + "\twhy="), "the refused jar has its own line, with "
+                    + "its own file version and hash: " + refused);
+            t.assertTrue(refused.contains("changed but isn't usable, so the running version stays"),
+                    "and says why: " + refused);
+        } finally {
+            jar.delete();
+            if (plugins.isPluginEnabled(NAME)) t.await("the probe to unload", () -> !plugins.isPluginEnabled(NAME), 200);
+            clearProperties();
+            deleteTree(new File(folder, NAME));
+        }
+    }
+
     @HadronTest(timeout = 900)
     @Covers(PluginDisableEvent.class)
     @Covers(value = PluginManager.class, method = "isPluginEnabled")

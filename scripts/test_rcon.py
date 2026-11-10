@@ -1,6 +1,5 @@
 """Tests for rcon.py against a stand-in server: python3 -m unittest scripts/test_rcon.py (no server, no dependencies)."""
 import os
-import select
 import socketserver
 import struct
 import sys
@@ -27,12 +26,9 @@ class Server:
                 sock = self.request
                 while True:
                     # As Minecraft's RconClient: one request per socket read, and a read holding anything but exactly
-                    # one frame disconnects. A busy server's read finds whatever the client has sent by then, so a
-                    # client that sends a second frame before the reply to the first is caught here: the stand-in
-                    # takes a short moment to read, and a second frame arriving meanwhile is read together with it.
+                    # one frame disconnects. (That a client waits for the first reply before sending its end marker is
+                    # checked without any timing, by ScriptedSocket below.)
                     data = sock.recv(1460)
-                    if select.select([sock], [], [], 0.15)[0]:
-                        return  # more bytes arrived: the same read would have held them
                     if len(data) < 10 or struct.unpack("<i", data[:4])[0] != len(data) - 4:
                         return
                     data = data[4:]
@@ -63,6 +59,42 @@ class Server:
         self.server.server_close()
 
 
+class ScriptedSocket:
+    """A socket with no network and no timing: recv is called only when the client has nothing more to send until
+    something arrives, so the frames sent by then are exactly the ones it sent without waiting for a reply."""
+
+    def __init__(self):
+        self.sent = b""
+        self.pending = b""
+        self.answered = 0
+        self.frames_when_first_reading = None
+
+    def sendall(self, data):
+        self.sent += data
+
+    def frames(self):
+        out, rest = [], self.sent
+        while rest:
+            (length,) = struct.unpack("<i", rest[:4])
+            out.append(struct.unpack("<ii", rest[4:12]))
+            rest = rest[4 + length:]
+        return out
+
+    def recv(self, count):
+        if not self.pending:
+            frames = self.frames()
+            if self.frames_when_first_reading is None:
+                self.frames_when_first_reading = len(frames)
+            if self.answered >= len(frames):
+                raise AssertionError("the client waits for a reply nobody owes it")
+            request_id, kind = frames[self.answered]
+            self.answered += 1
+            bodies = ["first ", "second"] if kind == rcon.COMMAND else ["Unknown request 0"]
+            self.pending = b"".join(frame(request_id, 0, body) for body in bodies)
+        data, self.pending = self.pending[:count], self.pending[count:]
+        return data
+
+
 class RconTest(unittest.TestCase):
     def talk(self, behavior="normal", password="pw", sent="pw", command="list"):
         server = Server(behavior, password)
@@ -79,9 +111,13 @@ class RconTest(unittest.TestCase):
     def test_a_reply_in_several_packets_is_joined(self):
         self.assertEqual(self.talk("long"), "a" * 3000 + "b" * 3000 + "c")
 
-    def test_a_command_is_not_followed_by_a_second_frame_until_its_reply_arrives(self):
-        # Vanilla hangs up on two frames in one read; the stand-in does too, so sending both at once fails here.
-        self.assertEqual(self.talk(command="list"), "echo list")
+    def test_the_end_marker_is_sent_only_after_the_first_reply_packet(self):
+        sock = ScriptedSocket()
+        self.assertEqual(rcon.run(sock, "list"), "first second")
+        self.assertEqual(sock.frames_when_first_reading, 1,
+                         "only the command may be sent before the client waits for the server: Minecraft's RCON "
+                         "hangs up on a second frame read together with the first")
+        self.assertEqual(sock.answered, 2, "the end marker followed once the first reply packet had arrived")
 
     def test_a_wrong_password_says_how_to_fix_it(self):
         with self.assertRaisesRegex(rcon.RconError, "refused the RCON password.*HADRON_RCON_PASSWORD"):
