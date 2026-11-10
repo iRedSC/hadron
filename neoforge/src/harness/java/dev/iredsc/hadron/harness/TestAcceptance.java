@@ -20,7 +20,13 @@ import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
+import dev.iredsc.hadron.api.event.item.ItemCraftEvent;
 import dev.iredsc.hadron.api.event.item.ItemDropEvent;
+import dev.iredsc.hadron.api.event.item.ItemSmeltEvent;
+import dev.iredsc.hadron.api.event.item.PrepareAnvilEvent;
+import dev.iredsc.hadron.api.event.item.PrepareItemCraftEvent;
+import dev.iredsc.hadron.api.event.item.TradeEvent;
 import dev.iredsc.hadron.api.event.item.ItemEvent;
 import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceEvent;
@@ -103,7 +109,9 @@ final class TestAcceptance implements Acceptance, Listener {
     TestAcceptance(TestContext t, BoundingBox box) {
         this.t = t;
         this.level = t.level();
-        this.box = Objects.requireNonNull(box, "box");
+        // A copy: a BoundingBox can be moved, and the watched, placed and compared area must stay one area.
+        Objects.requireNonNull(box, "box");
+        this.box = new BoundingBox(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ());
         Areas.watch(t.plugin(), level, box);
         t.registerEvents(this);
         this.before = snapshot();
@@ -262,6 +270,9 @@ final class TestAcceptance implements Acceptance, Listener {
         }
         if (event instanceof ItemEvent i) {
             if (i.getLevel() != level) return OUT;
+            // An item event naming the inventory it happens in (a craft, a smelt, a trade, an anvil) happens there.
+            Optional<InventoryHolder> in = itemHolder(i);
+            if (in.isPresent() && holder(in.get()) instanceof Place.In p) return p;
             return i.getActor() instanceof Actor.Unknown
                     ? new Place.Unplaced("nobody is behind it, so nothing says where it happened: push the actor "
                             + "(the player or machine using the item)")
@@ -292,7 +303,9 @@ final class TestAcceptance implements Acceptance, Listener {
                     + "the holder (InventoryHolder.Block or InventoryHolder.Entity)") : OUT;
         }
         if (event instanceof ResourceEvent r) {
+            boolean held = false;
             for (ResourceHolder h : r.getHolders()) {
+                held |= h instanceof ResourceHolder.Item;
                 Place p = switch (h) {
                     case ResourceHolder.Block b -> b.level() == level ? inBox(b.pos()) : OUT;
                     case ResourceHolder.Entity e -> e.entity().level() instanceof ServerLevel l
@@ -303,8 +316,28 @@ final class TestAcceptance implements Acceptance, Listener {
                 };
                 if (p instanceof Place.In) return p;
             }
+            // A resource in an item (a tool's energy) is where whoever holds it is.
+            if (held) {
+                if (r.getActor() instanceof Actor.Unknown) {
+                    return new Place.Unplaced("its resource is in an item and nobody is behind it, so nothing says "
+                            + "where it happened: push the actor (the player or machine holding the item)");
+                }
+                return actorAt(r.getActor());
+            }
         }
         return OUT;
+    }
+
+    private static Optional<InventoryHolder> itemHolder(ItemEvent event) {
+        return switch (event) {
+            case ItemChangeEvent e -> Optional.of(e.getHolder());
+            case ItemCraftEvent e -> Optional.of(e.getHolder());
+            case PrepareItemCraftEvent e -> Optional.of(e.getHolder());
+            case PrepareAnvilEvent e -> Optional.of(e.getHolder());
+            case ItemSmeltEvent e -> Optional.of(e.getHolder());
+            case TradeEvent e -> Optional.of(e.getTrader());
+            default -> Optional.empty();
+        };
     }
 
     private boolean overlaps(ChunkPos chunk) {

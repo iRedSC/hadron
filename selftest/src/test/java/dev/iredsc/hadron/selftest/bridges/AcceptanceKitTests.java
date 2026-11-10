@@ -10,11 +10,13 @@ import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
 import dev.iredsc.hadron.api.event.item.ItemDropEvent;
 import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.api.event.item.ItemUseEvent;
 import dev.iredsc.hadron.api.event.resource.Resource;
 import dev.iredsc.hadron.api.event.resource.ResourceConsumeEvent;
+import dev.iredsc.hadron.api.event.resource.ResourceEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
 import dev.iredsc.hadron.test.Acceptance;
@@ -24,9 +26,12 @@ import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.CompoundContainer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.CraftingMenu;
@@ -38,6 +43,8 @@ import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
@@ -490,5 +497,61 @@ public final class AcceptanceKitTests {
         pig.teleportTo(t.pos(-5, 0, 0).getX() + 0.5, t.pos(-5, 0, 0).getY(), t.pos(-5, 0, 0).getZ() + 0.5);
         area.assertUnchanged("a pig walking off", Part.ENTITIES);
         area.assertUnchanged("a pig walking off, asked again", Part.ENTITIES);
+    }
+
+    @HadronTest
+    void aShiftClickIntoADoubleChestInTheAreaIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos left = t.pos(2, 0, 0), right = t.pos(2, 0, 1);
+        t.setBlock(left, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, Direction.WEST)
+                .setValue(ChestBlock.TYPE, ChestType.LEFT));
+        t.setBlock(right, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, Direction.WEST)
+                .setValue(ChestBlock.TYPE, ChestType.RIGHT));
+        Acceptance area = t.acceptance(around(t));
+        CompoundContainer both = new CompoundContainer((ChestBlockEntity) t.level().getBlockEntity(left),
+                (ChestBlockEntity) t.level().getBlockEntity(right));
+        ChestMenu menu = ChestMenu.sixRows(1, bob.player().getInventory(), both);
+        boolean cancelled = Hadron.getPluginManager().callEvent(new InventoryClickEvent(bob.player(),
+                new InventoryHolder.Entity(bob.player()), menu, 60, 0, ClickType.QUICK_MOVE,
+                new Actor.Player(bob.player())));
+        t.assertTrue(cancelled, "a shift-click into the area's double chest was refused: " + area.events());
+    }
+
+    @HadronTest
+    void anItemChangedInAnInventoryInTheAreaIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos chest = t.pos(2, 0, 0);
+        t.setBlock(chest, Blocks.CHEST);
+        Acceptance area = t.acceptance(around(t));
+        Actor machine = new Actor.Machine(t.level(), t.pos(-3, 0, 0), Attribution.of(bob.uuid()));
+        boolean cancelled = Hadron.getPluginManager().callEvent(new ItemChangeEvent(t.level(),
+                new InventoryHolder.Block(t.level(), chest), new ItemStack(Items.IRON_SWORD),
+                new ItemStack(Items.DIAMOND_SWORD), machine));
+        t.assertTrue(cancelled, "a machine outside changing an item in the area's chest was refused: "
+                + area.events());
+    }
+
+    @HadronTest
+    void aHeldToolsEnergyIsWhereItsHolderIs(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos in = t.pos(2, 0, 0);
+        alice.teleport(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).refuse(ResourceEvent.class).mark();
+        boolean cancelled = Hadron.getPluginManager().callEvent(new ResourceConsumeEvent(
+                new Actor.Player(alice.player()), Resource.ENERGY,
+                new ResourceHolder.Item(new ItemStack(Items.IRON_PICKAXE)), 100, 40));
+        t.assertTrue(cancelled, "a tool's energy spent in the area, with resources refused, was refused");
+    }
+
+    @HadronTest
+    void movingTheBoxAfterwardsMovesNothing(TestContext t) {
+        BoundingBox box = around(t);
+        Acceptance area = t.acceptance(box);
+        box.move(20, 0, 0);
+        area.mark();
+        BlockPos pos = t.pos(2, 0, 0);
+        t.level().getChunkAt(pos).setBlockState(pos, Blocks.GOLD_BLOCK.defaultBlockState(), false);
+        failure(t, () -> area.assertUnchanged("a write in the area first given"));
     }
 }
