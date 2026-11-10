@@ -66,12 +66,13 @@ public final class TestSideEffects implements SideEffects {
     }
 
     /**
-     * The packet of the world broadcast this thread is running, which was recorded once as a whole: its copies, sent
-     * to each player near, aren't recorded again. Only those: another packet sent meanwhile (a packet handler sending
-     * someone a portal's whoosh) is recorded, and so is every packet another thread sends.
+     * The exact packet instances of the world broadcasts this thread is running, each recorded once as a whole: when
+     * one of these very instances is sent to a player near, it isn't recorded again. Membership is by identity alone,
+     * never by what a packet says: an independent sound with the same content (a handler playing it again for the
+     * player the broadcast left out) is another sound, and is recorded. Every packet another thread sends is too.
      */
-    @StaticState(reason = "each thread's innermost running broadcast, put back to the outer one as each returns")
-    private static final ThreadLocal<@Nullable Packet<?>> BROADCAST = new ThreadLocal<>();
+    @StaticState(reason = "each thread's running broadcasts' packets, each removed as its broadcast returns")
+    private static final ThreadLocal<List<Packet<?>>> BROADCAST = ThreadLocal.withInitial(ArrayList::new);
 
     /** Frames of the bookkeeping between an action and the hook, skipped so {@code from} starts at the action. */
     private static final Set<String> BOOKKEEPING_METHODS = Set.of("awardStat", "resetStat", "gameEvent",
@@ -241,42 +242,24 @@ public final class TestSideEffects implements SideEffects {
     }
 
     /**
-     * From {@code ServerLevelSoundMixin}: runs the broadcast of {@code packet}, which it has just recorded, so the
-     * copies it sends each player near aren't recorded too.
+     * From {@code ServerLevelSoundMixin}: runs the broadcast of {@code packet}, which it has just recorded, marking that
+     * instance until the broadcast returns so the copies of it sent to each player near aren't recorded too.
      */
     public static void broadcasting(Packet<?> packet, Runnable broadcast) {
-        @Nullable Packet<?> outer = BROADCAST.get();
-        BROADCAST.set(packet);
+        List<Packet<?>> marked = BROADCAST.get();
+        int before = marked.size();
+        marked.add(packet);
         try {
             broadcast.run();
         } finally {
-            if (outer == null) BROADCAST.remove();
-            else BROADCAST.set(outer);
+            marked.subList(before, marked.size()).clear(); // this broadcast's marks, and any it left
         }
     }
 
-    /**
-     * Whether {@code sent} is a copy of the broadcast running on this thread: that very packet, or one with the same
-     * sound, place and source, as a handler that rebuilt it would send.
-     */
+    /** Whether {@code sent} is one of the very packet instances a broadcast running on this thread marked. */
     private static boolean ofBroadcast(Packet<?> sent) {
-        @Nullable Packet<?> b = BROADCAST.get();
-        if (b == null) return false;
-        if (sent == b) return true;
-        return switch (sent) {
-            case ClientboundSoundPacket p when b instanceof ClientboundSoundPacket q -> sameSound(p.getSound(),
-                    q.getSound()) && p.getSource() == q.getSource() && p.getX() == q.getX() && p.getY() == q.getY()
-                    && p.getZ() == q.getZ();
-            case ClientboundSoundEntityPacket p when b instanceof ClientboundSoundEntityPacket q -> sameSound(
-                    p.getSound(), q.getSound()) && p.getSource() == q.getSource() && p.getId() == q.getId();
-            case ClientboundLevelEventPacket p when b instanceof ClientboundLevelEventPacket q -> p.getType()
-                    == q.getType() && p.getPos().equals(q.getPos()) && p.getData() == q.getData();
-            default -> false;
-        };
-    }
-
-    private static boolean sameSound(Holder<SoundEvent> a, Holder<SoundEvent> b) {
-        return a.value().getLocation().equals(b.value().getLocation());
+        for (Packet<?> marked : BROADCAST.get()) if (marked == sent) return true;
+        return false;
     }
 
     /**

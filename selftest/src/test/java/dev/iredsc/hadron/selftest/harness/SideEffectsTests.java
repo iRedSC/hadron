@@ -214,6 +214,84 @@ public final class SideEffectsTests {
         }
     }
 
+    /** {@code p} again, as a new packet: the same sound, place, source, volume, pitch and seed. */
+    private static ClientboundSoundPacket copy(ClientboundSoundPacket p) {
+        return new ClientboundSoundPacket(p.getSound(), p.getSource(), p.getX(), p.getY(), p.getZ(), p.getVolume(),
+                p.getPitch(), p.getSeed());
+    }
+
+    @HadronTest
+    void aSoundLikeTheBroadcastsSentToThePlayerItLeftOutIsRecorded(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        t.tick();
+        alice.clearReceived();
+        // The broadcast leaves alice out (her client plays it); a handler plays the same click for her separately.
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class, e -> {
+            if (e.getPlayer() == bob.player()) alice.player().connection.send(copy(e.getPacket()));
+        });
+        try {
+            SideEffects effects = t.watchSideEffects();
+            t.level().playSound(alice.player(), t.pos(0, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, alice.received(ClientboundSoundPacket.class).size(), "clicks alice was sent");
+            t.assertEquals(2, effects.seen(SideEffects.SoundPlayed.class).size(), "the broadcast, and the click sent "
+                    + "to alice apart from it; seen: " + effects.seen());
+        } finally {
+            handler.unregister();
+        }
+    }
+
+    @HadronTest
+    void aWatchStartedDuringABroadcastRecordsASoundLikeIt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        t.tick();
+        alice.clearReceived();
+        SideEffects[] step = new SideEffects[1];
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class, e -> {
+            if (e.getPlayer() == bob.player()) {
+                step[0] = t.watchSideEffects(); // the next step starts while the broadcast is still being sent
+                alice.player().connection.send(copy(e.getPacket()));
+            }
+        });
+        try {
+            t.level().playSound(alice.player(), t.pos(0, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, alice.received(ClientboundSoundPacket.class).size(), "clicks alice was sent");
+            SideEffects effects = step[0];
+            t.assertTrue(effects != null, "the handler should have started a watch; without it this proves nothing");
+            t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "the click sent to alice after the "
+                    + "watch started");
+        } finally {
+            handler.unregister();
+        }
+    }
+
+    @HadronTest
+    void anotherWorldsBroadcastHidesNoSoundFromTheWatch(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        bob.player().teleportTo(t.server().overworld(), 0.5, 120, 0.5, 0.0F, 0.0F);
+        t.tick();
+        alice.clearReceived();
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class, e -> {
+            if (e.getPlayer() == bob.player()) alice.player().connection.send(copy(e.getPacket()));
+        });
+        try {
+            SideEffects effects = t.watchSideEffects();
+            // The overworld's click isn't this watch's; the click a handler then sends alice, in the test's world, is.
+            t.server().overworld().playSound(null, bob.player().blockPosition(), SoundEvents.LEVER_CLICK,
+                    SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, alice.received(ClientboundSoundPacket.class).size(), "clicks alice was sent");
+            t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "the click sent to alice during "
+                    + "another world's broadcast; seen: " + effects.seen());
+        } finally {
+            handler.unregister();
+        }
+    }
+
     /** A portal's whoosh, which the server sends straight to the player who went through. */
     private static ClientboundLevelEventPacket whoosh(TestContext t) {
         return new ClientboundLevelEventPacket(LevelEvent.SOUND_PORTAL_TRAVEL, t.pos(0, 0, 0), 0, false);
