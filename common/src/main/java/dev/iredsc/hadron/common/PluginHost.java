@@ -159,8 +159,8 @@ public final class PluginHost implements PluginManager {
         }
     }
 
-    /** One jar as the host loaded it: the file's stamp when copied, and the SHA-256 of the copy it runs. */
-    record Source(Stamp stamp, String sha256) {}
+    /** One jar version an outcome is about: its file name, its stamp then, and the SHA-256 of those bytes. */
+    record Source(String jarName, Stamp stamp, String sha256) {}
 
     /** A refused jar's reason and the hash of the bytes it was refused at. */
     private record Refusal(Stamp stamp, String sha256, String why) {}
@@ -406,13 +406,14 @@ public final class PluginHost implements PluginManager {
         refused.remove(jar);
         refusals.remove(jar);
         Entry e = new Entry(description.getName(), jar, stamp, description);
+        e.source = identify(jar, stamp);
         entries.put(e.name, e);
         return e;
     }
 
     private void refuse(File jar, Stamp stamp, String why) {
         refused.put(jar, stamp);
-        refusals.put(jar, new Refusal(stamp, sha256(jar), why));
+        refusals.put(jar, new Refusal(stamp, identify(jar, stamp).sha256(), why));
         LOG.error(why);
         announce(red(why));
     }
@@ -449,6 +450,8 @@ public final class PluginHost implements PluginManager {
 
     private void poll() {
         Map<File, Stamp> now = scan();
+        // A refusal is about one file version: once the file is replaced or gone, its status line goes too.
+        refusals.entrySet().removeIf(r -> !r.getValue().stamp().equals(now.get(r.getKey())));
         // A new jar with a running plugin's name replaces it in place (a deploy renames the file, version or not),
         // so the old version keeps running until the new one is ready instead of its dependents losing it.
         Map<String, File> newByName = new TreeMap<String, File>(String.CASE_INSENSITIVE_ORDER);
@@ -550,7 +553,10 @@ public final class PluginHost implements PluginManager {
         disableAll(all);
         List<Entry> usable = new ArrayList<Entry>();
         for (Entry e : all) {
-            e.source = null; // the next load records the new jar; until then /hadron status reads the file itself
+            // The jar this outcome will be about, recorded now: a failure before any load (a missing dependency, a
+            // cycle, switched off) still reports this jar, whatever replaces the file later. A load that gets as far
+            // as copying it records the copy's hash instead.
+            e.source = identify(e.jar, e.stamp);
             try {
                 PluginDescription d = describe(e.jar);
                 if (!d.getName().equalsIgnoreCase(e.name)) {
@@ -674,7 +680,7 @@ public final class PluginHost implements PluginManager {
             loadedDir.mkdirs();
             Stamp copiedFrom = new Stamp(e.jar);
             Files.copy(e.jar.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            e.source = new Source(copiedFrom, sha256(copy));
+            e.source = new Source(e.jar.getName(), copiedFrom, sha256(copy));
             loader =new PluginLoader(d, e.jar, copy, data, server, deps, parent);
         } catch (IOException ex) {
             fail(e, "couldn't copy its jar to plugins/.loaded (" + ex.getMessage() + ")", ex);
@@ -1008,37 +1014,42 @@ public final class PluginHost implements PluginManager {
 
     /**
      * Every plugin and every refused jar as plain text, for {@code /hadron status}. A plugin's file version and hash
-     * are those of the jar it loaded, even while a replacement is refused (that one is a line of its own). One that
-     * failed before loading reports the jar file itself, unless the file changed since the host read it.
+     * are those of the jar its outcome is about, recorded when the host decided it (it loaded the jar, or failed or
+     * switched it off before loading), even while a replacement is refused (that one is a line of its own). Nothing
+     * here reads a jar from disk: an identity read now would belong to whatever file is there now.
      */
     List<PluginStatus> statuses() {
         List<PluginStatus> out = new ArrayList<PluginStatus>();
         for (Entry e : entries.values()) {
-            long modified = 0;
-            String sha = PluginStatus.UNKNOWN;
-            Source source = e.source;
-            Stamp stamp = e.stamp;
-            if (source != null) {
-                modified = source.stamp().modified;
-                sha = source.sha256();
-            } else if (stamp != null && stamp.equals(new Stamp(e.jar))) {
-                modified = stamp.modified;
-                sha = sha256(e.jar);
-            }
+            Source source = e.source; // recorded when the outcome was decided; null only before any decision
+            long modified = source == null ? 0 : source.stamp().modified;
+            String sha = source == null ? PluginStatus.UNKNOWN : source.sha256();
             PluginStatus.State state = e.state instanceof State.Enabled ? PluginStatus.State.ENABLED
                     : e.state instanceof State.Loaded ? PluginStatus.State.LOADING
                     : e.state instanceof State.Failed ? PluginStatus.State.FAILED
                     : e.state instanceof State.Off ? PluginStatus.State.OFF : PluginStatus.State.STOPPED;
             String why = e.state instanceof State.Failed f ? (f.why == null ? "no reason was given" : f.why) : null;
-            out.add(new PluginStatus(e.name, state, e.jar.getName(), modified, sha, why));
+            out.add(new PluginStatus(e.name, state, source == null ? e.jar.getName() : source.jarName(), modified, sha, why));
         }
         for (Map.Entry<File, Refusal> r : refusals.entrySet()) {
             Refusal refusal = r.getValue();
-            if (!refusal.stamp().equals(new Stamp(r.getKey()))) continue; // replaced or deleted since
             out.add(new PluginStatus(null, PluginStatus.State.REFUSED, r.getKey().getName(), refusal.stamp().modified,
                     refusal.sha256(), refusal.why()));
         }
         return out;
+    }
+
+    /**
+     * The jar as it is right now, for the status line of an outcome the host is deciding right now. Never called to
+     * answer a status request, so a line can't pick up the identity of a jar that arrived after its outcome. The hash
+     * is {@link PluginStatus#UNKNOWN} when the file isn't the version the host stamped ({@code expected}) or changed
+     * while it was read: an unknown hash matches no deploy.
+     */
+    private static Source identify(File jar, @Nullable Stamp expected) {
+        Stamp before = new Stamp(jar);
+        String sha = sha256(jar);
+        boolean steady = before.equals(new Stamp(jar)) && (expected == null || expected.equals(before));
+        return new Source(jar.getName(), before, steady ? sha : PluginStatus.UNKNOWN);
     }
 
     /** Hex SHA-256 of a file's bytes, or {@link PluginStatus#UNKNOWN} if it can't be read. */

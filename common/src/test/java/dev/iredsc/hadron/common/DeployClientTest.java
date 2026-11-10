@@ -106,6 +106,30 @@ class DeployClientTest {
     }
 
     @Test
+    void anOldFailureAndANewerRefusalAreToldApartByWhichJarEachIsAbout() throws Exception {
+        // The jar before this one failed on a missing dependency; this one's plugin.yml is malformed. Both lines are
+        // on the server's list, and only the refusal is about the jar just deployed.
+        Run run = deploy(5, (asked, jar, sha) -> List.of(
+                new PluginStatus("Hello", PluginStatus.State.FAILED, jar.getName(), jar.lastModified() - 5000, STALE_SHA,
+                        "needs Missing, which isn't in plugins/: put Missing's jar in plugins/"),
+                new PluginStatus(null, PluginStatus.State.REFUSED, jar.getName(), jar.lastModified(), sha,
+                        "Hello.jar changed but isn't usable, so the running version stays: plugin.yml isn't valid "
+                                + "YAML (line 2)")));
+        assertEquals(1, run.exit);
+        assertTrue(run.stderr.startsWith("Hello.jar was refused:") && run.stderr.contains("isn't valid YAML"), run.stderr);
+        assertFalse(run.stderr.contains("Missing"), "the old failure is not this deploy's: " + run.stderr);
+    }
+
+    @Test
+    void aStaleRefusalIsNotThisDeploysEitherWhenThePluginLoadedThisJar() throws Exception {
+        Run run = deploy(5, (asked, jar, sha) -> List.of(
+                new PluginStatus(null, PluginStatus.State.REFUSED, jar.getName(), jar.lastModified() - 5000, STALE_SHA,
+                        "an older jar of this name was refused"),
+                line(PluginStatus.State.ENABLED, jar, sha, null)));
+        assertEquals(0, run.exit, run.stderr);
+    }
+
+    @Test
     void aPluginSwitchedOffIsNotRunningThisBuild() throws Exception {
         Run run = deploy(5, (asked, jar, sha) -> List.of(line(PluginStatus.State.OFF, jar, sha, null)));
         assertEquals(1, run.exit);

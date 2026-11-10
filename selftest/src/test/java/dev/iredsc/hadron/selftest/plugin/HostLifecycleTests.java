@@ -185,6 +185,65 @@ public final class HostLifecycleTests {
         }
     }
 
+    /**
+     * Every status line is about the jar whose outcome it reports. A plugin that failed before loading (here, a missing
+     * dependency) keeps naming its own jar when a replacement with a broken plugin.yml arrives: the failure must not
+     * pick up the replacement's file version and hash, or a deploy of the replacement would be told to fix the old
+     * jar's dependency instead of its YAML.
+     */
+    @HadronTest(timeout = 1200)
+    void aFailureBeforeLoadingKeepsItsOwnJarWhenABrokenReplacementIsRefused(TestContext t) throws Exception {
+        TestPlayer admin = t.player("admin");
+        admin.setOp(true);
+        PluginManager plugins = t.plugin().getServer().getPluginManager();
+        File folder = t.plugin().getServer().getPluginsFolder();
+        File jar = new File(folder, "selftest-hostprobe.jar");
+        try {
+            File partial = new File(folder, "selftest-hostprobe.jar.part");
+            String needsMissing = "name: " + NAME + "\nversion: \"1\"\nminecraft: " + t.server().getServerVersion()
+                    + "\nmain: " + HostProbePlugin.class.getName() + "\ndepend: [SelfTestMissing]\n";
+            writeZip(partial, "plugin.yml", needsMissing);
+            Files.move(partial.toPath(), jar.toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            t.await("Hadron to fail the jar that needs a missing plugin", () -> statusLines(t, admin).stream()
+                    .anyMatch(l -> l.startsWith("plugin=" + NAME + "\tstate=failed")), 300);
+            String failedSha = sha256(jar);
+            long failedModified = jar.lastModified();
+
+            writeZip(partial, "plugin.yml", "name: " + NAME + "\nmain: [unclosed\n");
+            t.assertTrue(partial.setLastModified(failedModified + 60_000), "give the replacement its own file version");
+            Files.move(partial.toPath(), jar.toPath(), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+                    java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+            String refusedSha = sha256(jar);
+            long refusedModified = jar.lastModified();
+
+            t.await("Hadron to refuse the replacement", () -> statusLines(t, admin).stream()
+                    .anyMatch(l -> l.startsWith("refused\t")), 300);
+            List<String> lines = statusLines(t, admin);
+            String failed = lines.stream().filter(l -> l.startsWith("plugin=" + NAME + "\t")).findFirst().orElse("");
+            t.assertTrue(failed.startsWith("plugin=" + NAME + "\tstate=failed\tjar=selftest-hostprobe.jar\tmodified="
+                    + failedModified + "\tsha256=" + failedSha + "\twhy="), "the failure is about the jar that failed (modified "
+                    + failedModified + ", sha256 " + failedSha + "), not the replacement that arrived after; lines: " + lines);
+            t.assertTrue(failed.contains("SelfTestMissing"), "and says why: " + failed);
+            String refused = lines.stream().filter(l -> l.startsWith("refused\t")).findFirst().orElse("");
+            t.assertTrue(refused.startsWith("refused\tstate=refused\tjar=selftest-hostprobe.jar\tmodified="
+                    + refusedModified + "\tsha256=" + refusedSha + "\twhy="), "the refusal is about the replacement: "
+                    + refused);
+            t.assertFalse(plugins.isPluginEnabled(NAME), "neither jar is running");
+        } finally {
+            jar.delete();
+            t.tick(60);
+            clearProperties();
+            deleteTree(new File(folder, NAME));
+        }
+    }
+
+    private static void writeZip(File file, String entry, String text) throws IOException {
+        try (OutputStream out = Files.newOutputStream(file.toPath()); ZipOutputStream zip = new ZipOutputStream(out)) {
+            zip.putNextEntry(new ZipEntry(entry));
+            zip.write(text.getBytes(StandardCharsets.UTF_8));
+        }
+    }
+
     @HadronTest(timeout = 900)
     @Covers(PluginDisableEvent.class)
     @Covers(value = PluginManager.class, method = "isPluginEnabled")
