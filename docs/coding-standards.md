@@ -1,6 +1,6 @@
 # Coding standards
 
-For whoever reviews a change, not whoever writes it. The writer works from [AGENTS.md](../AGENTS.md) and the design docs; the reviewer reads this with a fresh context and checks the change against it. Fix what you find and commit it; leave a comment only for a question the code can't answer.
+For whoever reviews a change, not whoever writes it. The writer works from [AGENTS.md](../AGENTS.md) and the design docs; the reviewer reads this with a fresh context and checks the change against it. Report what you find in the form below and change nothing: the author fixes each finding, or answers it with evidence in the PR.
 
 A rule that a build check could enforce doesn't belong here. Write the check instead (see "Growing this file").
 
