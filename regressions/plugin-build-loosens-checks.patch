@@ -1,0 +1,18 @@
+diff --git a/gradle/hadron-checks.gradle.kts b/gradle/hadron-checks.gradle.kts
+index 4cf428d..2ebf1ad 100644
+--- a/gradle/hadron-checks.gradle.kts
++++ b/gradle/hadron-checks.gradle.kts
+@@ -35,13 +35,6 @@ val loosened = buildList {
+     if (skipped.isNotEmpty()) add("hadronChecks.staticState without " + skipped.joinToString(" and "))
+     if ("test" !in determinismSets) add("hadronChecks.determinism without test")
+ }
+-if (!hadronModule && loosened.isNotEmpty()) {
+-    throw GradleException("${project.buildFile} sets ${loosened.joinToString(", ")}, but only Hadron's own modules may "
+-            + "loosen Hadron's checks: a plugin's build keeps them all, so a mistake they catch can't ship. Remove "
+-            + "those lines, then fix what the checks name: keep state on your plugin object (or one it holds) instead "
+-            + "of a static field, wait in ticks and seed randomness instead of reading the clock, and use Hadron's api "
+-            + "instead of anything that takes the HostKey.")
+-}
+ 
+ val errorprone = configurations.create("errorprone") {
+     isCanBeConsumed = false

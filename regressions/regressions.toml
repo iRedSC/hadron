@@ -574,3 +574,15 @@ paths = [
 guards = [
     { test = "ListenerReleaseTests.anUnregisteredListenerIsLetGo", tier = "in-game" },
 ]
+
+[[regression]]
+id = "plugin-build-loosens-checks"
+bug = "A plugin's build could set hadronChecks.exemptions, or drop main or test from staticState or determinism, switching off the checks meant to catch its mistakes, HostOnly included."
+fix = "105bc58"
+paths = [
+    "gradle/hadron-checks.gradle.kts",
+]
+guards = [
+    { test = "ChecksScriptTest.aPluginBuildThatLoosensTheChecksFailsSayingWhatToDoInstead", tier = "fast" },
+]
+note = "Hand-made: keeps hadronModule and loosened (what the fix computes) and drops only the refusal that uses them."
