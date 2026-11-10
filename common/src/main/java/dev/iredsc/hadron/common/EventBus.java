@@ -155,6 +155,14 @@ final class EventBus {
          * Class.method"), or is null if no handler did.
          */
         void after(Event event, Object state, @Nullable String canceller);
+
+        /**
+         * True to hear only events some plugin handles: the observer then never makes {@link #listens} true, so a
+         * chokepoint builds no event for it that it wouldn't build anyway. What the test harness records uses this.
+         */
+        default boolean onlyHandled() {
+            return false;
+        }
     }
 
     /** Every handler and observer that hears one concrete event class. */
@@ -296,7 +304,10 @@ final class EventBus {
             if (e.getKey().isAssignableFrom(type)) out.addAll(e.getValue());
         }
         List<Observer> watching = new ArrayList<>();
-        for (Observer o : observers) if (Boolean.TRUE.equals(guard(() -> o.hears(type)))) watching.add(o);
+        for (Observer o : observers) {
+            if (out.isEmpty() && o.onlyHandled()) continue;
+            if (Boolean.TRUE.equals(guard(() -> o.hears(type)))) watching.add(o);
+        }
         if (out.isEmpty() && watching.isEmpty()) return EMPTY;
         out.sort(ORDER);
         return new Baked(out.toArray(NONE), watching.isEmpty() ? NO_OBSERVERS : watching.toArray(NO_OBSERVERS));

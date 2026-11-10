@@ -504,7 +504,10 @@ final class Trace {
 
     private static @Nullable Where where(Event event, @Nullable Actor actor) {
         if (event instanceof BlockEvent b) return at(b.getLevel(), Vec3.atLowerCornerOf(b.getPos()));
-        if (event instanceof EntityEvent e) return at(e.getLevel(), e.getPosition());
+        if (event instanceof EntityEvent e) {
+            Where at = at(e.getLevel(), e.getPosition());
+            return new Where(at.level, at.pos, entity(e.getEntity()) + " at " + at.text);
+        }
         if (event instanceof ExplosionEvent x) return at(x.getLevel(), x.getLocation());
         if (event instanceof ExplosionPrimeEvent x) return at(x.getLevel(), x.getLocation());
         if (event instanceof WorldEvent w) {
@@ -533,6 +536,12 @@ final class Trace {
         BlockPos b = BlockPos.containing(pos);
         return new Where(level, pos, shortId(level.dimension().location()) + " " + b.getX() + " " + b.getY() + " "
                 + b.getZ());
+    }
+
+    /** What an entity event happened to: a player's name, or the entity's type. */
+    private static String entity(net.minecraft.world.entity.Entity entity) {
+        if (entity instanceof net.minecraft.world.entity.player.Player p) return p.getGameProfile().getName();
+        return BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()).getPath();
     }
 
     static String kind(Actor actor) {
@@ -679,7 +688,11 @@ final class Trace {
 
     // ---- The line ----
 
-    private Component line(Event event, Seen seen, @Nullable String canceller) {
+    /** One event's line, as text; {@link #line} styles it for chat. */
+    private record Rendered(@Nullable Actor actor, @Nullable Operation op, List<String> changed, boolean cancelled,
+            String outcome, ChatFormatting color, String plain) {}
+
+    private Rendered render(Event event, Seen seen, @Nullable String canceller) {
         Actor actor = actor(event);
         Operation op = event instanceof ActionEvent a ? a.getOperation() : null;
         List<String> changed = changes(event, seen.values);
@@ -699,19 +712,39 @@ final class Trace {
             outcome = cancellable ? (seen.wasCancelled ? "uncancelled by " + plugin(canceller) : "allowed") : "done";
             color = cancellable ? ChatFormatting.GREEN : ChatFormatting.GRAY;
         }
+        String plain = event.getEventName() + " · " + (actor == null ? "no actor" : who(actor))
+                + (op != null ? " · op#" + op.id() : "") + (seen.where != null ? " · " + seen.where.text : "")
+                + " · " + outcome;
+        return new Rendered(actor, op, changed, cancelled, outcome, color, plain);
+    }
+
+    /** What {@link #plain} needs from before any plugin handled the event. */
+    static Object before(Event event) {
+        return new Seen(where(event, actor(event)), snapshot(event), event instanceof Cancellable c && c.isCancelled());
+    }
+
+    /** The line a trace shows for this event, as plain text; {@code before} is what {@link #before} returned. */
+    String plain(Event event, Object before, @Nullable String canceller) {
+        return render(event, (Seen) before, canceller).plain;
+    }
+
+    private Component line(Event event, Seen seen, @Nullable String canceller) {
+        Rendered r = render(event, seen, canceller);
+        Actor actor = r.actor;
+        Operation op = r.op;
 
         List<String> detail = new ArrayList<>();
         detail.add(event.getClass().getName());
         if (actor != null) detail.add("Actor: " + actor);
         if (op != null) detail.add("Operation #" + op.id() + ", begun by " + op.actor());
         if (seen.where != null) detail.add("Where: " + seen.where.text);
-        if (cancelled && canceller != null) detail.add("Cancelled by " + canceller);
-        if (cancelled && !changed.isEmpty()) detail.add("Also changed: " + String.join(", ", changed));
+        if (r.cancelled && canceller != null) detail.add("Cancelled by " + canceller);
+        if (r.cancelled && !r.changed.isEmpty()) detail.add("Also changed: " + String.join(", ", r.changed));
         detail.add("Click to copy this line");
 
-        String plain = event.getEventName() + " · " + (actor == null ? "no actor" : who(actor))
-                + (op != null ? " · op#" + op.id() : "") + (seen.where != null ? " · " + seen.where.text : "")
-                + " · " + outcome;
+        String plain = r.plain;
+        String outcome = r.outcome;
+        ChatFormatting color = r.color;
         MutableComponent out = Component.empty().withStyle(Style.EMPTY
                 .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal(String.join("\n", detail))))
                 .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, plain)));

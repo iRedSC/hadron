@@ -68,6 +68,8 @@ final class TestWorld implements TestContext {
     private final List<Listener> listeners = new ArrayList<>();
     private int spent;
     private boolean ticking;
+    /** What this test's report says led up to it, if it fails; the runner starts and stops it. */
+    final FailureRecorder failures = new FailureRecorder(this);
 
     TestWorld(MinecraftServer server, JavaPlugin plugin, @Nullable SocketAddress address, String test, int index, int timeout) {
         this.server = server;

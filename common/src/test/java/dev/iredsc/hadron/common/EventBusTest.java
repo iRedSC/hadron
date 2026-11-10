@@ -649,6 +649,45 @@ class EventBusTest {
         assertEquals(List.of("before Stoppable", "after watched null"), watcher.seen);
     }
 
+    /** Hears every event, but only those some handler handles. */
+    static class HandledWatcher extends Watcher {
+        HandledWatcher() {
+            super(Event.class);
+        }
+
+        @Override
+        public boolean onlyHandled() {
+            return true;
+        }
+    }
+
+    @Test
+    void anObserverOfHandledEventsNeverMakesAnUnheardEventBuilt() {
+        HandledWatcher watcher = new HandledWatcher();
+        bus.observe(watcher);
+        assertFalse(bus.listens(Ping.class), "with no handler, a chokepoint must still skip building the event");
+        bus.post(new Ping());
+        assertEquals(List.of(), watcher.seen);
+    }
+
+    @Test
+    void anObserverOfHandledEventsHearsWhatAHandlerHandles() {
+        HandledWatcher watcher = new HandledWatcher();
+        bus.observe(watcher);
+        bus.post(new Ping());
+        subscribe(new Listener() {
+            @EventHandler
+            void cancel(Stoppable s) {
+                s.setCancelled(true);
+            }
+        });
+        bus.post(new Stoppable());
+        assertEquals(2, watcher.seen.size(), watcher.seen.toString());
+        assertEquals("before Stoppable", watcher.seen.get(0));
+        assertTrue(watcher.seen.get(1).endsWith(".cancel"), "it is told who cancelled: " + watcher.seen);
+        assertFalse(bus.listens(Unheard.class));
+    }
+
     @Test
     void anObserverReturningNullSkipsThatEvent() {
         Watcher watcher = new Watcher(Ping.class);

@@ -52,12 +52,21 @@ Failures
 FAIL HelloTests.secretsAreNeverSent  (HelloTests.java:41)
     bob should not have received "secret", but got the line "<alice> the secret is 42". If a listener should
     have cancelled or changed it, check that it is registered and matches this message.
+    Events its listeners heard:
+      tick 0  PlayerJoinEvent · Player alice · hadrontest:test2 0 64 0 · done
+      tick 0  PlayerJoinEvent · Player bob · hadrontest:test2 0 64 0 · done
+      tick 1  PlayerChatEvent · Player alice · hadrontest:test2 0 64 0 · allowed
+    Players when it failed:
+      alice: survival, in hadrontest:test2 at pos(0, 0, 0) (0.50, 64.00, 0.50), holding nothing, off hand nothing
+      bob: survival, in hadrontest:test2 at pos(0, 0, 0) (0.50, 64.00, 0.50), holding nothing, off hand nothing
 
 Summary
 SUMMARY examples-hello.jar (Hello): 1 passed, 1 failed
 1 passed, 1 failed in 3.1 s
 RESULT: FAILED
 ```
+
+**A failure says what led up to it**, captured before the test's world is cleaned up: the last 30 events its listeners heard, each at the test's tick and as `/hadron trace` shows it (the event, who caused it, the operation, where and to what, and how it ended: allowed, changed, or cancelled by which plugin), with how many earlier events were left out; and each player the test joined, with their game mode, world, position and what they held as it ended. Only events some listener (the plugin's or the test's) handles are recorded, so recording never makes Hadron build an event it otherwise wouldn't, and a passing test's report has none of it. A hung test gets the same, read while its server thread was stuck.
 
 `FAIL` is an assertion, an exception (with its stack), a test past its tick limit (`@HadronTest(timeout = 600)`, in ticks), a method the runner can't call (the message shows the right signature), or a cleanup that left something behind. `HUNG` is a test that never returned, such as a loop that never ticks: a watchdog writes the report with where the server thread was and ends the process. `BROKEN` is a suite none of whose tests could run, such as a plugin that didn't enable. The `SUMMARY` lines and the last `RESULT:` line keep their shape for tools.
 
@@ -93,7 +102,7 @@ RESULT: FAILED
 
 ## report.json
 
-Beside every `report.txt` is a `report.json` with the same results for tools; `hadronTest` and `hadronRerun` print where it is. Every key is always present, with `null` where it doesn't apply. `schema` changes only when a field changes meaning or goes away. (The comments below are notes, not part of the file.)
+Beside every `report.txt` is a `report.json` with the same results for tools; `hadronTest` and `hadronRerun` print where it is. Every key is always present, with `null` where it doesn't apply, down to each player's `online`-only fields. `schema` changes only when a field changes meaning or goes away, so a new key (like `context`) leaves it at 1: a tool should ignore keys it doesn't know. (The comments below are notes, not part of the file.)
 
 ```jsonc
 {
@@ -121,7 +130,27 @@ Beside every `report.txt` is a `report.json` with the same results for tools; `h
       "message": "expected failure",   // null for a pass
       "source": "TmpTests.java:20",    // the test's first line, for every test
       "failedAt": "TmpTests.java:21",  // the test's own line nearest the failure, or null
-      "stack": null                    // for an exception, or where a hung test's thread was; null for an assertion
+      "stack": null,                   // for an exception, or where a hung test's thread was; null for an assertion
+      "context": {                     // what led up to a FAIL or HUNG; null for a pass, or a failure outside the
+                                       // test's own run (it couldn't start, a bad signature, its cleanup)
+        "events": [{                   // the last 30 its listeners heard, oldest first
+          "tick": 2,                   // the test's own tick count when it fired
+          "event": "BlockBreakEvent",
+          "cancelled": true,           // how it ended; null for an event that can't be cancelled
+          "line": "BlockBreakEvent · Player alice · op#7 · hadrontest:test4 1 64 0 · cancelled by Hello"
+        }],
+        "eventsOmitted": 0,            // earlier events heard but not kept
+        "players": [{                  // every player the test joined
+          "name": "alice",
+          "online": true,              // false once they left; then every key below is null
+          "world": "hadrontest:test4",
+          "pos": "pos(0, 0, 0)",       // the block they stood in, as t.pos names it; null outside the test's world
+          "x": 0.5, "y": 64.0, "z": 0.5,
+          "gameMode": "survival",
+          "mainHand": "1 minecraft:diamond_pickaxe",   // or "nothing"
+          "offHand": "nothing"
+        }]
+      }
     }]
   }]
 }

@@ -272,7 +272,9 @@ final class TestRunner {
             return result(c, source, TestReport.Status.FAIL, null, "Couldn't create the test's world, so it didn't "
                     + "run: " + e, stack(e), 0, System.currentTimeMillis() - start);
         }
-        watchdog.watch(report, suite, c.type().getName(), c.method().getName(), id, source, c.test().timeout());
+        watchdog.watch(report, suite, c.type().getName(), c.method().getName(), id, source, c.test().timeout(),
+                world.failures);
+        world.failures.start();
         TestReport.Result result;
         try {
             Object instance = null;
@@ -287,9 +289,13 @@ final class TestRunner {
                     System.currentTimeMillis() - start);
         } catch (InvocationTargetException e) {
             Throwable thrown = e.getCause() != null ? e.getCause() : e;
-            result = failure(c, source, thrown, world.ticksSpent(), System.currentTimeMillis() - start);
+            result = failure(c, source, thrown, world.ticksSpent(), System.currentTimeMillis() - start,
+                    world.failures.capture());
         } catch (Throwable t) {
-            result = failure(c, source, t, world.ticksSpent(), System.currentTimeMillis() - start);
+            result = failure(c, source, t, world.ticksSpent(), System.currentTimeMillis() - start,
+                    world.failures.capture());
+        } finally {
+            world.failures.stop();
         }
         watchdog.watch(report, suite, c.type().getName(), c.method().getName(), id + " (cleanup)", source, 200);
         try {
@@ -309,8 +315,14 @@ final class TestRunner {
 
     private static TestReport.Result result(Case c, @Nullable String source, TestReport.Status status, @Nullable String location,
                                             @Nullable String message, @Nullable String detail, int ticks, long millis) {
+        return result(c, source, status, location, message, detail, ticks, millis, null);
+    }
+
+    private static TestReport.Result result(Case c, @Nullable String source, TestReport.Status status, @Nullable String location,
+                                            @Nullable String message, @Nullable String detail, int ticks, long millis,
+                                            @Nullable FailureContext context) {
         return new TestReport.Result(c.id(), c.type().getName(), c.method().getName(), status, source, location,
-                message, detail, ticks, millis);
+                message, detail, ticks, millis, context);
     }
 
     /** A passed test turned into a failure by what came after it (cleanup, health). */
@@ -361,14 +373,15 @@ final class TestRunner {
         return online.isEmpty() ? null : String.join(", ", online) + " still online after the test";
     }
 
-    private static TestReport.Result failure(Case c, @Nullable String source, Throwable t, int ticks, long millis) {
+    private static TestReport.Result failure(Case c, @Nullable String source, Throwable t, int ticks, long millis,
+                                             FailureContext context) {
         String location = location(c.type(), t);
         if (t instanceof AssertionError) {
             String message = t.getMessage() != null ? t.getMessage() : "An assertion failed without a message.";
-            return result(c, source, TestReport.Status.FAIL, location, message, null, ticks, millis);
+            return result(c, source, TestReport.Status.FAIL, location, message, null, ticks, millis, context);
         }
         String message = "Threw " + t.getClass().getName() + (t.getMessage() != null ? ": " + t.getMessage() : "");
-        return result(c, source, TestReport.Status.FAIL, location, message, stack(t), ticks, millis);
+        return result(c, source, TestReport.Status.FAIL, location, message, stack(t), ticks, millis, context);
     }
 
     /** The test's own line nearest the failure: {@code ShopTests.java:12}. */
@@ -420,6 +433,8 @@ final class TestRunner {
         private volatile @Nullable TestReport report;
         private volatile TestReport.@Nullable Suite suite;
         private volatile @Nullable String className, method, current, source;
+        /** The running test's recorder, for a hung test's report; null outside a test's own run. */
+        private volatile @Nullable FailureRecorder failures;
         private volatile long deadline;
         private volatile long started;
         private volatile boolean running = true;
@@ -447,7 +462,14 @@ final class TestRunner {
          */
         void watch(TestReport report, TestReport.@Nullable Suite suite, @Nullable String className, @Nullable String method, String test,
                    @Nullable String source, int ticks) {
+            watch(report, suite, className, method, test, source, ticks, null);
+        }
+
+        /** As above, for a test's own run: a hang's report then says what led up to it, from {@code failures}. */
+        void watch(TestReport report, TestReport.@Nullable Suite suite, @Nullable String className, @Nullable String method, String test,
+                   @Nullable String source, int ticks, @Nullable FailureRecorder failures) {
             this.report = report;
+            this.failures = failures;
             this.suite = suite;
             this.className = className;
             this.method = method;
@@ -482,11 +504,18 @@ final class TestRunner {
                 if (suite == null) {
                     hung.problem(test + " never finished, so the server was ended. The server thread was at:\n" + where);
                 } else {
+                    FailureRecorder recorder = failures;
+                    FailureContext context = null;
+                    try {
+                        if (recorder != null) context = recorder.capture();
+                    } catch (RuntimeException e) {
+                        // Read off the stuck server thread: the report matters more than this part of it.
+                    }
                     hung.add(suite, new TestReport.Result(test, className, method, TestReport.Status.HUNG, source,
                             null, test + " never finished: it ran past its wall-clock limit without returning, so the "
                             + "tick limit couldn't stop it. A loop that never calls t.tick() or t.await(), or a wait "
                             + "on another thread, does this. The tests after it didn't run. The server thread was at:",
-                            where.toString(), 0, System.currentTimeMillis() - started));
+                            where.toString(), 0, System.currentTimeMillis() - started, context));
                 }
                 onHang.write(hung);
                 LOG.error("\n{}", hung.render());
