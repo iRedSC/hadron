@@ -5,6 +5,7 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
+import dev.iredsc.hadron.api.event.block.BlockDamageEvent;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.EventHandler;
@@ -156,8 +157,11 @@ public final class AcceptanceKitTests {
         bob.breakBlock(stone);
         t.tick(2);
         area.assertUnchanged("bob breaking stone in a region he isn't trusted in");
-        t.assertTrue(area.events().stream().anyMatch(s -> s.event() instanceof BlockBreakEvent && s.cancelled()),
-                "protection cancelled the break: " + area.events());
+        // Refused when he starts mining, so the break is never reached.
+        t.assertTrue(area.events().stream().anyMatch(s -> s.event() instanceof BlockDamageEvent && s.cancelled()),
+                "protection should refuse bob's mining as it starts: " + area.events());
+        t.assertFalse(area.events().stream().anyMatch(s -> s.event() instanceof BlockBreakEvent && !s.cancelled()),
+                "no break of bob's should go through: " + area.events());
     }
 
     @HadronTest

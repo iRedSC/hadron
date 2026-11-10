@@ -6,6 +6,7 @@ import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
+import dev.iredsc.hadron.api.event.block.BlockDamageEvent;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
@@ -215,7 +216,7 @@ public final class MissingFactTests {
     }
 
     @HadronTest
-    @KnownGap("Starting to mine a block fires nothing until the block breaks")
+    @Covers(BlockDamageEvent.class)
     void startingToMineABlockFiresAnEvent(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos stone = t.pos(2, 0, 0);

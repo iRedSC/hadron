@@ -37,7 +37,7 @@ Core never fires these; with no bridge, plugins hear nothing for them.
 <!-- generated: bridge-only, from @FiredBy on each event class. Edit those and run ./gradlew bridgeHooks; edits here are overwritten. -->
 | Event | Fire when the mod… | Must fill in |
 |---|---|---|
-| `BlockDamageEvent` | puts lasting partial damage on a block short of breaking it | damage before and after |
+| `BlockCrackEvent` | puts lasting partial damage on a block short of breaking it | damage before and after |
 | `BlockDataChangeEvent` | changes a block entity's data with the block state unchanged (a spawner's mob, a drawer lock, a terminal binding, a name) | the block entity data before and after |
 | `BlockRedstoneEvent` | changes the signal a block emits without changing its state | old and new signal, face |
 | `StructureMoveEvent` | assembles, moves, rotates or disassembles a contraption or ship within one level | source to target mapping, swept space, old and new transforms |
@@ -58,6 +58,7 @@ Core fires these for vanilla's paths; the bridge covers its mod's.
 | Event | Core sees | The bridge fires it for |
 |---|---|---|
 | `BlockChangeEvent` | every block state change, through `Level.setBlock` | block entity data changes, as `BlockDataChangeEvent`, and growth without bone meal, as `BlockFertilizeEvent` |
+| `BlockDamageEvent` | players and fake players starting to mine | starts mining a block that takes time to break (a drill, a mining laser) |
 | `BlockDropItemEvent` | every drop through `Block.dropResources` (player mining, `destroyBlock`, blocks losing support) | drops the mod spawns itself when it breaks or harvests a block, before spawning them; honour the edited list and experience |
 | `BlockFertilizeEvent` | bone meal | growth accelerators that grow without bone meal |
 | `BlockMoveEvent` | pistons, through its piston leaves | contraptions and ships within one level, as `StructureMoveEvent` |
