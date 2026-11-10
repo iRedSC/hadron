@@ -525,13 +525,12 @@ bug = "A cancelled placement kept the durability its item lost, since NeoForge's
 fix = "5515df2"
 paths = [
     "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java",
-    "neoforge/src/main/resources/hadron.block.mixins.json",
 ]
 guards = [
     { test = "BreakPlaceTests.cancelledStripKeepsTheLogAndTheAxesDurability", tier = "in-game" },
     { test = "FireAndTntTests.cancelledIgniteLeavesNoFireAndTheFlintUnworn", tier = "in-game" },
 ]
-note = "5515df2 is a merge; the patch drops only CommonHooksPlaceMixin and its line in hadron.block.mixins.json."
+note = "Hand-made: the patch drops only CommonHooksPlaceMixin's component-map copy (hadron$snapshot) and its imports. The mixin and its line in hadron.block.mixins.json stay, since the class also holds a placement's side effects (refused-place-leaves-side-effects, b1bf13b); 5515df2, a merge, added the whole file, so don't refresh this from the fix."
 
 
 # ---- Event invariants (fix/event-invariants) ----
