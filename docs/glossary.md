@@ -62,6 +62,7 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **In-game tier**: `@HadronTest`s in a headless server with real players over an in-memory connection, for anything that acts. `hadronTest`. Runs before a release.
 - **Suite**: one plugin's in-game tests. Suites share a server, but only the running suite's plugin is enabled.
 - **Self-tests**: Hadron's own in-game suite, in `selftest/`.
+- **Side effect**: what an action did to players and listeners beyond blocks and items: a statistic, an advancement trigger, a game event, experience or hunger. `t.watchSideEffects()` records them; a refused action must leave none. ([testing](testing.md#what-a-test-looks-like))
 - **Warm server**: a test server kept running by `hadronWatch`, so `hadronRerun` reruns a suite without a boot.
 - **`@Covers`**: what a test declares it proves. `coverageCheck` fails the build if any shipped event or public API method has none.
 - **`@FiredBy`**: on every event, who fires it: core on every path (`FULL`), core for vanilla's paths and bridges for their mods' (`PARTIAL`), or only bridges (`NONE`). `bridgeHooksCheck` holds it to what core constructs and generates [bridge-hooks.md](bridge-hooks.md)'s tables from it.
