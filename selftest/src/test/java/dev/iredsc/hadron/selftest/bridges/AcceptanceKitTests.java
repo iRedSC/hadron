@@ -12,6 +12,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
+import dev.iredsc.hadron.api.event.entity.EntityBreedEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDataChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
@@ -1284,6 +1285,36 @@ public final class AcceptanceKitTests {
         pig.setHealth(pig.getHealth() - 4);
         pig.teleportTo(out.getX() + 0.5, out.getY(), out.getZ() + 0.5);
         String why = failure(t, () -> area.assertUnchanged("a pig hurt by a refused blast", Part.ENTITIES));
-        t.assertTrue(why.contains("minecraft:pig") && why.contains("health"), why);
+        // Named as a cancel the bridge ignored, not as a change nothing reported.
+        t.assertTrue(why.contains("minecraft:pig") && why.contains("health") && why.contains("ExplosionEvent")
+                && why.contains("cancelled"), why);
+    }
+
+    @HadronTest
+    void aMarkAfterAnUnloadInventsNoRemoval(TestContext t) {
+        Pig pig = pig(t, t.pos(2, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        pig.remove(Entity.RemovalReason.UNLOADED_TO_CHUNK);
+        area.assertUnchanged("a pig saved with its chunk", Part.ENTITIES);
+        area.mark();
+        area.assertUnchanged("nothing, after the mark", Part.ENTITIES);
+    }
+
+    @HadronTest
+    void aParentNamedByABreedingOnItsWayThroughIsChecked(TestContext t) {
+        Pig mother = pig(t, t.pos(0, 0, 4));
+        Pig father = pig(t, t.pos(0, 0, 5));
+        Acceptance area = t.acceptance(around(t));
+        BlockPos in = t.pos(2, 0, 0), out = t.pos(0, 0, 4);
+        mother.teleportTo(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        Pig child = EntityType.PIG.create(t.level());
+        t.assertTrue(child != null, "a piglet");
+        child.moveTo(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        Hadron.getPluginManager().callEvent(new EntityBreedEvent(child, mother, father, null, Actor.Nature.INSTANCE));
+        mother.setHealth(mother.getHealth() - 4);
+        mother.teleportTo(out.getX() + 0.5, out.getY(), out.getZ() + 0.5);
+        String why = failure(t, () -> area.assertUnchanged("a breeding that cost a parent health", Part.ENTITIES));
+        t.assertTrue(why.contains("minecraft:pig") && why.contains("health") && why.contains("EntityBreedEvent"),
+                why);
     }
 }

@@ -343,8 +343,8 @@ final class TestAcceptance implements Acceptance, Listener {
             case Place.Out o -> {
                 // Kept for failure messages only: an event about an entity being compared, placed outside the area.
                 boolean motion = MOTION.stream().anyMatch(m -> m.isInstance(event));
-                if (!motion && event instanceof EntityEvent ee && (followed.containsKey(ee.getEntity().getUUID())
-                        || t.players().stream().anyMatch(p -> p.uuid().equals(ee.getEntity().getUUID())))) {
+                if (!motion && named(event).stream().anyMatch(e -> followed.containsKey(e.getUUID())
+                        || t.players().stream().anyMatch(p -> p.uuid().equals(e.getUUID())))) {
                     elsewhere.add(new Seen(event, a.getActor(), event instanceof Cancellable c && c.isCancelled(),
                             Optional.empty()));
                 }
@@ -507,33 +507,53 @@ final class TestAcceptance implements Acceptance, Listener {
                 + "make it a block, entity, item, inventory, resource or world event, whose place the kit reads");
     }
 
-    /** Every entity an event names: its subject, and the other of a pair (a mount, a lead's holder), or its items. */
-    private static List<Entity> named(Event event) {
-        return switch (event) {
-            case EntityMountEvent e -> List.of(e.getEntity(), e.getMount());
-            case EntityLeashEvent e -> List.of(e.getEntity(), e.getHolder());
-            case ExplosionEvent x -> {
-                List<Entity> all = new ArrayList<>(x.getEntities());
-                x.getSource().ifPresent(all::add);
-                yield all;
+    /**
+     * Every entity an event names, read from all its getters: its subject, the other of a pair (a mount, a lead's
+     * holder, a breeding's parents), a shot's or blast's victims, its items, and the entities holding any inventory or
+     * resource it names. Read rather than listed per kind, so a new event, or a getter added to one, can't leave an
+     * entity it touches uncompared.
+     */
+    static List<Entity> named(Event event) {
+        Set<Entity> out = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+        for (java.lang.reflect.Method getter : GETTERS.get(event.getClass())) {
+            try {
+                collect(getter.invoke(event), out);
+            } catch (ReflectiveOperationException | RuntimeException e) {
+                // A getter that can't answer names nothing.
             }
-            case ProjectileHitEvent e -> e.getHitEntity().map(hit -> List.of(e.getEntity(), hit))
-                    .orElse(List.of(e.getEntity()));
-            case EntityEvent e -> List.of(e.getEntity());
-            case ItemPickupEvent p -> holderEntity(p.getDestination()).map(d -> List.<Entity>of(p.getItemEntity(), d))
-                    .orElse(List.of(p.getItemEntity()));
-            case ItemEvent i -> {
-                List<Entity> all = new ArrayList<>(itemEntities(i));
-                itemUser(i).ifPresent(all::add);
-                itemHolder(i).flatMap(TestAcceptance::holderEntity).ifPresent(all::add);
-                yield all;
+        }
+        return List.copyOf(out);
+    }
+
+    /** Each event class's public no-argument getters, outside {@link Object} and the actor. */
+    @dev.iredsc.hadron.checks.StaticState(reason = "a cache of each event class's getters, which never change; "
+            + "it goes with the classes")
+    private static final ClassValue<List<java.lang.reflect.Method>> GETTERS = new ClassValue<>() {
+        @Override
+        protected List<java.lang.reflect.Method> computeValue(Class<?> type) {
+            List<java.lang.reflect.Method> out = new ArrayList<>();
+            for (java.lang.reflect.Method m : type.getMethods()) {
+                if (m.getParameterCount() != 0 || m.getDeclaringClass() == Object.class
+                        || java.lang.reflect.Modifier.isStatic(m.getModifiers()) || !m.getName().startsWith("get")
+                        || m.getName().equals("getActor")) {
+                    continue;
+                }
+                out.add(m);
             }
-            case InventoryChangeEvent c -> c.getHolders().stream().flatMap(h -> holderEntity(h).stream()).toList();
-            case InventoryEvent i -> holderEntity(i.getHolder()).map(List::of).orElse(List.of());
-            case ResourceEvent r -> r.getHolders().stream().<Entity>flatMap(h -> h instanceof ResourceHolder.Entity e
-                    ? java.util.stream.Stream.of(e.entity()) : java.util.stream.Stream.empty()).toList();
-            default -> List.of();
-        };
+            return List.copyOf(out);
+        }
+    };
+
+    private static void collect(@Nullable Object value, Set<Entity> out) {
+        switch (value) {
+            case null -> {}
+            case Entity e -> out.add(e);
+            case Optional<?> o -> o.ifPresent(v -> collect(v, out));
+            case java.util.Collection<?> c -> c.forEach(v -> collect(v, out));
+            case InventoryHolder h -> holderEntity(h).ifPresent(out::add);
+            case ResourceHolder.Entity r -> out.add(r.entity());
+            default -> {}
+        }
     }
 
     /** The entity holding an inventory (a cart, a donkey, a player), through items and per-player copies. */
@@ -676,8 +696,15 @@ final class TestAcceptance implements Acceptance, Listener {
      * in and is destroyed there is seen going, by where it was last.
      */
     private void follow(AcceptanceDiff.Snapshot at) {
+        Map<UUID, Entity> was = new LinkedHashMap<>(followed);
         followed.clear();
         for (AcceptanceDiff.Thing thing : at.entities().values()) {
+            // The reference the snapshot read it through, first: one saved with its chunk is listed by no world.
+            Entity known = was.get(thing.id());
+            if (known != null) {
+                followed.put(thing.id(), known);
+                continue;
+            }
             for (ServerLevel l : level.getServer().getAllLevels()) {
                 Entity e = l.getEntity(thing.id());
                 if (e != null) {

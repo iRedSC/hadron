@@ -4,12 +4,8 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
-import dev.iredsc.hadron.api.event.entity.EntityEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
-import dev.iredsc.hadron.api.event.item.ItemDespawnEvent;
-import dev.iredsc.hadron.api.event.item.ItemMergeEvent;
-import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
 import dev.iredsc.hadron.api.event.world.WorldEvent;
@@ -144,12 +140,9 @@ final class AcceptanceDiff {
                     || bornInside || touched.contains(id))) {
                 continue;
             }
-            // An item lying in the area is also what a pickup, a merge or a despawn is about.
-            Predicate<Seen> concerns = s -> s.event() instanceof EntityEvent e && e.getEntity().getUUID().equals(id)
-                    || s.event() instanceof ItemPickupEvent p && p.getItemEntity().getUUID().equals(id)
-                    || s.event() instanceof ItemMergeEvent m && (m.getItemEntity().getUUID().equals(id)
-                            || m.getTarget().getUUID().equals(id))
-                    || s.event() instanceof ItemDespawnEvent d && d.getItemEntity().getUUID().equals(id);
+            // Every event that names it, as the kit reads them for following: its subject, a victim, a holder.
+            Predicate<Seen> concerns = s -> TestAcceptance.named(s.event()).stream()
+                    .anyMatch(e -> e.getUUID().equals(id));
             if (was == null && is != null) {
                 out.add(new Change("a " + is.type() + describe(is) + (is.inBox() || !bornInside ? " appeared at "
                         : " appeared in the area, now at ") + at(is.pos()), concerns));
@@ -192,7 +185,7 @@ final class AcceptanceDiff {
             String name = e.getKey();
             UUID id = Objects.requireNonNull(before.playerIds().get(name), "every player has an id");
             Predicate<Seen> concerns = s -> s.actor().actingFor().filter(id::equals).isPresent()
-                    || s.event() instanceof EntityEvent ee && ee.getEntity().getUUID().equals(id);
+                    || TestAcceptance.named(s.event()).stream().anyMatch(n -> n.getUUID().equals(id));
             String diff = slots(e.getValue(), after.players().getOrDefault(name, List.of()));
             if (diff != null) out.add(new Change(name + "'s inventory " + diff, concerns));
             Float was = before.playerHealth().get(name), is = after.playerHealth().get(name);
