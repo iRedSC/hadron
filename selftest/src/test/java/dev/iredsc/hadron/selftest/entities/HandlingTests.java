@@ -14,17 +14,19 @@ import dev.iredsc.hadron.api.event.entity.EntityShearEvent;
 import dev.iredsc.hadron.api.event.entity.EntityUnleashEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.advancements.AdvancementHolder;
+import net.minecraft.advancements.CriteriaTriggers;
+import net.minecraft.advancements.CriterionTrigger;
 import net.minecraft.advancements.CriterionProgress;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ClientboundAnimatePacket;
 import net.minecraft.resources.ResourceLocation;
-import net.minecraft.stats.Stats;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.EntityType;
@@ -51,6 +53,11 @@ public final class HandlingTests {
     private static <E> E one(TestContext t, List<E> heard, String what) {
         t.assertEquals(1, heard.size(), "the number of " + what + "s fired");
         return heard.get(0);
+    }
+
+    /** Whether the server counted something toward advancements on this trigger since the watch's last mark. */
+    private static boolean triggered(SideEffects effects, CriterionTrigger<?> trigger) {
+        return effects.seen(SideEffects.CriterionTriggered.class).stream().anyMatch(c -> c.trigger() == trigger);
     }
 
     // ---- Leads ---------------------------------------------------------------------------------------------------
@@ -94,10 +101,12 @@ public final class HandlingTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.interact(cow);
         t.assertEquals(1, asked[0], "the number of EntityLeashEvents for one click");
         t.assertFalse(cow.isLeashed(), "the cow should not be leashed, but is held by " + cow.getLeashHolder());
         t.assertHolding(alice, Items.LEAD, 1);
+        effects.assertNone("a refused leash");
     }
 
     @HadronTest
@@ -153,10 +162,12 @@ public final class HandlingTests {
         });
         t.tick();
         alice.clearReceived();
+        SideEffects effects = t.watchSideEffects();
         alice.interact(frog);
         t.tick();
         assertNoSwing(t, alice, "A refused leash");
         t.assertFalse(frogLeashCounted(t, alice), "a refused leash should not count toward an advancement");
+        effects.assertNone("a refused leash of a frog");
         refuse[0] = false;
         alice.interact(frog);
         t.assertTrue(frogLeashCounted(t, alice), "a leash should count toward the frog advancement");
@@ -210,12 +221,14 @@ public final class HandlingTests {
         });
         t.tick();
         alice.clearReceived();
+        SideEffects effects = t.watchSideEffects();
         alice.interact(sheep);
         t.tick();
         t.assertEquals(alice.player(), sheep.getLeashHolder(), "the sheep's leash holder");
         t.assertFalse(sheep.isSheared(), "the refused click should not fall through to shearing");
         t.assertEquals(0, sheared[0], "EntityShearEvents fired");
         assertNoSwing(t, alice, "A refused unleash");
+        effects.assertNone("a refused unleash with shears in hand");
     }
 
     @HadronTest
@@ -232,11 +245,13 @@ public final class HandlingTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.interact(cow);
         t.tick();
         t.assertEquals(1, asked[0], "the number of EntityUnleashEvents for one click");
         t.assertEquals(alice.player(), cow.getLeashHolder(), "the cow's leash holder");
         t.assertTrue(near(t, ItemEntity.class).isEmpty(), "no lead should drop, but found " + near(t, ItemEntity.class));
+        effects.assertNone("a refused unleash");
     }
 
     @HadronTest
@@ -278,12 +293,14 @@ public final class HandlingTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useBlock(fence, Direction.UP);
         t.tick();
         t.assertEquals(1, asked[0], "the number of EntityLeashEvents for one click");
         t.assertEquals(alice.player(), cow.getLeashHolder(), "the cow's leash holder");
         t.assertTrue(near(t, LeashFenceKnotEntity.class).isEmpty(), "no knot should be left on the fence, but found "
                 + near(t, LeashFenceKnotEntity.class));
+        effects.assertNone("a refused tie at a fence");
     }
 
     @HadronTest
@@ -329,8 +346,10 @@ public final class HandlingTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useBlock(fence, Direction.UP);
         t.tick();
+        effects.assertNone("a refused tie at a fence with a knot");
         t.assertFalse(knot.isRemoved(), "the knot that was already on the fence should stay");
         t.assertEquals(knot, tied.getLeashHolder(), "the tied cow's leash holder");
         t.assertEquals(alice.player(), held.getLeashHolder(), "the held cow's leash holder");
@@ -369,8 +388,10 @@ public final class HandlingTests {
             }
         });
         BlockPos sensor = sensor(t);
+        SideEffects effects = t.watchSideEffects();
         alice.useBlock(fence, Direction.UP);
         t.assertFalse(sensed(t, sensor, 20), "a refused tie should make no vibration");
+        effects.assertNone("a refused tie beside a sculk sensor");
         refuse[0] = false;
         alice.useBlock(fence, Direction.UP);
         t.assertTrue(sensed(t, sensor, 20), "a tie should make the attach vibration");
@@ -392,8 +413,10 @@ public final class HandlingTests {
             }
         });
         BlockPos sensor = sensor(t);
+        SideEffects effects = t.watchSideEffects();
         alice.interact(knot);
         t.assertFalse(sensed(t, sensor, 20), "a refused tie to a knot should make no vibration");
+        effects.assertNone("a refused tie to a knot beside a sculk sensor");
         t.assertFalse(knot.isRemoved(), "the knot should stay");
     }
 
@@ -415,15 +438,15 @@ public final class HandlingTests {
                 e.setCancelled(refuse[0]);
             }
         });
-        try (CriterionWatch<?> blockUses = CriterionWatch.blockUses(alice);
-                CriterionWatch<?> itemUses = CriterionWatch.itemsOnBlocks(alice)) {
-            alice.useBlock(fence, Direction.UP);
-            t.assertEquals(1, asked[0], "EntityLeashEvents for one refused click");
-            t.assertFalse(blockUses.counted() || itemUses.counted(), "a refused tie should count for no advancement");
-            refuse[0] = false;
-            alice.useBlock(fence, Direction.UP);
-            t.assertTrue(blockUses.counted() || itemUses.counted(), "a tie should count as a use of the fence");
-        }
+        SideEffects effects = t.watchSideEffects();
+        alice.useBlock(fence, Direction.UP);
+        t.assertEquals(1, asked[0], "EntityLeashEvents for one refused click");
+        effects.assertNone("a refused tie at a fence, lead in hand");
+        refuse[0] = false;
+        alice.useBlock(fence, Direction.UP);
+        t.assertTrue(triggered(effects, CriteriaTriggers.ITEM_USED_ON_BLOCK)
+                || triggered(effects, CriteriaTriggers.DEFAULT_BLOCK_USE), "a tie should count as a use of the fence, "
+                + "but the side effects were " + effects.seen());
     }
 
     @HadronTest
@@ -444,14 +467,11 @@ public final class HandlingTests {
                 e.setCancelled(true);
             }
         });
-        try (CriterionWatch<?> itemUses = CriterionWatch.itemsOnBlocks(alice)) {
-            alice.useBlock(fence, Direction.UP);
-            t.assertEquals(1, asked[0], "EntityLeashEvents for one refused click");
-            t.assertEquals(0, alice.player().getStats().getValue(Stats.ITEM_USED.get(Items.LEAD)),
-                    "times the lead counts as used");
-            t.assertFalse(itemUses.counted(), "a refused tie should count for no advancement");
-            t.assertEquals(alice.player(), cow.getLeashHolder(), "the cow's leash holder");
-        }
+        SideEffects effects = t.watchSideEffects();
+        alice.useBlock(fence, Direction.UP);
+        t.assertEquals(1, asked[0], "EntityLeashEvents for one refused click");
+        effects.assertNone("a refused sneaking tie"); // the lead counted as used, or the click as a use, would show
+        t.assertEquals(alice.player(), cow.getLeashHolder(), "the cow's leash holder");
     }
 
     @HadronTest
@@ -496,15 +516,15 @@ public final class HandlingTests {
                 e.setCancelled(refuse[0]);
             }
         });
-        try (CriterionWatch<?> clicks = CriterionWatch.entityClicks(alice)) {
-            alice.interact(knot);
-            t.assertEquals(alice.player(), cow.getLeashHolder(), "the cow's leash holder after the refused tie");
-            t.assertFalse(clicks.counted(), "a refused tie should count for no advancement");
-            refuse[0] = false;
-            alice.interact(knot);
-            t.assertEquals(knot, cow.getLeashHolder(), "the cow's leash holder after the tie");
-            t.assertTrue(clicks.counted(), "a tie should count as an interaction");
-        }
+        SideEffects effects = t.watchSideEffects();
+        alice.interact(knot);
+        t.assertEquals(alice.player(), cow.getLeashHolder(), "the cow's leash holder after the refused tie");
+        effects.assertNone("a refused tie to a knot");
+        refuse[0] = false;
+        alice.interact(knot);
+        t.assertEquals(knot, cow.getLeashHolder(), "the cow's leash holder after the tie");
+        t.assertTrue(triggered(effects, CriteriaTriggers.PLAYER_INTERACTED_WITH_ENTITY), "a tie should count as an "
+                + "interaction, but the side effects were " + effects.seen());
     }
 
     @HadronTest
@@ -525,8 +545,10 @@ public final class HandlingTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.interact(knot);
         t.tick();
+        effects.assertNone("a refused tie to a knot with mobs on it");
         t.assertFalse(knot.isRemoved(), "the knot should stay on the fence");
         t.assertEquals(knot, tied.getLeashHolder(), "the tied cow's leash holder");
         t.assertEquals(alice.player(), held.getLeashHolder(), "the held cow's leash holder");
@@ -571,8 +593,10 @@ public final class HandlingTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.interact(sheep);
         t.tick();
+        effects.assertNone("a refused shear");
         t.assertEquals(1, asked[0], "the number of EntityShearEvents for one click");
         t.assertFalse(sheep.isSheared(), "the sheep should keep its wool");
         t.assertEquals(0, alice.player().getMainHandItem().getDamageValue(), "the shears' wear");
@@ -651,8 +675,10 @@ public final class HandlingTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.interact(stand);
         t.tick();
+        effects.assertNone("a refused armor stand manipulation");
         t.assertEquals(1, asked[0], "the number of ArmorStandManipulateEvents for one click");
         t.assertTrue(stand.getItemBySlot(EquipmentSlot.HEAD).isEmpty(), "the stand should wear nothing");
         t.assertHolding(alice, Items.IRON_HELMET, 1);
