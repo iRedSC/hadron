@@ -11,36 +11,39 @@ import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
-import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
 import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
+import dev.iredsc.hadron.api.event.entity.EntityLeashEvent;
+import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTargetEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityVelocityEvent;
+import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
-import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
-import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
 import dev.iredsc.hadron.api.event.item.EquipEvent;
+import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
 import dev.iredsc.hadron.api.event.item.ItemConsumeEvent;
 import dev.iredsc.hadron.api.event.item.ItemCraftEvent;
-import dev.iredsc.hadron.api.event.item.ItemUseEvent;
 import dev.iredsc.hadron.api.event.item.ItemDespawnEvent;
-import dev.iredsc.hadron.api.event.item.ItemMergeEvent;
 import dev.iredsc.hadron.api.event.item.ItemDropEvent;
+import dev.iredsc.hadron.api.event.item.ItemEvent;
+import dev.iredsc.hadron.api.event.item.ItemMergeEvent;
+import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.api.event.item.ItemSmeltEvent;
+import dev.iredsc.hadron.api.event.item.ItemUseEvent;
 import dev.iredsc.hadron.api.event.item.PrepareAnvilEvent;
 import dev.iredsc.hadron.api.event.item.PrepareItemCraftEvent;
 import dev.iredsc.hadron.api.event.item.TradeEvent;
-import dev.iredsc.hadron.api.event.item.ItemEvent;
-import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
 import dev.iredsc.hadron.api.event.world.WorldEvent;
 import dev.iredsc.hadron.api.world.Areas;
+import dev.iredsc.hadron.harness.mixin.ServerLevelEntitiesAccessor;
 import dev.iredsc.hadron.neoforge.InventoryHolders;
 import dev.iredsc.hadron.test.Acceptance;
 import dev.iredsc.hadron.test.TestContext;
@@ -75,7 +78,6 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
-import dev.iredsc.hadron.harness.mixin.ServerLevelEntitiesAccessor;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.items.IItemHandler;
 import org.jspecify.annotations.Nullable;
@@ -110,7 +112,17 @@ final class TestAcceptance implements Acceptance, Listener {
     private final Set<Class<? extends Event>> refused = new HashSet<>();
     private final List<Seen> seen = new ArrayList<>();
     /** Events that couldn't be placed, with why: each fails assertActingFor. */
-    private final List<String> unplaced = new ArrayList<>();
+    private final List<Unplaced> unplaced = new ArrayList<>();
+    /** Entities an event in the box named this step: compared even if they only passed through. */
+    private final Set<UUID> touched = new HashSet<>();
+
+    /** An event that couldn't be placed, as it stood after every listener ran, and what to fix. */
+    private record Unplaced(Seen seen, String why) {
+        @Override
+        public String toString() {
+            return seen.event().getEventName() + ": " + why;
+        }
+    }
     /**
      * Entities seen in the box at the last snapshot, by reference: one moved into a chunk whose entities aren't
      * listed yet still counts until it is removed.
@@ -170,6 +182,7 @@ final class TestAcceptance implements Acceptance, Listener {
         follow(before);
         seen.clear();
         unplaced.clear();
+        touched.clear();
     }
 
     @Override
@@ -188,12 +201,15 @@ final class TestAcceptance implements Acceptance, Listener {
 
     @Override
     public void assertRefused(TestPlayer player, String step) {
-        boolean tried = seen.stream().anyMatch(s -> s.cancelled()
-                && s.actor().actingFor().filter(player.uuid()::equals).isPresent());
+        java.util.function.Predicate<Seen> refusedFor = s -> s.cancelled()
+                && s.actor().actingFor().filter(player.uuid()::equals).isPresent();
+        boolean tried = seen.stream().anyMatch(refusedFor)
+                || unplaced.stream().map(Unplaced::seen).anyMatch(refusedFor);
         if (!tried) {
             throw new AssertionError(step + ": nothing acting for " + player.name() + " was refused since the last "
                     + "mark, so this step proves nothing about interception. Is the machine running (power, fuel, "
-                    + "range, an owner, enough ticks)? Heard: " + (seen.isEmpty() ? "no events" : seen));
+                    + "range, an owner, enough ticks)? Heard: " + (seen.isEmpty() ? "no events" : seen)
+                    + (unplaced.isEmpty() ? "" : "; and, nowhere it could tell, " + unplaced));
         }
     }
 
@@ -202,7 +218,7 @@ final class TestAcceptance implements Acceptance, Listener {
         AcceptanceDiff.Snapshot after = snapshot();
         requireSamePlayers(step, after);
         Set<Part> which = parts.length == 0 ? EnumSet.allOf(Part.class) : EnumSet.copyOf(List.of(parts));
-        List<String> problems = AcceptanceDiff.changes(before, after, which, seen);
+        List<String> problems = AcceptanceDiff.changes(before, after, which, seen, touched);
         if (!problems.isEmpty()) {
             throw new AssertionError(step + " should have changed nothing in " + which + ", but " + problems.size()
                     + " thing(s) changed:\n  " + String.join("\n  ", problems));
@@ -212,7 +228,7 @@ final class TestAcceptance implements Acceptance, Listener {
     @Override
     public void assertActingFor(TestPlayer player, String step) {
         requireSamePlayers(step, snapshot());
-        List<String> problems = new ArrayList<>(unplaced);
+        List<String> problems = new ArrayList<>(unplaced.stream().map(Unplaced::toString).toList());
         for (Seen s : seen) {
             if (AcceptanceDiff.nobodys(s.actor())) continue;
             Optional<UUID> who = s.actor().actingFor();
@@ -255,10 +271,18 @@ final class TestAcceptance implements Acceptance, Listener {
     void record(Event event) {
         if (!(event instanceof ActionEvent a)) return;
         switch (place(event)) {
-            case Place.In in -> seen.add(new Seen(event, a.getActor(), event instanceof Cancellable c
-                    && c.isCancelled(), in.pos()));
+            case Place.In in -> {
+                seen.add(new Seen(event, a.getActor(), event instanceof Cancellable c && c.isCancelled(), in.pos()));
+                for (Entity e : named(event)) {
+                    touched.add(e.getUUID());
+                    followed.putIfAbsent(e.getUUID(), e);
+                }
+            }
             case Place.Unplaced u -> {
-                if (!(a.getActor() instanceof Actor.Server)) unplaced.add(event.getEventName() + ": " + u.why());
+                if (!(a.getActor() instanceof Actor.Server)) {
+                    unplaced.add(new Unplaced(new Seen(event, a.getActor(), event instanceof Cancellable c
+                            && c.isCancelled(), Optional.empty()), u.why()));
+                }
             }
             case Place.Out o -> { }
         }
@@ -288,7 +312,13 @@ final class TestAcceptance implements Acceptance, Listener {
             Optional<BlockPos> block = hit.getHitBlock();
             if (block.isPresent() && box.isInside(block.get())) return in(block.get());
         }
-        if (event instanceof EntityEvent e) return at(e.getLevel(), e.getPosition());
+        if (event instanceof EntityEvent e) {
+            // Either of a pair: a rider boarding a vehicle in the area, a lead tied to a knot in it.
+            for (Entity named : named(event)) {
+                if (named.level() == level && at(level, named.position()) instanceof Place.In p) return p;
+            }
+            return at(e.getLevel(), e.getPosition());
+        }
         if (event instanceof WorldEvent w && !(event instanceof ExplosionEvent)) {
             // An area a world event names (an accelerator's field, a portal's frame), by whether it overlaps.
             return w.getLevel() == level && w.getArea().filter(box::intersects).isPresent()
@@ -387,8 +417,19 @@ final class TestAcceptance implements Acceptance, Listener {
         return OUT;
     }
 
+    /** Every entity an event names: its subject, and the other of a pair (a mount, a lead's holder), or its items. */
+    private static List<Entity> named(Event event) {
+        return switch (event) {
+            case EntityMountEvent e -> List.of(e.getEntity(), e.getMount());
+            case EntityLeashEvent e -> List.of(e.getEntity(), e.getHolder());
+            case EntityEvent e -> List.of(e.getEntity());
+            case ItemEvent i -> List.copyOf(itemEntities(i));
+            default -> List.of();
+        };
+    }
+
     /** The item entities an item event is about, when it is about ones lying in the world. */
-    static List<ItemEntity> itemEntities(ItemEvent event) {
+    private static List<ItemEntity> itemEntities(ItemEvent event) {
         return switch (event) {
             case ItemMergeEvent e -> List.of(e.getItemEntity(), e.getTarget());
             case ItemDespawnEvent e -> List.of(e.getItemEntity());

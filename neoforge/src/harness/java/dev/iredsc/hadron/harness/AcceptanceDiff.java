@@ -1,12 +1,18 @@
 package dev.iredsc.hadron.harness;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.item.ItemDespawnEvent;
 import dev.iredsc.hadron.api.event.item.ItemMergeEvent;
 import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
+import dev.iredsc.hadron.api.event.resource.ResourceEvent;
+import dev.iredsc.hadron.api.event.resource.ResourceHolder;
+import dev.iredsc.hadron.api.event.world.WorldEvent;
 import dev.iredsc.hadron.test.Acceptance.Part;
 import dev.iredsc.hadron.test.Acceptance.Seen;
 import java.util.ArrayList;
@@ -19,6 +25,7 @@ import java.util.UUID;
 import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.state.BlockState;
 
 /**
@@ -48,11 +55,11 @@ final class AcceptanceDiff {
     private record Change(String text, Predicate<Seen> concerns) {}
 
     /** Each change in {@code parts}, with the events heard for it. Empty when nothing in them changed. */
-    static List<String> changes(Snapshot before, Snapshot after, Set<Part> parts, List<Seen> seen) {
+    static List<String> changes(Snapshot before, Snapshot after, Set<Part> parts, List<Seen> seen, Set<UUID> touched) {
         List<Change> found = new ArrayList<>();
         if (parts.contains(Part.BLOCKS)) blocks(before, after, found);
         if (parts.contains(Part.INVENTORIES)) inventories(before, after, found);
-        if (parts.contains(Part.ENTITIES)) entities(before, after, found);
+        if (parts.contains(Part.ENTITIES)) entities(before, after, touched, found);
         if (parts.contains(Part.PLAYERS)) players(before, after, found);
         List<String> out = new ArrayList<>();
         for (Change c : found) out.add(c.text() + ": " + heard(c, seen));
@@ -108,13 +115,13 @@ final class AcceptanceDiff {
         }
     }
 
-    private static void entities(Snapshot before, Snapshot after, List<Change> out) {
+    private static void entities(Snapshot before, Snapshot after, Set<UUID> touched, List<Change> out) {
         Set<UUID> ids = new LinkedHashSet<>(before.entities().keySet());
         ids.addAll(after.entities().keySet());
         for (UUID id : ids) {
             Thing was = before.entities().get(id), is = after.entities().get(id);
-            // Only what was in the area at either end; once there, it is followed wherever it goes.
-            if (!(was != null && was.inBox() || is != null && is.inBox())) continue;
+            // What was in the area at either end, or that an event there named on its way through.
+            if (!(was != null && was.inBox() || is != null && is.inBox() || touched.contains(id))) continue;
             // An item lying in the area is also what a pickup, a merge or a despawn is about.
             Predicate<Seen> concerns = s -> s.event() instanceof EntityEvent e && e.getEntity().getUUID().equals(id)
                     || s.event() instanceof ItemPickupEvent p && p.getItemEntity().getUUID().equals(id)
@@ -162,11 +169,24 @@ final class AcceptanceDiff {
         }
     }
 
-    /** Events heard at {@code pos}: by where they were placed, or, with {@code listed}, any block space they list. */
+    /**
+     * Events heard that reach {@code pos}: by where they were placed, a block space they list, any inventory they name
+     * there, an area they cover (a tick accelerator's, a portal's), or a chunk they name. Only for the message.
+     */
     private static Predicate<Seen> near(BlockPos pos, boolean listed) {
-        return s -> s.pos().filter(pos::equals).isPresent()
-                || listed && s.event() instanceof BlockEvent b && b.getBlocks().stream()
-                        .map(BlockChange::getPos).anyMatch(pos::equals);
+        return s -> s.pos().filter(pos::equals).isPresent() || reaches(s.event(), pos, listed);
+    }
+
+    private static boolean reaches(Event event, BlockPos pos, boolean listed) {
+        return switch (event) {
+            case BlockEvent b -> listed && b.getBlocks().stream().map(BlockChange::getPos).anyMatch(pos::equals);
+            case InventoryChangeEvent i -> i.getHolders().stream()
+                    .anyMatch(h -> h instanceof InventoryHolder.Block b && b.pos().equals(pos));
+            case WorldEvent w -> w.getArea().filter(a -> a.isInside(pos)).isPresent();
+            case ResourceEvent r -> r.getHolders().stream().anyMatch(h -> h instanceof ResourceHolder.Chunk c
+                    && c.pos().equals(new ChunkPos(pos)) || h instanceof ResourceHolder.Block b && b.pos().equals(pos));
+            default -> false;
+        };
     }
 
     private static List<String> differing(Map<String, ItemStack> a, Map<String, ItemStack> b) {

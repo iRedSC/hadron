@@ -6,7 +6,9 @@ import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
+import dev.iredsc.hadron.api.event.entity.EntityDataChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
+import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
 import dev.iredsc.hadron.api.event.item.EquipEvent;
@@ -38,6 +40,8 @@ import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.CompoundContainer;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -742,5 +746,52 @@ public final class AcceptanceKitTests {
         copy.discard();
         String why = failure(t, () -> area.assertUnchanged("a pig taken away and destroyed", Part.ENTITIES));
         t.assertTrue(why.contains("minecraft:pig") && why.contains("is gone"), why);
+    }
+
+    @HadronTest
+    void aRefusalNothingCouldPlaceStillShowsTheMachineTried(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Acceptance area = t.acceptance(around(t));
+        t.assertTrue(Hadron.getPluginManager().callEvent(new InventoryChangeEvent(List.of(
+                new InventoryChangeEvent.Change(InventoryHolder.Unknown.INSTANCE, 0, ItemStack.EMPTY,
+                        new ItemStack(Items.DIAMOND))), new Actor.Player(bob.player()))), "refused, failing closed");
+        area.assertRefused(bob, "bob's pipe that can't name its chest");
+    }
+
+    @HadronTest
+    void aChangeInsideAnAcceleratorsFieldNamesIt(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos pos = t.pos(2, 0, 0);
+        Acceptance area = t.acceptance(around(t));
+        Hadron.getPluginManager().callEvent(new TickAccelerateEvent(new Actor.Player(bob.player()), t.level(),
+                BoundingBox.fromCorners(t.pos(1, 0, -1), t.pos(3, 1, 1)), 4));
+        t.level().getChunkAt(pos).setBlockState(pos, Blocks.GOLD_BLOCK.defaultBlockState(), false);
+        String why = failure(t, () -> area.assertUnchanged("an accelerator that ignored its refusal"));
+        t.assertTrue(why.contains("TickAccelerateEvent") && why.contains("the cancel left it behind"), why);
+    }
+
+    @HadronTest
+    void anEntityHurtWhilePassingThroughIsCompared(TestContext t) {
+        Pig pig = pig(t, t.pos(0, 0, 4));
+        Acceptance area = t.acceptance(around(t));
+        pig.teleportTo(t.pos(2, 0, 0).getX() + 0.5, t.pos(2, 0, 0).getY(), t.pos(2, 0, 0).getZ() + 0.5);
+        CompoundTag after = new CompoundTag();
+        after.putInt("level", 2);
+        // Any event in the area naming the pig, as its bridge fires on the way through.
+        t.bridge().fire(new EntityDataChangeEvent(pig, ResourceLocation.fromNamespaceAndPath("hadron_test_target",
+                "mark"), new CompoundTag(), after, Actor.Nature.INSTANCE));
+        pig.setHealth(pig.getHealth() - 4);
+        pig.teleportTo(t.pos(0, 0, 4).getX() + 0.5, t.pos(0, 0, 4).getY(), t.pos(0, 0, 4).getZ() + 0.5);
+        String why = failure(t, () -> area.assertUnchanged("a pig hurt on its way through", Part.ENTITIES));
+        t.assertTrue(why.contains("health"), why);
+    }
+
+    @HadronTest
+    void boardingAVehicleInTheAreaFromOutsideIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Pig horse = pig(t, t.pos(1, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        t.assertTrue(Hadron.getPluginManager().callEvent(new EntityMountEvent(bob.player(), horse,
+                new Actor.Player(bob.player()))), "bob boarding a mount in the area was refused: " + area.events());
     }
 }
