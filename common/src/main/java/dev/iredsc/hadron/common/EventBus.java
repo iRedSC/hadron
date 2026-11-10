@@ -80,6 +80,16 @@ final class EventBus {
             if (owner != null) owner.remove(this);
         }
 
+        /**
+         * Whether it is removed and no other thread is inside its handler now, so nothing needs it any longer. Never
+         * waits.
+         */
+        boolean finished() {
+            synchronized (this) {
+                return removed && calls.size() == (calls.containsKey(Thread.currentThread()) ? 1 : 0);
+            }
+        }
+
         @Nondeterministic(reason = "waits for handlers still running on other threads, up to the disable grace period")
         boolean awaitIdle(long deadline) {
             boolean interrupted = false;

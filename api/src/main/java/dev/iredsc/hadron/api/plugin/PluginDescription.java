@@ -18,8 +18,9 @@ import java.util.regex.Pattern;
  * uses directly; that ties it to one loader, so it also needs {@code loader} (such as {@code neoforge}). A plugin
  * without mod-depend runs on every loader. {@code api-depend} lists mods, also by mod id, that must be installed for the
  * plugin's own pure-Java API (LuckPerms' {@code net.luckperms.api}), which is the same on every loader, so it needs no
- * {@code loader}. Anything malformed fails the load with a message naming the key, so a typo
- * can't quietly drop a command or a dependency.
+ * {@code loader}. {@code bridge-depend} lists mods whose Hadron bridge must be installed, for the events and API that
+ * bridge publishes; that keeps the plugin write-once too. Anything malformed fails the load with a message naming the
+ * key, so a typo can't quietly drop a command or a dependency.
  */
 public final class PluginDescription {
     private static final Pattern NAME = Pattern.compile("[A-Za-z0-9_.-]+");
@@ -71,6 +72,7 @@ public final class PluginDescription {
     private final List<String> softDepend;
     private final List<String> modDepend;
     private final List<String> apiDepend;
+    private final List<String> bridgeDepend;
     private final String minecraft;
     private final @Nullable String loader;
     private final Map<String, CommandSpec> commands;
@@ -99,6 +101,7 @@ public final class PluginDescription {
         softDepend = Collections.unmodifiableList(strings(yaml, "softdepend"));
         modDepend = Collections.unmodifiableList(strings(yaml, "mod-depend"));
         apiDepend = Collections.unmodifiableList(strings(yaml, "api-depend"));
+        bridgeDepend = Collections.unmodifiableList(strings(yaml, "bridge-depend"));
         String minecraft = optional(yaml, "minecraft");
         if (minecraft == null || minecraft.isEmpty()) {
             throw new PluginException("plugin.yml needs 'minecraft', the Minecraft version the plugin was built for, "
@@ -167,6 +170,14 @@ public final class PluginDescription {
         return apiDepend;
     }
 
+    /**
+     * Mod ids whose Hadron bridge must be installed (such as {@code mekanism}), for the bridge API that bridge
+     * publishes. Like api-depend, this keeps the plugin write-once.
+     */
+    public List<String> getBridgeDepend() {
+        return bridgeDepend;
+    }
+
     /** The loader this plugin was built for, or null when it runs on any. Set by plugins that use mods directly. */
     public @Nullable String getLoader() {
         return loader;
@@ -208,7 +219,7 @@ public final class PluginDescription {
             case "website" -> "website: https://example.com";
             case "loader" -> "loader: neoforge";
             case "depend", "softdepend" -> key + ": [OtherPlugin]";
-            case "mod-depend", "api-depend" -> key + ": [modid]";
+            case "mod-depend", "api-depend", "bridge-depend" -> key + ": [modid]";
             case "authors" -> "authors: [YourName]";
             case "aliases" -> "aliases: [shortname]";
             default -> key + ": value";

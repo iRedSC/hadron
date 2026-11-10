@@ -93,7 +93,7 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | Event | What | Core chokepoint |
 |---|---|---|
 | `EntitySpawnEvent` | an entity enters the world; reason (natural, spawner, egg, breeding, summoned, released from capture, actor). Not for dropped items, experience orbs or falling blocks, whose cancelling would destroy what they carry; see `ItemDropEvent` | `addFreshEntity` |
-| `EntityRemoveEvent` | an entity leaves the world other than by dying, unloading or converting; cause (killed without damage, dismissed, converted in a mod's own code, captured, discarded) | `KillCommand`, for entities that don't die; bridges for mods' own removals |
+| `EntityRemoveEvent` | an entity leaves the world other than by dying, unloading or converting; cause (killed without damage, dismissed, converted in a mod's own code, captured, discarded) | `KillCommand`, for entities that don't die; `EndCrystal.hurt`, which shatters it; bridges for mods' own removals |
 | └ `EntityCaptureEvent` | an entity is stored into an item, block or carrier (bucket, mob catcher, Carry On); where it goes | `Bucketable`; bridges for catchers and carrying |
 | `EntityDamageEvent` | an entity is hurt; damage source, actor, and the weapon or spell | `hurt`, and `ArmorStand.hurt`, which skips it |
 | `EntityDeathEvent` | an entity is dying; drops, experience and where each item goes are editable; not cancellable | `die` |
@@ -128,6 +128,7 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | `ProjectileLaunchEvent` | anything fired or thrown; the actor is the shooter | `Projectile` spawn |
 | `ProjectileHitEvent` | a projectile, or a hitscan shot with no projectile, hits a block or entity; hit position, origin, weapon | `onHit`, bridges for hitscan |
 | `HangingPlaceEvent`, `HangingBreakEvent` | item frames, paintings | `HangingEntity` |
+| `VehicleDamageEvent` | a boat or minecart is hit; living mounts are `EntityDamageEvent` | `VehicleEntity.hurt`, `MinecartTNT.hurt` |
 | `ItemFrameChangeEvent` | an item put in a frame, knocked out or turned, by any actor; breaking the frame is `HangingBreakEvent` | `ItemFrame.interact`, `ItemFrame.hurt` |
 | `ArmorStandManipulateEvent` | equipment taken or placed on a stand by a right-click; the slot, what goes on and what comes off | `ArmorStand.swapItem`; bridges for mods' stand editors |
 
@@ -235,7 +236,7 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 
 Designed but not in `api`, because core can't yet fire them for every actor without breaking rule 7 or making a cancel unsafe. A plugin can't listen for them, so none of them can look like coverage.
 
-- Removal by expiry (a mob despawning, a timed summon, a temporary portal): will be an *(after)* event, so a cancel can't make it permanent. `EntityRemoveEvent` shipped without it, and core fires it only for `/kill` and buckets: refusing in Minecraft's one removal method could duplicate (a cancelled arrow pickup), so each cause needs its own hook.
+- Removal by expiry (a mob despawning, a timed summon, a temporary portal): will be an *(after)* event, so a cancel can't make it permanent. `EntityRemoveEvent` shipped without it, and core fires it only for `/kill`, buckets and end crystals shattering: refusing in Minecraft's one removal method could duplicate (a cancelled arrow pickup), so each cause needs its own hook.
 - `EntityAttributeChangeEvent`, `EntityRelationshipChangeEvent`, `FoodLevelChangeEvent`: the vanilla classes that change don't know their entity.
 - `BiomeChangeEvent`: biome writes are too hot and scattered for one hook.
 - `ResourceTransferEvent` from the port's energy and fluid capabilities: no single point sees both ends; bridges fire it meanwhile.

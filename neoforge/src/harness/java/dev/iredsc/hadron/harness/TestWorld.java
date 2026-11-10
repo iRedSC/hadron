@@ -69,6 +69,7 @@ final class TestWorld implements TestContext {
     private final Map<String, TestClient> players = new LinkedHashMap<>();
     private final List<Listener> listeners = new ArrayList<>();
     private final List<TestSideEffects> sideEffects = new ArrayList<>();
+    private final List<TestAcceptance> acceptances = new ArrayList<>();
     private int spent;
     private boolean ticking;
 
@@ -244,6 +245,11 @@ final class TestWorld implements TestContext {
     }
 
     @Override
+    public dev.iredsc.hadron.api.bridge.Bridge bridge() {
+        return java.util.Objects.requireNonNull(HarnessMod.bridge, "the harness claims its bridge as it loads");
+    }
+
+    @Override
     public void registerEvents(Listener listener) {
         requireIdle("register listeners");
         Hadron.getPluginManager().registerEvents(listener, plugin);
@@ -265,6 +271,14 @@ final class TestWorld implements TestContext {
         TestSideEffects watch = TestSideEffects.start(this);
         sideEffects.add(watch);
         return watch;
+    }
+
+    @Override
+    public dev.iredsc.hadron.test.Acceptance acceptance(net.minecraft.world.level.levelgen.structure.BoundingBox box) {
+        requireIdle("start an acceptance area");
+        TestAcceptance area = new TestAcceptance(this, box);
+        acceptances.add(area);
+        return area;
     }
 
     @Override
@@ -425,6 +439,8 @@ final class TestWorld implements TestContext {
         List<String> problems = new ArrayList<>();
         for (TestSideEffects watch : sideEffects) watch.stop();
         sideEffects.clear();
+        for (TestAcceptance area : acceptances) area.close();
+        acceptances.clear();
         for (Listener l : listeners) {
             try {
                 Hadron.getPluginManager().unregisterEvents(l);
