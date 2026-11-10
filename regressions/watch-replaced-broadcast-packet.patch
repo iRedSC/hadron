@@ -1,0 +1,74 @@
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
+index f7c3149..0b00cab 100644
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
+@@ -69,8 +69,7 @@ public final class TestSideEffects implements SideEffects {
+      * The exact packet instances of the world broadcasts this thread is running, each recorded once as a whole: when
+      * one of these very instances is sent to a player near, it isn't recorded again. Membership is by identity alone,
+      * never by what a packet says: an independent sound with the same content (a handler playing it again for the
+-     * player the broadcast left out) is another sound, and is recorded. Every packet another thread sends is too. A
+-     * packet a handler puts in place of a marked one is marked with it ({@link #replaced}).
++     * player the broadcast left out) is another sound, and is recorded. Every packet another thread sends is too.
+      */
+     @StaticState(reason = "each thread's running broadcasts' packets, each removed as its broadcast returns")
+     private static final ThreadLocal<List<Packet<?>>> BROADCAST = ThreadLocal.withInitial(ArrayList::new);
+@@ -257,15 +256,6 @@ public final class TestSideEffects implements SideEffects {
+         }
+     }
+ 
+-    /**
+-     * From {@code NetHooksBroadcastMarkMixin}: {@code replacement} goes out in place of {@code original}, as a handler's
+-     * {@code setPacket} does. If {@code original} is a running broadcast's, so is its replacement: one sound, whatever
+-     * the handler changed in it.
+-     */
+-    public static void replaced(Packet<?> original, Packet<?> replacement) {
+-        if (ofBroadcast(original)) BROADCAST.get().add(replacement);
+-    }
+-
+     /** Whether {@code sent} is one of the very packet instances a broadcast running on this thread marked. */
+     private static boolean ofBroadcast(Packet<?> sent) {
+         for (Packet<?> marked : BROADCAST.get()) if (marked == sent) return true;
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/NetHooksBroadcastMarkMixin.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/NetHooksBroadcastMarkMixin.java
+deleted file mode 100644
+index 3a9c503..0000000
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/NetHooksBroadcastMarkMixin.java
++++ /dev/null
+@@ -1,26 +0,0 @@
+-package dev.iredsc.hadron.harness.mixin;
+-
+-import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+-import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+-import dev.iredsc.hadron.harness.TestSideEffects;
+-import dev.iredsc.hadron.neoforge.NetHooks;
+-import net.minecraft.network.protocol.Packet;
+-import net.minecraft.server.level.ServerPlayer;
+-import org.jspecify.annotations.Nullable;
+-import org.spongepowered.asm.mixin.Mixin;
+-
+-/**
+- * The one place a packet on its way to a player is replaced (a plugin's {@code setPacket}, Hadron's name rewriting),
+- * for {@code SideEffects}: a replacement of a broadcast's packet is still that broadcast's copy, so it inherits the
+- * mark ({@link TestSideEffects#replaced}).
+- */
+-@Mixin(NetHooks.class)
+-abstract class NetHooksBroadcastMarkMixin {
+-    @WrapMethod(method = "outgoing")
+-    private static @Nullable Packet<?> hadron$recordReplacement(ServerPlayer player, Packet<?> packet,
+-            Operation<@Nullable Packet<?>> original) {
+-        @Nullable Packet<?> sent = original.call(player, packet);
+-        if (sent != null && sent != packet) TestSideEffects.replaced(packet, sent);
+-        return sent;
+-    }
+-}
+diff --git a/neoforge/src/harness/resources/hadron_test.mixins.json b/neoforge/src/harness/resources/hadron_test.mixins.json
+index ec1bdcb..a3138c2 100644
+--- a/neoforge/src/harness/resources/hadron_test.mixins.json
++++ b/neoforge/src/harness/resources/hadron_test.mixins.json
+@@ -4,7 +4,6 @@
+   "package": "dev.iredsc.hadron.harness.mixin",
+   "compatibilityLevel": "JAVA_21",
+   "mixins": [
+-    "NetHooksBroadcastMarkMixin",
+     "NetworkRegistryAccessor",
+     "PlayerConnectionSoundMixin",
+     "PlayerExhaustionMixin",

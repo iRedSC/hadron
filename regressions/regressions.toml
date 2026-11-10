@@ -897,3 +897,31 @@ paths = [
 guards = [
     { test = "SideEffectsTests.aSoundAnotherThreadSendsDuringAnAmbientTriggerIsRecorded", tier = "in-game" },
 ]
+
+[[regression]]
+id = "watch-broadcast-content-match"
+bug = "The watch took any packet with a broadcast's sound, place and source as the broadcast's copy, so an independent sound with the same content sent to the player the broadcast left out was hidden, and assertNone passed for a watch started inside the broadcast or watching another world."
+fix = "69c76f4"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java",
+]
+guards = [
+    { test = "SideEffectsTests.aSoundLikeTheBroadcastsSentToThePlayerItLeftOutIsRecorded", tier = "in-game" },
+    { test = "SideEffectsTests.aWatchStartedDuringABroadcastRecordsASoundLikeIt", tier = "in-game" },
+    { test = "SideEffectsTests.anotherWorldsBroadcastHidesNoSoundFromTheWatch", tier = "in-game" },
+]
+note = "Hand-made: brings back matching by content alongside the identity marks, which the replacement fix after it still needs."
+
+[[regression]]
+id = "watch-replaced-broadcast-packet"
+bug = "A broadcast packet a handler replaced with setPacket lost its place in the broadcast, so one delivered sound was recorded twice."
+fix = "796f116"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/NetHooksBroadcastMarkMixin.java",
+    "neoforge/src/harness/resources/hadron_test.mixins.json",
+]
+guards = [
+    { test = "SideEffectsTests.aBroadcastsPacketAHandlerReplacesIsStillOneSound", tier = "in-game" },
+    { test = "SideEffectsTests.aBroadcastsPacketAHandlerChangesTheSourceOfIsStillOneSound", tier = "in-game" },
+]
