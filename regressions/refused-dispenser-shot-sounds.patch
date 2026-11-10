@@ -1,0 +1,44 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java
+index 8ef7752..58aa128 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java
+@@ -8,7 +8,6 @@ import dev.iredsc.hadron.api.event.entity.ProjectileLaunchEvent;
+ import java.util.function.BooleanSupplier;
+ import java.util.function.Supplier;
+ import net.minecraft.core.BlockPos;
+-import net.minecraft.server.MinecraftServer;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.world.InteractionResult;
+@@ -21,7 +20,6 @@ import net.minecraft.world.level.Level;
+ import net.minecraft.world.level.block.Block;
+ import net.neoforged.neoforge.common.util.BlockSnapshot;
+ import net.neoforged.neoforge.common.util.FakePlayer;
+-import net.neoforged.neoforge.server.ServerLifecycleHooks;
+ 
+ /**
+  * Gives back what an action spent when every entity it tried to spawn was refused. Vanilla spends first and ignores
+@@ -87,17 +85,15 @@ public final class EntitySpawnRefunds {
+         return everyRefused.getAsBoolean();
+     }
+ 
+-    /**
+-     * A dispenser's shot: if every spawn it tried was refused, the item stays in the dispenser, and what the shot
+-     * played or emitted meanwhile (its click, a mob bucket's splash) is dropped ({@link HeldEffects}), as for a player.
+-     */
++    /** A dispenser's shot: if every spawn it tried was refused, the item stays in the dispenser. */
+     static ItemStack dispensing(ItemStack stack, Supplier<ItemStack> dispense) {
+         if (!listening()) return dispense.get();
+         ItemStack before = stack.copy();
+-        ItemStack[] after = {stack};
+-        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+-        boolean refused = tryingSpawns(server != null && server.isSameThread(), () -> after[0] = dispense.get());
+-        return refused ? before : after[0];
++        int attempts = EntitySpawns.attempts;
++        int refused = EntitySpawns.refused;
++        ItemStack after = dispense.get();
++        int tried = EntitySpawns.attempts - attempts;
++        return tried > 0 && EntitySpawns.refused - refused == tried ? before : after;
+     }
+ 
+     /** What was where a mob bucket is pouring, until its mob is released. Server thread only. */

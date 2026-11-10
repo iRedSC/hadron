@@ -770,3 +770,28 @@ guards = [
     { test = "AcceptanceKitTests.aPlayersVibrationAtTheSameCoordinatesInAnotherWorldIsNoChange", tier = "in-game" },
 ]
 note = "The patch drops only the world comparison; SideEffects.GameEventEmitted keeps its level, which the guard doesn't read."
+
+[[regression]]
+id = "refused-action-sounds"
+bug = "A refused action still played its sounds and numbered level events: a refused lever clicked, a refused place played the block's place sound (and a door's half put back its break), a refused strip or ignite scraped or struck, and a refused snowball, arrow or item frame sounded its throw, shot or placing."
+fix = "8c76ce2"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/world/ServerLevelMixin.java",
+]
+guards = [
+    { test = "BreakPlaceTests.aRefusedLeverFlipClicksForNobodyNear", tier = "in-game" },
+    { test = "BreakPlaceTests.cancelledLeverFlipLeavesItOff", tier = "in-game" },
+    { test = "BreakPlaceTests.cancelledPlaceLeavesAirAndKeepsTheItem", tier = "in-game" },
+    { test = "SpawnTests.aRefusedSnowballIsGivenBack", tier = "in-game" },
+]
+
+[[regression]]
+id = "refused-dispenser-shot-sounds"
+bug = "A dispenser whose every spawn was refused (a cod bucket whose cod was refused) kept its item but still clicked and splashed as if it had poured."
+fix = "f351529"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java",
+]
+guards = [
+    { test = "BucketTests.refusedCodFromADispenserPoursNoWaterAndKeepsTheBucketInside", tier = "in-game" },
+]
