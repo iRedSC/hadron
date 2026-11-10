@@ -43,6 +43,9 @@ import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import java.util.ArrayList;
+import net.minecraft.resources.ResourceLocation;
+import java.util.Map;
+import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
@@ -375,8 +378,9 @@ final class Protection implements Listener {
      * even after the menu is open: a click is checked against every inventory behind the menu, since a shift-click can
      * move items into any of them. The world on its own (a hopper nobody owns) is held to
      * {@link Rules#refusingCrossing} both ways, as a piston is. An inventory with no place in a world (linked storage,
-     * a plugin's own menu) stands outside every region. A player's own inventory is never a region's: it goes where
-     * they go.
+     * a plugin's own menu) stands outside every region. So does a player's own inventory, and what they carry in it
+     * (a backpack): it goes where they go, so no region's {@code use} covers it, yet a hopper nobody owns can't empty a
+     * chest inside into a player outside.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void inventory(InventoryEvent e) {
@@ -393,17 +397,15 @@ final class Protection implements Listener {
             holders.addAll(open.getSlotHolders());
         }
         List<Place> places = new ArrayList<>();
-        for (InventoryHolder holder : holders) {
-            if (!playersOwn(holder)) places.addAll(Place.of(holder));
-        }
+        for (InventoryHolder holder : holders) places.addAll(placesOf(holder));
         refuse(e, c, places, Flag.USE,
                 e.getHolder() instanceof InventoryHolder.Block b ? Optional.of(b.pos()) : Optional.empty());
     }
 
     /**
      * Energy, fluids and other resources a mod moves, makes or spends: draining a protected battery, a pipe filling a
-     * tank. Held to {@code use}, as inventories are, wherever each holder stands; a player's own (their items, their
-     * experience) is never a region's.
+     * tank. Held to {@code use}, as inventories are, wherever each holder stands; a player's own (their experience,
+     * what they carry) stands outside every region, as their inventory does.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void resource(ResourceEvent e) {
@@ -412,18 +414,33 @@ final class Protection implements Listener {
         List<ResourceHolder> holders = e.getHolders();
         if (holders.isEmpty()) places.addAll(e.getPlaces());
         for (ResourceHolder holder : holders) {
-            boolean own = switch (holder) {
-                case ResourceHolder.Entity en -> en.entity() instanceof Player;
+            Optional<UUID> own = switch (holder) {
+                case ResourceHolder.Entity en when en.entity() instanceof Player p -> Optional.of(p.getUUID());
                 case ResourceHolder.Item i -> playersOwn(i.heldIn());
-                default -> false;
+                default -> Optional.empty();
             };
-            if (!own) places.addAll(Place.of(holder));
+            if (own.isPresent()) {
+                places.add(Place.Nowhere.player(own.get()));
+            } else {
+                places.addAll(Place.of(holder));
+            }
         }
         refuse(e, e, places, Flag.USE, Optional.empty());
     }
 
-    private static boolean playersOwn(InventoryHolder holder) {
-        return holder instanceof InventoryHolder.Entity en && en.entity() instanceof Player;
+    /** Where an inventory stands for regions: outside every one for a player's own, or what they carry in it. */
+    private static List<Place> placesOf(InventoryHolder holder) {
+        Optional<UUID> own = playersOwn(holder);
+        return own.isPresent() ? List.of(Place.Nowhere.player(own.get())) : Place.of(holder);
+    }
+
+    /** The player whose own inventory this is, or is carried in (a backpack in their pocket, however deep). */
+    private static Optional<UUID> playersOwn(InventoryHolder holder) {
+        return switch (holder) {
+            case InventoryHolder.Entity en when en.entity() instanceof Player p -> Optional.of(p.getUUID());
+            case InventoryHolder.Item i -> playersOwn(i.outer());
+            default -> Optional.empty();
+        };
     }
 
     /**
@@ -468,12 +485,11 @@ final class Protection implements Listener {
     }
 
     /**
-     * The sets of regions a place may stand in, one per spot it may be. A block is in exactly the regions there. A
-     * place that covers or may be anywhere in an area (a chunk, a level, one nobody can place) may be outside every
-     * region, unless one region holds all of it, or in any one region the area reaches, alone: whichever higher
-     * priority region shares a spot with it never lets through what that region alone refuses, so checking each alone
-     * refuses all a real spot would, and fails closed where a spot is unknown. One with no place in a world is outside
-     * every region.
+     * The sets of regions a place may stand in, each standing for a spot it may be: a block is in exactly the regions
+     * there. For a place that covers or may be anywhere in an area (a chunk, a level, one nobody can place): outside
+     * every region if some of the area is, and each region alone wherever part of it holds the area and no region of
+     * higher priority covers that part. Alone is enough there: only regions of its own priority decide with it, and any
+     * of those refusing is its own entry. One with no place in a world is outside every region.
      */
     private List<List<Region>> mayBeIn(Place place) {
         return switch (place) {
@@ -485,23 +501,32 @@ final class Protection implements Listener {
             case Place.Unknown u -> switch (u.bound()) {
                 case Place.Spot s -> anywhereIn(store.overlapping(s.level(), s.box()), s.box());
                 case Place.Level l -> anywhereIn(store.in(l.level()), null);
-                case Place.Anywhere a -> anywhereIn(List.copyOf(store.all()), null);
+                case Place.Anywhere a -> {
+                    List<List<Region>> out = new ArrayList<>();
+                    out.add(List.of());
+                    Map<ResourceLocation, List<Region>> byWorld = new HashMap<>();
+                    for (Region r : store.all()) byWorld.computeIfAbsent(r.world(), w -> new ArrayList<>()).add(r);
+                    for (List<Region> world : byWorld.values()) out.addAll(anywhereIn(world, null));
+                    yield out;
+                }
             };
         };
     }
 
-    /** Outside every region, unless one of {@code reached} holds all of {@code area}; or in any one of them. */
-    private static List<List<Region>> anywhereIn(List<Region> reached, @Nullable BoundingBox area) {
+    /**
+     * {@link #mayBeIn} for an area of one world, given the regions that reach it; {@code area} null for a whole world,
+     * which always has room outside every region.
+     */
+    static List<List<Region>> anywhereIn(List<Region> reached, @Nullable BoundingBox area) {
         List<List<Region>> out = new ArrayList<>(reached.size() + 1);
-        boolean held = area != null && reached.stream().anyMatch(r -> contains(r.box(), area));
-        if (!held) out.add(List.of());
-        for (Region r : reached) out.add(List.of(r));
+        if (area == null || !Boxes.covered(area, reached.stream().map(Region::box).toList())) out.add(List.of());
+        for (Region r : reached) {
+            BoundingBox part = area == null ? r.box() : Boxes.intersection(r.box(), area);
+            List<BoundingBox> higher = reached.stream().filter(h -> h.priority() > r.priority()).map(Region::box)
+                    .toList();
+            if (!Boxes.covered(part, higher)) out.add(List.of(r));
+        }
         return out;
-    }
-
-    private static boolean contains(BoundingBox outer, BoundingBox inner) {
-        return outer.minX() <= inner.minX() && outer.minY() <= inner.minY() && outer.minZ() <= inner.minZ()
-                && outer.maxX() >= inner.maxX() && outer.maxY() >= inner.maxY() && outer.maxZ() >= inner.maxZ();
     }
 
     private static boolean placed(Entity entity) {

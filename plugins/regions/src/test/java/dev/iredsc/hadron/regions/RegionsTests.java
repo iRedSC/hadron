@@ -50,7 +50,7 @@ import net.minecraft.world.phys.Vec3;
 public final class RegionsTests {
     /** An op in creative, who makes regions and is let through them. */
     /** An operator, alice, with every region an earlier test left removed, so a test sees only its own. */
-    private static TestPlayer admin(TestContext t) {
+    static TestPlayer admin(TestContext t) {
         RegionStore store = ((RegionsPlugin) t.plugin()).regions();
         for (String id : List.copyOf(store.all().stream().map(Region::id).toList())) store.remove(id);
         TestPlayer alice = t.player("alice");
@@ -60,7 +60,7 @@ public final class RegionsTests {
     }
 
     /** Defines a region from {@code a} to {@code b} the way an operator does: the wand, then /rg define. */
-    private static void define(TestContext t, TestPlayer admin, String id, BlockPos a, BlockPos b) {
+    static void define(TestContext t, TestPlayer admin, String id, BlockPos a, BlockPos b) {
         t.setBlock(a, Blocks.DIRT);
         t.setBlock(b, Blocks.DIRT);
         admin.command("rg wand");
@@ -670,113 +670,5 @@ public final class RegionsTests {
         carol.clickSlot(29, 0, ClickType.QUICK_MOVE);
         t.tick();
         t.assertFalse(horse.isSaddled(), "a removed member should not saddle the horse");
-    }
-
-    /** Stands {@code who} at {@code pos}, well clear of the regions these tests define. */
-    private static void standAt(TestPlayer who, BlockPos pos) {
-        who.player().teleportTo(pos.getX() + 0.5, pos.getY(), pos.getZ() + 0.5);
-    }
-
-    @HadronTest
-    void aRemoteTerminalOutsideCantReachAChestInside(TestContext t) {
-        BlockPos chest = t.pos(3, 0, 0);
-        t.setBlock(chest, Blocks.CHEST);
-        ChestBlockEntity box = (ChestBlockEntity) t.level().getBlockEntity(chest);
-        define(t, admin(t), "terminal-reach", t.pos(2, 0, -1), t.pos(4, 2, 1));
-        TestPlayer bob = t.player("bob");
-        BlockPos terminal = t.pos(-4, 0, 0);
-        standAt(bob, terminal.north());
-        // A mod's terminal, open on its own block outside, whose slots show the chest inside: bob shift-clicks one of
-        // his own slots, which moves the stack into the chest.
-        ChestMenu menu = ChestMenu.threeRows(99, bob.player().getInventory(), box);
-        InventoryClickEvent click = new InventoryClickEvent(bob.player(), new InventoryHolder.Entity(bob.player()), menu,
-                new InventoryHolder.Block(t.level(), terminal), 30, 0, ClickType.QUICK_MOVE,
-                new Actor.Player(bob.player()));
-        t.plugin().getServer().getPluginManager().callEvent(click);
-        t.assertTrue(click.isCancelled(), "a click that can move items into a chest inside should be refused");
-    }
-
-    @HadronTest
-    void aMenuNothingIdentifiesIsRefusedToAnOutsiderWhereverTheyStand(TestContext t) {
-        define(t, admin(t), "unplaced-menu", t.pos(2, 0, -1), t.pos(4, 2, 1));
-        TestPlayer bob = t.player("bob");
-        standAt(bob, t.pos(-6, 0, 0));
-        ChestMenu menu = ChestMenu.threeRows(99, bob.player().getInventory(), new SimpleContainer(27));
-        InventoryClickEvent click = new InventoryClickEvent(bob.player(), InventoryHolder.Unknown.INSTANCE, menu,
-                InventoryHolder.Unknown.INSTANCE, 0, 0, ClickType.PICKUP, new Actor.Player(bob.player()));
-        t.plugin().getServer().getPluginManager().callEvent(click);
-        t.assertTrue(click.isCancelled(), "an inventory nobody can place could be inside, so an outsider is refused");
-    }
-
-    @HadronTest
-    void anOutsidersPlayerInventoryStaysTheirsInsideARegion(TestContext t) {
-        define(t, admin(t), "own-pockets", t.pos(2, 0, -1), t.pos(4, 2, 1));
-        TestPlayer bob = t.player("bob");
-        standAt(bob, t.pos(3, 0, 0));
-        ServerPlayer viewer = bob.player();
-        InventoryClickEvent click = new InventoryClickEvent(viewer, new InventoryHolder.Entity(viewer),
-                viewer.inventoryMenu, new InventoryHolder.Entity(viewer), 36, 0, ClickType.QUICK_MOVE,
-                new Actor.Player(viewer));
-        t.plugin().getServer().getPluginManager().callEvent(click);
-        t.assertFalse(click.isCancelled(), "bob's own inventory goes where he goes, so a region doesn't refuse it");
-    }
-
-    @HadronTest
-    void anOutsidersCableCantDrainABatteryInside(TestContext t) {
-        define(t, admin(t), "battery-room", t.pos(2, 0, -1), t.pos(4, 2, 1));
-        TestPlayer bob = t.player("bob");
-        ResourceTransferEvent drain = new ResourceTransferEvent(new Actor.Player(bob.player()), Resource.ENERGY,
-                new ResourceHolder.Block(t.level(), t.pos(3, 0, 0)), new ResourceHolder.Block(t.level(), t.pos(-4, 0, 0)),
-                1000);
-        t.plugin().getServer().getPluginManager().callEvent(drain);
-        t.assertTrue(drain.isCancelled(), "bob's cable should not take energy out of a battery inside");
-        ResourceTransferEvent outside = new ResourceTransferEvent(new Actor.Player(bob.player()), Resource.ENERGY,
-                new ResourceHolder.Block(t.level(), t.pos(-5, 0, 0)), new ResourceHolder.Block(t.level(), t.pos(-4, 0, 0)),
-                1000);
-        t.plugin().getServer().getPluginManager().callEvent(outside);
-        t.assertFalse(outside.isCancelled(), "a transfer between two blocks outside is none of the region's business");
-    }
-
-    @HadronTest
-    void anOutsiderCantStripAnArmorStandThroughAnEditor(TestContext t) {
-        ArmorStand stand = EntityType.ARMOR_STAND.create(t.level());
-        BlockPos at = t.pos(3, 0, 0);
-        stand.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5);
-        stand.setItemSlot(EquipmentSlot.HEAD, new ItemStack(Items.DIAMOND_HELMET));
-        t.level().addFreshEntity(stand);
-        define(t, admin(t), "stand-editor", t.pos(2, 0, -1), t.pos(4, 2, 1));
-        TestPlayer bob = t.player("bob");
-        ArmorStandManipulateEvent edit = new ArmorStandManipulateEvent(stand, EquipmentSlot.HEAD, InteractionHand.MAIN_HAND,
-                ItemStack.EMPTY, stand.getItemBySlot(EquipmentSlot.HEAD), new Actor.Player(bob.player()));
-        t.plugin().getServer().getPluginManager().callEvent(edit);
-        t.assertTrue(edit.isCancelled(), "bob should not take the helmet off a stand inside");
-    }
-
-    @HadronTest
-    void aPublicParkElsewhereDoesntOpenAVaultToAnUnplacedInventory(TestContext t) {
-        TestPlayer alice = admin(t);
-        define(t, alice, "vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
-        standAt(alice, t.pos(-7, 0, 3));
-        define(t, alice, "park", t.pos(-8, 0, -1), t.pos(-6, 2, 1));
-        alice.command("rg priority park 1");
-        alice.command("rg flag park use allow");
-        TestPlayer bob = t.player("bob");
-        standAt(bob, t.pos(-7, 0, 0));
-        ChestMenu menu = ChestMenu.threeRows(99, bob.player().getInventory(), new SimpleContainer(27));
-        InventoryClickEvent click = new InventoryClickEvent(bob.player(), InventoryHolder.Unknown.INSTANCE, menu,
-                InventoryHolder.Unknown.INSTANCE, 0, 0, ClickType.PICKUP, new Actor.Player(bob.player()));
-        t.plugin().getServer().getPluginManager().callEvent(click);
-        t.assertTrue(click.isCancelled(), "an inventory nobody can place may be in the vault, which the park, "
-                + "though higher, doesn't cover");
-    }
-
-    @HadronTest
-    void nothingCarriesBetweenTwoInventoriesNobodyCanPlace(TestContext t) {
-        define(t, admin(t), "unknown-both", t.pos(2, 0, -1), t.pos(4, 2, 1));
-        InventoryMoveItemEvent pipe = new InventoryMoveItemEvent(InventoryHolder.Unknown.INSTANCE, 0,
-                new ItemStack(Items.DIAMOND, 8), InventoryHolder.Unknown.INSTANCE, new ItemStack(Items.DIAMOND),
-                InventoryHolder.Unknown.INSTANCE, Actor.Nature.INSTANCE);
-        t.plugin().getServer().getPluginManager().callEvent(pipe);
-        t.assertTrue(pipe.isCancelled(), "either end may be in the region and the other outside it");
     }
 }
