@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.item;
 
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -28,8 +29,8 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
         bridges = "the mod's crafting, with every input, output and cost")
 public class ItemCraftEvent extends ItemEvent implements Cancellable {
     private final InventoryHolder holder;
-    private final List<ItemStack> inputs;
-    private final List<ItemStack> outputs;
+    private final List<EventStack.Copy> inputs;
+    private final List<EventStack.Copy> outputs;
     private final @Nullable RecipeHolder<?> recipe;
     private boolean cancelled;
 
@@ -43,18 +44,20 @@ public class ItemCraftEvent extends ItemEvent implements Cancellable {
         super(level, first(outputs), actor);
         this.holder = Objects.requireNonNull(holder,
                 "holder; use InventoryHolder.Unknown.INSTANCE when nothing is known");
-        this.inputs = copies(inputs);
-        this.outputs = copies(outputs);
+        this.inputs = copies(inputs, "inputs");
+        this.outputs = copies(outputs, "outputs");
         this.recipe = recipe;
     }
 
-    static ItemStack first(List<ItemStack> stacks) {
-        Objects.requireNonNull(stacks, "outputs");
-        return stacks.isEmpty() ? ItemStack.EMPTY : stacks.get(0).copy();
+    static EventStack.Copy first(List<ItemStack> stacks) {
+        Objects.requireNonNull(stacks, "outputs is null; pass List.of() when nothing is made");
+        return EventStack.copyOf(stacks.isEmpty() ? ItemStack.EMPTY : stacks.get(0), "outputs' first element");
     }
 
-    static List<ItemStack> copies(List<ItemStack> stacks) {
-        return stacks.stream().filter(s -> !s.isEmpty()).map(ItemStack::copy).toList();
+    /** Copies of the stacks, empty ones left out. */
+    static List<EventStack.Copy> copies(List<ItemStack> stacks, String name) {
+        Objects.requireNonNull(stacks, () -> name + " is null; pass List.of() for none");
+        return EventStack.copiesOf(stacks.stream().filter(s -> s == null || !s.isEmpty()).toList(), name);
     }
 
     /** Where it's crafted: the crafting table, the crafter, the player for their own 2x2 grid. */
@@ -64,12 +67,12 @@ public class ItemCraftEvent extends ItemEvent implements Cancellable {
 
     /** What one craft uses up, empty slots left out. Copies. */
     public List<ItemStack> getInputs() {
-        return inputs;
+        return EventStack.getAll(inputs);
     }
 
     /** What one craft makes, the main result first. Copies. */
     public List<ItemStack> getOutputs() {
-        return outputs;
+        return EventStack.getAll(outputs);
     }
 
     /** The main result; same as {@link #getItem()}. */

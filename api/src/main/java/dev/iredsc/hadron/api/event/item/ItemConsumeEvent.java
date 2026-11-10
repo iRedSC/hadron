@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
@@ -25,7 +26,7 @@ public class ItemConsumeEvent extends ItemEvent implements Cancellable {
     private boolean cancelled;
 
     public ItemConsumeEvent(ServerLevel level, LivingEntity consumer, ItemStack item, Actor actor) {
-        super(level, item, actor);
+        super(level, EventStack.live(item, "item"), actor);
         this.consumer = Objects.requireNonNull(consumer, "consumer");
     }
 

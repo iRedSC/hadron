@@ -543,30 +543,31 @@ public final class BridgeContractTests {
             }
         });
         DataRevealEvent[] fired = new DataRevealEvent[1];
-        fire(t, new Actor.Player(alice.player()), a -> fired[0] = new DataRevealEvent(alice.player(), t.level(), pos,
-                data.copy()), () -> sent.add(fired[0].getData()));
+        fire(t, new Actor.Player(alice.player()), a -> fired[0] = new DataRevealEvent(alice.player(),
+                new DataRevealEvent.Target.Block(t.level(), pos), data.copy()), () -> sent.add(fired[0].getData()));
         DataRevealEvent e = only(t, seen, "DataRevealEvent");
-        t.assertTrue(e.getViewer() == alice.player() && e.getLevel().orElse(null) == t.level(), "the viewer and world");
-        t.assertEquals(Optional.of(pos), e.getBlockPos(), "the block revealed");
-        t.assertEquals(Optional.empty(), e.getEntity(), "no entity for a block reveal");
-        t.assertEquals(Optional.empty(), e.getAccount(), "no account for a block reveal");
+        t.assertTrue(e.getViewer() == alice.player(), "the viewer");
+        t.assertEquals(new DataRevealEvent.Target.Block(t.level(), pos), e.getTarget(), "the block revealed");
         t.assertFalse(sent.get(0).contains("owner"), "the field a listener removed isn't sent");
         t.assertEquals(12, sent.get(0).getInt("items"), "the rest is sent");
         cancel[0] = true;
         Pig pig = EntityType.PIG.create(t.level());
-        fire(t, new Actor.Player(alice.player()), a -> new DataRevealEvent(alice.player(), pig, data.copy()),
+        fire(t, new Actor.Player(alice.player()), a -> new DataRevealEvent(alice.player(),
+                new DataRevealEvent.Target.Entity(pig), data.copy()),
                 () -> sent.add(data));
         t.assertEquals(1, sent.size(), "a withheld reveal sends nothing");
-        t.assertEquals(Optional.of(pig), seen.get(1).getEntity(), "the entity revealed");
-        t.assertEquals(Optional.empty(), seen.get(1).getAccount(), "no account for an entity reveal");
+        t.assertEquals(new DataRevealEvent.Target.Entity(pig), seen.get(1).getTarget(), "the entity revealed");
         cancel[0] = false;
         ResourceHolder.Account bobs = ResourceHolder.Account.player(new UUID(0, 42)); // bob, who may be offline
-        fire(t, new Actor.Player(alice.player()), a -> fired[0] = new DataRevealEvent(alice.player(), bobs,
-                data.copy()), () -> sent.add(fired[0].getData()));
-        t.assertEquals(Optional.of(bobs), seen.get(2).getAccount(), "the account revealed");
-        t.assertEquals(Optional.empty(), seen.get(2).getLevel(), "an account has no world");
-        t.assertTrue(seen.get(2).getBlockPos().isEmpty() && seen.get(2).getEntity().isEmpty(), "an account reveal "
-                + "is about nothing else");
+        fire(t, new Actor.Player(alice.player()), a -> fired[0] = new DataRevealEvent(alice.player(),
+                new DataRevealEvent.Target.Account(bobs), data.copy()), () -> sent.add(fired[0].getData()));
+        // A guard written as a switch must name every kind of target, so it can't let accounts through unseen.
+        String kind = switch (seen.get(2).getTarget()) {
+            case DataRevealEvent.Target.Block b -> "block";
+            case DataRevealEvent.Target.Entity en -> "entity";
+            case DataRevealEvent.Target.Account acc -> acc.account().equals(bobs) ? "bob's account" : "another account";
+        };
+        t.assertEquals("bob's account", kind, "the account revealed");
         t.assertFalse(sent.get(1).contains("owner"), "the field a listener removed isn't sent for an account either");
         t.assertEquals(12, sent.get(1).getInt("items"), "the rest of an account's data is sent");
     }

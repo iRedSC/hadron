@@ -1,0 +1,13 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/VehicleHooks.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/VehicleHooks.java
+index 2003335..101a85c 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/VehicleHooks.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/VehicleHooks.java
+@@ -24,7 +24,7 @@ public final class VehicleHooks {
+      * NaN hit can't leave the vehicle's wear NaN (unbreakable) while the event said 0.
+      */
+     public static float dealt(float amount) {
+-        return Hooks.listens(VehicleDamageEvent.class) ? EntityEvents.reportedDamage(amount) : amount;
++        return amount;
+     }
+ 
+     /** True if a plugin refused the removal a hit is about to cause (an end crystal shattering). */

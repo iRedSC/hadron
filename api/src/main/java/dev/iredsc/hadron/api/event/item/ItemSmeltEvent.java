@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.item;
 
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -28,9 +29,9 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
         bridges = "the mod's machines, including items processed in the world or on belts")
 public class ItemSmeltEvent extends ItemEvent implements Cancellable {
     private final InventoryHolder holder;
-    private final List<ItemStack> inputs;
-    private final List<ItemStack> catalysts;
-    private final List<ItemStack> outputs;
+    private final List<EventStack.Copy> inputs;
+    private final List<EventStack.Copy> catalysts;
+    private final List<EventStack.Copy> outputs;
     private final @Nullable RecipeHolder<?> recipe;
     private boolean cancelled;
 
@@ -45,9 +46,9 @@ public class ItemSmeltEvent extends ItemEvent implements Cancellable {
         super(level, ItemCraftEvent.first(outputs), actor);
         this.holder = Objects.requireNonNull(holder,
                 "holder; use InventoryHolder.Unknown.INSTANCE when nothing is known");
-        this.inputs = ItemCraftEvent.copies(inputs);
-        this.catalysts = ItemCraftEvent.copies(catalysts);
-        this.outputs = ItemCraftEvent.copies(outputs);
+        this.inputs = ItemCraftEvent.copies(inputs, "inputs");
+        this.catalysts = ItemCraftEvent.copies(catalysts, "catalysts");
+        this.outputs = ItemCraftEvent.copies(outputs, "outputs");
         this.recipe = recipe;
     }
 
@@ -58,22 +59,22 @@ public class ItemSmeltEvent extends ItemEvent implements Cancellable {
 
     /** What this step uses up. Copies. */
     public List<ItemStack> getInputs() {
-        return inputs;
+        return EventStack.getAll(inputs);
     }
 
     /** The first input; for a furnace, the item being smelted. */
     public ItemStack getSource() {
-        return inputs.isEmpty() ? ItemStack.EMPTY : inputs.get(0);
+        return inputs.isEmpty() ? ItemStack.EMPTY : inputs.get(0).get();
     }
 
     /** What it needs but doesn't use up. Copies. */
     public List<ItemStack> getCatalysts() {
-        return catalysts;
+        return EventStack.getAll(catalysts);
     }
 
     /** What it makes, the main result first. Copies. */
     public List<ItemStack> getOutputs() {
-        return outputs;
+        return EventStack.getAll(outputs);
     }
 
     /** The main result; same as {@link #getItem()}. */

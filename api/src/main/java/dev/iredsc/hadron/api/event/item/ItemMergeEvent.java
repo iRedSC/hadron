@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
@@ -20,7 +21,7 @@ public class ItemMergeEvent extends ItemEvent implements Cancellable {
     private boolean cancelled;
 
     public ItemMergeEvent(ServerLevel level, ItemEntity entity, ItemEntity target, Actor actor) {
-        super(level, Objects.requireNonNull(entity, "entity").getItem(), actor);
+        super(level, EventStack.live(Objects.requireNonNull(entity, "entity").getItem(), "entity's item"), actor);
         this.entity = entity;
         this.target = Objects.requireNonNull(target, "target");
     }

@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.item;
 
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Optional;
@@ -27,7 +28,7 @@ public class EquipmentChangeEvent extends ItemEvent {
     private final LivingEntity entity;
     private final @Nullable EquipmentSlot slot;
     private final String slotName;
-    private final ItemStack from;
+    private final EventStack.Copy from;
 
     /** A vanilla slot. */
     public EquipmentChangeEvent(ServerLevel level, LivingEntity entity, EquipmentSlot slot, ItemStack from,
@@ -43,11 +44,11 @@ public class EquipmentChangeEvent extends ItemEvent {
 
     private EquipmentChangeEvent(ServerLevel level, LivingEntity entity, @Nullable EquipmentSlot slot, String slotName,
             ItemStack from, ItemStack to, Actor actor) {
-        super(level, to.copy(), actor);
+        super(level, EventStack.copyOf(to, "to"), actor);
         this.entity = Objects.requireNonNull(entity, "entity");
         this.slot = slot;
         this.slotName = slotName;
-        this.from = from.copy();
+        this.from = EventStack.copyOf(from, "from");
     }
 
     /** Who wears or holds it. */
@@ -67,7 +68,7 @@ public class EquipmentChangeEvent extends ItemEvent {
 
     /** What was there. A copy. */
     public ItemStack getFrom() {
-        return from;
+        return from.get();
     }
 
     /** What is there now; same as {@link #getItem()}. A copy. */

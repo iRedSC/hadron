@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Optional;
@@ -20,13 +21,13 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 @FiredBy(core = FULL)
 public class EntityUseEvent extends EntityEvent implements Cancellable {
     private final InteractionHand hand;
-    private final ItemStack item;
+    private final EventStack.Copy item;
     private boolean cancelled;
 
     public EntityUseEvent(Entity entity, InteractionHand hand, ItemStack item, Actor actor) {
         super(entity, actor);
         this.hand = Objects.requireNonNull(hand, "hand");
-        this.item = Objects.requireNonNull(item, "item; use ItemStack.EMPTY for an empty hand");
+        this.item = EventStack.copyOf(item, "item (the hand's stack)");
     }
 
     /**
@@ -41,9 +42,9 @@ public class EntityUseEvent extends EntityEvent implements Cancellable {
         return hand;
     }
 
-    /** What was in that hand; empty stack for nothing. */
+    /** What was in that hand; empty stack for nothing. A new copy each call, so editing it changes nothing. */
     public ItemStack getItem() {
-        return item;
+        return item.get();
     }
 
     @Override

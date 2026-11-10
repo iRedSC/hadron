@@ -3,6 +3,7 @@ package dev.iredsc.hadron.api.event.block;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Objects;
@@ -39,7 +40,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 public class BlockDropItemEvent extends BlockEvent implements Cancellable {
     private final @Nullable BlockEntity blockEntity;
     private final List<ItemEntity> items;
-    private final ItemStack tool;
+    private final EventStack.Copy tool;
     private int experience;
     private boolean cancelled;
 
@@ -54,7 +55,7 @@ public class BlockDropItemEvent extends BlockEvent implements Cancellable {
         super(level, pos, state, List.of(broken(level, pos, state, blockEntity)), actor);
         this.blockEntity = blockEntity;
         this.items = Objects.requireNonNull(items, "items");
-        this.tool = Objects.requireNonNull(tool, "tool; use ItemStack.EMPTY").copy();
+        this.tool = EventStack.copyOf(tool, "tool");
         this.experience = Math.max(0, experience);
     }
 
@@ -105,7 +106,7 @@ public class BlockDropItemEvent extends BlockEvent implements Cancellable {
 
     /** A copy of what broke it: the tool held, or {@code ItemStack.EMPTY}. */
     public ItemStack getTool() {
-        return tool.copy();
+        return tool.get();
     }
 
     /** Experience points about to drop, after enchantments. */

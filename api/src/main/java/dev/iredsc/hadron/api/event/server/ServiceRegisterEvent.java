@@ -13,28 +13,8 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  * its own event has been heard.
  */
 @FiredBy(core = FULL)
-public class ServiceRegisterEvent extends ServerEvent {
-    private final Class<?> service;
-    private final Object provider;
-    private final JavaPlugin plugin;
-
-    public ServiceRegisterEvent(Class<?> service, Object provider, JavaPlugin plugin) {
-        this.service = service;
-        this.provider = provider;
-        this.plugin = plugin;
-    }
-
-    /** The service interface, such as an economy API. */
-    public Class<?> getService() {
-        return service;
-    }
-
-    public Object getProvider() {
-        return provider;
-    }
-
-    /** The plugin that registered the provider. */
-    public JavaPlugin getPlugin() {
-        return plugin;
+public class ServiceRegisterEvent extends ServiceEvent {
+    public <T> ServiceRegisterEvent(Class<T> service, T provider, JavaPlugin plugin) {
+        super(service, provider, plugin);
     }
 }

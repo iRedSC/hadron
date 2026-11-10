@@ -2,8 +2,8 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.FiredBy;
-import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -23,17 +23,17 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
         coreSees = "shears used by hand or by a dispenser, on any mob NeoForge can shear",
         bridges = "the mod shearing in its own code (an auto-shearer, its own shears)")
 public class EntityShearEvent extends EntityEvent implements Cancellable {
-    private final ItemStack tool;
+    private final EventStack.Copy tool;
     private boolean cancelled;
 
     public EntityShearEvent(Entity entity, ItemStack tool, Actor actor) {
         super(entity, actor);
-        this.tool = Objects.requireNonNull(tool, "tool").copy();
+        this.tool = EventStack.copyOf(tool, "tool");
     }
 
     /** The shears. A copy. */
     public ItemStack getItem() {
-        return tool.copy();
+        return tool.get();
     }
 
     /**

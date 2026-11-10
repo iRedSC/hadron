@@ -533,6 +533,117 @@ guards = [
 note = "5515df2 is a merge; the patch drops only CommonHooksPlaceMixin and its line in hadron.block.mixins.json."
 
 
+# ---- Event invariants (fix/event-invariants) ----
+
+
+[[regression]]
+id = "event-stack-copy-shared"
+bug = "Events whose Javadoc promised a copy (ItemChangeEvent.getBefore, InventoryChangeEvent.Change, EntityUseEvent and more) handed out their stored stack, so one listener's edit reached the next and core's damage maths."
+fix = "98b36f4"
+paths = ["api/src/main/java/dev/iredsc/hadron/api/event/EventStack.java"]
+guards = [
+    { test = "EventStackTest.aCopyIsNewOnEveryReadSoAnEditReachesNoOneElse", tier = "fast" },
+    { test = "InventoryChangeEventTest.aChangesStacksAreNewOnEveryReadSoAListenerCantEditThem", tier = "fast" },
+    { test = "EventInvariantTests.anItemChangesStacksAreCopiesSoAListenerCantChangeTheDamageMaths", tier = "in-game" },
+    { test = "EventInvariantTests.handedOutStacksAreNewOnEveryRead", tier = "in-game" },
+]
+note = "Undoes only the copy on read, in the one place every event's stored stack now goes through."
+
+[[regression]]
+id = "item-damage-wraps-around"
+bug = "ItemDamageEvent added damage to the damage value in an int, so a huge amount wrapped around and neither broke the item nor reported willBreak."
+fix = "98b36f4"
+paths = ["api/src/main/java/dev/iredsc/hadron/api/event/item/ItemDamageEvent.java"]
+guards = [
+    { test = "EventInvariantTests.hugeItemDamageBreaksTheItemRatherThanWrappingAround", tier = "in-game" },
+]
+note = "Undoes only the event's prediction (ItemDamageEvent.breaks); the hook applying it is item-damage-hook-applies-full-amount."
+
+[[regression]]
+id = "item-damage-negative-constructor"
+bug = "ItemDamageEvent's constructor accepted negative damage, which its setter refuses, turning a damage event into a repair."
+fix = "98b36f4"
+paths = ["api/src/main/java/dev/iredsc/hadron/api/event/item/ItemDamageEvent.java"]
+guards = [
+    { test = "EventInvariantTests.itemDamageRefusesANegativeAmountFromTheConstructorAsTheSetterDoes", tier = "in-game" },
+]
+
+[[regression]]
+id = "entity-damage-unchecked-constructor"
+bug = "EntityDamageEvent's constructor accepted negative, NaN or infinite damage, which its setter refuses."
+fix = "98b36f4"
+paths = ["api/src/main/java/dev/iredsc/hadron/api/event/entity/EntityDamageEvent.java"]
+guards = [
+    { test = "EventInvariantTests.entityDamageRefusesAnAmountTheSetterRefuses", tier = "in-game" },
+]
+
+[[regression]]
+id = "inventory-move-unrelated-stack"
+bug = "InventoryMoveItemEvent accepted moving items that weren't in the source slot, or more than it held, and reported the slot shrinking by the moving count anyway."
+fix = "98b36f4"
+paths = ["api/src/main/java/dev/iredsc/hadron/api/event/inventory/InventoryMoveItemEvent.java"]
+guards = [
+    { test = "InventoryChangeEventTest.aMoveOfItemsTheSourceSlotDoesntHoldIsRefused", tier = "fast" },
+]
+note = "Disables the item, components and count check; the slot and empty-item checks stay."
+
+[[regression]]
+id = "potion-change-mismatched-effects"
+bug = "EntityPotionEffectEvent accepted a CHANGED event whose old and new instances were different effects."
+fix = "66aa371"
+paths = ["api/src/main/java/dev/iredsc/hadron/api/event/entity/EntityPotionEffectEvent.java"]
+guards = [
+    { test = "EventInvariantTests.aPotionChangeMustKeepItsEffect", tier = "in-game" },
+]
+note = "Disables only the same-effect check in EntityPotionEffectEvent.Change.Changed; the sealed Change stays."
+
+[[regression]]
+id = "damage-skips-bad-amounts"
+bug = "A negative or NaN hit fired no EntityDamageEvent while Minecraft went on, so protection couldn't refuse it: it broke armour stands, knocked mobs back and left NaN health."
+fix = "47f7716"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ArmorStandMixin.java",
+]
+guards = [
+    { test = "DamageAmountTests.aNegativeHitOnAStandCanBeRefused", tier = "in-game" },
+    { test = "DamageAmountTests.aNegativeHitCanBeRefusedKnockbackAndAll", tier = "in-game" },
+    { test = "DamageAmountTests.aNaNHitCanBeRefusedAndUnrefusedDealsNothing", tier = "in-game" },
+]
+note = "Puts back only the early return for amounts below 0 or NaN, in both places; the reporting of such amounts as 0 stays."
+
+[[regression]]
+id = "item-damage-hook-applies-full-amount"
+bug = "A durability loss ItemDamageEvent said would break the item reached vanilla's int addition whole, which wrapped a huge amount around to a repair, so the item survived the break its event predicted."
+fix = "47f7716"
+paths = ["neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java"]
+guards = [
+    { test = "EventInvariantTests.hugeDurabilityDamageBreaksTheItemAsTheEventSaid", tier = "in-game" },
+]
+note = "Undoes only the hook's use of ItemHooks.applied, which stays unused; the event's own long arithmetic stays (that is item-damage-wraps-around)."
+
+[[regression]]
+id = "effect-copy-drops-hidden-effect"
+bug = "The potion events copied effect instances with MobEffectInstance's copy constructor, which drops the hidden weaker effect, so a saved-and-restored instance lost the effect that should resume after it."
+fix = "47f7716"
+paths = ["api/src/main/java/dev/iredsc/hadron/api/event/entity/EffectCopies.java"]
+guards = [
+    { test = "EntityPotionEffectEventTest.everyCopyKeepsTheHiddenWeakerEffect", tier = "fast" },
+    { test = "EntityPotionEffectEventTest.anEditToTheCallersInstanceOrAReadCopyReachesNoOne", tier = "fast" },
+]
+note = "Swaps the save-and-load copy in EffectCopies.copy for the copy constructor; every copy path still goes through the helper."
+
+[[regression]]
+id = "infinite-damage-compared-with-report"
+bug = "Core applied an EntityDamageEvent's amount only when it differed from the reported one, so an infinite hit (reported as Float.MAX_VALUE, untouched or set to it) reached Minecraft as infinity and left NaN health."
+fix = "47f7716"
+paths = ["neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java"]
+guards = [
+    { test = "DamageAmountTests.anInfiniteHitKillsWithoutNaNHealthWhetherOrNotAListenerSetsIt", tier = "in-game" },
+]
+note = "Compares the event's amount with the report instead of the raw incoming amount; every hit still fires the event."
+
+
 # ---- Found by the PR #27 acceptance kit's suite ----
 
 
@@ -547,6 +658,16 @@ paths = [
 guards = [
     { test = "ListenerReleaseTests.anUnregisteredListenerIsLetGo", tier = "in-game" },
 ]
+
+[[regression]]
+id = "vehicle-damage-deals-raw-amount"
+bug = "A NaN hit on a boat or minecart was reported to VehicleDamageEvent as 0 but reached Minecraft as NaN, leaving the vehicle's wear NaN and the vehicle unbreakable."
+fix = "8eb531b"
+paths = ["neoforge/src/main/java/dev/iredsc/hadron/neoforge/VehicleHooks.java"]
+guards = [
+    { test = "DamageAmountTests.aNaNOrNegativeHitOnABoatCanBeRefusedAndUnrefusedDealsWhatWasReported", tier = "in-game" },
+]
+note = "VehicleHooks.dealt hands back the raw amount; the event still fires and reports the sanitized one."
 
 
 # ---- Found by the PR #35 side-effects watch ----

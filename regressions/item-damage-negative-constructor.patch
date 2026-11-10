@@ -1,0 +1,13 @@
+diff --git a/api/src/main/java/dev/iredsc/hadron/api/event/item/ItemDamageEvent.java b/api/src/main/java/dev/iredsc/hadron/api/event/item/ItemDamageEvent.java
+index 20610e6..b4c526a 100644
+--- a/api/src/main/java/dev/iredsc/hadron/api/event/item/ItemDamageEvent.java
++++ b/api/src/main/java/dev/iredsc/hadron/api/event/item/ItemDamageEvent.java
+@@ -28,7 +28,7 @@ public class ItemDamageEvent extends ItemChangeEvent {
+      */
+     public ItemDamageEvent(ServerLevel level, InventoryHolder holder, @Nullable LivingEntity entity, ItemStack item, int damage,
+             Actor actor) {
+-        super(level, holder, item, damaged(item, checked(damage)), actor);
++        super(level, holder, item, damaged(item, damage), actor);
+         this.entity = entity;
+         this.damage = damage;
+     }

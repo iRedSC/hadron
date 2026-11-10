@@ -1,0 +1,13 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java
+index 471beb7..63d965b 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java
+@@ -99,7 +99,7 @@ public final class EntityEvents {
+         }
+         // Whatever the event says now, unless it is exactly what Minecraft already has: compared with the raw amount,
+         // not the report, so a report that replaced NaN or infinity is applied even when no listener changed it.
+-        if (Float.compare(hadron.getDamage(), amount) != 0) event.setAmount(hadron.getDamage());
++        if (Float.compare(hadron.getDamage(), reportedDamage(amount)) != 0) event.setAmount(hadron.getDamage());
+     }
+ 
+     /**
