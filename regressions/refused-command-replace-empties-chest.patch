@@ -101,22 +101,23 @@ index 6131817..0000000
 -    }
 -}
 diff --git a/neoforge/src/main/resources/hadron.block.mixins.json b/neoforge/src/main/resources/hadron.block.mixins.json
-index 9915335..f20f9a6 100644
+index 4952910..15a3b67 100644
 --- a/neoforge/src/main/resources/hadron.block.mixins.json
 +++ b/neoforge/src/main/resources/hadron.block.mixins.json
-@@ -9,11 +9,9 @@
+@@ -9,12 +9,10 @@
      "BoundTickingBlockEntityMixin",
      "BucketItemMixin",
      "CarvedPumpkinBlockMixin",
 -    "CloneCommandsMixin",
      "CommonHooksPlaceMixin",
      "DispenserBlockMixin",
+     "EndDragonFightMixin",
      "ExplosionMixin",
 -    "FillCommandMixin",
      "FireBlockMixin",
      "FlowingFluidMixin",
      "FungusBlockMixin",
-@@ -27,9 +25,7 @@
+@@ -29,9 +27,7 @@
      "PistonStructureResolverMixin",
      "ServerLevelMixin",
      "ServerPlayerGameModeMixin",

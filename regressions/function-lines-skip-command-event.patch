@@ -127,14 +127,14 @@ index fdcf37c..0000000
 -    }
 -}
 diff --git a/neoforge/src/main/resources/hadron.world.mixins.json b/neoforge/src/main/resources/hadron.world.mixins.json
-index ab6abd7..f4935e6 100644
+index 23296a8..72c7466 100644
 --- a/neoforge/src/main/resources/hadron.world.mixins.json
 +++ b/neoforge/src/main/resources/hadron.world.mixins.json
-@@ -4,7 +4,6 @@
-   "package": "dev.iredsc.hadron.neoforge.mixin.world",
+@@ -5,7 +5,6 @@
    "compatibilityLevel": "JAVA_21",
    "mixins": [
+     "AreasServerLevelMixin",
 -    "BuildContextsUnboundMixin",
      "CommandsMixin",
+     "EndPlatformFeatureMixin",
      "ExplosionAccessor",
-     "ExplosionMixin",
