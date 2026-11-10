@@ -589,9 +589,9 @@ note = "Disables the item, components and count check; the slot and empty-item c
 [[regression]]
 id = "potion-change-mismatched-effects"
 bug = "EntityPotionEffectEvent accepted a CHANGED event whose old and new instances were different effects."
-fix = "98b36f4"
+fix = "66aa371"
 paths = ["api/src/main/java/dev/iredsc/hadron/api/event/entity/EntityPotionEffectEvent.java"]
 guards = [
     { test = "EventInvariantTests.aPotionChangeMustKeepItsEffect", tier = "in-game" },
 ]
-note = "Disables only the same-effect check in EntityPotionEffectEvent.changed; the per-action factories stay."
+note = "Disables only the same-effect check in EntityPotionEffectEvent.Change.Changed; the sealed Change stays."
