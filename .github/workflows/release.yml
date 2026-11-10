@@ -28,12 +28,12 @@ jobs:
       # build runs check, and with it releaseJarCheck: the mod jar server owners get must hold no test code. Named
       # here too, so the release can't lose it if check's wiring changes.
       - run: ./gradlew build :neoforge:releaseJarCheck
-      # Every project with a hadronTest task is a suite, so a new plugin is tested without editing this file. bench's
-      # hadronTest runs benchmarks, which never gate anything.
+      # Every project with a hadronTest task is a suite, so a new plugin is tested without editing this file, whether or
+      # not its task has a description. bench's hadronTest runs benchmarks, which never gate anything.
       - id: suites
         run: |
           ./gradlew -q tasks --all > tasks.txt
-          suites=$(sed -n 's/^\([A-Za-z0-9_.:-]*\):hadronTest - .*/\1/p' tasks.txt | grep -vx bench \
+          suites=$(sed -n 's/^\([A-Za-z0-9_.:-]*\):hadronTest\( - .*\)\?$/\1/p' tasks.txt | grep -vx bench \
             | jq -Rnc '[inputs | {task: ":\(.):hadronTest", name: gsub(":"; "-")}]')
           echo "$suites"
           if [ "$(jq length <<< "$suites")" -eq 0 ]; then
