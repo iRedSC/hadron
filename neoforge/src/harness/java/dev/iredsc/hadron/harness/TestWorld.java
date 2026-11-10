@@ -278,7 +278,10 @@ final class TestWorld implements TestContext {
     @Override
     public dev.iredsc.hadron.test.Acceptance acceptance(net.minecraft.world.level.levelgen.structure.BoundingBox box) {
         requireIdle("start an acceptance area");
-        TestAcceptance area = new TestAcceptance(this, box);
+        // Its own watch, for vibrations in the box; stopped with the test's other watches.
+        TestSideEffects watch = TestSideEffects.start(this);
+        sideEffects.add(watch);
+        TestAcceptance area = new TestAcceptance(this, box, watch);
         acceptances.add(area);
         return area;
     }

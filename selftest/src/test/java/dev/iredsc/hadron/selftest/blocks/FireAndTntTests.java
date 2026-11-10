@@ -16,6 +16,7 @@ import dev.iredsc.hadron.api.event.block.BlockChangeEvent;
 import dev.iredsc.hadron.api.event.block.BlockIgniteEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -68,10 +69,12 @@ public final class FireAndTntTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useBlock(floor, Direction.UP);
         t.tick();
         t.assertBlock(floor.above(), Blocks.AIR);
         t.assertEquals(0, alice.player().getMainHandItem().getDamageValue(), "the flint and steel's damage");
+        effects.assertNone("a refused ignite");
     }
 
     // ---- Fire on its own
@@ -196,6 +199,7 @@ public final class FireAndTntTests {
         t.setBlock(tnt, Blocks.TNT);
         alice.hold(new ItemStack(Items.FLINT_AND_STEEL));
         List<BlockBreakEvent> tried = recordBreaks(t, true);
+        SideEffects effects = t.watchSideEffects();
         alice.useBlock(tnt);
         t.tick();
         t.assertEquals(1, tried.size(), "alice's attempts to light the TNT");
@@ -203,6 +207,7 @@ public final class FireAndTntTests {
         t.assertBlock(tnt.above(), Blocks.AIR); // the flint and steel mustn't light a fire on it instead
         t.assertEquals(0, entities(t, PrimedTnt.class, tnt, 2), "the primed TNT");
         t.assertEquals(0, alice.player().getMainHandItem().getDamageValue(), "the flint and steel's damage");
+        effects.assertNone("a refused TNT lighting");
     }
 
     private static void awaitDispense(TestContext t, BlockPos at, DispenserBlockEntity dispenser,
@@ -241,6 +246,7 @@ public final class FireAndTntTests {
         t.setBlock(at.east(), Blocks.TNT);
         DispenserBlockEntity dispenser = dispenser(t, at, Direction.EAST, new ItemStack(Items.FLINT_AND_STEEL));
         List<BlockBreakEvent> tried = recordBreaks(t, true);
+        SideEffects effects = t.watchSideEffects();
         fire(t, at, Direction.EAST);
         awaitDispense(t, at, dispenser, () -> !tried.isEmpty());
         t.assertEquals(1, tried.size(), "the dispenser's attempts to light the TNT (TNT block now: "
@@ -252,5 +258,6 @@ public final class FireAndTntTests {
         t.assertTrue(dispenser.getItem(0).is(Items.FLINT_AND_STEEL), "the dispenser should still hold the flint "
                 + "and steel, but holds " + dispenser.getItem(0));
         t.assertEquals(0, dispenser.getItem(0).getDamageValue(), "the dispensed flint and steel's damage");
+        effects.assertNone("a dispenser's refused TNT lighting");
     }
 }

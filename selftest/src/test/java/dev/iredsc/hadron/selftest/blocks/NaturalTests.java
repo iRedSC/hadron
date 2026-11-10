@@ -17,6 +17,7 @@ import dev.iredsc.hadron.api.event.block.LeavesDecayEvent;
 import dev.iredsc.hadron.api.event.block.StructureGrowEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -340,10 +341,12 @@ public final class NaturalTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useBlock(crop);
         t.tick();
         t.assertEquals(0, ((CropBlock) Blocks.WHEAT).getAge(t.getBlock(crop)), "the wheat's age");
         t.assertHolding(alice, Items.BONE_MEAL, 5);
+        effects.assertNone("a refused bone meal");
     }
 
     /** An oak sapling on dirt at pos(2, 1, 2). */

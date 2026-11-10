@@ -9,6 +9,7 @@ import dev.iredsc.hadron.api.event.block.BlockUseEvent;
 import dev.iredsc.hadron.api.event.block.SignChangeEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -87,10 +88,12 @@ public final class UseAndSignTests {
                 changes.add(e);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useBlock(at);
         t.tick();
         t.assertBlock(at, lever());
         t.assertEquals(0, changes.size(), "the block changes after a cancelled use");
+        effects.assertNone("a refused lever use");
     }
 
     // ---- Signs. The harness has no sign-editing packet yet, so the edit is handed to the server's own handler for
@@ -164,8 +167,10 @@ public final class UseAndSignTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         write(t, alice, at, "never", "written", "", "");
         t.assertEquals("", line(sign, 0), "the sign's first line");
         t.assertEquals("", line(sign, 1), "the sign's second line");
+        effects.assertNone("a refused sign edit");
     }
 }
