@@ -28,6 +28,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.entity.animal.Wolf;
+import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.Arrow;
 import net.minecraft.world.item.ItemStack;
@@ -363,5 +364,50 @@ public final class DamageTests {
         ((Wolf) loaded).doHurtTarget(pig);
         t.assertEquals(1, actors.size(), "the number of EntityDamageEvents for the pig");
         assertEntityFor(t, actors.get(0), loaded, aliceId, "The reloaded wolf's bite");
+    }
+
+    /** Armor stands replace LivingEntity.hurt without calling it, so NeoForge's damage event never reaches them. */
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aPlayersHitOnAnArmorStandIsTheirs(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ArmorStand stand = spawn(t, EntityType.ARMOR_STAND, t.pos(2, 0, 0));
+        List<EntityDamageEvent> events = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDamageEvent e) {
+                if (e.getEntity() == stand) events.add(e);
+            }
+        });
+        alice.attack(stand);
+        t.assertEquals(1, events.size(), "the number of EntityDamageEvents for the armor stand");
+        assertPlayer(t, events.get(0).getActor(), alice, "A hit on an armor stand");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void twoQuickHitsBreakAnArmorStand(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ArmorStand stand = spawn(t, EntityType.ARMOR_STAND, t.pos(2, 0, 0));
+        alice.attack(stand);
+        alice.attack(stand);
+        t.assertTrue(stand.isRemoved(), "two quick hits should break an armor stand, the control for the cancel test");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aCancelledHitLeavesAnArmorStandStanding(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ArmorStand stand = spawn(t, EntityType.ARMOR_STAND, t.pos(2, 0, 0));
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDamageEvent e) {
+                if (e.getEntity() == stand) e.setCancelled(true);
+            }
+        });
+        alice.attack(stand);
+        alice.attack(stand);
+        t.assertFalse(stand.isRemoved(), "a cancelled hit should leave the armor stand standing");
+        t.assertTrue(near(t, ItemEntity.class).isEmpty(), "a cancelled hit should drop nothing");
     }
 }

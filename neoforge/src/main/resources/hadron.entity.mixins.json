@@ -17,6 +17,7 @@
     "EntityVelocityMixin",
     "FishingHookMixin",
     "HangingEntityItemMixin",
+    "ItemFrameMixin",
     "KillCommandMixin",
     "LeashFenceKnotEntityMixin",
     "LeashableMixin",
