@@ -10,15 +10,13 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
-import dev.iredsc.hadron.api.event.entity.EntityDeathEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
-import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
-import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTargetEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityVelocityEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -32,8 +30,8 @@ import dev.iredsc.hadron.test.Acceptance;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashSet;
-import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -46,14 +44,14 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.ExperienceOrb;
-import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.item.FallingBlockEntity;
-import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.Container;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -64,24 +62,40 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * The acceptance kit over one box: a protection listener first, a logger last, and snapshots of the box to compare.
- * Deciding what each change means is {@link AcceptanceDiff}'s; this class only reads Minecraft and listens.
+ * Comparing is {@link AcceptanceDiff}'s; this class reads Minecraft, places events and listens.
  */
 final class TestAcceptance implements Acceptance, Listener {
-    /** An entity's own motion and attention: not something a region forbids, and nobody's doing but its own. */
+    /** Motion and attention: not something a region forbids, so anyone may walk through. */
     private static final Set<Class<? extends Event>> MOTION = Set.of(EntityMoveEvent.class, EntityTeleportEvent.class,
             EntityVelocityEvent.class, EntityKnockbackEvent.class, EntityTargetEvent.class, EntityAirChangeEvent.class);
+
+    /** Where an event happens, as far as the box goes. */
+    private sealed interface Place {
+        /** In the box, at {@code pos} when it has one. */
+        record In(Optional<BlockPos> pos) implements Place {}
+
+        /** Elsewhere, or not a kind the box is about. */
+        record Out() implements Place {}
+
+        /** Nowhere it can tell: {@code why} says what to fix. */
+        record Unplaced(String why) implements Place {}
+    }
+
+    private static final Place OUT = new Place.Out();
 
     private final TestContext t;
     private final ServerLevel level;
     private final BoundingBox box;
     private final Set<UUID> trusted = new HashSet<>();
+    private final Set<Class<?>> refused = new HashSet<>();
     private final List<Seen> seen = new ArrayList<>();
-    /** Entities born or gone outside the box this step: one in the box at only one end crossed its edge. */
-    private final Set<UUID> crossing = new HashSet<>();
-    /** What each heard event said it changes, copied as it fired. */
-    private final Map<Event, AcceptanceDiff.Report> reports = new IdentityHashMap<>();
-    /** Inventory events whose holder is Unknown: nothing can place them, so a failure says to name the holder. */
-    private final List<Event> unplaced = new ArrayList<>();
+    /** Events that couldn't be placed, with why: each fails assertActingFor. */
+    private final List<String> unplaced = new ArrayList<>();
+    /**
+     * Entities seen in the box at the last snapshot, by reference: one moved into a chunk whose entities aren't
+     * listed yet still counts until it is removed.
+     */
+    private final Map<UUID, Entity> followed = new LinkedHashMap<>();
     private AcceptanceDiff.Snapshot before;
 
     TestAcceptance(TestContext t, BoundingBox box) {
@@ -106,11 +120,22 @@ final class TestAcceptance implements Acceptance, Listener {
     }
 
     @Override
+    public Acceptance refuse(Class<?>... kinds) {
+        for (Class<?> kind : kinds) {
+            if (!Event.class.isAssignableFrom(kind)) {
+                throw new IllegalArgumentException(kind.getName() + " isn't a Hadron event: refuse takes event classes "
+                        + "such as BlockEvent.class or InventoryEvent.class");
+            }
+        }
+        refused.clear();
+        refused.addAll(List.of(kinds));
+        return this;
+    }
+
+    @Override
     public void mark() {
         before = snapshot();
         seen.clear();
-        crossing.clear();
-        reports.clear();
         unplaced.clear();
     }
 
@@ -119,179 +144,190 @@ final class TestAcceptance implements Acceptance, Listener {
         return List.copyOf(seen);
     }
 
-    /** The area now, refusing a step whose players changed: one who joined has nothing to be compared against. */
-    private AcceptanceDiff.Snapshot after(String step) {
-        AcceptanceDiff.Snapshot now = snapshot();
-        if (!now.players().keySet().equals(before.players().keySet())) {
+    @Override
+    public void assertUnchanged(String step, Part... parts) {
+        AcceptanceDiff.Snapshot after = snapshot();
+        if (!after.players().keySet().equals(before.players().keySet())) {
             throw new AssertionError(step + ": the test's players changed since the last mark (" + before.players()
-                    .keySet() + " then, " + now.players().keySet() + " now), so their inventories and health have "
+                    .keySet() + " then, " + after.players().keySet() + " now), so their inventories and health have "
                     + "nothing to be compared against. Join every player before calling mark().");
         }
-        return now;
-    }
-
-    @Override
-    public void assertUnchanged(String step) {
-        List<String> problems = AcceptanceDiff.unchanged(before, after(step), step());
+        Set<Part> which = parts.length == 0 ? EnumSet.allOf(Part.class) : EnumSet.copyOf(List.of(parts));
+        List<String> problems = AcceptanceDiff.changes(before, after, which, seen);
         if (!problems.isEmpty()) {
-            throw new AssertionError(step + " should have changed nothing in the protected area, but "
-                    + problems.size() + " thing(s) changed:\n  " + String.join("\n  ", problems));
-        }
-    }
-
-    @Override
-    public void assertEveryChangeSeen(String step) {
-        AcceptanceDiff.Snapshot after = after(step);
-        if (!AcceptanceDiff.anyChange(before, after, step())) {
-            throw new AssertionError(step + ": nothing in the area changed since the last mark, so this proves "
-                    + "nothing. Check the machine ran (power, fuel, an owner, enough ticks), or use assertUnchanged "
-                    + "for a step that should change nothing.");
-        }
-        List<String> problems = AcceptanceDiff.unseen(before, after, step());
-        if (!problems.isEmpty()) {
-            throw new AssertionError(step + ": " + problems.size() + " change(s) in the area fired no event a plugin "
-                    + "could act on. Each is an interception gap: the bridge fires the core event before the change "
-                    + "(docs/bridge-hooks.md).\n  " + String.join("\n  ", problems));
+            throw new AssertionError(step + " should have changed nothing in " + which + ", but " + problems.size()
+                    + " thing(s) changed:\n  " + String.join("\n  ", problems));
         }
     }
 
     @Override
     public void assertActingFor(TestPlayer player, String step) {
-        List<String> problems = AcceptanceDiff.notActingFor(player.uuid(), player.name(), seen);
-        if (!problems.isEmpty()) {
-            throw new AssertionError(step + ": " + problems.size() + " event(s) in the area don't act for "
-                    + player.name() + ":\n  " + String.join("\n  ", problems));
+        List<String> problems = new ArrayList<>(unplaced);
+        for (Seen s : seen) {
+            if (AcceptanceDiff.nobodys(s.actor())) continue;
+            Optional<UUID> who = s.actor().actingFor();
+            if (who.isPresent() && who.get().equals(player.uuid())) continue;
+            if (s.actor() instanceof Actor.Unknown) {
+                problems.add(s + ": Unknown, so nothing was on the actor stack. An attribution gap: push the actor "
+                        + "around the work that did this (docs/bridge-hooks.md, \"Always: attribution\")");
+            } else if (who.isEmpty()) {
+                problems.add(s + ": nobody is responsible for it. An attribution gap: remember its owner with "
+                        + "Actors.remember when it is placed, spawned or claimed");
+            } else {
+                problems.add(s + ": acts for " + who.get() + ", not " + player.name());
+            }
         }
-        if (seen.stream().allMatch(s -> s.actor() instanceof Actor.Server || s.actor() instanceof Actor.Nature)) {
+        if (!problems.isEmpty()) {
+            throw new AssertionError(step + ": " + problems.size() + " event(s) don't show " + player.name()
+                    + " acting:\n  " + String.join("\n  ", problems));
+        }
+        if (seen.stream().allMatch(s -> AcceptanceDiff.nobodys(s.actor()))) {
             throw new AssertionError(step + ": no event in the area acts for anyone (any there are the server's or "
                     + "nature's), so nothing shows " + player.name() + " acted. A machine " + player.name()
                     + " owns should act for them; if the step changed something, an event is missing.");
         }
     }
 
-    private AcceptanceDiff.Step step() {
-        return new AcceptanceDiff.Step(seen, reports, crossing, unplaced);
-    }
-
     // ---- Listening ------------------------------------------------------------------------------------------------
 
     @EventHandler(priority = EventPriority.LOWEST)
     void protect(Event event) {
-        if (!(event instanceof Cancellable c) || !(event instanceof ActionEvent a) || where(event).isEmpty()) return;
-        if (!allowed(a.getActor())) c.setCancelled(true);
+        if (!(event instanceof Cancellable c) || !(event instanceof ActionEvent a)) return;
+        Place place = place(event);
+        if (place instanceof Place.Out) return;
+        // An event that can't be placed might be in the box: fail closed, as protection should.
+        if (!allowed(a.getActor(), event) || place instanceof Place.Unplaced) {
+            if (!(a.getActor() instanceof Actor.Server)) c.setCancelled(true);
+        }
     }
 
     @EventHandler(priority = EventPriority.MONITOR)
     void record(Event event) {
         if (!(event instanceof ActionEvent a)) return;
-        Optional<Where> at = where(event);
-        if (at.isEmpty()) {
-            if (event instanceof InventoryEvent i && AcceptanceDiff.holders(i).stream()
-                    .anyMatch(h -> h instanceof InventoryHolder.Unknown)) {
-                unplaced.add(event);
+        switch (place(event)) {
+            case Place.In in -> seen.add(new Seen(event, a.getActor(), event instanceof Cancellable c
+                    && c.isCancelled(), in.pos()));
+            case Place.Unplaced u -> {
+                if (!(a.getActor() instanceof Actor.Server)) unplaced.add(event.getEventName() + ": " + u.why());
             }
-            boolean bornOrGone = event instanceof EntitySpawnEvent || event instanceof EntityRemoveEvent
-                    || event instanceof EntityDeathEvent;
-            if (bornOrGone && !(event instanceof Cancellable c && c.isCancelled())) {
-                crossing.add(((EntityEvent) event).getEntity().getUUID());
-            }
-            return;
+            case Place.Out o -> { }
         }
-        reports.put(event, AcceptanceDiff.report(event, level));
-        seen.add(new Seen(event, a.getActor(), event instanceof Cancellable c && c.isCancelled(), at.get().pos()));
     }
 
-    private boolean allowed(Actor actor) {
+    private boolean allowed(Actor actor, Event event) {
         if (actor instanceof Actor.Server) return true;
         Optional<UUID> who = actor.actingFor();
-        return who.isPresent() && trusted.contains(who.get());
+        if (who.isEmpty() || !trusted.contains(who.get())) return false;
+        for (Class<?> kind : refused) if (kind.isInstance(event)) return false;
+        return true;
     }
 
-    /** Where in the box an event happens, when it does; empty for events outside it or of no place. */
-    private record Where(Optional<BlockPos> pos) {}
-
-    private Optional<Where> where(Event event) {
+    private Place place(Event event) {
         // Subclasses too: a player's move is a PlayerMoveEvent.
-        for (Class<? extends Event> motion : MOTION) if (motion.isInstance(event)) return Optional.empty();
+        for (Class<? extends Event> motion : MOTION) if (motion.isInstance(event)) return OUT;
         if (event instanceof BlockEvent b) {
-            if (b.getLevel() != level) return Optional.empty();
-            if (box.isInside(b.getPos())) return Optional.of(new Where(Optional.of(b.getPos())));
-            for (BlockChange change : b.getBlocks()) {
-                if (box.isInside(change.getPos())) return Optional.of(new Where(Optional.of(change.getPos())));
-            }
-            return Optional.empty();
+            if (b.getLevel() != level) return OUT;
+            if (box.isInside(b.getPos())) return new Place.In(Optional.of(b.getPos()));
+            for (BlockChange change : b.getBlocks()) if (box.isInside(change.getPos())) return in(change.getPos());
+            return OUT;
         }
         if (event instanceof EntityEvent e) return at(e.getLevel(), e.getPosition());
         if (event instanceof ExplosionEvent x) {
             // Its blocks too: a blast just outside the box still breaks blocks in it.
-            if (x.getLevel() != level) return Optional.empty();
-            Optional<Where> centre = at(level, x.getLocation());
-            if (centre.isPresent()) return centre;
-            for (BlockPos p : x.blockList()) if (box.isInside(p)) return inBox(p);
-            return Optional.empty();
+            if (x.getLevel() != level) return OUT;
+            Place centre = at(level, x.getLocation());
+            if (centre instanceof Place.In) return centre;
+            for (BlockPos p : x.blockList()) if (box.isInside(p)) return in(p);
+            return OUT;
         }
-        if (event instanceof ItemPickupEvent pickup && pickup.getLevel() == level) {
-            // Where the item lands, or where it lay.
-            Optional<Where> into = holderAt(pickup.getDestination());
-            if (into.isPresent()) return into;
-            return at(level, pickup.getItemEntity().position());
+        if (event instanceof ItemPickupEvent pickup) {
+            if (pickup.getLevel() != level) return OUT;
+            Place into = holder(pickup.getDestination());
+            return into instanceof Place.In ? into : at(level, pickup.getItemEntity().position());
         }
-        if (event instanceof ItemEvent i) return i.getLevel() == level ? actorAt(i.getActor()) : Optional.empty();
+        if (event instanceof ItemEvent i) {
+            if (i.getLevel() != level) return OUT;
+            return i.getActor() instanceof Actor.Unknown
+                    ? new Place.Unplaced("nobody is behind it, so nothing says where it happened: push the actor "
+                            + "(the player or machine using the item)")
+                    : actorAt(i.getActor());
+        }
         if (event instanceof InventoryClickEvent click) {
-            // A click in a menu showing a block in the box, whichever slot was clicked: a shift-click from the
+            // Whichever slot was clicked, a menu showing a block in the box can change it: a shift-click from the
             // player's own inventory fills the block's.
-            for (BlockPos p : AcceptanceDiff.report(click, level).slots().keySet()) if (box.isInside(p)) return inBox(p);
+            for (Slot slot : click.getMenu().slots) {
+                if (slot.container instanceof BlockEntity be && be.getLevel() == level
+                        && box.isInside(be.getBlockPos())) {
+                    return in(be.getBlockPos());
+                }
+            }
         }
         if (event instanceof InventoryEvent i) {
-            for (InventoryHolder holder : AcceptanceDiff.holders(i)) {
-                Optional<Where> w = holderAt(holder);
-                if (w.isPresent()) return w;
+            Set<InventoryHolder> holders = i instanceof InventoryChangeEvent c ? c.getHolders() : Set.of(i.getHolder());
+            boolean unknown = false;
+            for (InventoryHolder h : holders) {
+                Place p = holder(h);
+                if (p instanceof Place.In) return p;
+                unknown |= p instanceof Place.Unplaced;
             }
-            return Optional.empty();
+            return unknown ? new Place.Unplaced("its holder is unknown, so nothing says whose inventory changed: name "
+                    + "the holder (InventoryHolder.Block or InventoryHolder.Entity)") : OUT;
         }
         if (event instanceof ResourceEvent r) {
-            for (ResourceHolder holder : r.getHolders()) {
-                Optional<Where> w = switch (holder) {
-                    case ResourceHolder.Block b -> b.level() == level ? inBox(b.pos()) : Optional.empty();
+            for (ResourceHolder h : r.getHolders()) {
+                Place p = switch (h) {
+                    case ResourceHolder.Block b -> b.level() == level ? inBox(b.pos()) : OUT;
                     case ResourceHolder.Entity e -> e.entity().level() instanceof ServerLevel l
-                            ? at(l, e.entity().position()) : Optional.empty();
-                    default -> Optional.empty();
+                            ? at(l, e.entity().position()) : OUT;
+                    case ResourceHolder.Chunk c -> c.level() == level && overlaps(c.pos())
+                            ? new Place.In(Optional.empty()) : OUT;
+                    default -> OUT;
                 };
-                if (w.isPresent()) return w;
+                if (p instanceof Place.In) return p;
             }
         }
-        return Optional.empty();
+        return OUT;
+    }
+
+    private boolean overlaps(ChunkPos chunk) {
+        return chunk.getMinBlockX() <= box.maxX() && chunk.getMaxBlockX() >= box.minX()
+                && chunk.getMinBlockZ() <= box.maxZ() && chunk.getMaxBlockZ() >= box.minZ();
     }
 
     /** An item event has no place of its own: it happens where whoever did it is. */
-    private Optional<Where> actorAt(Actor actor) {
+    private Place actorAt(Actor actor) {
         return switch (actor) {
             case Actor.Player p -> at(p.player().serverLevel(), p.player().position());
             case Actor.FakePlayer f -> at(f.fake().serverLevel(), f.fake().position());
-            case Actor.Machine m -> m.level() == level ? inBox(m.pos()) : Optional.empty();
+            case Actor.Machine m -> m.level() == level ? inBox(m.pos()) : OUT;
             case Actor.EntityActor e -> e.entity().level() instanceof ServerLevel l
-                    ? at(l, e.entity().position()) : Optional.empty();
-            default -> Optional.empty();
+                    ? at(l, e.entity().position()) : OUT;
+            default -> OUT;
         };
     }
 
-    private Optional<Where> holderAt(InventoryHolder holder) {
+    private Place holder(InventoryHolder holder) {
         return switch (holder) {
-            case InventoryHolder.Block b -> b.level() == level ? inBox(b.pos()) : Optional.empty();
+            case InventoryHolder.Block b -> b.level() == level ? inBox(b.pos()) : OUT;
             case InventoryHolder.Entity e -> e.entity().level() instanceof ServerLevel l
-                    ? at(l, e.entity().position()) : Optional.empty();
-            case InventoryHolder.Item i -> holderAt(i.outer());
-            case InventoryHolder.PerPlayer p -> holderAt(p.at());
-            default -> Optional.empty();
+                    ? at(l, e.entity().position()) : OUT;
+            case InventoryHolder.Item i -> holder(i.outer());
+            case InventoryHolder.PerPlayer p -> holder(p.at());
+            case InventoryHolder.Unknown u -> new Place.Unplaced("unknown holder");
+            default -> OUT;
         };
     }
 
-    private Optional<Where> at(ServerLevel at, Vec3 pos) {
-        return at == level ? inBox(BlockPos.containing(pos)) : Optional.empty();
+    private Place at(ServerLevel at, Vec3 pos) {
+        return at == level ? inBox(BlockPos.containing(pos)) : OUT;
     }
 
-    private Optional<Where> inBox(BlockPos pos) {
-        return box.isInside(pos) ? Optional.of(new Where(Optional.of(pos.immutable()))) : Optional.empty();
+    private Place inBox(BlockPos pos) {
+        return box.isInside(pos) ? in(pos) : OUT;
+    }
+
+    private static Place in(BlockPos pos) {
+        return new Place.In(Optional.of(pos.immutable()));
     }
 
     // ---- Recording the box ----------------------------------------------------------------------------------------
@@ -312,43 +348,44 @@ final class TestAcceptance implements Acceptance, Listener {
             if (!stacks.isEmpty()) contents.put(pos, stacks);
         }
         Map<UUID, AcceptanceDiff.Thing> entities = new LinkedHashMap<>();
-        for (Entity e : level.getAllEntities()) {
+        Map<UUID, Entity> present = new LinkedHashMap<>();
+        for (Entity e : level.getAllEntities()) present.put(e.getUUID(), e);
+        for (Entity e : followed.values()) if (!e.isRemoved()) present.putIfAbsent(e.getUUID(), e);
+        followed.clear();
+        for (Entity e : present.values()) {
             if (e instanceof ServerPlayer) continue;
+            if (box.isInside(e.blockPosition())) followed.put(e.getUUID(), e);
             ItemStack stack = e instanceof ItemEntity item ? item.getItem().copy() : ItemStack.EMPTY;
             Map<String, ItemStack> held = new LinkedHashMap<>();
             if (e instanceof Container c) {
                 for (int i = 0; i < c.getContainerSize(); i++) held.put("slot " + i, c.getItem(i).copy());
             }
-            boolean consequence = e instanceof ItemEntity || e instanceof ExperienceOrb
-                    || e instanceof FallingBlockEntity;
             float health = e instanceof LivingEntity living ? living.getHealth() : -1;
             entities.put(e.getUUID(), new AcceptanceDiff.Thing(e.getUUID(),
                     String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(e.getType())), stack, health, held,
-                    // By the block it stands in, as where() places its events.
-                    e.blockPosition(), box.isInside(e.blockPosition()), consequence));
+                    // By the block it stands in, as place() puts its events.
+                    e.blockPosition(), box.isInside(e.blockPosition())));
         }
         Map<String, List<ItemStack>> players = new LinkedHashMap<>();
         Map<String, Float> health = new LinkedHashMap<>();
         Map<String, UUID> ids = new LinkedHashMap<>();
-        Set<String> inBox = new HashSet<>();
         for (TestPlayer tp : t.players()) {
             Inventory inv = tp.player().getInventory();
             List<ItemStack> stacks = new ArrayList<>();
             for (int i = 0; i < inv.getContainerSize(); i++) stacks.add(inv.getItem(i).copy());
             stacks.add(tp.player().containerMenu.getCarried().copy());
             players.put(tp.name(), stacks);
-            if (box.isInside(tp.player().blockPosition())) inBox.add(tp.name());
             health.put(tp.name(), tp.player().getHealth());
             ids.put(tp.name(), tp.uuid());
         }
-        return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, ids, players, health, inBox);
+        return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, ids, players, health);
     }
 
     /**
-     * Every slot a block exposes, labelled so an event can name it. {@code slot 3}: the block's own inventory, a
-     * container block entity's slots or else its sideless item handler's. Then every other handler it offers (the
-     * sideless one of a container, each face's), as {@code unsided slot 3} or {@code north slot 3}: they may be views
-     * of its own slots or separate stores, which only a refused step checks. Empty when it has none.
+     * Every slot a block exposes: {@code slot 3} for its own inventory (a container block entity's slots, or else
+     * its sideless item handler's), then every other handler it offers (a container's sideless one, each face's), as
+     * {@code unsided slot 3} or {@code north slot 3}, since any of them may be a separate store. Empty when it has
+     * none.
      */
     private Map<String, ItemStack> items(BlockPos pos, @Nullable BlockEntity be) {
         Map<String, ItemStack> out = new LinkedHashMap<>();

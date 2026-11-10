@@ -89,6 +89,12 @@ public interface TestContext {
      */
     dev.iredsc.hadron.api.bridge.Bridge bridge();
 
+    /**
+     * Protects, logs and records the box in this test's world, both corners included, for the bridge acceptance test
+     * ({@link Acceptance}). It starts trusting nobody, recorded as it is now.
+     */
+    Acceptance acceptance(net.minecraft.world.level.levelgen.structure.BoundingBox box);
+
     /** Runs {@code ticks} server ticks: worlds, entities, scheduled tasks, plugins' timers. */
     void tick(int ticks);
 

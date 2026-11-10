@@ -8,52 +8,85 @@ import net.minecraft.core.BlockPos;
 
 /**
  * The bridge acceptance test (docs/bridges.md) as a kit: a protection plugin and a logger over one area, neither of
- * which knows any mod, and a record of the area to compare against. A bridge passes when they work on its mod's
- * machines, weapons and tools with nothing but core events and the actors the bridge pushes.
+ * which knows any mod, and a record of the area to compare against.
+ *
+ * <p><b>Refusal proves interception.</b> A change no event reported can't be refused, so it happens anyway; a cancel
+ * that a bridge ignores happens anyway too. So a step protection refuses must leave the area as it was, and
+ * {@link #assertUnchanged} checks exactly that, comparing the area itself: whether it passes never depends on
+ * reading what an event meant. A machine refused at its first action never reaches the rest of its work, so a
+ * trusted step can refuse one kind of event at a time with {@link #refuse}, letting the machine run while whatever
+ * that kind covers must not happen:
  *
  * <pre>{@code
  * Acceptance area = t.acceptance(BoundingBox.fromCorners(t.pos(-3, 0, -3), t.pos(3, 4, 3)));
- * // a quarry bob owns, working in the area; nobody is trusted, so everything it tries is denied
+ * // bob's quarry in the area, bob not trusted: everything it tries is refused
  * t.tick(100);
- * area.assertUnchanged("bob's quarry in a region he isn't trusted in");
+ * area.assertUnchanged("bob's quarry where he isn't trusted");
  *
- * area.trust(bob).mark();
+ * // trusted, but its block changes refused: it runs, and no block may change
+ * area.trust(bob).refuse(BlockEvent.class).mark();
  * t.tick(100);
- * area.assertEveryChangeSeen("bob's quarry where he is trusted");
- * area.assertActingFor(bob, "bob's quarry where he is trusted");
+ * area.assertUnchanged("bob's quarry with its block changes refused", Acceptance.Part.BLOCKS);
+ * area.assertActingFor(bob, "bob's quarry");
+ *
+ * // and its inventory changes: it digs, and no chest it reaches may change
+ * area.refuse(InventoryEvent.class).mark();
+ * t.tick(100);
+ * area.assertUnchanged("bob's quarry with its inventory changes refused", Acceptance.Part.INVENTORIES);
  * }</pre>
  *
- * <p>What it protects and logs: every block, inventory and resource event at a place in the area, every explosion
- * in it or breaking a block in it, every item event by someone in it, and every entity event for an entity in it,
- * except an entity's own motion and attention (moving, teleporting, velocity, knockback, targeting, air), so anyone
- * may walk through. Protection denies each that is cancellable unless the server or a trusted player is behind it,
- * so {@link Actor.Unknown}, ownerless machines and other players are outsiders, as {@link Actor} says protection
- * should treat them. The area is watched ({@code Areas.watch}), so a change with nobody behind it fires as Unknown
- * there.
+ * <p><b>What it protects and logs:</b> every block, inventory, resource and item event at a place in the area, every
+ * explosion in it or breaking a block in it, and every entity event for an entity in it, except an entity's motion
+ * and attention (moving, teleporting, velocity, knockback, targeting, air), so anyone may walk through. Protection
+ * denies each that is cancellable unless the server or a trusted player is behind it and its kind isn't refused, so
+ * {@link Actor.Unknown}, ownerless machines and other players are outsiders, as {@link Actor} says protection should
+ * treat them. An event it can't place at all (an inventory event whose holder is unknown, an item event nobody is
+ * behind) is denied too, unless the server is behind it, and {@link #assertActingFor} names it. The area is watched
+ * ({@code Areas.watch}), so a change with nobody behind it fires as Unknown there.
  *
- * <p>What it compares, slot by slot where there are slots: block states and which block entity is where; the items in
- * every inventory a block in the area exposes, on any face; which entities are in it (by id and type, a dropped
- * item's stack, a living entity's health, a container entity's slots, such as a chest minecart's); and every test
- * player's inventory and health. A block's other item handlers (its sideless one if it is a container, each face's)
- * may be separate stores no event can name, so only {@link #assertUnchanged} compares them: an allowed step can't
- * vouch for them. Not compared: a block entity's other data (a machine's progress, settings or
+ * <p><b>What it compares</b>, by {@link Part}: block states and which block entity is where; every slot of every
+ * inventory a block in the area exposes, through any face; every entity that was in the area at either end, wherever
+ * it went (that it came or went, a dropped item's stack, a container entity's slots, a living entity's health); every
+ * test player's inventory and health. Not compared: a block entity's other data (a machine's progress, settings or
  * filters), mobs' equipment and inventories that aren't containers, and energy, fluids and other resources a machine
- * holds. Those wait for Hadron's design for running resource flows, since a machine's own data also changes while it
- * merely ticks.
+ * holds, which wait for Hadron's design for running resource flows. An entity that waited outside in a chunk whose
+ * entities the world doesn't list yet (one still loading, far from {@code pos(0, 0, 0)}) counts as new when it walks
+ * in; build the area near the test's centre.
  *
- * <p>Get one with {@link TestContext#acceptance}, after the box is built and every player the test needs has joined:
- * the box's own setup would be refused as Unknown once it is watched, and a player who joins after a {@link #mark} has
- * nothing to be compared against, so the assertions refuse that step. It lasts until the test ends.
+ * <p>Get one with {@link TestContext#acceptance}, after the area is built and every player the test needs has joined:
+ * once the area is watched, the test's own setup would be refused as Unknown, and a player who joins after a
+ * {@link #mark} has nothing to be compared against, so the assertions refuse that step. It lasts until the test ends.
  */
 public interface Acceptance {
+    /** The parts of the area {@link #assertUnchanged} can compare. */
+    enum Part {
+        /** Block states, and which block entity is at each position. */
+        BLOCKS,
+        /** Every slot of every inventory a block in the area exposes. */
+        INVENTORIES,
+        /** Entities that were in the area at either end: arriving, leaving, their items, slots and health. */
+        ENTITIES,
+        /** Every test player's inventory and health. */
+        PLAYERS
+    }
+
     /**
-     * Lets actions whose {@link Actor#actingFor()} is one of these players through; everyone else stays denied.
-     * Returns this, for {@code trust(bob).mark()}.
+     * Lets actions whose {@link Actor#actingFor()} is one of these players through, unless their kind is refused;
+     * everyone else stays denied. Returns this, for {@code trust(bob).mark()}.
      */
     Acceptance trust(TestPlayer... players);
 
     /** Denies everyone but the server again. Returns this. */
     Acceptance trustNobody();
+
+    /**
+     * Refuses events of these kinds, Hadron event classes such as {@code BlockEvent.class} (their subclasses too),
+     * from trusted players as well, replacing the kinds refused before; {@code refuse()} refuses none again. The
+     * server is never refused. Returns this.
+     *
+     * @throws IllegalArgumentException for a class that isn't a Hadron event.
+     */
+    Acceptance refuse(Class<?>... kinds);
 
     /** Records the area as it is now and forgets the events so far: the start of the next step. */
     void mark();
@@ -62,45 +95,21 @@ public interface Acceptance {
     List<Seen> events();
 
     /**
-     * That nothing in the area (blocks, inventories, entities with their health and container slots, nor any entity
-     * arriving that was born elsewhere this step), and no test player's inventory or health, changed since the last
-     * {@link #mark}. For a step
-     * protection denies. A failure lists each change with what explains it: a cancelled event there whose cancel
-     * left it behind, an event that went through, or no event at all, which is an interception gap.
+     * That none of {@code parts} (every part, when none is given) changed since the last {@link #mark}: for a step
+     * protection refuses. A failure lists each change with the events heard for that place or entity and whether they
+     * were cancelled, so it reads as a cancel the bridge ignored or, with nothing heard, an interception gap the bridge
+     * closes by firing the core event (docs/bridge-hooks.md).
      *
      * @param step what was done, for the failure: {@code "bob's quarry in alice's region"}.
+     * @throws AssertionError also when the test's players changed since the last mark.
      */
-    void assertUnchanged(String step);
-
-    /**
-     * That every change in the area since the last {@link #mark} was reported by an event that went through and says
-     * it changed that thing:
-     *
-     * <ul>
-     *   <li>a block, by a block event whose change there isn't empty (a use or a crack changes nothing), or an
-     *       explosion listing it;
-     *   <li>a slot of a block's or a container entity's inventory, by an inventory change or a click naming that
-     *       slot, a pickup into that inventory, or, when the block itself went or changed, by the block event;
-     *   <li>an entity that appeared, by its spawn or transformation; one that left, by its removal, death or
-     *       transformation; one whose health changed, by its damage or healing;
-     *   <li>a test player standing in the area, their inventory by what they did or an inventory change naming it,
-     *       and their health by what hurt or healed them;
-     *   <li>an entity that was in the area at either end is followed wherever it goes, so one hurt here and walking
-     *       out still counts.
-     * </ul>
-     *
-     * Dropped items, experience and falling blocks are exempt, since their contents come from a change reported
-     * elsewhere; an entity walking in or out, or born or gone outside the area, isn't a change. A failure names each
-     * unreported change: an interception gap the bridge closes by firing the core event (docs/bridge-hooks.md). Fails
-     * too when nothing changed, since then the step proves nothing: the machine never ran.
-     */
-    void assertEveryChangeSeen(String step);
+    void assertUnchanged(String step, Part... parts);
 
     /**
      * That every event in the area since the last {@link #mark} acts for {@code player}, leaving out the server's and
-     * nature's (water flowing, gravel falling), which are nobody's to attribute. A failure names each event that
-     * doesn't, and whether it is an attribution gap ({@link Actor.Unknown}, or an actor with no owner) or acts
-     * for someone else.
+     * nature's (water flowing, gravel falling), which are nobody's to attribute, and that at least one does. Events
+     * that couldn't be placed fail it too. A failure names each: an attribution gap ({@link Actor.Unknown}, or an
+     * actor with no owner), an event acting for someone else, or one that couldn't be placed, with what to fix.
      */
     void assertActingFor(TestPlayer player, String step);
 
