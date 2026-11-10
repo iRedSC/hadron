@@ -275,9 +275,10 @@ final class TestAcceptance implements Acceptance, Listener {
                 arrived));
         if (which.contains(Part.BLOCKS)) {
             // A vibration in the box is what a sculk sensor there would turn into a redstone signal. Walking through
-            // is allowed, so motion doesn't count.
+            // is allowed, so motion doesn't count, and a test player's events in another world are elsewhere.
             for (SideEffects.GameEventEmitted e : heard.seen(SideEffects.GameEventEmitted.class)) {
-                if (!TestSideEffects.isMotion(e.event()) && box.isInside(BlockPos.containing(e.pos()))) {
+                if (!TestSideEffects.isMotion(e.event()) && e.level() == level
+                        && box.isInside(BlockPos.containing(e.pos()))) {
                     problems.add("a sculk sensor in the box would hear it: " + e);
                 }
             }

@@ -136,7 +136,7 @@ public final class TestSideEffects implements SideEffects {
         for (TestSideEffects watch : ACTIVE) {
             boolean byPlayer = cause != null && watch.world.testPlayer(cause) != null;
             if (!byPlayer && (e.getLevel() != watch.world.level() || Ambient.MOTION.contains(e.getVanillaEvent()))) continue;
-            watch.seen.add(new GameEventEmitted(e.getVanillaEvent(), e.getEventPosition(), Optional.ofNullable(cause),
+            watch.seen.add(new GameEventEmitted(e.getVanillaEvent(), e.getLevel(), e.getEventPosition(), Optional.ofNullable(cause),
                     from()));
         }
     }

@@ -219,6 +219,17 @@ public final class AcceptanceKitTests {
     }
 
     @HadronTest
+    void aPlayersVibrationAtTheSameCoordinatesInAnotherWorldIsNoChange(TestContext t) {
+        // A test player's events are watched in every world, so the box must be matched by world, not only position.
+        TestPlayer alice = t.player("alice");
+        BlockPos pos = t.pos(2, 0, 0);
+        alice.player().teleportTo(t.server().overworld(), pos.getX(), pos.getY(), pos.getZ(), 0.0F, 0.0F);
+        Acceptance area = t.acceptance(around(t));
+        t.server().overworld().gameEvent(alice.player(), GameEvent.BLOCK_ACTIVATE, pos);
+        area.assertUnchanged("a vibration at the box's coordinates in another world");
+    }
+
+    @HadronTest
     void anEntityWalkingInIsNoChange(TestContext t) {
         // Outside the area but in the origin's chunk, whose entities the world lists from the start.
         Pig pig = pig(t, t.pos(0, 0, 4));
