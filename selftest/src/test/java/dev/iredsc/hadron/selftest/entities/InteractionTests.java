@@ -16,6 +16,8 @@ import dev.iredsc.hadron.api.event.entity.EntityTameEvent;
 import dev.iredsc.hadron.api.event.entity.EntityUseEvent;
 import dev.iredsc.hadron.api.event.entity.ExperiencePickupEvent;
 import dev.iredsc.hadron.api.event.entity.HangingBreakEvent;
+import dev.iredsc.hadron.api.event.entity.ItemFrameChangeEvent;
+import dev.iredsc.hadron.api.event.entity.ItemFrameChangeEvent.ItemFrameChangeAction;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
@@ -38,7 +40,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 
-/** Right-clicking, riding, taming, breeding, picking up experience, and breaking an item frame. */
+/** Right-clicking, riding, taming, breeding, picking up experience, and an item frame's item and breaking. */
 public final class InteractionTests {
     @HadronTest
     @Covers(EntityUseEvent.class)
@@ -368,6 +370,93 @@ public final class InteractionTests {
         });
         alice.attack(frame);
         t.tick();
+        t.assertFalse(frame.isRemoved(), "the item frame should still hang");
+        t.assertEquals(0, near(t, ItemEntity.class).size(), "the number of items dropped");
+    }
+
+    private static List<ItemFrameChangeEvent> frameChanges(TestContext t, ItemFrame frame, boolean cancel) {
+        List<ItemFrameChangeEvent> events = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(ItemFrameChangeEvent e) {
+                if (e.getEntity() != frame) return;
+                events.add(e);
+                e.setCancelled(cancel);
+            }
+        });
+        return events;
+    }
+
+    @HadronTest
+    @Covers(ItemFrameChangeEvent.class)
+    void puttingAnItemInAFrameIsThePlayersPlace(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ItemFrame frame = hangFrame(t);
+        alice.hold(new ItemStack(Items.DIAMOND, 3));
+        List<ItemFrameChangeEvent> events = frameChanges(t, frame, false);
+        alice.interact(frame);
+        t.assertEquals(1, events.size(), "the number of ItemFrameChangeEvents");
+        ItemFrameChangeEvent e = events.get(0);
+        t.assertEquals(ItemFrameChangeAction.PLACE, e.getAction(), "the action");
+        t.assertTrue(e.getItemStack().is(Items.DIAMOND) && e.getItemStack().getCount() == 1,
+                "the item should be one diamond, but was " + e.getItemStack());
+        assertPlayer(t, e.getActor(), alice, "Putting a diamond in the frame");
+        t.assertTrue(frame.getItem().is(Items.DIAMOND), "the frame should hold the diamond, but holds " + frame.getItem());
+        t.assertHolding(alice, Items.DIAMOND, 2);
+    }
+
+    @HadronTest
+    @Covers(ItemFrameChangeEvent.class)
+    void aCancelledPlaceLeavesTheFrameEmptyAndTheItemHeld(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ItemFrame frame = hangFrame(t);
+        alice.hold(new ItemStack(Items.DIAMOND, 3));
+        List<ItemFrameChangeEvent> events = frameChanges(t, frame, true);
+        alice.interact(frame);
+        t.assertEquals(1, events.size(), "the number of ItemFrameChangeEvents; the off hand shouldn't ask again");
+        t.assertTrue(frame.getItem().isEmpty(), "the frame should stay empty, but holds " + frame.getItem());
+        t.assertHolding(alice, Items.DIAMOND, 3);
+    }
+
+    @HadronTest
+    @Covers(ItemFrameChangeEvent.class)
+    void clickingAFullFrameIsARotateAndCancelledItStaysPut(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ItemFrame frame = hangFrame(t);
+        frame.setItem(new ItemStack(Items.DIAMOND));
+        List<ItemFrameChangeEvent> events = frameChanges(t, frame, true);
+        alice.interact(frame);
+        t.assertEquals(1, events.size(), "the number of ItemFrameChangeEvents");
+        t.assertEquals(ItemFrameChangeAction.ROTATE, events.get(0).getAction(), "the action");
+        t.assertTrue(events.get(0).getItemStack().is(Items.DIAMOND), "the item turned should be the diamond");
+        t.assertEquals(0, frame.getRotation(), "the frame's rotation");
+    }
+
+    @HadronTest
+    @Covers(ItemFrameChangeEvent.class)
+    void punchingAFullFrameIsARemove(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ItemFrame frame = hangFrame(t);
+        frame.setItem(new ItemStack(Items.DIAMOND));
+        List<ItemFrameChangeEvent> events = frameChanges(t, frame, false);
+        alice.attack(frame);
+        t.assertEquals(1, events.size(), "the number of ItemFrameChangeEvents");
+        t.assertEquals(ItemFrameChangeAction.REMOVE, events.get(0).getAction(), "the action");
+        assertPlayer(t, events.get(0).getActor(), alice, "Punching the diamond out");
+        t.assertTrue(frame.getItem().isEmpty(), "the frame should be empty, but holds " + frame.getItem());
+        t.assertFalse(frame.isRemoved(), "the first punch takes the item, not the frame");
+    }
+
+    @HadronTest
+    @Covers(ItemFrameChangeEvent.class)
+    void aCancelledRemoveKeepsTheItemAndDropsNothing(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ItemFrame frame = hangFrame(t);
+        frame.setItem(new ItemStack(Items.DIAMOND));
+        frameChanges(t, frame, true);
+        alice.attack(frame);
+        t.tick();
+        t.assertTrue(frame.getItem().is(Items.DIAMOND), "the frame should keep the diamond, but holds " + frame.getItem());
         t.assertFalse(frame.isRemoved(), "the item frame should still hang");
         t.assertEquals(0, near(t, ItemEntity.class).size(), "the number of items dropped");
     }

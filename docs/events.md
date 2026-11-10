@@ -95,7 +95,7 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | `EntitySpawnEvent` | an entity enters the world; reason (natural, spawner, egg, breeding, summoned, released from capture, actor). Not for dropped items, experience orbs or falling blocks, whose cancelling would destroy what they carry; see `ItemDropEvent` | `addFreshEntity` |
 | `EntityRemoveEvent` | an entity leaves the world other than by dying, unloading or converting; cause (killed without damage, dismissed, converted in a mod's own code, captured, discarded) | `KillCommand`, for entities that don't die; bridges for mods' own removals |
 | └ `EntityCaptureEvent` | an entity is stored into an item, block or carrier (bucket, mob catcher, Carry On); where it goes | `Bucketable`; bridges for catchers and carrying |
-| `EntityDamageEvent` | an entity is hurt; damage source, actor, and the weapon or spell | `hurt` |
+| `EntityDamageEvent` | an entity is hurt; damage source, actor, and the weapon or spell | `hurt`, and `ArmorStand.hurt`, which skips it |
 | `EntityDeathEvent` | an entity is dying; drops, experience and where each item goes are editable; not cancellable | `die` |
 | └ `PlayerDeathEvent` | a player is dying; each item, including extra slots, is assigned to kept, dropped, grave or destroyed; the death line is editable and replaces vanilla's | `ServerPlayer.die` |
 | `EntityRegainHealthEvent` | healed, including absorption | `heal`, `setAbsorptionAmount` |
@@ -128,6 +128,7 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | `ProjectileLaunchEvent` | anything fired or thrown; the actor is the shooter | `Projectile` spawn |
 | `ProjectileHitEvent` | a projectile, or a hitscan shot with no projectile, hits a block or entity; hit position, origin, weapon | `onHit`, bridges for hitscan |
 | `HangingPlaceEvent`, `HangingBreakEvent` | item frames, paintings | `HangingEntity` |
+| `ItemFrameChangeEvent` | an item put in a frame, knocked out or turned, by any actor; breaking the frame is `HangingBreakEvent` | `ItemFrame.interact`, `ItemFrame.hurt` |
 | `ArmorStandManipulateEvent` | equipment taken or placed on a stand by a right-click; the slot, what goes on and what comes off | `ArmorStand.swapItem`; bridges for mods' stand editors |
 
 ### Items: `ItemEvent`
