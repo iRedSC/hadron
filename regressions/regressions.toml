@@ -874,3 +874,26 @@ paths = [
 guards = [
     { test = "SideEffectsTests.aSoundSentStraightToAPlayerIsRecordedOnce", tier = "in-game" },
 ]
+
+[[regression]]
+id = "watch-broadcast-hides-other-sounds"
+bug = "While a world's sound broadcast ran, the watch skipped every packet sent, so a sound a packet handler sent a player during a broadcast that left them out was never recorded and assertNone passed."
+fix = "a564142"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerLevelSoundMixin.java",
+]
+guards = [
+    { test = "SideEffectsTests.aSoundAHandlerSendsDuringABroadcastIsRecorded", tier = "in-game" },
+]
+
+[[regression]]
+id = "watch-ambient-depth-global"
+bug = "The watch's ambient-trigger suppression was one counter for every thread, so another thread's sound sent while the server thread was inside an ambient trigger was never recorded."
+fix = "836c571"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java",
+]
+guards = [
+    { test = "SideEffectsTests.aSoundAnotherThreadSendsDuringAnAmbientTriggerIsRecorded", tier = "in-game" },
+]
