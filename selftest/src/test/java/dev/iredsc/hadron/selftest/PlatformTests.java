@@ -13,6 +13,8 @@ import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.math.BigDecimal;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 /** Hadron's platform APIs between real players: visibility, persistent data, the economy. */
 public final class PlatformTests {
@@ -84,11 +86,18 @@ public final class PlatformTests {
         t.assertBalance(bob, "money", "4.25");
     }
 
+    /**
+     * Ends owing the harness a cleanup. After every test the harness resets its players' balances and saved data, and
+     * then checks that nothing is left (TestWorld.verifyReset); a leftover turns a passing test into a failure. So this
+     * test passes only if its own money and dirt are gone once it ends, whichever tests a run selects and in
+     * whatever order they run.
+     */
     @HadronTest
-    void moneyResetsForTheNextTest(TestContext t) {
-        // Runs right after moneyMovesBetweenTwoPlayers (tests run by name), which left alice with 5.75.
+    void aTestsMoneyAndItemsAreGoneOnceItEnds(TestContext t) {
         TestPlayer alice = t.player("alice");
-        t.assertBalance(alice, "money", "0");
-        t.assertInventory(alice, net.minecraft.world.item.Items.DIRT, 0);
+        Economy.get().deposit(alice.uuid(), Economy.MONEY, new BigDecimal("7.50"));
+        alice.give(new ItemStack(Items.DIRT, 5));
+        t.assertBalance(alice, "money", "7.50");
+        t.assertInventory(alice, Items.DIRT, 5);
     }
 }
