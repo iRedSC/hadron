@@ -65,7 +65,7 @@ Core fires these for vanilla's paths; the bridge covers its mod's.
 | `EntityCaptureEvent` | water buckets, for vanilla's and mods' fish, axolotls and tadpoles | the mod storing an entity in an item, a block or a player's arms (mob catchers, jars, Carry On) |
 | `EntityLeashBreakEvent` | leads snapping from distance, a holder dying, removed or never found after loading or a portal, and the entity dying, despawning, being destroyed or mounting | the mod dropping a lead in its own code with nobody choosing it (its own despawn, a summon running out); a chosen removal is EntityUnleashEvent |
 | `EntityLeashEvent` | players putting a lead on a mob or boat, and tying the ones they hold to a fence | the mod leashing in its own code (its own lead items, leashing what it spawns) |
-| `EntityRemoveEvent` | /kill on entities that don't die (boats, minecarts, items, armor stands, the ender dragon) | the mod removing an entity in its own code: dismissing a summon, an instant kill, its own conversion |
+| `EntityRemoveEvent` | /kill on entities that don't die (boats, minecarts, items, armor stands, the ender dragon), end crystals shattering | the mod removing an entity in its own code: dismissing a summon, an instant kill, its own conversion |
 | `EntityShearEvent` | shears used by hand or by a dispenser, on any mob NeoForge can shear | the mod shearing in its own code (an auto-shearer, its own shears) |
 | `EntityStatusChangeEvent` | a mob's AI turned off or on | the mod's stuns, freezes, holds and interrupted casts, with its own status ids |
 | `EntityTargetEvent` | mobs | turret blocks |
