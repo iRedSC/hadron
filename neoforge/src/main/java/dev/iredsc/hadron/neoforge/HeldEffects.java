@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.checks.StaticState;
 import java.util.ArrayList;
 import java.util.List;
@@ -7,6 +9,7 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -71,13 +74,34 @@ public final class HeldEffects {
 
     /**
      * Holds {@code effect} until the innermost open hold is decided, and returns true; returns false, holding nothing,
-     * when none is open on this thread, so the caller lets it happen now.
+     * when none is open on this thread, so the caller lets it happen now. A kept effect happens as it would have now:
+     * under what is set around this one call ({@link #replaying}).
      */
     public static boolean hold(Runnable effect) {
         Hold hold = current();
         if (hold == null) return false;
-        hold.held.add(effect);
+        hold.held.add(replaying(effect));
         return true;
+    }
+
+    /**
+     * {@code effect} with what was set around the call that emitted it, put back while it runs later: the entity whose
+     * own sound it is, which decides who may hear it ({@link NetVisibility#soundSource}), and the actor behind it,
+     * which anything it fires names. Both are set around a narrower call than the hold (an entity's {@code playSound},
+     * a nested actor scope) and are gone by the time the hold is decided. A kept effect must go out exactly as it
+     * would have: a hidden player's spyglass, held while their use is asked about, must stay unheard by those it is
+     * hidden from.
+     */
+    private static Runnable replaying(Runnable effect) {
+        @Nullable Entity source = NetVisibility.soundSource();
+        @Nullable Actor actor = Actors.current().orElse(null);
+        return () -> NetVisibility.withSoundSource(source, () -> {
+            if (actor == null || Actors.current().orElse(null) == actor) {
+                effect.run();
+            } else {
+                Actors.acting(actor, effect);
+            }
+        });
     }
 
     /**
