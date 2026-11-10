@@ -111,7 +111,7 @@ An effect and an entity's fire keep the actor that caused them and where it was 
 | Event | What | Core chokepoint |
 |---|---|---|
 | `BlockChangeEvent` | a block's state or its block entity's data changes | `Level.setBlock`, chunk section writes |
-| ├ `BlockBreakEvent` | a block is removed by an actor | `destroyBlock`, player mining, `setBlock` to air with an actor |
+| ├ `BlockBreakEvent` | a block is removed by an actor; what it is broken with (a player's main hand, the tool a machine works out its drops with, nothing, or unknown and why) | `destroyBlock`, player mining, `setBlock` to air with an actor |
 | ├ `BlockPlaceEvent` | a block or fluid source is placed by an actor | `BlockItem.place`, `setBlock` with an actor |
 | ├ `BlockMultiPlaceEvent` | several blocks at once (a door, a bed, a building gadget) | NeoForge's `EntityMultiPlaceEvent` |
 | ├ `BlockTransformEvent` | an actor changes a block into another (machine conversion, stripping a log, upgrading a chest in place) | `setBlock` with an actor |
@@ -125,7 +125,7 @@ An effect and an entity's fire keep the actor that caused them and where it was 
 | ├ `BlockPistonExtendEvent`, `BlockPistonRetractEvent` | | `PistonBaseBlock` |
 | └ `StructureMoveEvent` | a contraption or ship assembles, moves, rotates or disassembles within one level; old and new transforms | bridge (Create, Valkyrien Skies) |
 | `BlockDropItemEvent` | a broken block's drops are about to appear; the item entities and experience are editable, and a cancel drops nothing | `Block.dropResources` (NeoForge's `BlockDropsEvent`), so player mining, `destroyBlock` and blocks losing their support |
-| `BlockUseEvent` | an actor right-clicks or activates a block, including remotely through a linked terminal | `useItemOn`, `useWithoutItem` |
+| `BlockUseEvent` | an actor right-clicks or activates a block, including remotely through a linked terminal. Cancelled, the block doesn't react but the held item still acts (a torch placed against it fires its own `BlockPlaceEvent`) | `useItemOn`, `useWithoutItem` |
 | `BlockRedstoneEvent` | an actor changes the signal a block emits without changing its state | bridge (Integrated Dynamics, LaserIO) |
 | `BlockDamageEvent` | a block takes lasting partial damage short of breaking | bridge (Create Big Cannons) |
 | `SignChangeEvent` | sign text set | `SignBlockEntity` |
