@@ -292,6 +292,46 @@ public final class SideEffectsTests {
         }
     }
 
+    @HadronTest
+    void aBroadcastsPacketAHandlerReplacesIsStillOneSound(TestContext t) {
+        t.player("alice");
+        t.player("bob");
+        t.tick();
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class,
+                e -> e.setPacket(copy(e.getPacket())));
+        try {
+            SideEffects effects = t.watchSideEffects();
+            t.level().playSound(null, t.pos(0, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "sounds recorded for one broadcast "
+                    + "whose packet a handler replaced for each player; seen: " + effects.seen());
+        } finally {
+            handler.unregister();
+        }
+    }
+
+    @HadronTest
+    void aBroadcastsPacketAHandlerChangesTheSourceOfIsStillOneSound(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        t.tick();
+        alice.clearReceived();
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class, e -> {
+            ClientboundSoundPacket p = e.getPacket();
+            e.setPacket(new ClientboundSoundPacket(p.getSound(), SoundSource.MASTER, p.getX(), p.getY(), p.getZ(),
+                    p.getVolume(), p.getPitch(), p.getSeed()));
+        });
+        try {
+            SideEffects effects = t.watchSideEffects();
+            t.level().playSound(null, t.pos(0, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, alice.received(ClientboundSoundPacket.class).size(), "clicks alice was sent");
+            t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "sounds recorded for one broadcast "
+                    + "whose source a handler changed; seen: " + effects.seen());
+        } finally {
+            handler.unregister();
+        }
+    }
+
     /** A portal's whoosh, which the server sends straight to the player who went through. */
     private static ClientboundLevelEventPacket whoosh(TestContext t) {
         return new ClientboundLevelEventPacket(LevelEvent.SOUND_PORTAL_TRAVEL, t.pos(0, 0, 0), 0, false);

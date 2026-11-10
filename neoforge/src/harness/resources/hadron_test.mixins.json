@@ -4,6 +4,7 @@
   "package": "dev.iredsc.hadron.harness.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "NetHooksBroadcastMarkMixin",
     "NetworkRegistryAccessor",
     "PlayerConnectionSoundMixin",
     "PlayerExhaustionMixin",
