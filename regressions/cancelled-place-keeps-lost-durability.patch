@@ -1,41 +1,27 @@
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java
-deleted file mode 100644
-index e449874..0000000
+index a8a8dcc..3d86d30 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java
-+++ /dev/null
-@@ -1,23 +0,0 @@
--package dev.iredsc.hadron.neoforge.mixin.block;
--
--import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java
+@@ -7,8 +7,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+ import dev.iredsc.hadron.neoforge.HeldEffects;
+ import java.util.List;
+ import net.minecraft.core.Direction;
 -import net.minecraft.core.component.DataComponentMap;
 -import net.minecraft.core.component.PatchedDataComponentMap;
--import net.neoforged.neoforge.common.CommonHooks;
--import org.spongepowered.asm.mixin.Mixin;
--import org.spongepowered.asm.mixin.injection.At;
--
--/**
-- * A cancelled placement keeps the item as it was, and an allowed one keeps what the use did to it. NeoForge reads the
-- * stack's component map before the use and again after it, but both are the one live map, so putting the "before"
-- * back for the event also rewrote the "after": a cancel kept the lost durability. Both reads are now copies.
-- */
--@Mixin(value = CommonHooks.class, remap = false)
--abstract class CommonHooksPlaceMixin {
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.entity.Entity;
+@@ -33,13 +31,6 @@ import org.spongepowered.asm.mixin.injection.At;
+  */
+ @Mixin(value = CommonHooks.class, remap = false)
+ abstract class CommonHooksPlaceMixin {
 -    @ModifyExpressionValue(method = "onPlaceItemIntoWorld", at = @At(value = "INVOKE",
 -            target = "Lnet/minecraft/world/item/ItemStack;getComponents()Lnet/minecraft/core/component/DataComponentMap;"))
 -    private static DataComponentMap hadron$snapshot(DataComponentMap live) {
 -        // The map itself, copied: a local would be ambiguous here, since NeoForge also keeps a pre-use copy stack.
 -        return live instanceof PatchedDataComponentMap patched ? patched.copy() : live;
 -    }
--}
-diff --git a/neoforge/src/main/resources/hadron.block.mixins.json b/neoforge/src/main/resources/hadron.block.mixins.json
-index 9915335..fa3b9c1 100644
---- a/neoforge/src/main/resources/hadron.block.mixins.json
-+++ b/neoforge/src/main/resources/hadron.block.mixins.json
-@@ -10,7 +10,6 @@
-     "BucketItemMixin",
-     "CarvedPumpkinBlockMixin",
-     "CloneCommandsMixin",
--    "CommonHooksPlaceMixin",
-     "DispenserBlockMixin",
-     "ExplosionMixin",
-     "FillCommandMixin",
+-
+     @WrapMethod(method = "onPlaceItemIntoWorld")
+     private static InteractionResult hadron$holdEffects(UseOnContext context, Operation<InteractionResult> original) {
+         boolean server = context.getLevel() instanceof ServerLevel level && level.getServer().isSameThread();

@@ -5,10 +5,12 @@ import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.event.entity.HangingPlaceEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileLaunchEvent;
+import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.BucketItem;
@@ -23,7 +25,8 @@ import net.neoforged.neoforge.common.util.FakePlayer;
  * Gives back what an action spent when every entity it tried to spawn was refused. Vanilla spends first and ignores
  * whether the spawn happened (a thrown trident leaves the inventory, a boat is used up, a bow uses an arrow), so a
  * refused spawn would otherwise cost the player the item for nothing. Only when every spawn was refused: a multishot
- * crossbow with one bolt refused still fired the others, so it keeps its cost.
+ * crossbow with one bolt refused still fired the others, so it keeps its cost. A player's use given back this way also
+ * leaves no statistic, advancement or vibration behind ({@link HeldEffects}).
  */
 public final class EntitySpawnRefunds {
     private EntitySpawnRefunds() {}
@@ -33,23 +36,53 @@ public final class EntitySpawnRefunds {
                 || Hooks.listens(EntitySpawnEvent.class);
     }
 
-    /** Runs a player's item use; if every spawn it tried was refused, their inventory is put back as it was. */
-    public static <T> T using(Player player, Supplier<T> use) {
-        if (!(player instanceof ServerPlayer server) || !listening()) return use.get();
+    /**
+     * Runs a player's item use; if every spawn it tried was refused, their inventory is put back as it was, what the
+     * use counted, triggered or emitted is dropped ({@link HeldEffects}), and a use that claimed it acted fails, so
+     * nothing after it counts it either.
+     */
+    public static InteractionResult using(Player player, Supplier<InteractionResult> use) {
+        InteractionResult[] result = {InteractionResult.PASS};
+        boolean refused = spend(player, () -> result[0] = use.get());
+        return refused && result[0].consumesAction() ? InteractionResult.FAIL : result[0];
+    }
+
+    /** As {@link #using}, for letting go of an item being used: a bow's or a trident's shot. */
+    public static void releasingItem(Player player, Runnable release) {
+        spend(player, release);
+    }
+
+    /** Runs {@code use}; true, with the inventory put back, when every spawn it tried was refused. */
+    private static boolean spend(Player player, Runnable use) {
+        if (!(player instanceof ServerPlayer server) || !listening()) {
+            use.run();
+            return false;
+        }
         Inventory inventory = server.getInventory();
         ItemStack[] before = new ItemStack[inventory.getContainerSize()];
         for (int i = 0; i < before.length; i++) before[i] = inventory.getItem(i).copy();
+        if (!tryingSpawns(server.getServer().isSameThread(), use)) return false;
+        for (int i = 0; i < before.length; i++) {
+            if (!ItemStack.matches(inventory.getItem(i), before[i])) inventory.setItem(i, before[i]);
+        }
+        if (!(server instanceof FakePlayer)) server.containerMenu.sendAllDataToRemote();
+        return true;
+    }
+
+    /**
+     * Runs {@code work}; true when it tried to spawn something and every try was refused. On the server thread what it
+     * caused is held meanwhile, and dropped in that case.
+     */
+    private static boolean tryingSpawns(boolean onServerThread, Runnable work) {
         int attempts = EntitySpawns.attempts;
         int refused = EntitySpawns.refused;
-        T result = use.get();
-        int tried = EntitySpawns.attempts - attempts;
-        if (tried > 0 && EntitySpawns.refused - refused == tried) {
-            for (int i = 0; i < before.length; i++) {
-                if (!ItemStack.matches(inventory.getItem(i), before[i])) inventory.setItem(i, before[i]);
-            }
-            if (!(server instanceof FakePlayer)) server.containerMenu.sendAllDataToRemote();
-        }
-        return result;
+        BooleanSupplier everyRefused = () -> {
+            int tried = EntitySpawns.attempts - attempts;
+            return tried > 0 && EntitySpawns.refused - refused == tried;
+        };
+        if (onServerThread) return HeldEffects.spawning(work, everyRefused);
+        work.run();
+        return everyRefused.getAsBoolean();
     }
 
     /** A dispenser's shot: if every spawn it tried was refused, the item stays in the dispenser. */
@@ -88,11 +121,8 @@ public final class EntitySpawnRefunds {
             release.run();
             return;
         }
-        int attempts = EntitySpawns.attempts;
-        int refused = EntitySpawns.refused;
-        release.run();
-        int tried = EntitySpawns.attempts - attempts;
-        if (tried == 0 || EntitySpawns.refused - refused != tried) return;
+        // The release is held too: a refused mob's splash (entity_place) must not reach a sculk sensor.
+        if (!tryingSpawns(server.getServer().isSameThread(), release)) return;
         boolean restoring = server.restoringBlockSnapshots;
         server.restoringBlockSnapshots = true; // putting back what was there is no new change to report
         try {

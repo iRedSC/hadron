@@ -3,16 +3,30 @@ package dev.iredsc.hadron.neoforge.mixin.entity;
 import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import dev.iredsc.hadron.neoforge.EntityTeleports;
+import dev.iredsc.hadron.neoforge.HeldEffects;
 import java.util.Set;
+import java.util.function.Consumer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.stats.ServerStatsCounter;
+import net.minecraft.stats.Stat;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.RelativeMovement;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.portal.DimensionTransition;
+import net.minecraft.world.scores.ScoreAccess;
+import net.minecraft.world.scores.ScoreHolder;
+import net.minecraft.world.scores.Scoreboard;
+import net.minecraft.world.scores.criteria.ObjectiveCriteria;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
 
-/** ServerPlayer overrides every teleport method without calling Entity's, so each is wrapped again here. */
+/**
+ * ServerPlayer overrides every teleport method without calling Entity's, so each is wrapped again here. A statistic
+ * counted while a refusal is still to come waits for it ({@link HeldEffects}).
+ */
 @Mixin(ServerPlayer.class)
 abstract class ServerPlayerMixin {
     @WrapMethod(method = "teleportTo(DDD)V")
@@ -59,5 +73,23 @@ abstract class ServerPlayerMixin {
                         transition.missingRespawnBlock(), transition.postDimensionTransition())
                 : transition;
         return EntityTeleports.during(self, () -> original.call(going));
+    }
+
+    /** Counting a statistic: inside a hold it waits whole, and comes back through here when kept. */
+    @WrapWithCondition(method = "awardStat(Lnet/minecraft/stats/Stat;I)V", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/stats/ServerStatsCounter;increment(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/stats/Stat;I)V"))
+    private boolean hadron$holdStat(ServerStatsCounter stats, Player player, Stat<?> stat, int amount) {
+        if (!HeldEffects.holding()) return true;
+        ServerPlayer self = (ServerPlayer) (Object) this;
+        HeldEffects.hold(() -> self.awardStat(stat, amount));
+        return false;
+    }
+
+    /** The scoreboard objectives counting it, which wait with it. */
+    @WrapWithCondition(method = "awardStat(Lnet/minecraft/stats/Stat;I)V", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/scores/Scoreboard;forAllObjectives(Lnet/minecraft/world/scores/criteria/ObjectiveCriteria;Lnet/minecraft/world/scores/ScoreHolder;Ljava/util/function/Consumer;)V"))
+    private boolean hadron$holdStatScore(Scoreboard scoreboard, ObjectiveCriteria criteria, ScoreHolder holder,
+            Consumer<ScoreAccess> action) {
+        return !HeldEffects.holding();
     }
 }

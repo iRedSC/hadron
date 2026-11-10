@@ -1,8 +1,8 @@
 diff --git a/common/src/main/java/dev/iredsc/hadron/common/EventBus.java b/common/src/main/java/dev/iredsc/hadron/common/EventBus.java
-index 725239a..522b3ba 100644
+index 80f808d..ad34082 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/EventBus.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/EventBus.java
-@@ -165,10 +165,7 @@ final class EventBus {
+@@ -192,10 +192,7 @@ final class EventBus {
      private final AtomicLong registered = new AtomicLong();
      /** Guarded by this; replaced whole. */
      private Observer[] observers = NO_OBSERVERS;
@@ -14,7 +14,7 @@ index 725239a..522b3ba 100644
      private final Set<Class<?>> seen = ConcurrentHashMap.newKeySet();
  
      /** Adds an observer; the events it hears are built and posted from now on, even with no plugin listening. */
-@@ -191,14 +188,8 @@ final class EventBus {
+@@ -218,14 +215,8 @@ final class EventBus {
          return Collections.unmodifiableSet(seen);
      }
  
@@ -32,31 +32,10 @@ index 725239a..522b3ba 100644
      /** Subscribes every {@code @EventHandler} method; all or nothing. */
      List<Subscription> subscribe(Listener listener, String plugin, Logger log) {
 diff --git a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-index eb604d3..ebb66d9 100644
+index 4ce0805..be76814 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-@@ -678,19 +678,12 @@ public final class PluginHost implements PluginManager {
-             Entry n = entries.get(need);
-             if (n != null && n.state instanceof State.Running) deps.add(((State.Running) n.state).loader);
-         }
--        File data;
--        try {
--            data = dataFolder(folder, e.name);
--        } catch (PluginException ex) {
--            fail(e, ex.getMessage(), null);
--            return;
--        }
-         File copy = new File(loadedDir, e.name + "-" + (++copies) + ".jar");
-         PluginLoader loader;
-         try {
-             loadedDir.mkdirs();
-             Files.copy(e.jar.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING);
--            loader = new PluginLoader(d, e.jar, copy, data, server, deps, parent);
-+            loader = new PluginLoader(d, e.jar, copy, new File(folder, e.name), server, deps, parent);
-         } catch (IOException ex) {
-             fail(e, "couldn't copy its jar to plugins/.loaded (" + ex.getMessage() + ")", ex);
-             return;
-@@ -863,8 +856,16 @@ public final class PluginHost implements PluginManager {
+@@ -1003,8 +1003,16 @@ public final class PluginHost implements PluginManager {
          String why = cause instanceof PluginException ? cause.getMessage()
                  : step + " threw " + cause + pluginFrame(cause, running.loader) + ". Fix that there; the stack trace "
                          + "is in the server log";
@@ -75,30 +54,7 @@ index eb604d3..ebb66d9 100644
      }
  
      /** " at File.java:line", the first frame in the plugin's own code, or "" when none of the trace is its. */
-@@ -879,22 +880,6 @@ public final class PluginHost implements PluginManager {
-         return "";
-     }
- 
--    /**
--     * {@code plugins/<name>/}, refused unless it is a folder of its own directly in {@code plugins/}: never the jar
--     * cache Hadron empties, the switched-off list, or a path out of {@code plugins/}. plugin.yml's name check already
--     * keeps such names out; this keeps the host safe whatever reaches it.
--     */
--    static File dataFolder(File plugins, String name) {
--        java.nio.file.Path root = plugins.toPath().toAbsolutePath().normalize();
--        java.nio.file.Path dir = root.resolve(name).normalize();
--        if (!root.equals(dir.getParent()) || name.equalsIgnoreCase(".loaded") || name.equalsIgnoreCase("disabled.txt")
--                || name.toLowerCase(java.util.Locale.ROOT).endsWith(".jar")) {
--            throw new PluginException("its name '" + name + "' can't be its data folder in plugins/. Rename it in "
--                    + "plugin.yml to start with a letter or digit, such as name: MyPlugin");
--        }
--        return dir.toFile();
--    }
--
-     /** Whether a mod jar has the class, which would shadow the plugin's own copy. */
-     private boolean visibleToMods(String className) {
-         return parent.getResource(className.replace('.', '/') + ".class") != null;
-@@ -905,44 +890,31 @@ public final class PluginHost implements PluginManager {
+@@ -1045,44 +1053,31 @@ public final class PluginHost implements PluginManager {
              if (!(e.state instanceof State.Failed) || next instanceof State.Off) e.state = next;
              return;
          }
@@ -130,12 +86,12 @@ index eb604d3..ebb66d9 100644
              runBeforeDisableHooks(plugin, deadline);
 -            if (callOnDisable && running instanceof State.Enabled) {
 -                try {
--                    plugin.onDisable();
+-                    PluginActors.asPlugin(plugin.getName(), plugin::onDisable);
 -                } catch (Throwable t) {
 -                    LOG.error(e.name + " threw while disabling", t);
 -                }
 +            try {
-+                plugin.onDisable();
++                PluginActors.asPlugin(plugin.getName(), plugin::onDisable);
 +            } catch (Throwable t) {
 +                LOG.error(e.name + " threw while disabling", t);
              }
@@ -152,39 +108,11 @@ index eb604d3..ebb66d9 100644
      }
  
      /**
-@@ -1002,10 +974,6 @@ public final class PluginHost implements PluginManager {
- 
-     private void fail(Entry e, @Nullable String why, @Nullable Throwable error) {
-         e.state = new State.Failed(why);
--        report(e, why, error);
--    }
--
--    private void report(Entry e, @Nullable String why, @Nullable Throwable error) {
-         if (error != null && !(error instanceof PluginException)) {
-             LOG.error(e.name + " didn't enable: " + why, error);
-         } else {
-@@ -1286,14 +1254,8 @@ public final class PluginHost implements PluginManager {
-     /** To the console and every online player who may manage plugins. */
-     private void announce(Component message) {
-         LOG.info(message.getString());
--        if (minecraft == null) return;
--        // Telling people never stops what is being told: a plugin's failure here can't halt a reload partway.
--        for (ServerPlayer p : List.copyOf(minecraft.getPlayerList().getPlayers())) {
--            try {
--                if (Permissions.has(p, MANAGE)) p.sendSystemMessage(message);
--            } catch (RuntimeException | LinkageError ex) {
--                LOG.error("Telling " + p.getGameProfile().getName() + " \"" + message.getString() + "\" failed", ex);
--            }
-+        for (ServerPlayer p : minecraft.getPlayerList().getPlayers()) {
-+            if (Permissions.has(p, MANAGE)) p.sendSystemMessage(message);
-         }
-     }
- 
 diff --git a/common/src/main/java/dev/iredsc/hadron/common/Trace.java b/common/src/main/java/dev/iredsc/hadron/common/Trace.java
-index 4723bfb..28a90cd 100644
+index 086d132..e14e8cd 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/Trace.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/Trace.java
-@@ -118,23 +118,8 @@ final class Trace {
+@@ -119,23 +119,8 @@ final class Trace {
                      + "BlockChangeEvent traces its subclasses too), a plugin event's full class name, a family ("
                      + String.join(", ", FAMILIES) + "), or all");
          }

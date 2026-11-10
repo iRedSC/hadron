@@ -192,7 +192,7 @@ guards = [
     { test = "HostLifecycleTests.aPluginWhoseEnableFailsLeavesNoMenuOfItsOpen", tier = "in-game" },
     { test = "HostLifecycleTests.aDisabledPluginIsGoneWhenItsDisableIsAnnouncedAndItsEventsAreForgotten", tier = "in-game" },
 ]
-note = "PluginHost keeps 5e68bb9's runBeforeDisableHooks; EventBus keeps forget(ClassLoader) as a no-op so EventBusTest compiles."
+note = "Hand-made: PluginHost goes back to a failed enable that closes no menus and a disable that announces PluginDisableEvent before the state changes, without teardown or events.forget; it keeps later work (f975d3a's snapshots, 089d416's PluginActors.asPlugin, 5e68bb9's runBeforeDisableHooks) and 04877ae's other changes (dataFolder, announce). EventBus keeps forget(ClassLoader) as a no-op so EventBusTest compiles."
 
 [[regression]]
 id = "service-events-out-of-order"
@@ -493,6 +493,7 @@ paths = [
 guards = [
     { test = "FireAndTntTests.cancelledTntLightingLeavesTheTntUnprimedAndTheFlintUnworn", tier = "in-game" },
 ]
+note = "Since refused-tnt-lighting-counts the refusal answers FAIL, on which the click mixin ends the click. The patch answers SKIP_DEFAULT_BLOCK_INTERACTION instead, which hands the click on to the flint and steel, as before the fix."
 
 [[regression]]
 id = "dispenser-tnt-leaves-both"
@@ -524,13 +525,12 @@ bug = "A cancelled placement kept the durability its item lost, since NeoForge's
 fix = "5515df2"
 paths = [
     "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java",
-    "neoforge/src/main/resources/hadron.block.mixins.json",
 ]
 guards = [
     { test = "BreakPlaceTests.cancelledStripKeepsTheLogAndTheAxesDurability", tier = "in-game" },
     { test = "FireAndTntTests.cancelledIgniteLeavesNoFireAndTheFlintUnworn", tier = "in-game" },
 ]
-note = "5515df2 is a merge; the patch drops only CommonHooksPlaceMixin and its line in hadron.block.mixins.json."
+note = "Hand-made: the patch drops only CommonHooksPlaceMixin's component-map copy (hadron$snapshot) and its imports. The mixin and its line in hadron.block.mixins.json stay, since the class also holds a placement's side effects (refused-place-leaves-side-effects, b1bf13b); 5515df2, a merge, added the whole file, so don't refresh this from the fix."
 
 
 # ---- Event invariants (fix/event-invariants) ----
@@ -668,3 +668,105 @@ guards = [
     { test = "DamageAmountTests.aNaNOrNegativeHitOnABoatCanBeRefusedAndUnrefusedDealsWhatWasReported", tier = "in-game" },
 ]
 note = "VehicleHooks.dealt hands back the raw amount; the event still fires and reports the sanitized one."
+
+
+# ---- Found by the PR #35 side-effects watch ----
+
+
+[[regression]]
+id = "refused-place-leaves-side-effects"
+bug = "A refused placement, strip or fire lit with flint and steel still met placed_block or item_used_on_block, counted durability lost and vibrated, since NeoForge asks only after the item did the work."
+fix = "b1bf13b"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java",
+]
+guards = [
+    { test = "BreakPlaceTests.cancelledPlaceLeavesAirAndKeepsTheItem", tier = "in-game" },
+    { test = "BreakPlaceTests.cancelledDoorPlaceLeavesNeitherHalfAndKeepsTheDoor", tier = "in-game" },
+    { test = "BreakPlaceTests.cancelledStripKeepsTheLogAndTheAxesDurability", tier = "in-game" },
+    { test = "BreakPlaceTests.aPlantingCountsTowardItsAdvancementOnlyWhenAllowed", tier = "in-game" },
+    { test = "FireAndTntTests.cancelledIgniteLeavesNoFireAndTheFlintUnworn", tier = "in-game" },
+]
+note = "Hand-made: the patch drops only the hold around onPlaceItemIntoWorld (hadron$holdEffects). The place-event wrappers stay: they also scope the event's handlers (held-action-takes-in-handler-actions), and with no hold open they refuse nothing. HeldEffects and the hooks that hold grants, stats and game events stay, shared with the other fixes of b1bf13b."
+
+[[regression]]
+id = "refused-block-use-leaves-side-effects"
+bug = "A lever whose flip was refused still vibrated and counted default_block_use and any_block_use, since the block's use went on past its refused setBlock."
+fix = "b1bf13b"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ServerPlayerGameModeClickMixin.java",
+]
+guards = [
+    { test = "BreakPlaceTests.cancelledLeverFlipLeavesItOff", tier = "in-game" },
+]
+note = "The patch undoes only the hold around useWithoutItem; the one around useItemOn stays, for refused-tnt-lighting-counts."
+
+[[regression]]
+id = "refused-tnt-lighting-counts"
+bug = "Refused TNT lighting still counted item_used_on_block and any_block_use, since the refusal answered CONSUME."
+fix = "b1bf13b"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/TntBlockMixin.java",
+]
+guards = [
+    { test = "FireAndTntTests.cancelledTntLightingLeavesTheTntUnprimedAndTheFlintUnworn", tier = "in-game" },
+]
+note = "The patch puts back CONSUME only; the click mixin's end for a failed useItemOn stays."
+
+[[regression]]
+id = "refused-spawn-use-leaves-side-effects"
+bug = "An item use whose every spawn was refused (snowball, boat, spawn egg, item frame, bow, cod bucket) was given back but still counted its stat, triggers and vibration."
+fix = "b1bf13b"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java",
+]
+guards = [
+    { test = "SpawnTests.aRefusedSnowballIsGivenBack", tier = "in-game" },
+    { test = "SpawnTests.aRefusedBoatIsGivenBack", tier = "in-game" },
+    { test = "SpawnTests.aRefusedSpawnEggIsNotSpent", tier = "in-game" },
+    { test = "SpawnTests.aRefusedItemFrameIsNotSpent", tier = "in-game" },
+    { test = "SpawnTests.aRefusedArrowFromABowKeepsTheArrowAndTheBow", tier = "in-game" },
+    { test = "BucketTests.refusedCodFromABucketPoursNoWaterAndKeepsTheBucket", tier = "in-game" },
+    { test = "BucketTests.refusedCodFromADispenserPoursNoWaterAndKeepsTheBucketInside", tier = "in-game" },
+]
+note = "The patch runs the use without a hold and keeps its result; the refund itself stays."
+
+[[regression]]
+id = "refused-frame-click-counts"
+bug = "A refused place into an item frame or turn of its item still counted player_interacted_with_entity, since the refusal answered CONSUME."
+fix = "bcdcb6e"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ItemFrameMixin.java",
+]
+guards = [
+    { test = "InteractionTests.aCancelledPlaceLeavesTheFrameEmptyAndTheItemHeld", tier = "in-game" },
+    { test = "InteractionTests.clickingAFullFrameIsARotateAndCancelledItStaysPut", tier = "in-game" },
+]
+
+[[regression]]
+id = "held-action-takes-in-handler-actions"
+bug = "A hold took in what an event's handlers did: a handler's allowed place for Bob lost its stat, advancements and vibration with Alice's refused one, a handler's own block change made a refused lever flip count as allowed, and a handler's own spawn kept a refused snowball from being given back."
+fix = "d97643d"
+paths = [
+    "common/src/main/java/dev/iredsc/hadron/common/EventBus.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/HeldEffects.java",
+]
+guards = [
+    { test = "BreakPlaceTests.aPlaceAListenerMakesWhileRefusingAnotherKeepsItsSideEffects", tier = "in-game" },
+    { test = "BreakPlaceTests.aRefusedLeverFlipLeavesNoTraceWhenItsListenerChangesAnotherBlock", tier = "in-game" },
+    { test = "SpawnTests.aRefusedSnowballIsGivenBackWhenItsListenerSpawnsSomethingElse", tier = "in-game" },
+    { test = "EventBusTest.everyHandlerRunsInsideThePortsDispatchScopeAndItEndsEvenWhenOneThrows", tier = "fast" },
+]
+note = "The patch takes the scope out of both dispatches (EventBus.post and NeoForge's place event in HeldEffects.decidingPlace); PluginHost.aroundDispatch, HandlerScope and the install in HadronMod stay, unused."
+
+[[regression]]
+id = "acceptance-vibration-any-world"
+bug = "The acceptance kit matched a vibration to its box by coordinates alone, so a test player's vibration at the same coordinates in another world failed assertUnchanged for an unchanged box."
+fix = "6d51e2b"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestAcceptance.java",
+]
+guards = [
+    { test = "AcceptanceKitTests.aPlayersVibrationAtTheSameCoordinatesInAnotherWorldIsNoChange", tier = "in-game" },
+]
+note = "The patch drops only the world comparison; SideEffects.GameEventEmitted keeps its level, which the guard doesn't read."

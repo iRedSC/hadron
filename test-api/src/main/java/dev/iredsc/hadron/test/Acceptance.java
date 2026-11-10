@@ -55,7 +55,8 @@ import net.minecraft.core.BlockPos;
  * pass. The area is watched
  * ({@code Areas.watch}), so a change with nobody behind it fires as Unknown there.
  *
- * <p><b>What it compares</b>, by {@link Part}: block states and which block entity is where; every slot of every
+ * <p><b>What it compares</b>, by {@link Part}: block states and which block entity is where, and the game events
+ * (vibrations) heard in the area, leaving out motion; every slot of every
  * inventory a block in the area exposes, through any face; every entity that was in the area at either end, was born or
  * destroyed there, or that an event there named on its way through, wherever it went (that it came or went, a dropped
  * item's stack, a container entity's slots, a living entity's health), one born since the mark compared with how it
@@ -73,7 +74,10 @@ import net.minecraft.core.BlockPos;
 public interface Acceptance {
     /** The parts of the area {@link #assertUnchanged} can compare. */
     enum Part {
-        /** Block states, and which block entity is at each position. */
+        /**
+         * Block states, which block entity is at each position, and every game event in the area but motion: what a
+         * sculk sensor there would hear, so a refused step that still vibrates fails.
+         */
         BLOCKS,
         /** Every slot of every inventory a block in the area exposes. */
         INVENTORIES,

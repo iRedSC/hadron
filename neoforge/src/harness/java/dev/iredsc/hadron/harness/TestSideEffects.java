@@ -1,8 +1,10 @@
 package dev.iredsc.hadron.harness;
 
 import dev.iredsc.hadron.checks.StaticState;
+import dev.iredsc.hadron.neoforge.HeldEffects;
 import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestPlayer;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -46,6 +48,7 @@ public final class TestSideEffects implements SideEffects {
             "giveExperiencePoints", "giveExperienceLevels", "onEnchantmentPerformed", "causeFoodExhaustion",
             "awardRecipes", "awardRecipesByKey");
     private static final List<String> BOOKKEEPING_PACKAGES = List.of("dev.iredsc.hadron.harness.",
+            "dev.iredsc.hadron.neoforge.HeldEffects",
             "net.minecraft.advancements.", "net.minecraft.server.PlayerAdvancements", "net.minecraft.stats.", "net.minecraft.world.level.gameevent.",
             "net.neoforged.bus.", "net.neoforged.neoforge.event.EventHooks", "net.neoforged.neoforge.common.CommonHooks",
             "java.", "jdk.");
@@ -122,13 +125,18 @@ public final class TestSideEffects implements SideEffects {
         record(player, p -> new StatChanged(p, stat, before, e.getValue(), from()));
     }
 
+    /** A step, a swim, a flap: motion, which anyone may make. */
+    static boolean isMotion(Holder<GameEvent> event) {
+        return Ambient.MOTION.contains(event);
+    }
+
     private static void onGameEvent(VanillaGameEvent e) {
         if (ACTIVE.isEmpty() || ambientDepth > 0) return;
         @Nullable Entity cause = e.getCause();
         for (TestSideEffects watch : ACTIVE) {
             boolean byPlayer = cause != null && watch.world.testPlayer(cause) != null;
             if (!byPlayer && (e.getLevel() != watch.world.level() || Ambient.MOTION.contains(e.getVanillaEvent()))) continue;
-            watch.seen.add(new GameEventEmitted(e.getVanillaEvent(), e.getEventPosition(), Optional.ofNullable(cause),
+            watch.seen.add(new GameEventEmitted(e.getVanillaEvent(), e.getLevel(), e.getEventPosition(), Optional.ofNullable(cause),
                     from()));
         }
     }
@@ -148,7 +156,7 @@ public final class TestSideEffects implements SideEffects {
                 ambientDepth--;
             }
         } else {
-            record(player, p -> new CriterionTriggered(p, trigger, from()));
+            recordUnlessDropped(player, p -> new CriterionTriggered(p, trigger, from()));
             fire.run();
         }
     }
@@ -169,6 +177,24 @@ public final class TestSideEffects implements SideEffects {
         }
     }
 
+    /**
+     * As {@link #record}, for a trigger fired inside core's {@link HeldEffects} hold: its grant waits on whether the
+     * action stands, so the record does too, and a refused action's trigger, which grants nothing, isn't recorded.
+     * Read now, so it names the line that fired it.
+     */
+    private static void recordUnlessDropped(Player player, Function<TestPlayer, Effect> effect) {
+        if (ambientDepth > 0) return;
+        List<Runnable> adds = new ArrayList<>();
+        for (TestSideEffects watch : ACTIVE) {
+            TestPlayer testPlayer = watch.world.testPlayer(player);
+            if (testPlayer == null) continue;
+            Effect read = effect.apply(testPlayer);
+            adds.add(() -> watch.seen.add(read));
+        }
+        Runnable commit = () -> adds.forEach(Runnable::run);
+        if (!HeldEffects.hold(commit)) commit.run();
+    }
+
     /** The code that caused the effect: the first frames outside the bookkeeping that reports it. */
     private static List<StackTraceElement> from() {
         return StackWalker.getInstance().walk(frames -> frames.map(StackWalker.StackFrame::toStackTraceElement)
@@ -178,7 +204,12 @@ public final class TestSideEffects implements SideEffects {
     private static boolean bookkeeping(StackTraceElement frame) {
         String type = frame.getClassName();
         String method = frame.getMethodName();
-        if (BOOKKEEPING_METHODS.contains(method) || method.contains("hadron$record")) return true;
+        // Core's hold on what may yet be refused (HeldEffects and the mixins that hand it over) is bookkeeping too, and
+        // so is a trampoline MixinExtras generates, which has no line of its own.
+        if (BOOKKEEPING_METHODS.contains(method) || method.contains("hadron$record") || method.contains("hadron$hold")
+                || method.startsWith("mixinextras$bridge$")) {
+            return true;
+        }
         for (String prefix : BOOKKEEPING_PACKAGES) if (type.startsWith(prefix)) return true;
         return false;
     }

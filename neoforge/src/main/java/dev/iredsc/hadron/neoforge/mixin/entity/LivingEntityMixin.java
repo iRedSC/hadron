@@ -72,10 +72,7 @@ abstract class LivingEntityMixin implements EntityActors.Hurting {
     @WrapMethod(method = "releaseUsingItem")
     private void hadron$refundRelease(Operation<Void> original) {
         if ((Object) this instanceof Player player) {
-            EntitySpawnRefunds.using(player, () -> {
-                original.call();
-                return null;
-            });
+            EntitySpawnRefunds.releasingItem(player, original::call);
         } else {
             original.call();
         }

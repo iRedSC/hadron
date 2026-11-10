@@ -9,6 +9,7 @@ import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.stats.Stat;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.phys.Vec3;
 
@@ -102,9 +103,12 @@ public interface SideEffects {
         }
     }
 
-    /** A game event was emitted at {@code pos}, which sculk sensors, wardens and allays within range hear. */
-    record GameEventEmitted(Holder<GameEvent> event, Vec3 pos, Optional<Entity> source, List<StackTraceElement> from)
-            implements Effect {
+    /**
+     * A game event was emitted at {@code pos} in {@code level}, which sculk sensors, wardens and allays within range
+     * there hear. A test player's events are recorded in any world, so compare {@code level} before {@code pos}.
+     */
+    record GameEventEmitted(Holder<GameEvent> event, Level level, Vec3 pos, Optional<Entity> source,
+            List<StackTraceElement> from) implements Effect {
         /** Such as {@code game event minecraft:block_attach at 2 64 0 by alice, from ...}. */
         @Override
         public String toString() {

@@ -13,6 +13,7 @@ import dev.iredsc.hadron.api.event.block.BucketFillEvent;
 import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -81,10 +82,12 @@ public final class BucketTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useItem();
         t.tick(5);
         t.assertBlock(at, Blocks.AIR);
         t.assertHolding(alice, Items.WATER_BUCKET, 1);
+        effects.assertNone("a refused pour");
     }
 
     @HadronTest
@@ -117,11 +120,13 @@ public final class BucketTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useItem();
         t.tick();
         t.assertBlock(at, Blocks.WATER);
         t.assertTrue(t.level().getFluidState(at).isSource(), "the water should still be a source");
         t.assertHolding(alice, Items.BUCKET, 1);
+        effects.assertNone("a refused fill");
     }
 
     // ---- Dispensers
@@ -155,12 +160,14 @@ public final class BucketTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         fire(t, at, Direction.EAST);
         t.assertEquals(1, tried.size(), "the dispenser's attempts to pour");
         t.assertBlock(at.east(), Blocks.AIR);
         t.assertTrue(dispenser.getItem(0).is(Items.WATER_BUCKET), "the dispenser should still hold the water "
                 + "bucket, but holds " + dispenser.getItem(0));
         t.assertEquals(0, Fixtures.entities(t, ItemEntity.class, at, 3), "items thrown out of the dispenser");
+        effects.assertNone("a dispenser's refused pour");
     }
 
     @HadronTest
@@ -198,12 +205,14 @@ public final class BucketTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         fire(t, at, Direction.EAST);
         t.assertEquals(1, tried.size(), "the dispenser's attempts to fill");
         t.assertTrue(t.level().getFluidState(at.east()).isSource(), "the water source should still be there");
         t.assertTrue(dispenser.getItem(0).is(Items.BUCKET) && dispenser.getItem(0).getCount() == 1,
                 "the dispenser should still hold its one empty bucket, but holds " + dispenser.getItem(0));
         t.assertEquals(0, Fixtures.entities(t, ItemEntity.class, at, 3), "items thrown out of the dispenser");
+        effects.assertNone("a dispenser's refused fill");
     }
 
     // ---- Buckets holding a mob
@@ -226,11 +235,13 @@ public final class BucketTests {
         aimDownAt(alice, at);
         alice.hold(new ItemStack(Items.COD_BUCKET));
         refuseCod(t);
+        SideEffects effects = t.watchSideEffects();
         alice.useItem();
         t.tick(5);
         t.assertBlock(at, Blocks.AIR);
         t.assertHolding(alice, Items.COD_BUCKET, 1);
         t.assertEquals(0, Fixtures.entities(t, Cod.class, at, 3), "cod released");
+        effects.assertNone("a refused cod from a bucket");
     }
 
     @HadronTest
@@ -239,10 +250,12 @@ public final class BucketTests {
         BlockPos at = t.pos(2, 0, 0);
         DispenserBlockEntity dispenser = dispenser(t, at, Direction.EAST, new ItemStack(Items.COD_BUCKET));
         refuseCod(t);
+        SideEffects effects = t.watchSideEffects();
         fire(t, at, Direction.EAST);
         t.assertBlock(at.east(), Blocks.AIR);
         t.assertTrue(dispenser.getItem(0).is(Items.COD_BUCKET), "the dispenser should still hold the cod bucket, "
                 + "but holds " + dispenser.getItem(0));
         t.assertEquals(0, Fixtures.entities(t, Cod.class, at, 3), "cod released");
+        effects.assertNone("a refused cod from a dispenser");
     }
 }
