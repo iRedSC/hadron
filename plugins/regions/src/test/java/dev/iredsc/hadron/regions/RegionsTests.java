@@ -4,7 +4,10 @@ import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.projectile.ThrownEnderpearl;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -193,5 +196,37 @@ public final class RegionsTests {
         t.tick(2);
         t.assertTrue(bob.player().getBlockX() < t.pos(2, 0, 0).getX(),
                 "bob should not have been carried into the vault, but stands at " + bob.player().blockPosition());
+    }
+
+    @HadronTest
+    void anOutsiderCantKnockOverAnArmorStand(TestContext t) {
+        ArmorStand stand = EntityType.ARMOR_STAND.create(t.level());
+        BlockPos at = t.pos(1, 0, 1);
+        stand.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5);
+        t.level().addFreshEntity(stand);
+        TestPlayer alice = admin(t);
+        define(t, alice, "armor-stand-hit", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        TestPlayer bob = t.player("bob");
+        bob.attack(stand);
+        t.tick(2);
+        bob.attack(stand);
+        t.tick(2);
+        t.assertFalse(stand.isRemoved(), "an outsider's hits should not break a stand in a region that denies building");
+    }
+
+    @HadronTest
+    void anOutsiderCantTakeAFramesItem(TestContext t) {
+        BlockPos wall = t.pos(1, 0, 1);
+        t.setBlock(wall, Blocks.STONE);
+        ItemFrame frame = new ItemFrame(t.level(), wall.west(), Direction.WEST);
+        frame.setItem(new ItemStack(Items.DIAMOND));
+        t.level().addFreshEntity(frame);
+        TestPlayer alice = admin(t);
+        define(t, alice, "frame-item", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        TestPlayer bob = t.player("bob");
+        bob.attack(frame);
+        t.tick(2);
+        t.assertTrue(frame.getItem().is(Items.DIAMOND), "the frame should keep its diamond, but holds " + frame.getItem());
+        t.assertFalse(frame.isRemoved(), "the frame should still hang");
     }
 }

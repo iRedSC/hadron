@@ -17,6 +17,7 @@ import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityUseEvent;
 import dev.iredsc.hadron.api.event.entity.HangingBreakEvent;
+import dev.iredsc.hadron.api.event.entity.ItemFrameChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
@@ -163,6 +164,12 @@ final class Protection implements Listener {
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void hangingBreak(HangingBreakEvent e) {
+        entityChange(e, e, e.getEntity(), Flag.BUILD);
+    }
+
+    /** A frame's item going in, coming out or turning is building, whoever or whatever does it. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    private void frame(ItemFrameChangeEvent e) {
         entityChange(e, e, e.getEntity(), Flag.BUILD);
     }
 
