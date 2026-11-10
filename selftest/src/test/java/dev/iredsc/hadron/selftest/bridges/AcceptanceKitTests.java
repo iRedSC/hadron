@@ -160,8 +160,8 @@ public final class AcceptanceKitTests {
         // Refused when he starts mining, so the break is never reached.
         t.assertTrue(area.events().stream().anyMatch(s -> s.event() instanceof BlockDamageEvent && s.cancelled()),
                 "protection should refuse bob's mining as it starts: " + area.events());
-        t.assertFalse(area.events().stream().anyMatch(s -> s.event() instanceof BlockBreakEvent && !s.cancelled()),
-                "no break of bob's should go through: " + area.events());
+        t.assertFalse(area.events().stream().anyMatch(s -> s.event() instanceof BlockBreakEvent),
+                "a refused start should never reach a break: " + area.events());
     }
 
     @HadronTest

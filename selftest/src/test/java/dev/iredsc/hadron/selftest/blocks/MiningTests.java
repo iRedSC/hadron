@@ -10,6 +10,7 @@ import dev.iredsc.hadron.api.event.block.BlockDamageEvent;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -65,10 +66,43 @@ public final class MiningTests {
         BlockPos ore = t.pos(2, 0, 0);
         t.setBlock(ore, Blocks.REDSTONE_ORE);
         List<BlockDamageEvent> seen = record(t, BlockDamageEvent.class, true);
+        SideEffects effects = t.watchSideEffects();
         alice.startDigging(ore);
         t.tick();
         t.assertEquals(1, seen.size(), "the BlockDamageEvents asked");
         t.assertFalse(t.getBlock(ore).getValue(RedStoneOreBlock.LIT), "the refused hit shouldn't light the ore");
+        effects.assertNone("a refused start of mining");
+    }
+
+    /**
+     * Vanilla checks a finish only against the last block mined and that mining's timer. Alice mines the dirt, stops,
+     * is refused starting again, and finishes long enough after the first start to have broken it.
+     */
+    @HadronTest
+    @Covers(BlockDamageEvent.class)
+    void finishingAfterARefusedRestartBreaksNothing(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos dirt = t.pos(2, 0, 0);
+        t.setBlock(dirt, Blocks.DIRT);
+        boolean[] refuse = {false};
+        List<BlockEvent> seen = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockEvent e) {
+                if (e instanceof BlockBreakEvent) seen.add(e);
+                if (refuse[0] && e instanceof BlockDamageEvent d) d.setCancelled(true);
+            }
+        });
+        alice.startDigging(dirt);
+        t.tick();
+        alice.abortDigging(dirt);
+        refuse[0] = true;
+        alice.startDigging(dirt);
+        t.tick(30); // a bare hand breaks dirt in about 15 ticks
+        alice.stopDigging(dirt);
+        t.tick(5);
+        t.assertBlock(dirt, Blocks.DIRT);
+        t.assertEquals(0, seen.size(), "the BlockBreakEvents after the refused start");
     }
 
     @HadronTest

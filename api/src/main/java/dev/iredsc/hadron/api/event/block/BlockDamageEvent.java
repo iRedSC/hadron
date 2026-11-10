@@ -17,8 +17,10 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 /**
  * An actor is about to start mining a block: a player's first hit on it, or a fake player's. Bukkit's
  * {@code BlockDamageEvent}. Cancel it and mining doesn't start: the block isn't hit (redstone ore doesn't light, a
- * note block doesn't play, a dragon egg doesn't move, the tool's on-hit enchantments don't act), no crack appears,
- * and the player's client is shown the block unchanged.
+ * note block doesn't play, a dragon egg doesn't move, the tool's on-hit enchantments don't act), the server records
+ * no progress, so finishing the swing breaks nothing, and other players see no crack. The miner's own client is sent
+ * the block unchanged but, as with vanilla's own refusals (spawn protection), may keep drawing its crack while the
+ * button is held.
  *
  * <p>A block that breaks in one hit still fires this first, then {@link BlockBreakEvent}. In creative a hit breaks
  * the block at once without starting to mine, so only {@link BlockBreakEvent} fires, as in Bukkit. Lasting damage a
