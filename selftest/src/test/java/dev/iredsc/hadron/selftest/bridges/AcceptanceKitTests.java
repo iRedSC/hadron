@@ -19,6 +19,7 @@ import dev.iredsc.hadron.api.event.item.EquipEvent;
 import dev.iredsc.hadron.api.event.item.EquipmentChangeEvent;
 import dev.iredsc.hadron.api.event.player.PlayerSwapHandItemsEvent;
 import dev.iredsc.hadron.api.event.world.TickAccelerateEvent;
+import dev.iredsc.hadron.api.event.world.WeatherChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
@@ -175,18 +176,26 @@ public final class AcceptanceKitTests {
     }
 
     @HadronTest
-    void aMobSpawnedOutsideAndPlacedInsideIsAChange(TestContext t) {
+    void aMobBornOutsideThatComesInIsMotion(TestContext t) {
         TestPlayer bob = t.player("bob");
         Acceptance area = t.acceptance(around(t));
-        // A bridge firing the spawn before placing its mob, so the event says where the mob isn't.
         Pig pig = EntityType.PIG.create(t.level());
-        pig.moveTo(t.pos(-5, 0, 0).getX() + 0.5, t.pos(-5, 0, 0).getY(), t.pos(-5, 0, 0).getZ() + 0.5);
+        pig.moveTo(t.pos(0, 0, 4).getX() + 0.5, t.pos(0, 0, 4).getY(), t.pos(0, 0, 4).getZ() + 0.5);
         try (Actors.Scope s = Actors.push(new Actor.Player(bob.player()))) {
             t.level().addFreshEntity(pig);
         }
         pig.teleportTo(t.pos(2, 0, 0).getX() + 0.5, t.pos(2, 0, 0).getY(), t.pos(2, 0, 0).getZ() + 0.5);
-        String why = failure(t, () -> area.assertUnchanged("bob's mob placed in an area he isn't trusted in"));
-        t.assertTrue(why.contains("minecraft:pig appeared"), why);
+        area.assertUnchanged("a mob born outside the area walking in", Part.ENTITIES);
+    }
+
+    @HadronTest
+    void anItemAppearingInTheAreaIsAChange(TestContext t) {
+        BlockPos in = t.pos(2, 0, 0);
+        Acceptance area = t.acceptance(around(t));
+        t.level().addFreshEntity(new ItemEntity(t.level(), in.getX() + 0.5, in.getY(), in.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND)));
+        String why = failure(t, () -> area.assertUnchanged("a diamond dropped into the area", Part.ENTITIES));
+        t.assertTrue(why.contains("minecraft:item") && why.contains("appeared"), why);
     }
 
     @HadronTest
@@ -875,5 +884,47 @@ public final class AcceptanceKitTests {
                 new InventoryHolder.Block(t.level(), chest), new ItemStack(Items.IRON_SWORD),
                 new ItemStack(Items.DIAMOND_SWORD), Actor.Unknown.INSTANCE));
         t.assertFalse(cancelled, "an item change in a chest known to be outside the area isn't the area's");
+    }
+
+    @HadronTest
+    void aDoubleChestsOutsideHalfFillingLeavesTheAreaUnchanged(TestContext t) {
+        BlockPos outside = t.pos(3, 0, 3), inside = t.pos(3, 0, 2);
+        t.setBlock(outside, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, Direction.EAST)
+                .setValue(ChestBlock.TYPE, ChestType.LEFT));
+        t.setBlock(inside, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, Direction.EAST)
+                .setValue(ChestBlock.TYPE, ChestType.RIGHT));
+        Acceptance area = t.acceptance(around(t));
+        ((ChestBlockEntity) t.level().getBlockEntity(outside)).setItem(0, new ItemStack(Items.DIAMOND, 3));
+        area.assertUnchanged("a hopper outside filling the outside half", Part.INVENTORIES);
+    }
+
+    @HadronTest
+    void refuseRejectsWholeWorldKinds(TestContext t) {
+        Acceptance area = t.acceptance(around(t));
+        String why = "no refusal";
+        try {
+            area.refuse(WeatherChangeEvent.class);
+        } catch (IllegalArgumentException e) {
+            why = e.getMessage();
+        }
+        t.assertTrue(why.contains("WeatherChangeEvent can't be refused") && why.contains("a whole world"), why);
+    }
+
+    @HadronTest
+    void naturesUnplaceableEventsAreNobodysButAreListed(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos stone = t.pos(2, 0, 0);
+        t.setBlock(stone, Blocks.STONE);
+        alice.hold(new ItemStack(Items.IRON_PICKAXE));
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        alice.breakBlock(stone);
+        Hadron.getPluginManager().callEvent(new InventoryChangeEvent(List.of(new InventoryChangeEvent.Change(
+                InventoryHolder.Unknown.INSTANCE, 0, ItemStack.EMPTY, new ItemStack(Items.DIAMOND))),
+                Actor.Nature.INSTANCE));
+        t.tick(2);
+        area.assertActingFor(alice, "alice breaking stone while nature fills somewhere unknown");
+        t.assertTrue(area.events().stream().anyMatch(e -> e.event() instanceof InventoryChangeEvent
+                && e.pos().isEmpty()), "events() lists the event nothing could place: " + area.events());
     }
 }

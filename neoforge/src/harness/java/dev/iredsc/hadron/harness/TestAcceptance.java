@@ -43,6 +43,8 @@ import dev.iredsc.hadron.api.event.item.TradeEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
+import dev.iredsc.hadron.api.event.world.TimeSkipEvent;
+import dev.iredsc.hadron.api.event.world.WeatherChangeEvent;
 import dev.iredsc.hadron.api.event.world.WorldEvent;
 import dev.iredsc.hadron.api.world.Areas;
 import dev.iredsc.hadron.harness.mixin.ServerLevelEntitiesAccessor;
@@ -77,10 +79,13 @@ import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.capabilities.Capabilities;
+import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
 import net.neoforged.neoforge.items.IItemHandler;
 import org.jspecify.annotations.Nullable;
 
@@ -92,6 +97,10 @@ final class TestAcceptance implements Acceptance, Listener {
     /** Motion and attention: not something a region forbids, so anyone may walk through. */
     private static final Set<Class<? extends Event>> MOTION = Set.of(EntityMoveEvent.class, EntityTeleportEvent.class,
             EntityVelocityEvent.class, EntityKnockbackEvent.class, EntityTargetEvent.class, EntityAirChangeEvent.class);
+
+    /** World events about the whole world, never an area: not the box's to refuse. */
+    private static final Set<Class<? extends Event>> WHOLE_LEVEL = Set.of(WeatherChangeEvent.class,
+            TimeSkipEvent.class);
 
     /** Where an event happens, as far as the box goes. */
     private sealed interface Place {
@@ -117,6 +126,24 @@ final class TestAcceptance implements Acceptance, Listener {
     private final List<Unplaced> unplaced = new ArrayList<>();
     /** Entities an event in the box named this step: compared even if they only passed through. */
     private final Set<UUID> touched = new HashSet<>();
+    /**
+     * Entities that joined the world outside the box this step: one of them in the box at the end walked, rolled or
+     * flowed in, which is motion, not something appearing there.
+     */
+    private final Set<UUID> joinedOutside = new HashSet<>();
+    private final java.util.function.Consumer<EntityJoinLevelEvent> joins = this::joined;
+
+    private void joined(EntityJoinLevelEvent event) {
+        if (event.getLevel() == level && !box.isInside(event.getEntity().blockPosition())) {
+            joinedOutside.add(event.getEntity().getUUID());
+        }
+    }
+
+    /** Stops hearing the loader when the test ends. */
+    void close() {
+        NeoForge.EVENT_BUS.unregister(joins);
+    }
+
     /** Events the kit itself refused, so another listener's cancel never shows the machine tried. */
     private final Set<Event> denied = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 
@@ -142,6 +169,7 @@ final class TestAcceptance implements Acceptance, Listener {
         this.box = new BoundingBox(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ());
         Areas.watch(t.plugin(), level, box);
         t.registerEvents(this);
+        NeoForge.EVENT_BUS.addListener(EntityJoinLevelEvent.class, joins);
         this.before = snapshot();
         follow(before);
     }
@@ -165,10 +193,12 @@ final class TestAcceptance implements Acceptance, Listener {
         boolean action = ActionEvent.class.isAssignableFrom(kind);
         boolean concrete = !java.lang.reflect.Modifier.isAbstract(kind.getModifiers());
         boolean motion = MOTION.stream().anyMatch(m -> m.isAssignableFrom(kind));
-        if (!action || motion || concrete && !Cancellable.class.isAssignableFrom(kind)) {
+        boolean wholeLevel = WHOLE_LEVEL.stream().anyMatch(w -> w.isAssignableFrom(kind));
+        if (!action || motion || wholeLevel || concrete && !Cancellable.class.isAssignableFrom(kind)) {
             throw new IllegalArgumentException(kind.getSimpleName() + " can't be refused in an acceptance area: refuse "
                     + "takes a kind of action protection can cancel, such as BlockEvent, InventoryEvent, ItemEvent, "
-                    + "ResourceEvent or EntityDamageEvent. Player events, motion and after-the-fact events can't be.");
+                    + "ResourceEvent or EntityDamageEvent. Player events, motion, after-the-fact events and events "
+                    + "about a whole world (weather, time) can't be.");
         }
         refused.add(kind);
         return this;
@@ -188,11 +218,14 @@ final class TestAcceptance implements Acceptance, Listener {
         unplaced.clear();
         touched.clear();
         denied.clear();
+        joinedOutside.clear();
     }
 
     @Override
     public List<Seen> events() {
-        return List.copyOf(seen);
+        List<Seen> all = new ArrayList<>(seen);
+        for (Unplaced u : unplaced) all.add(u.seen());
+        return List.copyOf(all);
     }
 
     /** Refuses a step whose players changed since the mark: one who joined has nothing to be compared against. */
@@ -223,7 +256,7 @@ final class TestAcceptance implements Acceptance, Listener {
         AcceptanceDiff.Snapshot after = snapshot();
         requireSamePlayers(step, after);
         Set<Part> which = parts.length == 0 ? EnumSet.allOf(Part.class) : EnumSet.copyOf(List.of(parts));
-        List<String> problems = AcceptanceDiff.changes(before, after, which, seen, touched);
+        List<String> problems = AcceptanceDiff.changes(before, after, which, seen, touched, joinedOutside);
         if (!problems.isEmpty()) {
             throw new AssertionError(step + " should have changed nothing in " + which + ", but " + problems.size()
                     + " thing(s) changed:\n  " + String.join("\n  ", problems));
@@ -233,7 +266,9 @@ final class TestAcceptance implements Acceptance, Listener {
     @Override
     public void assertActingFor(TestPlayer player, String step) {
         requireSamePlayers(step, snapshot());
-        List<String> problems = new ArrayList<>(unplaced.stream().map(Unplaced::toString).toList());
+        // Protection fails closed on nature's unplaceable events too, but they are nobody's to attribute.
+        List<String> problems = new ArrayList<>(unplaced.stream().filter(u -> !AcceptanceDiff.nobodys(u.seen().actor()))
+                .map(Unplaced::toString).toList());
         for (Seen s : seen) {
             if (AcceptanceDiff.nobodys(s.actor())) continue;
             Optional<UUID> who = s.actor().actingFor();
@@ -650,6 +685,11 @@ final class TestAcceptance implements Acceptance, Listener {
     private Map<String, ItemStack> items(BlockPos pos, @Nullable BlockEntity be) {
         Map<String, ItemStack> out = new LinkedHashMap<>();
         List<IItemHandler> handlers = new ArrayList<>();
+        // A chest's item handler is both halves of a double chest, so its own slots are the whole truth for it.
+        if (be instanceof ChestBlockEntity chest) {
+            for (int i = 0; i < chest.getContainerSize(); i++) out.put("slot " + i, chest.getItem(i).copy());
+            return out;
+        }
         @Nullable IItemHandler sideless = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null);
         if (be instanceof Container c) {
             for (int i = 0; i < c.getContainerSize(); i++) out.put("slot " + i, c.getItem(i).copy());

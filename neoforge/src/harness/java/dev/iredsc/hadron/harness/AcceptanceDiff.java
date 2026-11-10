@@ -55,11 +55,12 @@ final class AcceptanceDiff {
     private record Change(String text, Predicate<Seen> concerns) {}
 
     /** Each change in {@code parts}, with the events heard for it. Empty when nothing in them changed. */
-    static List<String> changes(Snapshot before, Snapshot after, Set<Part> parts, List<Seen> seen, Set<UUID> touched) {
+    static List<String> changes(Snapshot before, Snapshot after, Set<Part> parts, List<Seen> seen, Set<UUID> touched,
+            Set<UUID> joinedOutside) {
         List<Change> found = new ArrayList<>();
         if (parts.contains(Part.BLOCKS)) blocks(before, after, found);
         if (parts.contains(Part.INVENTORIES)) inventories(before, after, found);
-        if (parts.contains(Part.ENTITIES)) entities(before, after, touched, found);
+        if (parts.contains(Part.ENTITIES)) entities(before, after, touched, joinedOutside, found);
         if (parts.contains(Part.PLAYERS)) players(before, after, found);
         List<String> out = new ArrayList<>();
         for (Change c : found) out.add(c.text() + ": " + heard(c, seen));
@@ -115,7 +116,8 @@ final class AcceptanceDiff {
         }
     }
 
-    private static void entities(Snapshot before, Snapshot after, Set<UUID> touched, List<Change> out) {
+    private static void entities(Snapshot before, Snapshot after, Set<UUID> touched, Set<UUID> joinedOutside,
+            List<Change> out) {
         Set<UUID> ids = new LinkedHashSet<>(before.entities().keySet());
         ids.addAll(after.entities().keySet());
         for (UUID id : ids) {
@@ -129,6 +131,8 @@ final class AcceptanceDiff {
                             || m.getTarget().getUUID().equals(id))
                     || s.event() instanceof ItemDespawnEvent d && d.getItemEntity().getUUID().equals(id);
             if (was == null && is != null) {
+                // Joined the world outside and came in: motion, as any entity walking in is.
+                if (joinedOutside.contains(id)) continue;
                 out.add(new Change("a " + is.type() + describe(is) + " appeared at " + at(is.pos()), concerns));
                 continue;
             }

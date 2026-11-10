@@ -102,7 +102,10 @@ public interface Acceptance {
     /** Records the area as it is now and forgets the events so far: the start of the next step. */
     void mark();
 
-    /** Every event in the area since the last {@link #mark}, in the order they fired, with their outcome. */
+    /**
+     * Every event in the area since the last {@link #mark}, with its outcome, and then every event the kit couldn't
+     * place anywhere (its {@code pos} empty), which protection refused unless the server was behind it.
+     */
     List<Seen> events();
 
     /**
@@ -126,7 +129,7 @@ public interface Acceptance {
     /**
      * That every event in the area since the last {@link #mark} acts for {@code player}, leaving out the server's and
      * nature's (water flowing, gravel falling), which are nobody's to attribute, and that at least one does. Events
-     * that couldn't be placed fail it too. A failure names each: an attribution gap ({@link Actor.Unknown}, or an
+     * that couldn't be placed fail it too, unless the server or nature is behind them. A failure names each: an attribution gap ({@link Actor.Unknown}, or an
      * actor with no owner), an event acting for someone else, or one that couldn't be placed, with what to fix.
      */
     void assertActingFor(TestPlayer player, String step);

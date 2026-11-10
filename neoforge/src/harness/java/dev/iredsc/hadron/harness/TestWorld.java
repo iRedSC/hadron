@@ -66,6 +66,7 @@ final class TestWorld implements TestContext {
     private final ServerLevel level;
     private final Map<String, TestClient> players = new LinkedHashMap<>();
     private final List<Listener> listeners = new ArrayList<>();
+    private final List<TestAcceptance> acceptances = new ArrayList<>();
     private int spent;
     private boolean ticking;
 
@@ -255,7 +256,9 @@ final class TestWorld implements TestContext {
     @Override
     public dev.iredsc.hadron.test.Acceptance acceptance(net.minecraft.world.level.levelgen.structure.BoundingBox box) {
         requireIdle("start an acceptance area");
-        return new TestAcceptance(this, box);
+        TestAcceptance area = new TestAcceptance(this, box);
+        acceptances.add(area);
+        return area;
     }
 
     @Override
@@ -414,6 +417,8 @@ final class TestWorld implements TestContext {
      */
     void close() {
         List<String> problems = new ArrayList<>();
+        for (TestAcceptance area : acceptances) area.close();
+        acceptances.clear();
         for (Listener l : listeners) {
             try {
                 Hadron.getPluginManager().unregisterEvents(l);
