@@ -147,9 +147,9 @@ public final class EntityEvents {
         Entity source = event.getEffectSource();
         Actor actor = source != null && source != entity
                 ? EntityActors.of(source) : EntityActors.fromStack(entity, Actor.Nature.INSTANCE);
-        EntityPotionEffectEvent hadron = Hooks.post(old == null
-                ? EntityPotionEffectEvent.added(entity, added, actor)
-                : EntityPotionEffectEvent.changed(entity, old, added, actor));
+        EntityPotionEffectEvent hadron = Hooks.post(new EntityPotionEffectEvent(entity, old == null
+                ? new EntityPotionEffectEvent.Change.Added(added)
+                : new EntityPotionEffectEvent.Change.Changed(old, added), actor));
         if (hadron.isCancelled()) event.setResult(MobEffectEvent.Applicable.Result.DO_NOT_APPLY);
     }
 
@@ -158,7 +158,8 @@ public final class EntityEvents {
         if (!server(entity) || !Hooks.listens(EntityPotionEffectEvent.class)) return;
         MobEffectInstance old = entity.getEffect(event.getEffect());
         if (old == null) return;
-        EntityPotionEffectEvent hadron = Hooks.post(EntityPotionEffectEvent.removed(entity, old,
+        EntityPotionEffectEvent hadron = Hooks.post(new EntityPotionEffectEvent(entity,
+                new EntityPotionEffectEvent.Change.Removed(old),
                 EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
         if (hadron.isCancelled()) event.setCanceled(true);
     }

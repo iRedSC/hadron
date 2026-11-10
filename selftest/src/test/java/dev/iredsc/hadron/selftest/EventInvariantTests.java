@@ -88,7 +88,8 @@ public final class EventInvariantTests {
             refused(t, "An EntityDamageEvent built with " + bad + " damage", "setCancelled(true)",
                     () -> new EntityDamageEvent(pig, t.level().damageSources().generic(), bad, NOBODY));
         }
-        EntityDamageEvent max = new EntityDamageEvent(pig, t.level().damageSources().generic(), Float.MAX_VALUE, NOBODY);
+        EntityDamageEvent max = new EntityDamageEvent(pig, t.level().damageSources().generic(), Float.MAX_VALUE,
+                NOBODY);
         t.assertEquals(Float.MAX_VALUE, max.getDamage(), "the largest finite damage");
         refused(t, "setDamage(NaN)", "setCancelled(true)", () -> max.setDamage(Float.NaN));
     }
@@ -98,13 +99,15 @@ public final class EventInvariantTests {
         Pig pig = pig(t);
         MobEffectInstance speed = new MobEffectInstance(MobEffects.MOVEMENT_SPEED, 200);
         MobEffectInstance poison = new MobEffectInstance(MobEffects.POISON, 200);
-        refused(t, "A CHANGED event from speed to poison", "entity.getEffect(added.getEffect())",
-                () -> EntityPotionEffectEvent.changed(pig, speed, poison, NOBODY));
+        refused(t, "A change from speed to poison", "entity.getEffect(added.getEffect())",
+                () -> new EntityPotionEffectEvent.Change.Changed(speed, poison));
 
-        EntityPotionEffectEvent added = EntityPotionEffectEvent.added(pig, speed, NOBODY);
+        EntityPotionEffectEvent added = new EntityPotionEffectEvent(pig,
+                new EntityPotionEffectEvent.Change.Added(speed), NOBODY);
         t.assertEquals(EntityPotionEffectEvent.Action.ADDED, added.getAction(), "added's action");
         t.assertTrue(added.getOldEffect().isEmpty() && added.getNewEffect().isPresent(), "added has only a new effect");
-        EntityPotionEffectEvent removed = EntityPotionEffectEvent.removed(pig, poison, NOBODY);
+        EntityPotionEffectEvent removed = new EntityPotionEffectEvent(pig,
+                new EntityPotionEffectEvent.Change.Removed(poison), NOBODY);
         t.assertEquals(MobEffects.POISON, removed.getEffect(), "removed's effect, taken from the instance");
         t.assertTrue(removed.getOldEffect().isPresent() && removed.getNewEffect().isEmpty(),
                 "removed has only an old effect");
