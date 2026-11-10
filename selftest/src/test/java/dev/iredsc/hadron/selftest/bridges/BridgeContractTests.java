@@ -3,6 +3,7 @@ package dev.iredsc.hadron.selftest.bridges;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
+import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
@@ -56,8 +57,8 @@ import org.joml.Matrix4d;
 
 /**
  * Events only bridges fire ({@code docs/bridge-hooks.md}), fired here the way a bridge must: with its machine's actor
- * pushed, before the change, through {@code callEvent}, and the change made only if no listener cancelled. Each test
- * checks that a listener receives the event as built, that a listener on its parent hears it too, and that a cancel
+ * pushed, before the change, through its claim ({@code t.bridge()}), and the change made only if no listener
+ * cancelled. Each test checks that a listener receives the event as built, that a listener on its parent hears it too, and that a cancel
  * reaches the bridge, so a plugin written against these events works the day a bridge fires them.
  */
 public final class BridgeContractTests {
@@ -71,7 +72,7 @@ public final class BridgeContractTests {
             Runnable change) {
         try (Actors.Scope scope = Actors.push(actor)) {
             E event = build.apply(Actors.currentOr(Actor.Unknown.INSTANCE));
-            boolean cancelled = t.plugin().getServer().getPluginManager().callEvent(event);
+            boolean cancelled = t.bridge().fire(event) instanceof Cancellable c && c.isCancelled();
             if (!cancelled) change.run();
             return cancelled;
         }
@@ -184,7 +185,7 @@ public final class BridgeContractTests {
         boolean refused = fire(t, machine(t, alice), a -> new BlockDataChangeEvent(t.level(), pos,
                 chest.getBlockState(), after, unlocked, a), () -> chest.loadWithComponents(unlocked,
                 t.level().registryAccess()));
-        t.assertTrue(refused, "callEvent should report the cancel to the bridge");
+        t.assertTrue(refused, "fire should hand the cancel back to the bridge");
         BlockDataChangeEvent unlock = (BlockDataChangeEvent) changes.get(1);
         after.putString("Lock", "changed");
         unlock.getBeforeData().putString("Lock", "changed");
@@ -201,7 +202,7 @@ public final class BridgeContractTests {
         Pig pig = EntityType.PIG.create(t.level());
         pig.moveTo(t.pos(2, 0, 2).getX() + 0.5, t.pos(2, 0, 2).getY(), t.pos(2, 0, 2).getZ() + 0.5);
         t.level().addFreshEntity(pig);
-        ResourceLocation job = ResourceLocation.fromNamespaceAndPath("minecolonies", "job");
+        ResourceLocation job = ResourceLocation.fromNamespaceAndPath("hadron_test_target", "job");
         CompoundTag builder = new CompoundTag();
         builder.putString("job", "builder");
         CompoundTag[] stored = {new CompoundTag()};
@@ -227,7 +228,7 @@ public final class BridgeContractTests {
         farmer.putString("job", "farmer");
         boolean refused = fire(t, machine(t, alice), a -> new EntityDataChangeEvent(pig, job, builder, farmer, a),
                 () -> stored[0] = farmer);
-        t.assertTrue(refused, "callEvent should report the cancel to the bridge");
+        t.assertTrue(refused, "fire should hand the cancel back to the bridge");
         t.assertEquals("builder", stored[0].getString("job"), "a refused change keeps the old job");
         EntityDataChangeEvent change = (EntityDataChangeEvent) seen.get(1);
         builder.putString("job", "changed");

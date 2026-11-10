@@ -21,7 +21,7 @@ Every bridge does these, whatever its mod does. Without them, core still fires i
 ## The rule for firing
 
 - **If the mod's change reaches a vanilla chokepoint (`Level.setBlock`, `hurt`, `addFreshEntity`, a hopper transfer), don't fire anything: push the actor and core fires the event.** Firing it too reports one effect twice.
-- **If the mod skips vanilla, fire the core event yourself**, before the change, and honour a cancel by not making it.
+- **If the mod skips vanilla, fire the core event yourself** through your claim (`BRIDGE.fire`, [bridges](bridges.md#claiming-a-mod)), before the change, and honour a cancel by not making it.
 - **Fire for committed changes only**, never for a simulated transfer or a capacity probe.
 - **Cancelled means fully undone**: nothing spent, nothing half-moved. If the mod spends a cost before acting, fire before the cost.
 - **Fire before the first change on either side.** Mods often fill the destination before draining the source, place the moved block before removing the old one, or clear a slot before spawning its item. A cancel at the last step then duplicates or loses things. Call `Operation.begin(actor)` before the first change, so the action's opening event can be refused while nothing has happened; and if a core event inside the operation is cancelled after one side already changed, undo that side.
@@ -65,7 +65,7 @@ Core fires these for vanilla's paths; the bridge covers its mod's.
 | `EntityCaptureEvent` | water buckets, for vanilla's and mods' fish, axolotls and tadpoles | the mod storing an entity in an item, a block or a player's arms (mob catchers, jars, Carry On) |
 | `EntityLeashBreakEvent` | leads snapping from distance, a holder dying, removed or never found after loading or a portal, and the entity dying, despawning, being destroyed or mounting | the mod dropping a lead in its own code with nobody choosing it (its own despawn, a summon running out); a chosen removal is EntityUnleashEvent |
 | `EntityLeashEvent` | players putting a lead on a mob or boat, and tying the ones they hold to a fence | the mod leashing in its own code (its own lead items, leashing what it spawns) |
-| `EntityRemoveEvent` | /kill on entities that don't die (boats, minecarts, items, armor stands, the ender dragon) | the mod removing an entity in its own code: dismissing a summon, an instant kill, its own conversion |
+| `EntityRemoveEvent` | /kill on entities that don't die (boats, minecarts, items, armor stands, the ender dragon), end crystals shattering | the mod removing an entity in its own code: dismissing a summon, an instant kill, its own conversion |
 | `EntityShearEvent` | shears used by hand or by a dispenser, on any mob NeoForge can shear | the mod shearing in its own code (an auto-shearer, its own shears) |
 | `EntityStatusChangeEvent` | a mob's AI turned off or on | the mod's stuns, freezes, holds and interrupted casts, with its own status ids |
 | `EntityTargetEvent` | mobs | turret blocks |

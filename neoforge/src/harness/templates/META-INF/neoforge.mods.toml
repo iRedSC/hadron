@@ -17,5 +17,15 @@ Runs plugins' @HadronTests on a headless server. Only Hadron's test server loads
     ordering="AFTER"
     side="BOTH"
 
+# A mod with nothing in it, which the harness claims as a bridge from its constructor, so self-tests see a claim made
+# the way a real bridge makes one.
+[[mods]]
+modId="hadron_test_target"
+version="${hadron_version}"
+displayName="Hadron test bridge target"
+description='''
+Nothing: the mod Hadron's test harness claims as a bridge, so its tests see a real claim.
+'''
+
 [[mixins]]
     config="hadron_test.mixins.json"

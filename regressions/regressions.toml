@@ -642,3 +642,19 @@ guards = [
     { test = "DamageAmountTests.anInfiniteHitKillsWithoutNaNHealthWhetherOrNotAListenerSetsIt", tier = "in-game" },
 ]
 note = "Compares the event's amount with the report instead of the raw incoming amount; every hit still fires the event."
+
+
+# ---- Found by the PR #27 acceptance kit's suite ----
+
+
+[[regression]]
+id = "unregistered-listener-kept"
+bug = "An unregistered listener stayed referenced until its plugin disabled, keeping everything it held in memory."
+note = "The patch undoes PluginHost.unregister, which the fix grew so a handler still running stays listed until it finishes; EventBus.finished stays, unused."
+fix = "5692658"
+paths = [
+    "common/src/main/java/dev/iredsc/hadron/common/PluginHost.java",
+]
+guards = [
+    { test = "ListenerReleaseTests.anUnregisteredListenerIsLetGo", tier = "in-game" },
+]
