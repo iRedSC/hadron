@@ -595,3 +595,18 @@ guards = [
     { test = "EventInvariantTests.aPotionChangeMustKeepItsEffect", tier = "in-game" },
 ]
 note = "Disables only the same-effect check in EntityPotionEffectEvent.Change.Changed; the sealed Change stays."
+
+[[regression]]
+id = "damage-skips-bad-amounts"
+bug = "A negative or NaN hit fired no EntityDamageEvent while Minecraft went on, so protection couldn't refuse it: it broke armour stands, knocked mobs back and left NaN health."
+fix = "47f7716"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ArmorStandMixin.java",
+]
+guards = [
+    { test = "DamageAmountTests.aNegativeHitOnAStandCanBeRefused", tier = "in-game" },
+    { test = "DamageAmountTests.aNegativeHitCanBeRefusedKnockbackAndAll", tier = "in-game" },
+    { test = "DamageAmountTests.aNaNHitCanBeRefusedAndUnrefusedDealsNothing", tier = "in-game" },
+]
+note = "Puts back only the early return for amounts below 0 or NaN, in both places; the reporting of such amounts as 0 stays."
