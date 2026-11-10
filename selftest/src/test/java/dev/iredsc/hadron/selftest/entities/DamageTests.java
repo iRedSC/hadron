@@ -13,7 +13,9 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDeathEvent;
 import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
+import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
+import dev.iredsc.hadron.api.event.entity.VehicleDamageEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
@@ -28,11 +30,14 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.ExperienceOrb;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.entity.animal.Wolf;
+import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.projectile.Arrow;
+import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.level.GameType;
 
 /** EntityDamageEvent, EntityKnockbackEvent, EntityDeathEvent and ProjectileHitEvent, and who a hit is remembered as. */
 public final class DamageTests {
@@ -409,5 +414,81 @@ public final class DamageTests {
         alice.attack(stand);
         t.assertFalse(stand.isRemoved(), "a cancelled hit should leave the armor stand standing");
         t.assertTrue(near(t, ItemEntity.class).isEmpty(), "a cancelled hit should drop nothing");
+    }
+
+    @HadronTest
+    @Covers(VehicleDamageEvent.class)
+    void aPlayersHitOnABoatIsTheirsAndBreaksItInCreative(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        alice.player().setGameMode(GameType.CREATIVE);
+        Boat boat = spawn(t, EntityType.BOAT, t.pos(2, 0, 0));
+        List<VehicleDamageEvent> events = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(VehicleDamageEvent e) {
+                if (e.getEntity() == boat) events.add(e);
+            }
+        });
+        alice.attack(boat);
+        t.assertEquals(1, events.size(), "the number of VehicleDamageEvents");
+        assertPlayer(t, events.get(0).getActor(), alice, "Hitting the boat");
+        t.assertEquals(Optional.of(alice.player()), events.get(0).getDamager(), "the damager");
+        t.assertTrue(boat.isRemoved(), "a creative player's hit should break the boat");
+    }
+
+    @HadronTest
+    @Covers(VehicleDamageEvent.class)
+    void aCancelledHitLeavesTheBoat(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        alice.player().setGameMode(GameType.CREATIVE);
+        Boat boat = spawn(t, EntityType.BOAT, t.pos(2, 0, 0));
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(VehicleDamageEvent e) {
+                if (e.getEntity() == boat) e.setCancelled(true);
+            }
+        });
+        alice.attack(boat);
+        t.tick();
+        t.assertFalse(boat.isRemoved(), "a cancelled hit should leave the boat");
+        t.assertEquals(0f, boat.getDamage(), "the boat's wear");
+        t.assertTrue(near(t, ItemEntity.class).isEmpty(), "a cancelled hit should drop nothing");
+    }
+
+    @HadronTest
+    @Covers(EntityRemoveEvent.class)
+    void shatteringAnEndCrystalIsThePlayersRemoval(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        EndCrystal crystal = spawn(t, EntityType.END_CRYSTAL, t.pos(3, 0, 0));
+        List<EntityRemoveEvent> events = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityRemoveEvent e) {
+                if (e.getEntity() == crystal) events.add(e);
+            }
+        });
+        alice.attack(crystal);
+        t.assertEquals(1, events.size(), "the number of EntityRemoveEvents");
+        t.assertEquals(EntityRemoveEvent.Cause.KILLED, events.get(0).getCause(), "the cause");
+        assertPlayer(t, events.get(0).getActor(), alice, "Shattering the crystal");
+        t.assertTrue(crystal.isRemoved(), "the crystal should be gone");
+    }
+
+    @HadronTest
+    @Covers(EntityRemoveEvent.class)
+    void aRefusedShatterKeepsTheCrystalAndNothingExplodes(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        EndCrystal crystal = spawn(t, EntityType.END_CRYSTAL, t.pos(3, 0, 0));
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityRemoveEvent e) {
+                if (e.getEntity() == crystal) e.setCancelled(true);
+            }
+        });
+        float health = alice.player().getHealth();
+        alice.attack(crystal);
+        t.tick();
+        t.assertFalse(crystal.isRemoved(), "a refused shatter should keep the crystal");
+        t.assertEquals(health, alice.player().getHealth(), "alice's health: nothing should have exploded");
     }
 }
