@@ -11,7 +11,8 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * What a player's action did beyond the world, held until it is known whether the action stands: the statistics it
- * counted, the advancement criteria it met and the game events (what sculk sensors hear) it emitted. Some refusals
+ * counted, the advancement criteria it met, the game events (what sculk sensors hear) it emitted and the sounds and
+ * numbered level events (a lever's click, a block breaking) it played. Some refusals
  * come only after vanilla did the work: NeoForge asks about a placement once the item has placed its blocks and
  * undoes them on a cancel, a block's use goes on after its {@code setBlock} was refused, and an item whose every spawn
  * was refused is given back only once its use is over. Putting things back doesn't take back a vibration already
@@ -19,7 +20,7 @@ import org.jspecify.annotations.Nullable;
  * them happen, in order, as it ends.
  *
  * <p>A criterion is still tested when its trigger fires, against the world and item as they are then; only its grant
- * waits. A statistic and a game event wait whole. Experience and hunger aren't held: no held action changes them
+ * waits. A statistic, a game event, a sound and a level event wait whole. Experience and hunger aren't held: no held action changes them
  * before it is decided. Holds open only on the server thread and nest: what an inner hold keeps waits on the outer
  * one, and what an inner hold drops is gone even if the outer one is kept. A hold covers only the action that opened
  * it: while an event's handlers run, it is set aside ({@link HandlerScope}).

@@ -9,13 +9,19 @@ import dev.iredsc.hadron.neoforge.HeldEffects;
 import dev.iredsc.hadron.neoforge.Hooks;
 import dev.iredsc.hadron.neoforge.WorldActors;
 import dev.iredsc.hadron.neoforge.WorldHooks;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ChunkPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.level.storage.ServerLevelData;
 import net.minecraft.world.phys.Vec3;
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
@@ -26,8 +32,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Weather, time of day and /forceload, at ServerLevel's own setters; and every game event, held while a refusal is
- * still to come ({@link HeldEffects}).
+ * Weather, time of day and /forceload, at ServerLevel's own setters; and every game event, sound and numbered level
+ * event (a dispenser's click, a block breaking), held while a refusal is still to come ({@link HeldEffects}).
  */
 @Mixin(ServerLevel.class)
 public abstract class ServerLevelMixin {
@@ -142,5 +148,44 @@ public abstract class ServerLevelMixin {
         ServerLevel self = hadron$self();
         HeldEffects.hold(() -> self.gameEvent(event, pos, context));
         return false;
+    }
+
+    // ---- Sounds and numbered level events
+
+    /**
+     * Every sound at a position: every {@code playSound} overload ends here, before NeoForge's event and the broadcast.
+     * Inside a hold it waits whole, seed and all, and comes back through here when kept; otherwise one check.
+     */
+    @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/player/Player;DDDLnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V",
+            at = @At("HEAD"), cancellable = true)
+    private void hadron$holdSound(@Nullable Player player, double x, double y, double z, Holder<SoundEvent> sound,
+            SoundSource source, float volume, float pitch, long seed, CallbackInfo ci) {
+        if (!HeldEffects.holding()) return;
+        ServerLevel self = hadron$self();
+        HeldEffects.hold(() -> self.playSeededSound(player, x, y, z, sound, source, volume, pitch, seed));
+        ci.cancel();
+    }
+
+    /** As {@link #hadron$holdSound}, for a sound that follows an entity. */
+    @Inject(method = "playSeededSound(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V",
+            at = @At("HEAD"), cancellable = true)
+    private void hadron$holdEntitySound(@Nullable Player player, Entity entity, Holder<SoundEvent> sound,
+            SoundSource source, float volume, float pitch, long seed, CallbackInfo ci) {
+        if (!HeldEffects.holding()) return;
+        ServerLevel self = hadron$self();
+        HeldEffects.hold(() -> self.playSeededSound(player, entity, sound, source, volume, pitch, seed));
+        ci.cancel();
+    }
+
+    /**
+     * A numbered event ({@code LevelEvent}): most play a sound, some particles, such as a dispenser's click or a block
+     * breaking as a refused placement is put back. Held as a sound is.
+     */
+    @Inject(method = "levelEvent", at = @At("HEAD"), cancellable = true)
+    private void hadron$holdLevelEvent(@Nullable Player player, int type, BlockPos pos, int data, CallbackInfo ci) {
+        if (!HeldEffects.holding()) return;
+        ServerLevel self = hadron$self();
+        HeldEffects.hold(() -> self.levelEvent(player, type, pos, data));
+        ci.cancel();
     }
 }
