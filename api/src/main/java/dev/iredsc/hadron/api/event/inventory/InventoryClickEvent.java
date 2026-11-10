@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.inventory;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -92,5 +94,16 @@ public class InventoryClickEvent extends InventoryEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /**
+     * Where {@link #getHolder()} is, then every inventory behind the menu's slots, since a click can move items into
+     * any of them (a shift-click, a number-key swap): a chest and the player's own, both halves of a double chest. A
+     * slot that is the menu's own (a crafting grid) is where the menu is open. A mod's menu that says nothing of
+     * where it is adds {@link Place.Unknown.Reason#UNDESCRIBED_MENU}.
+     */
+    @Override
+    public Places getPlaces() {
+        return Places.of(Place.of(getHolder()), Menus.places(menu, viewer));
     }
 }

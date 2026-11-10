@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.inventory;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
@@ -52,5 +54,15 @@ public class InventoryOpenEvent extends InventoryEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /**
+     * Where {@link #getHolder()} is, then, once the menu exists, every inventory behind its slots (both halves of a
+     * double chest), as for {@link InventoryClickEvent#getPlaces()}.
+     */
+    @Override
+    public Places getPlaces() {
+        Places own = Places.of(Place.of(getHolder()));
+        return menu == null ? own : own.and(Menus.places(menu, viewer));
     }
 }

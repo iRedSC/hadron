@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
@@ -72,5 +74,19 @@ public class EntityCaptureEvent extends EntityRemoveEvent {
     /** Where the entity will be stored. */
     public Storage getStorage() {
         return storage;
+    }
+
+    /**
+     * Where the entity is, then where it is stored: the block, or where its carrier is. An item it goes into adds no
+     * place of its own: the item is made here, and wherever it goes next is that event's.
+     */
+    @Override
+    public Places getPlaces() {
+        Places own = super.getPlaces();
+        return switch (getStorage()) {
+            case Storage.Block b -> own.and(Place.Spot.at(b.level(), b.pos()));
+            case Storage.Carried c -> own.and(Place.of(c.carrier()));
+            case Storage.Item i -> own;
+        };
     }
 }

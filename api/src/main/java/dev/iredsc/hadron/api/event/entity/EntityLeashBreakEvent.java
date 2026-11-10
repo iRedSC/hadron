@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
@@ -74,5 +76,12 @@ public class EntityLeashBreakEvent extends EntityEvent {
 
     public Reason getReason() {
         return reason;
+    }
+
+    /** Where the leashed entity is, then where what held the lead is, when known. */
+    @Override
+    public Places getPlaces() {
+        Places own = super.getPlaces();
+        return getHolder().map(h -> own.and(Place.of(h))).orElse(own);
     }
 }

@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.player;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -19,5 +21,14 @@ public class PlayerChangedWorldEvent extends PlayerEvent {
     /** The world they left. */
     public ServerLevel getFrom() {
         return from;
+    }
+
+    /**
+     * Where the player is now, then the world they left: {@link Place.Unknown.Reason#UNSEEN_ORIGIN} within it, since
+     * nothing says where in it they left from.
+     */
+    @Override
+    public Places getPlaces() {
+        return super.getPlaces().and(new Place.Unknown(new Place.Level(getFrom()), Place.Unknown.Reason.UNSEEN_ORIGIN));
     }
 }

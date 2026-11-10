@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.block;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.core.BlockPos;
@@ -25,5 +27,11 @@ public class BlockSpreadEvent extends BlockFormEvent {
     /** The block it spreads from. */
     public BlockPos getSourcePos() {
         return source;
+    }
+
+    /** Its own places, then where it spreads from. */
+    @Override
+    public Places getPlaces() {
+        return super.getPlaces().and(Place.Spot.at(getLevel(), getSourcePos()));
     }
 }

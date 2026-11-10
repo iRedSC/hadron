@@ -91,12 +91,21 @@ import net.minecraft.world.phys.Vec3;
  * would pass a bridge that covers nothing.
  */
 public final class AcceptanceKitTests {
-    /** An action of a family the kit doesn't know, as a bridge's own event type might be. */
+    /**
+     * An action of a family the kit doesn't know, as a bridge's own event type might be. Every action must state its
+     * places; this one can't say where it happens, so it says so.
+     */
     public static final class OddEvent extends ActionEvent implements Cancellable {
         private boolean cancelled;
 
         public OddEvent(Actor actor) {
             super(actor);
+        }
+
+        @Override
+        public dev.iredsc.hadron.api.event.Places getPlaces() {
+            return dev.iredsc.hadron.api.event.Places.of(dev.iredsc.hadron.api.event.Place.Unknown.anywhere(
+                    dev.iredsc.hadron.api.event.Place.Unknown.Reason.UNPLACEABLE_OPERATION));
         }
 
         @Override
@@ -520,13 +529,27 @@ public final class AcceptanceKitTests {
     }
 
     @HadronTest
-    void anItemUsedByAMachineInTheAreaIsRefused(TestContext t) {
+    void anItemUsedInTheAreaByAMachineIsRefused(TestContext t) {
+        // Where the item is used is where its user holds it: the pig, in the area.
+        Pig pig = pig(t, t.pos(2, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        Actor machine = new Actor.Machine(t.level(), t.pos(-3, 0, 0), Attribution.none());
+        boolean cancelled = Hadron.getPluginManager().callEvent(new ItemUseEvent(t.level(), pig,
+                InteractionHand.MAIN_HAND, new ItemStack(Items.BONE_MEAL), machine));
+        t.assertTrue(cancelled, "an item used in the area, by a machine outside, was refused: " + area.events());
+    }
+
+    @HadronTest
+    void aMachineInTheAreaUsingAnItemHeldOutsideIsLeftAlone(TestContext t) {
+        // The actor's own position is never where its action happens: the item is in the pig's hand, outside.
         Pig pig = pig(t, t.pos(-3, 0, 0));
         Acceptance area = t.acceptance(around(t));
         Actor machine = new Actor.Machine(t.level(), t.pos(2, 0, 0), Attribution.none());
         boolean cancelled = Hadron.getPluginManager().callEvent(new ItemUseEvent(t.level(), pig,
                 InteractionHand.MAIN_HAND, new ItemStack(Items.BONE_MEAL), machine));
-        t.assertTrue(cancelled, "an item used by a machine standing in the area was refused: " + area.events());
+        t.assertFalse(cancelled, "an item used outside the area, by a machine in it, isn't the area's: "
+                + area.events());
+        t.assertTrue(area.events().isEmpty(), "nothing heard in the area: " + area.events());
     }
 
     @HadronTest

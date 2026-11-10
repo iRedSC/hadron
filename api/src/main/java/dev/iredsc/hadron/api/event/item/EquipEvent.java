@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.EventStack;
@@ -91,5 +93,11 @@ public class EquipEvent extends ItemEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         cancelled = cancel;
+    }
+
+    /** Where the entity wearing it is. */
+    @Override
+    public Places getPlaces() {
+        return Places.of(Place.of(getEntity()));
     }
 }

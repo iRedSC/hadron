@@ -1,5 +1,10 @@
 package dev.iredsc.hadron.api.event.server;
 
+import net.minecraft.resources.ResourceLocation;
+import java.util.Optional;
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Placed;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -20,7 +25,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 @FiredBy(core = NONE,
         bridges = "changes a claim, team, party, alliance or trust list",
         fillIn = "what changed, who changed it")
-public class AccessControlChangeEvent extends ServerEvent implements Cancellable {
+public class AccessControlChangeEvent extends ServerEvent implements Cancellable, Placed {
     public enum Change {
         CREATED, REMOVED, AREA, MEMBERS, FLAGS
     }
@@ -77,5 +82,17 @@ public class AccessControlChangeEvent extends ServerEvent implements Cancellable
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /**
+     * The claim, team or party itself, which has no place in a world: {@link Place.Nowhere} of kind
+     * {@code <system>:access_group} with {@link #getGroup()} as its id. A claim's area isn't in this event, so its
+     * places don't say which blocks an area change covers.
+     */
+    @Override
+    public Places getPlaces() {
+        ResourceLocation kind = ResourceLocation.tryBuild(system, "access_group");
+        return Places.of(new Place.Nowhere(kind != null ? kind
+                : ResourceLocation.fromNamespaceAndPath("hadron", "access_group"), group, Optional.empty()));
     }
 }

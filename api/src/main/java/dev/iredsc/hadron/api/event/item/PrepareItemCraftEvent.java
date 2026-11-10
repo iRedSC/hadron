@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.EventStack;
@@ -88,5 +90,11 @@ public class PrepareItemCraftEvent extends ItemEvent {
     /** Offer this instead; {@code ItemStack.EMPTY} offers nothing, so the ingredients can't be crafted. */
     public void setResult(ItemStack result) {
         this.result = EventStack.copyOf(result, "result");
+    }
+
+    /** Where the inventory holding the stack is ({@link #getHolder()}). */
+    @Override
+    public Places getPlaces() {
+        return Places.of(Place.of(getHolder()));
     }
 }

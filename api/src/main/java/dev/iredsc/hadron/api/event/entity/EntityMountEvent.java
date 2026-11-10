@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -35,5 +37,11 @@ public class EntityMountEvent extends EntityEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /** Where the rider is, then where what it mounts is. */
+    @Override
+    public Places getPlaces() {
+        return super.getPlaces().and(Place.of(getMount()));
     }
 }

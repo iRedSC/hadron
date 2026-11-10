@@ -1,5 +1,9 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import java.util.List;
+import java.util.ArrayList;
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -75,5 +79,18 @@ public class ProjectileHitEvent extends EntityEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /**
+     * Where the projectile (or a hitscan shot's shooter) is, then where it hits: the point, the block and the entity
+     * hit, each when there is one.
+     */
+    @Override
+    public Places getPlaces() {
+        List<Place> hit = new ArrayList<>();
+        hit.add(Place.Spot.at(getLevel(), getHitPosition()));
+        getHitBlock().ifPresent(block -> hit.add(Place.Spot.at(getLevel(), block)));
+        getHitEntity().ifPresent(entity -> hit.add(Place.of(entity)));
+        return super.getPlaces().and(hit);
     }
 }

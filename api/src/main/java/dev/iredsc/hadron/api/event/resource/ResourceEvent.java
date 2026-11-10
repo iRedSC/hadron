@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.resource;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import dev.iredsc.hadron.api.event.Cancellable;
@@ -60,5 +62,16 @@ public abstract class ResourceEvent extends ActionEvent implements Cancellable {
                     + " is " + holder + "; use ResourceHolder.Account, such as ResourceHolder.Account.player(uuid)");
         }
         return holder;
+    }
+
+    /** Where each holder in {@link #getHolders()} is ({@link Place#of(ResourceHolder)}). */
+    @Override
+    public Places getPlaces() {
+        List<ResourceHolder> holders = getHolders();
+        if (holders.isEmpty()) {
+            // A leaf that names no holder is a bridge's bug; say so as a place rather than claim none.
+            return Places.of(Place.Unknown.anywhere(Place.Unknown.Reason.UNPLACEABLE_OPERATION));
+        }
+        return Places.of(Place.of(holders.get(0)), holders.stream().map(Place::of).toList());
     }
 }

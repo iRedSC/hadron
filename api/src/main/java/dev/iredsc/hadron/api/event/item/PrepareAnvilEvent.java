@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.EventStack;
@@ -106,5 +108,11 @@ public class PrepareAnvilEvent extends ItemEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /** Where the inventory holding the stack is ({@link #getHolder()}). */
+    @Override
+    public Places getPlaces() {
+        return Places.of(Place.of(getHolder()));
     }
 }

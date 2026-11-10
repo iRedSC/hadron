@@ -21,6 +21,7 @@ import dev.iredsc.hadron.api.event.entity.EntityDataChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryDestroyEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryGenerateEvent;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.inventory.InventorySortEvent;
 import dev.iredsc.hadron.api.event.resource.Resource;
@@ -428,7 +429,7 @@ public final class BridgeContractTests {
 
     @HadronTest
     @Covers(InventoryGenerateEvent.class)
-    @Covers(value = InventoryHolder.class, method = "place")
+    @Covers(value = Place.class, method = "of")
     void eachPlayersCopyOfALootChestIsItsOwnInventoryAtTheChest(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -449,16 +450,20 @@ public final class BridgeContractTests {
         InventoryHolder.PerPlayer copy = (InventoryHolder.PerPlayer) e.getChanges().get(0).holder();
         t.assertEquals(chest, copy.at(), "where the copy is, for protection");
         t.assertEquals(alice.uuid(), copy.owner(), "whose copy");
-        t.assertEquals(chest, chest.place(), "a chest is its own place");
-        t.assertEquals(chest, alices.place(), "a claim check finds the copy's chest");
+        Place chestSpot = Place.Spot.at(t.level(), pos);
+        t.assertEquals(chestSpot, Place.of(chest), "a chest is at its block");
+        t.assertEquals(chestSpot, Place.of(alices), "a copy is at its chest");
         InventoryHolder cart = new InventoryHolder.Entity(EntityType.CHEST_MINECART.create(t.level()));
-        t.assertEquals(cart, new InventoryHolder.Item(cart, loot).place(), "a backpack on an entity");
-        t.assertEquals(chest, new InventoryHolder.Item(alices, loot).place(), "a backpack in a copy is at its chest");
+        t.assertEquals(Place.of(cart), Place.of(new InventoryHolder.Item(cart, loot)), "a backpack on an entity");
+        t.assertEquals(chestSpot, Place.of(new InventoryHolder.Item(alices, loot)), "a backpack in a copy is at its "
+                + "chest");
         InventoryHolder ender = new InventoryHolder.Linked(InventoryHolder.Linked.ENDER_CHEST, alice.uuid().toString());
-        t.assertEquals(ender, new InventoryHolder.Item(ender, loot).place(), "a backpack in an ender chest comes "
-                + "down to its frequency");
+        t.assertEquals(new Place.Nowhere(InventoryHolder.Linked.ENDER_CHEST, alice.uuid().toString(),
+                java.util.Optional.of(alice.uuid())), Place.of(new InventoryHolder.Item(ender, loot)),
+                "a backpack in an ender chest has no place: its frequency, owned by alice");
         InventoryHolder unplaced = new InventoryHolder.PerPlayer(InventoryHolder.Unknown.INSTANCE, alice.uuid());
-        t.assertEquals(InventoryHolder.Unknown.INSTANCE, unplaced.place(), "whose copy, but not where, is Unknown");
+        t.assertEquals(Place.Unknown.anywhere(Place.Unknown.Reason.UNIDENTIFIED_INVENTORY), Place.of(unplaced),
+                "whose copy, but not where, is Unknown");
         t.assertFalse(unplaced.equals(new InventoryHolder.PerPlayer(InventoryHolder.Unknown.INSTANCE, bob.uuid())),
                 "and still never merges two players' copies");
         refuses(t, "keyed by its frequency", () -> new InventoryHolder.PerPlayer(ender, alice.uuid()));

@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.EventStack;
@@ -30,5 +32,15 @@ public class ItemBreakEvent extends ItemEvent {
     /** Who held it, if anyone. */
     public Optional<LivingEntity> getEntity() {
         return Optional.ofNullable(entity);
+    }
+
+    /**
+     * Where whoever held it is; {@link Place.Unknown.Reason#UNIDENTIFIED_INVENTORY} within its level when nothing
+     * says who held it.
+     */
+    @Override
+    public Places getPlaces() {
+        return Places.of(getEntity().<Place>map(Place::of).orElseGet(() -> new Place.Unknown(
+                new Place.Level(getLevel()), Place.Unknown.Reason.UNIDENTIFIED_INVENTORY)));
     }
 }

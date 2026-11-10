@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
@@ -57,5 +59,11 @@ public class EntityBreedEvent extends EntityEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /** Where the child is, then where each parent is. The breeder, who fed them, is not a place of the breeding. */
+    @Override
+    public Places getPlaces() {
+        return super.getPlaces().and(Place.of(getMother()), Place.of(getFather()));
     }
 }

@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.inventory;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
@@ -31,5 +33,11 @@ public class InventoryCloseEvent extends InventoryEvent {
     /** The menu that closed. */
     public AbstractContainerMenu getMenu() {
         return menu;
+    }
+
+    /** Where {@link #getHolder()} is, then every inventory behind the menu's slots, as for a click. */
+    @Override
+    public Places getPlaces() {
+        return Places.of(Place.of(getHolder()), Menus.places(menu, viewer));
     }
 }
