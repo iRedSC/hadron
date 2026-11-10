@@ -874,6 +874,7 @@ paths = [
 guards = [
     { test = "SideEffectsTests.aSoundSentStraightToAPlayerIsRecordedOnce", tier = "in-game" },
 ]
+note = "Hand-made: drops the connection hook and brings back the playNotifySound hook; the broadcast marks and their carry through a replacement stay, unused."
 
 [[regression]]
 id = "watch-broadcast-hides-other-sounds"
@@ -886,6 +887,7 @@ paths = [
 guards = [
     { test = "SideEffectsTests.aSoundAHandlerSendsDuringABroadcastIsRecorded", tier = "in-game" },
 ]
+note = "Hand-made: keeps the per-thread broadcast marks the later fixes use, and skips every packet sent while one runs, as before the fix."
 
 [[regression]]
 id = "watch-ambient-depth-global"
