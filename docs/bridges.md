@@ -17,27 +17,27 @@ A bridge runs the test as an in-game suite with its mod and itself in the test s
 ```java
 Acceptance area = t.acceptance(BoundingBox.fromCorners(t.pos(-3, 0, -3), t.pos(3, 4, 3)));
 t.tick(200);                                       // bob's miner, bob not trusted
-area.assertRefused("bob's miner where he isn't trusted");
+area.assertRefused(bob, "bob's miner where he isn't trusted");
 area.assertUnchanged("bob's miner where he isn't trusted");
 
 area.trust(bob).refuse(BlockEvent.class).mark();   // it runs, but every dig is refused,
 t.tick(200);                                       // so nothing may change, not even its buffer
-area.assertRefused("bob's miner, block changes refused");
+area.assertRefused(bob, "bob's miner, block changes refused");
 area.assertUnchanged("bob's miner, block changes refused");
 area.assertActingFor(bob, "bob's miner");
 
 area.refuseNothing().refuse(InventoryEvent.class).mark();  // it digs; its inventory changes are refused
 t.tick(200);
-area.assertRefused("bob's miner, inventory changes refused");
+area.assertRefused(bob, "bob's miner, inventory changes refused");
 area.assertUnchanged("bob's miner, inventory changes refused", Acceptance.Part.INVENTORIES);
 ```
 
-`assertRefused` makes sure something was tried: a refused step where the machine sat idle (no power, out of range) proves nothing. What a refused-kind step can't catch yet is a drop thrown away when its insert is refused: that is conservation, which waits for the design of running resource flows.
+`assertRefused(bob, step)` makes sure something acting for bob was refused: a refused step where the machine sat idle (no power, out of range) proves nothing, and nature's refusals don't count. What a refused-kind step can't catch yet is a drop thrown away when its insert is refused: that is conservation, which waits for the design of running resource flows.
 
 - **`assertUnchanged(step, parts...)`**: nothing in the parts named (`BLOCKS`, `INVENTORIES`, `ENTITIES`, `PLAYERS`; all, when none) changed. Compare every part when a refused kind stops the machine's work, so a cost kept or a drop duped from a refused action fails too; name parts only when the step lets other kinds through on purpose. Each change is listed with the events heard for that place or entity, so it reads as a cancel the bridge ignored or, with nothing heard, an interception gap.
 - **`assertActingFor(player, step)`**: every event in the box acts for that player, except the server's and nature's, and at least one does. `Unknown` and ownerless actors are named as attribution gaps, and an event the kit can't place at all (an inventory event with an unknown holder, an item event nobody is behind) fails it too: protection denies those, failing closed.
 
-Protection denies every cancellable block, inventory, resource, item, explosion or entity event in the box unless the server or a trusted player is behind it and its kind isn't refused. Motion (moving, teleporting, velocity, knockback, targeting, air) is neither protected nor logged, so anyone walks through. The box is watched, so a change with nobody behind it fires as `Unknown`. What the kit compares and what it doesn't is in `Acceptance`'s Javadoc; not yet compared are a block entity's other data and the energy, fluids and other resources a machine holds, which wait for the design of running resource flows ([design](design.md#open-designs)). Build the box and join every player before calling `t.acceptance`.
+Protection denies every cancellable block, inventory, resource, item, explosion, entity or area-shaped world event (a tick accelerator, a portal) in the box unless the server or a trusted player is behind it and its kind isn't refused. Motion (moving, teleporting, velocity, knockback, targeting, air) is neither protected nor logged, so anyone walks through. The box is watched, so a change with nobody behind it fires as `Unknown`. What the kit compares and what it doesn't is in `Acceptance`'s Javadoc; not yet compared are a block entity's other data and the energy, fluids and other resources a machine holds, which wait for the design of running resource flows ([design](design.md#open-designs)). Build the box and join every player before calling `t.acceptance`.
 
 An earlier design also checked that every change in an allowed step was reported, by deciding which event explained each change. Five council rounds showed that needs a hand-written meaning for every event, wrong in one direction or the other each time (#27); refusing one kind at a time proves the same thing by construction.
 

@@ -6,7 +6,13 @@ import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
+import dev.iredsc.hadron.api.event.entity.EntityEvent;
+import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
+import dev.iredsc.hadron.api.event.item.EquipEvent;
+import dev.iredsc.hadron.api.event.item.EquipmentChangeEvent;
+import dev.iredsc.hadron.api.event.player.PlayerSwapHandItemsEvent;
+import dev.iredsc.hadron.api.event.world.TickAccelerateEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
@@ -21,6 +27,7 @@ import dev.iredsc.hadron.api.event.resource.ResourceConsumeEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
+import dev.iredsc.hadron.api.event.world.ExplosionPrimeEvent;
 import dev.iredsc.hadron.test.Acceptance;
 import dev.iredsc.hadron.test.Acceptance.Part;
 import dev.iredsc.hadron.test.HadronTest;
@@ -32,6 +39,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.CompoundContainer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ClickType;
@@ -213,8 +221,10 @@ public final class AcceptanceKitTests {
         }
         t.tick(2);
         area.assertUnchanged("bob's blast beside an area he isn't trusted in");
-        t.assertTrue(area.events().stream().anyMatch(e -> e.event() instanceof ExplosionEvent && e.cancelled()
-                && e.pos().isPresent()), "protection refused the blast reaching into the area: " + area.events());
+        // Refused as it primed (its reach overlaps the area) or as it went off (its blocks reach in).
+        t.assertTrue(area.events().stream().anyMatch(e -> (e.event() instanceof ExplosionEvent
+                || e.event() instanceof ExplosionPrimeEvent) && e.cancelled()),
+                "protection refused the blast reaching into the area: " + area.events());
     }
 
     @HadronTest
@@ -580,11 +590,11 @@ public final class AcceptanceKitTests {
         bob.hold(new ItemStack(Items.IRON_PICKAXE));
         Acceptance area = t.acceptance(around(t));
         t.tick(2);
-        String why = failure(t, () -> area.assertRefused("bob's machine, never started"));
-        t.assertTrue(why.contains("nothing was refused since the last mark"), why);
+        String why = failure(t, () -> area.assertRefused(bob, "bob's machine, never started"));
+        t.assertTrue(why.contains("nothing acting for bob was refused"), why);
         bob.breakBlock(stone);
         t.tick(2);
-        area.assertRefused("bob breaking stone where he isn't trusted");
+        area.assertRefused(bob, "bob breaking stone where he isn't trusted");
     }
 
     @HadronTest
@@ -634,5 +644,59 @@ public final class AcceptanceKitTests {
         pig.changeDimension(new DimensionTransition(nether, new Vec3(0.5, 100, 0.5), Vec3.ZERO, 0, 0,
                 DimensionTransition.DO_NOTHING));
         area.assertUnchanged("a pig taken through a portal", Part.ENTITIES);
+    }
+
+    @HadronTest
+    void natureBeingRefusedDoesNotShowTheMachineTried(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos in = t.pos(2, 0, 0);
+        Acceptance area = t.acceptance(around(t));
+        ItemEntity a = new ItemEntity(t.level(), in.getX() + 0.5, in.getY(), in.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND));
+        ItemEntity b = new ItemEntity(t.level(), in.getX() + 0.5, in.getY(), in.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND));
+        t.assertTrue(Hadron.getPluginManager().callEvent(new ItemMergeEvent(t.level(), a, b, Actor.Nature.INSTANCE)),
+                "nature's merge was refused");
+        String why = failure(t, () -> area.assertRefused(bob, "bob's idle machine beside merging items"));
+        t.assertTrue(why.contains("nothing acting for bob was refused"), why);
+    }
+
+    @HadronTest
+    void refuseRejectsKindsProtectionCantDeny(TestContext t) {
+        Acceptance area = t.acceptance(around(t));
+        for (Class<? extends dev.iredsc.hadron.api.event.Event> kind : List.of(EntityTeleportEvent.class,
+                PlayerSwapHandItemsEvent.class, EquipmentChangeEvent.class)) {
+            String why = "no refusal";
+            try {
+                area.refuse(kind);
+            } catch (IllegalArgumentException e) {
+                why = e.getMessage();
+            }
+            t.assertTrue(why.contains(kind.getSimpleName() + " can't be refused"), why);
+        }
+        area.refuse(BlockEvent.class).refuse(EntityEvent.class);
+    }
+
+    @HadronTest
+    void armourPutOnAPlayerInTheAreaIsRefused(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos in = t.pos(2, 0, 0);
+        alice.teleport(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        Acceptance area = t.acceptance(around(t));
+        // A dispenser outside the area, nobody's, equips the player standing in it.
+        Actor dispenser = new Actor.Machine(t.level(), t.pos(-3, 0, 0), Attribution.none());
+        boolean cancelled = Hadron.getPluginManager().callEvent(new EquipEvent(t.level(), alice.player(),
+                EquipmentSlot.HEAD, ItemStack.EMPTY, new ItemStack(Items.IRON_HELMET), dispenser));
+        t.assertTrue(cancelled, "armour put on a player in the area from outside was refused: " + area.events());
+    }
+
+    @HadronTest
+    void anAcceleratorReachingIntoTheAreaIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Acceptance area = t.acceptance(around(t));
+        boolean cancelled = Hadron.getPluginManager().callEvent(new TickAccelerateEvent(
+                new Actor.Player(bob.player()), t.level(), BoundingBox.fromCorners(t.pos(-2, 0, -1), t.pos(1, 1, 1)),
+                4));
+        t.assertTrue(cancelled, "a field overlapping the area was refused: " + area.events());
     }
 }

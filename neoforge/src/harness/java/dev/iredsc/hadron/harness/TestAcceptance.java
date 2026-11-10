@@ -22,7 +22,10 @@ import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
+import dev.iredsc.hadron.api.event.item.EquipEvent;
+import dev.iredsc.hadron.api.event.item.ItemConsumeEvent;
 import dev.iredsc.hadron.api.event.item.ItemCraftEvent;
+import dev.iredsc.hadron.api.event.item.ItemUseEvent;
 import dev.iredsc.hadron.api.event.item.ItemDespawnEvent;
 import dev.iredsc.hadron.api.event.item.ItemMergeEvent;
 import dev.iredsc.hadron.api.event.item.ItemDropEvent;
@@ -35,6 +38,7 @@ import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
+import dev.iredsc.hadron.api.event.world.WorldEvent;
 import dev.iredsc.hadron.api.world.Areas;
 import dev.iredsc.hadron.neoforge.InventoryHolders;
 import dev.iredsc.hadron.test.Acceptance;
@@ -136,7 +140,17 @@ final class TestAcceptance implements Acceptance, Listener {
 
     @Override
     public Acceptance refuse(Class<? extends Event> kind) {
-        refused.add(Objects.requireNonNull(kind, "kind"));
+        Objects.requireNonNull(kind, "kind");
+        // Only what protection can deny: an action, not motion, and, for a single kind, one that can be cancelled.
+        boolean action = ActionEvent.class.isAssignableFrom(kind);
+        boolean concrete = !java.lang.reflect.Modifier.isAbstract(kind.getModifiers());
+        boolean motion = MOTION.stream().anyMatch(m -> m.isAssignableFrom(kind));
+        if (!action || motion || concrete && !Cancellable.class.isAssignableFrom(kind)) {
+            throw new IllegalArgumentException(kind.getSimpleName() + " can't be refused in an acceptance area: refuse "
+                    + "takes a kind of action protection can cancel, such as BlockEvent, InventoryEvent, ItemEvent, "
+                    + "ResourceEvent or EntityDamageEvent. Player events, motion and after-the-fact events can't be.");
+        }
+        refused.add(kind);
         return this;
     }
 
@@ -169,11 +183,13 @@ final class TestAcceptance implements Acceptance, Listener {
     }
 
     @Override
-    public void assertRefused(String step) {
-        if (seen.stream().noneMatch(Seen::cancelled)) {
-            throw new AssertionError(step + ": nothing was refused since the last mark, so this step proves nothing "
-                    + "about interception. Is the machine running (power, fuel, range, an owner, enough ticks)? Heard: "
-                    + (seen.isEmpty() ? "no events" : seen));
+    public void assertRefused(TestPlayer player, String step) {
+        boolean tried = seen.stream().anyMatch(s -> s.cancelled()
+                && s.actor().actingFor().filter(player.uuid()::equals).isPresent());
+        if (!tried) {
+            throw new AssertionError(step + ": nothing acting for " + player.name() + " was refused since the last "
+                    + "mark, so this step proves nothing about interception. Is the machine running (power, fuel, "
+                    + "range, an owner, enough ticks)? Heard: " + (seen.isEmpty() ? "no events" : seen));
         }
     }
 
@@ -269,6 +285,11 @@ final class TestAcceptance implements Acceptance, Listener {
             if (block.isPresent() && box.isInside(block.get())) return in(block.get());
         }
         if (event instanceof EntityEvent e) return at(e.getLevel(), e.getPosition());
+        if (event instanceof WorldEvent w && !(event instanceof ExplosionEvent)) {
+            // An area a world event names (an accelerator's field, a portal's frame), by whether it overlaps.
+            return w.getLevel() == level && w.getArea().filter(box::intersects).isPresent()
+                    ? new Place.In(Optional.empty()) : OUT;
+        }
         if (event instanceof ExplosionEvent x) {
             // Its blocks too: a blast just outside the box still breaks blocks in it.
             if (x.getLevel() != level) return OUT;
@@ -301,6 +322,9 @@ final class TestAcceptance implements Acceptance, Listener {
         if (event instanceof ItemEvent i) {
             if (i.getLevel() != level) return OUT;
             // An item event naming the inventory it happens in (a craft, a smelt, a trade, an anvil) happens there.
+            // An item used, eaten or equipped happens where the entity it is about stands.
+            Optional<LivingEntity> about = itemUser(i);
+            if (about.isPresent() && at(level, about.get().position()) instanceof Place.In p) return p;
             Optional<InventoryHolder> in = itemHolder(i);
             Place named = in.map(this::holder).orElse(OUT);
             if (named instanceof Place.In) return named;
@@ -319,6 +343,7 @@ final class TestAcceptance implements Acceptance, Listener {
             // chest, a machine's menu over its item handler), then any slot over a block entity in the box.
             Place on = holder(InventoryHolders.ofMenu(click.getMenu(), click.getViewer()));
             if (on instanceof Place.In) return on;
+            Map<BlockPos, Container> containers = null;
             for (Slot slot : click.getMenu().slots) {
                 if (slot.container instanceof BlockEntity be && be.getLevel() == level
                         && box.isInside(be.getBlockPos())) {
@@ -326,9 +351,9 @@ final class TestAcceptance implements Acceptance, Listener {
                 }
                 // A double chest: either half may be the one in the area.
                 if (slot.container instanceof CompoundContainer both) {
-                    for (BlockPos p : BlockPos.betweenClosed(box.minX(), box.minY(), box.minZ(),
-                            box.maxX(), box.maxY(), box.maxZ())) {
-                        if (level.getBlockEntity(p) instanceof Container half && both.contains(half)) return in(p);
+                    if (containers == null) containers = containersInBox();
+                    for (Map.Entry<BlockPos, Container> half : containers.entrySet()) {
+                        if (both.contains(half.getValue())) return in(half.getKey());
                     }
                 }
             }
@@ -383,6 +408,15 @@ final class TestAcceptance implements Acceptance, Listener {
                 + "(InventoryHolder.Block or InventoryHolder.Entity)");
     }
 
+    private static Optional<LivingEntity> itemUser(ItemEvent event) {
+        return switch (event) {
+            case EquipEvent e -> Optional.of(e.getEntity());
+            case ItemUseEvent e -> Optional.of(e.getUser());
+            case ItemConsumeEvent e -> Optional.of(e.getConsumer());
+            default -> Optional.empty();
+        };
+    }
+
     private static Optional<InventoryHolder> itemHolder(ItemEvent event) {
         return switch (event) {
             case ItemChangeEvent e -> Optional.of(e.getHolder());
@@ -393,6 +427,15 @@ final class TestAcceptance implements Acceptance, Listener {
             case TradeEvent e -> Optional.of(e.getTrader());
             default -> Optional.empty();
         };
+    }
+
+    private Map<BlockPos, Container> containersInBox() {
+        Map<BlockPos, Container> out = new LinkedHashMap<>();
+        for (BlockPos p : BlockPos.betweenClosed(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(),
+                box.maxZ())) {
+            if (level.getBlockEntity(p) instanceof Container c) out.put(p.immutable(), c);
+        }
+        return out;
     }
 
     private boolean overlaps(ChunkPos chunk) {
@@ -469,7 +512,9 @@ final class TestAcceptance implements Acceptance, Listener {
         for (Entity e : followed.values()) {
             if (!e.isRemoved()) {
                 present.putIfAbsent(e.getUUID(), e);
-            } else if (e.getRemovalReason() == Entity.RemovalReason.CHANGED_DIMENSION) {
+            } else if (e.getRemovalReason() == Entity.RemovalReason.CHANGED_DIMENSION
+                    || e.getRemovalReason() == Entity.RemovalReason.UNLOADED_TO_CHUNK
+                    || e.getRemovalReason() == Entity.RemovalReason.UNLOADED_WITH_PLAYER) {
                 // A mob changing worlds is replaced by a copy with the same id there: follow the copy, or, while
                 // the world it went to doesn't list it yet, the mob as it left. Changing worlds is motion, not a
                 // change.

@@ -21,28 +21,29 @@ import net.minecraft.core.BlockPos;
  * Acceptance area = t.acceptance(BoundingBox.fromCorners(t.pos(-3, 0, -3), t.pos(3, 4, 3)));
  * // bob's quarry in the area, bob not trusted: everything it tries is refused
  * t.tick(100);
- * area.assertRefused("bob's quarry where he isn't trusted");
+ * area.assertRefused(bob, "bob's quarry where he isn't trusted");
  * area.assertUnchanged("bob's quarry where he isn't trusted");
  *
  * // trusted, but its block changes refused: it runs, yet with every dig refused nothing may change at all, not
  * // even its own buffer (a drop kept from a refused break is a dupe)
  * area.trust(bob).refuse(BlockEvent.class).mark();
  * t.tick(100);
- * area.assertRefused("bob's quarry with its block changes refused");
+ * area.assertRefused(bob, "bob's quarry with its block changes refused");
  * area.assertUnchanged("bob's quarry with its block changes refused");
  * area.assertActingFor(bob, "bob's quarry");
  *
  * // digging allowed, its inventory changes refused: blocks go, but no chest it reaches may change
  * area.refuseNothing().refuse(InventoryEvent.class).mark();
  * t.tick(100);
- * area.assertRefused("bob's quarry with its inventory changes refused");
+ * area.assertRefused(bob, "bob's quarry with its inventory changes refused");
  * area.assertUnchanged("bob's quarry with its inventory changes refused", Acceptance.Part.INVENTORIES);
  * // Not caught yet: a drop thrown away when its insert is refused. That is conservation, which waits for
  * // Hadron's design for running resource flows.
  * }</pre>
  *
- * <p><b>What it protects and logs:</b> every block, inventory, resource and item event at a place in the area, every
- * explosion in it or breaking a block in it, and every entity event for an entity in it, except an entity's motion
+ * <p><b>What it protects and logs:</b> every block, inventory, resource and item event at a place in the area (an
+ * item event by the entity it is about, the inventory it names, or whoever is behind it), every explosion in it or
+ * breaking a block in it, every world event whose area overlaps it (a tick accelerator, a portal), and every entity event for an entity in it, except an entity's motion
  * and attention (moving, teleporting, velocity, knockback, targeting, air), so anyone may walk through. Protection
  * denies each that is cancellable unless the server or a trusted player is behind it and its kind isn't refused, so
  * {@link Actor.Unknown}, ownerless machines and other players are outsiders, as {@link Actor} says protection should
@@ -88,6 +89,9 @@ public interface Acceptance {
     /**
      * Refuses events of this kind (its subclasses too) from trusted players as well, on top of any refused before:
      * {@code refuse(BlockEvent.class).refuse(InventoryEvent.class)}. The server is never refused. Returns this.
+     *
+     * @throws IllegalArgumentException for a kind protection can't deny: player events, motion, and events reported
+     *         after the fact, which can't be cancelled.
      */
     Acceptance refuse(Class<? extends Event> kind);
 
@@ -101,10 +105,11 @@ public interface Acceptance {
     List<Seen> events();
 
     /**
-     * That protection refused at least one event since the last {@link #mark}. A refused step where nothing was even
-     * tried proves nothing (the machine is out of power or range), so assert this beside {@link #assertUnchanged}.
+     * That protection refused at least one event acting for {@code player} since the last {@link #mark}. A refused step
+     * where the machine never tried anything proves nothing (it is out of power or range), and nature's or a stray
+     * mob's refusals don't count, so assert this beside {@link #assertUnchanged}.
      */
-    void assertRefused(String step);
+    void assertRefused(TestPlayer player, String step);
 
     /**
      * That none of {@code parts} (every part, when none is given) changed since the last {@link #mark}: for a step
