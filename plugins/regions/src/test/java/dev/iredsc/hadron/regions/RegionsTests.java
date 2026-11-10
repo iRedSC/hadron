@@ -20,6 +20,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.EquipmentSlot;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.List;
@@ -37,6 +38,7 @@ import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.projectile.ThrownEnderpearl;
 import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.stats.Stats;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
@@ -83,11 +85,13 @@ public final class RegionsTests {
         t.setBlock(t.pos(1, 0, 1), Blocks.DIRT);
         define(t, admin(t), "an-outsider-cant-break-or-place", t.pos(-2, 0, -2), t.pos(2, 2, 2));
         TestPlayer bob = t.player("bob");
+        SideEffects effects = t.watchSideEffects();
         bob.breakBlock(t.pos(1, 0, 1));
         t.assertBlock(t.pos(1, 0, 1), Blocks.DIRT);
         bob.hold(new ItemStack(Items.STONE));
         bob.placeBlock(t.pos(1, 1, 1));
         t.assertBlock(t.pos(1, 1, 1), Blocks.AIR);
+        effects.assertNone("a refused break and place");
     }
 
     @HadronTest
@@ -209,10 +213,12 @@ public final class RegionsTests {
         alice.command("rg flag armor-stand-place use allow");
         TestPlayer bob = t.player("bob");
         bob.hold(new ItemStack(Items.ARMOR_STAND));
+        SideEffects effects = t.watchSideEffects();
         bob.useBlock(t.pos(1, -1, 1));
         t.tick(2);
         t.assertTrue(t.level().getEntitiesOfClass(ArmorStand.class, new AABB(t.pos(1, 0, 1)).inflate(3)).isEmpty(),
                 "an outsider's armor stand should not appear in a region that denies building");
+        effects.assertNone("a refused armor stand");
     }
 
     @HadronTest
@@ -241,11 +247,13 @@ public final class RegionsTests {
         TestPlayer alice = admin(t);
         define(t, alice, "armor-stand-hit", t.pos(-2, 0, -2), t.pos(2, 2, 2));
         TestPlayer bob = t.player("bob");
+        SideEffects effects = t.watchSideEffects();
         bob.attack(stand);
         t.tick(2);
         bob.attack(stand);
         t.tick(2);
         t.assertFalse(stand.isRemoved(), "an outsider's hits should not break a stand in a region that denies building");
+        effects.assertNone("refused hits on a stand");
     }
 
     @HadronTest
@@ -258,10 +266,12 @@ public final class RegionsTests {
         TestPlayer alice = admin(t);
         define(t, alice, "frame-item", t.pos(-2, 0, -2), t.pos(2, 2, 2));
         TestPlayer bob = t.player("bob");
+        SideEffects effects = t.watchSideEffects();
         bob.attack(frame);
         t.tick(2);
         t.assertTrue(frame.getItem().is(Items.DIAMOND), "the frame should keep its diamond, but holds " + frame.getItem());
         t.assertFalse(frame.isRemoved(), "the frame should still hang");
+        effects.assertNone("a refused hit on a frame");
     }
 
     @HadronTest
@@ -341,10 +351,12 @@ public final class RegionsTests {
         alice.command("rg flag boat-vault entry deny");
         alice.command("rg flag boat-vault use allow");
         TestPlayer bob = t.player("bob");
+        SideEffects effects = t.watchSideEffects();
         bob.interact(boat);
         t.tick(2);
         t.assertTrue(bob.player().getVehicle() == null, "bob should not board a boat inside a region he may not enter");
         t.assertFalse(boat.isRemoved(), "the boat should still be there");
+        effects.assertNone("a refused boarding");
     }
 
     @HadronTest
@@ -423,9 +435,11 @@ public final class RegionsTests {
         define(t, alice, "hopper-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
         // The hopper comes after the region, below it and outside.
         t.setBlock(chest.below(), Blocks.HOPPER);
+        SideEffects effects = t.watchSideEffects();
         t.tick(40);
         t.assertEquals(8, ((ChestBlockEntity) t.level().getBlockEntity(chest)).getItem(0).getCount(),
                 "the diamonds left in the chest");
+        effects.assertNone("a hopper refused for 40 ticks");
     }
 
     @HadronTest
@@ -463,10 +477,12 @@ public final class RegionsTests {
         define(t, alice, "double-chest", t.pos(2, 0, -1), t.pos(4, 2, 1));
         alice.command("rg flag double-chest use deny");
         TestPlayer bob = t.player("bob");
+        SideEffects effects = t.watchSideEffects();
         bob.useBlock(t.pos(1, 0, 0));
         t.tick();
         t.assertTrue(bob.player().containerMenu == bob.player().inventoryMenu,
                 "bob should not have the double chest open, but has " + bob.player().containerMenu);
+        effects.assertNone("a refused chest opening");
     }
 
     @HadronTest
@@ -548,12 +564,18 @@ public final class RegionsTests {
         BlockPos inside = t.pos(1, 0, 1);
         boat.moveTo(inside.getX() + 0.5, inside.getY(), inside.getZ() + 0.5);
         t.level().addFreshEntity(boat);
-        define(t, admin(t), "boat-break", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        TestPlayer alice = admin(t);
+        define(t, alice, "boat-break", t.pos(-2, 0, -2), t.pos(2, 2, 2));
         TestPlayer bob = t.player("bob");
         bob.player().setGameMode(GameType.CREATIVE);
+        SideEffects effects = t.watchSideEffects();
         bob.attack(boat);
         t.tick();
         t.assertFalse(boat.isRemoved(), "an outsider's hit should not break a boat in a region");
+        // Idle creative players creep a centimetre now and then, counted as walking; nothing else may show.
+        List<SideEffects.Effect> left = effects.seen().stream().filter(e -> !(e instanceof SideEffects.StatChanged s
+                && s.stat().getValue().equals(Stats.WALK_ONE_CM))).toList();
+        t.assertTrue(left.isEmpty(), "a refused hit on a boat should leave no side effect, but left " + left);
     }
 
     @HadronTest
@@ -571,12 +593,14 @@ public final class RegionsTests {
         carol.hold(new ItemStack(Items.DIRT, 16));
         alice.command("rg removeplayer shift-menu carol");
         // Her own hotbar's first slot, below the chest's 27 and her 27 others.
+        SideEffects effects = t.watchSideEffects();
         carol.clickSlot(54, 0, ClickType.QUICK_MOVE);
         t.tick();
         ChestBlockEntity box = (ChestBlockEntity) t.level().getBlockEntity(chest);
         for (int i = 0; i < box.getContainerSize(); i++) {
             t.assertTrue(box.getItem(i).isEmpty(), "the chest should stay empty, but slot " + i + " holds " + box.getItem(i));
         }
+        effects.assertNone("a refused shift-click");
     }
 
     @HadronTest

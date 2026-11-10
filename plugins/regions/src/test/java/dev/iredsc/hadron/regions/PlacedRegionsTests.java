@@ -22,6 +22,12 @@ import dev.iredsc.hadron.api.event.resource.ResourceTransferEvent;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.EquipmentSlot;
+import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
+import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
+import dev.iredsc.hadron.test.SideEffects;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.level.block.DispenserBlock;
+import net.minecraft.world.level.block.entity.DispenserBlockEntity;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -189,5 +195,47 @@ public final class PlacedRegionsTests {
                 new InventoryHolder.Entity(viewer), 36, 0, ClickType.PICKUP, new Actor.Player(viewer));
         t.plugin().getServer().getPluginManager().callEvent(click);
         t.assertFalse(click.isCancelled(), "what bob carries goes where he goes, as his pockets do");
+    }
+
+    @HadronTest
+    void anOutsiderCantSpendOrPickUpIntoAChestInside(TestContext t) {
+        BlockPos chest = t.pos(3, 0, 0);
+        t.setBlock(chest, Blocks.CHEST);
+        define(t, admin(t), "item-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer bob = t.player("bob");
+        InventoryHolder.Block box = new InventoryHolder.Block(t.level(), chest);
+        ItemChangeEvent spend = new ItemChangeEvent(t.level(), box, new ItemStack(Items.DIAMOND, 8), ItemStack.EMPTY,
+                new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(spend);
+        t.assertTrue(spend.isCancelled(), "bob should not use up the diamonds in a chest inside");
+        ItemEntity loose = new ItemEntity(t.level(), chest.getX() - 4.5, chest.getY(), chest.getZ() + 0.5,
+                new ItemStack(Items.DIRT));
+        ItemPickupEvent pickup = new ItemPickupEvent(t.level(), loose, box, new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(pickup);
+        t.assertTrue(pickup.isCancelled(), "bob's pickup should not land in a chest inside");
+        ItemPickupEvent own = new ItemPickupEvent(t.level(), loose, new InventoryHolder.Entity(bob.player()),
+                new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(own);
+        t.assertFalse(own.isCancelled(), "picking up into his own pockets is bob's business");
+    }
+
+    @HadronTest
+    void aDispenserOutsideCantDressAnArmorStandInside(TestContext t) {
+        BlockPos at = t.pos(2, 0, 0);
+        ArmorStand stand = EntityType.ARMOR_STAND.create(t.level());
+        stand.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5);
+        t.level().addFreshEntity(stand);
+        define(t, admin(t), "stand-dispenser", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        BlockPos dispenser = t.pos(1, 0, 0);
+        t.setBlock(dispenser, Blocks.DISPENSER.defaultBlockState().setValue(DispenserBlock.FACING, Direction.EAST));
+        DispenserBlockEntity box = (DispenserBlockEntity) t.level().getBlockEntity(dispenser);
+        box.setItem(0, new ItemStack(Items.CARVED_PUMPKIN));
+        SideEffects effects = t.watchSideEffects();
+        t.setBlock(dispenser.west(), Blocks.REDSTONE_BLOCK);
+        t.tick(6);
+        t.assertTrue(stand.getItemBySlot(EquipmentSlot.HEAD).isEmpty(), "the stand inside should stay bare, but wears "
+                + stand.getItemBySlot(EquipmentSlot.HEAD));
+        t.assertEquals(1, box.getItem(0).getCount(), "the pumpkin left in the dispenser");
+        effects.assertNone("a refused dispenser");
     }
 }

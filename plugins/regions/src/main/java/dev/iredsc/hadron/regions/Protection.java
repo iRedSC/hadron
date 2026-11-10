@@ -3,6 +3,23 @@ package dev.iredsc.hadron.regions;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.Event;
+import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
+import dev.iredsc.hadron.api.event.entity.EntityEvent;
+import dev.iredsc.hadron.api.event.entity.EntityTargetEvent;
+import dev.iredsc.hadron.api.event.entity.EntityVelocityEvent;
+import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
+import dev.iredsc.hadron.api.event.item.EquipEvent;
+import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
+import dev.iredsc.hadron.api.event.item.ItemConsumeEvent;
+import dev.iredsc.hadron.api.event.item.ItemCraftEvent;
+import dev.iredsc.hadron.api.event.item.ItemEvent;
+import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
+import dev.iredsc.hadron.api.event.item.ItemSmeltEvent;
+import dev.iredsc.hadron.api.event.item.ItemUseEvent;
+import dev.iredsc.hadron.api.event.item.TradeEvent;
+import dev.iredsc.hadron.api.event.world.TimeSkipEvent;
+import dev.iredsc.hadron.api.event.world.WeatherChangeEvent;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.event.Listener;
@@ -428,6 +445,74 @@ final class Protection implements Listener {
         refuse(e, e, places, Flag.USE, Optional.empty());
     }
 
+    /**
+     * An item used, eaten, crafted, changed, traded or picked up: held to {@code use} where what holds it stands, and
+     * putting one on (a dispenser dressing an armor stand) to {@code build}. What a player holds, eats or picks up is
+     * their own, so it stands outside every region; a loose item a player picks up isn't a region's either. Drops,
+     * merges, despawns and switching slots aren't a region's business.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    private void item(ItemEvent e) {
+        if (!(e instanceof Cancellable c) || trusted(e)) return;
+        List<Place> places = new ArrayList<>();
+        Flag flag = Flag.USE;
+        switch (e) {
+            case ItemChangeEvent ch -> places.addAll(placesOf(ch.getHolder()));
+            case ItemCraftEvent cr -> places.addAll(placesOf(cr.getHolder()));
+            case ItemSmeltEvent sm -> places.addAll(placesOf(sm.getHolder()));
+            case TradeEvent tr -> places.addAll(placesOf(tr.getTrader()));
+            case ItemConsumeEvent co -> places.add(placeOf(co.getConsumer()));
+            case ItemUseEvent us -> places.add(placeOf(us.getUser()));
+            case EquipEvent eq -> {
+                places.add(placeOf(eq.getEntity()));
+                flag = Flag.BUILD;
+            }
+            case ItemPickupEvent pk -> {
+                if (playersOwn(pk.getDestination()).isEmpty()) places.add(Place.of(pk.getItemEntity()));
+                places.addAll(placesOf(pk.getDestination()));
+            }
+            default -> {
+                return;
+            }
+        }
+        refuse(e, c, places, flag, Optional.empty());
+    }
+
+    /**
+     * Every other action that can be refused, held to {@code build} wherever it happens: a mod's change to an
+     * entity's data, shearing, taming, leashing, a portal or lightning made, chunks force-loaded, a tick accelerator.
+     * The handlers above decide their own kinds; moving, aiming and breathing are anyone's, weather and time are a
+     * whole world's, a projectile's hit is decided by what it does (damage, a block it changes), and what happens to
+     * a player themselves is no region's, but PvP's.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    private void action(Event ev) {
+        if (!(ev instanceof ActionEvent e) || !(ev instanceof Cancellable c) || decidedElsewhere(ev) || trusted(e)) {
+            return;
+        }
+        if (ev instanceof EntityEvent en && en.getEntity() instanceof Player) return;
+        refuse(e, c, List.copyOf(e.getPlaces()), Flag.BUILD, Optional.empty());
+    }
+
+    /** Kinds a handler above decides, or that no region decides. */
+    private static final List<Class<?>> DECIDED_ELSEWHERE = List.of(BlockEvent.class, ExplosionEvent.class,
+            InventoryEvent.class, ResourceEvent.class, ItemEvent.class, EntityMoveEvent.class, EntityTeleportEvent.class,
+            EntityMountEvent.class, EntityDismountEvent.class, EntityDamageEvent.class, EntityPotionEffectEvent.class,
+            EntityUseEvent.class, ArmorStandManipulateEvent.class, HangingBreakEvent.class, VehicleDamageEvent.class,
+            ItemFrameChangeEvent.class, EntitySpawnEvent.class, EntityRemoveEvent.class, EntityVelocityEvent.class,
+            EntityTargetEvent.class, EntityAirChangeEvent.class, ProjectileHitEvent.class, WeatherChangeEvent.class,
+            TimeSkipEvent.class);
+
+    private static boolean decidedElsewhere(Event e) {
+        for (Class<?> kind : DECIDED_ELSEWHERE) if (kind.isInstance(e)) return true;
+        return false;
+    }
+
+    /** Where an entity stands for regions: outside every one for a player, who goes where they go. */
+    private static Place placeOf(Entity entity) {
+        return entity instanceof Player p ? Place.Nowhere.player(p.getUUID()) : Place.of(entity);
+    }
+
     /** Where an inventory stands for regions: outside every one for a player's own, or what they carry in it. */
     private static List<Place> placesOf(InventoryHolder holder) {
         Optional<UUID> own = playersOwn(holder);
@@ -449,13 +534,24 @@ final class Protection implements Listener {
      * spot it may be in refuses.
      */
     private void refuse(ActionEvent e, Cancellable c, List<Place> places, Flag flag, Optional<BlockPos> shown) {
-        List<List<List<Region>>> possible = new ArrayList<>(places.size());
+        List<List<List<Region>>> possible = new ArrayList<>(places.size() + 1);
         for (Place place : places) possible.add(mayBeIn(place));
+        // The world on its own carries a change from where the machine or mob doing it stands, too.
+        if (worldOnItsOwn(e.getActor())) source(e.getActor()).ifPresent(at -> possible.add(mayBeIn(at)));
         Optional<Region> no = worldOnItsOwn(e.getActor()) ? crossing(possible)
                 : Rules.refusingAny(possible.stream().flatMap(List::stream).toList(), flag, e.getActor().actingFor());
         if (no.isEmpty()) return;
         c.setCancelled(true);
         shown.ifPresent(pos -> tell(e, pos, no.get()));
+    }
+
+    /** Where a machine or mob acting on its own stands. */
+    private static Optional<Place> source(Actor actor) {
+        return switch (actor) {
+            case Actor.Machine m -> Optional.of(Place.Spot.at(m.level(), m.pos()));
+            case Actor.EntityActor a -> Optional.of(Place.of(a.entity()));
+            default -> Optional.empty();
+        };
     }
 
     /** Nobody behind it: nature, or a machine or mob nobody owns. */
@@ -574,10 +670,19 @@ final class Protection implements Listener {
         return Optional.of(e.getPos());
     }
 
-    /** Every space the event touches, including all a move sweeps through. */
+    /**
+     * Every space the event touches, including all a move sweeps through, and, for a block used, every block of the
+     * inventory using it opens: both halves of a double chest, so the half outside a region doesn't open the half in.
+     */
     private static Set<BlockPos> touched(BlockEvent e) {
         Set<BlockPos> out = new LinkedHashSet<>();
         out.add(e.getPos());
+        if (e instanceof BlockUseEvent) {
+            for (Place p : Place.of(new InventoryHolder.Block(e.getLevel(), e.getPos()))) {
+                if (p instanceof Place.Spot s && s.isBlock()) out.add(new BlockPos(s.box().minX(), s.box().minY(),
+                        s.box().minZ()));
+            }
+        }
         for (BlockChange change : e.getBlocks()) out.add(change.getPos());
         if (e instanceof BlockMoveEvent m) {
             out.addAll(m.getSweptSpace());
