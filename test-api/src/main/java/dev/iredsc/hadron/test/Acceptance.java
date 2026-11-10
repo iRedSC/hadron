@@ -43,8 +43,9 @@ import net.minecraft.core.BlockPos;
  *
  * <p><b>What it protects and logs:</b> every block, inventory, resource and item event at a place in the area (an
  * item event by the entity it is about, the inventory it names, or whoever is behind it), every explosion in it or
- * breaking a block in it, every world event whose area overlaps it (a tick accelerator, a portal), and every entity event for an entity in it, except an entity's motion
- * and attention (moving, teleporting, velocity, knockback, targeting, air), so anyone may walk through. Protection
+ * breaking a block in it, every world event whose area overlaps it (a tick accelerator, a portal), and every entity
+ * event for an entity in it, except an entity's motion and attention (moving, teleporting, velocity, knockback,
+ * targeting, air), so anyone may walk through. Protection
  * denies each that is cancellable unless the server or a trusted player is behind it and its kind isn't refused, so
  * {@link Actor.Unknown}, ownerless machines and other players are outsiders, as {@link Actor} says protection should
  * treat them. An event it can't place at all (an inventory event whose holder is unknown, an item event nobody is
