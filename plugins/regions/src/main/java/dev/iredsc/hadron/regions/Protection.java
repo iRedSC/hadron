@@ -6,6 +6,7 @@ import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityCaptureEvent;
+import dev.iredsc.hadron.api.event.entity.EntityCombustEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTargetEvent;
 import dev.iredsc.hadron.api.event.entity.EntityVelocityEvent;
@@ -314,6 +315,16 @@ final class Protection implements Listener {
         });
     }
 
+    /** Setting a player alight is an attack, refused where a hit would be. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    private void ignite(EntityCombustEvent e) {
+        if (!(e.getEntity() instanceof ServerPlayer hurt)) return;
+        pvp(e, hurt, Optional.empty()).ifPresent(no -> {
+            e.setCancelled(true);
+            tell(e, hurt.blockPosition(), no);
+        });
+    }
+
     /** The region refusing this attack on {@code hurt}, if it is PvP and a region on either side denies it. */
     private Optional<Region> pvp(ActionEvent e, ServerPlayer hurt, Optional<Entity> damager) {
         if (e.getActor() instanceof Actor.Server) return Optional.empty();
@@ -324,24 +335,29 @@ final class Protection implements Listener {
         if (who.isPresent() && who.get().equals(hurt.getUUID())) return Optional.empty();
         if (who.isEmpty() && (e.getActor() instanceof Actor.Nature
                 || e.getActor() instanceof Actor.EntityActor a && a.entity() instanceof Mob)) return Optional.empty();
-        // Both sides count: nobody fights out of a safe zone or into one.
-        ServerLevel level = hurt.serverLevel();
-        List<BlockPos> sides = new ArrayList<>(3);
-        sides.add(hurt.blockPosition());
-        e.getActingPlayer().filter(a -> a.level() == level).ifPresent(a -> sides.add(a.blockPosition()));
-        damager.filter(d -> d.level() == level).ifPresent(d -> sides.add(d.blockPosition()));
+        // Every side counts, each in its own world: nobody fights out of a safe zone or into one, even across worlds.
+        List<Place.Spot> sides = new ArrayList<>(4);
+        sides.add(Place.Spot.at(hurt.serverLevel(), hurt.blockPosition()));
+        e.getActingPlayer().ifPresent(a -> sides.add(Place.Spot.at(a.serverLevel(), a.blockPosition())));
+        damager.ifPresent(d -> spotOf(d).ifPresent(sides::add));
         // Where the attack comes from: a turret block, a fake player, a thrown potion, a mob someone controls.
         switch (e.getActor()) {
-            case Actor.Machine m when m.level() == level -> sides.add(m.pos());
-            case Actor.FakePlayer f when f.fake().level() == level -> sides.add(f.fake().blockPosition());
-            case Actor.EntityActor a when a.entity().level() == level -> sides.add(a.entity().blockPosition());
+            case Actor.Machine m -> sides.add(Place.Spot.at(m.level(), m.pos()));
+            case Actor.FakePlayer f -> sides.add(Place.Spot.at(f.fake().serverLevel(), f.fake().blockPosition()));
+            case Actor.EntityActor a -> spotOf(a.entity()).ifPresent(sides::add);
             default -> { }
         }
-        for (BlockPos side : sides) {
-            Optional<Region> no = Rules.refusing(store.at(level, side), Flag.PVP, who);
+        for (Place.Spot side : sides) {
+            Optional<Region> no = Rules.refusing(store.at(side.level(), new BlockPos(side.box().minX(),
+                    side.box().minY(), side.box().minZ())), Flag.PVP, who);
             if (no.isPresent()) return no;
         }
         return Optional.empty();
+    }
+
+    private static Optional<Place.Spot> spotOf(Entity entity) {
+        return entity.level() instanceof ServerLevel level ? Optional.of(Place.Spot.at(level, entity.blockPosition()))
+                : Optional.empty();
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
@@ -548,6 +564,7 @@ final class Protection implements Listener {
      * spot it may be in refuses.
      */
     private void refuse(ActionEvent e, Cancellable c, List<Place> places, Flag flag, Optional<BlockPos> shown) {
+        if (trusted(e)) return;
         List<List<List<Region>>> possible = new ArrayList<>(places.size() + 1);
         for (Place place : places) possible.add(mayBeIn(place));
         // The world on its own carries a change from where the machine or mob doing it stands, too.

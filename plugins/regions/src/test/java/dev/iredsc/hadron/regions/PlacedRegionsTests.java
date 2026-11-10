@@ -30,6 +30,10 @@ import net.minecraft.world.level.block.DispenserBlock;
 import net.minecraft.world.level.block.entity.DispenserBlockEntity;
 import dev.iredsc.hadron.api.event.entity.EntityCaptureEvent;
 import net.minecraft.world.entity.animal.Cow;
+import dev.iredsc.hadron.api.event.entity.EntityCombustEvent;
+import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -276,5 +280,60 @@ public final class PlacedRegionsTests {
                 new Actor.Player(bob.player()));
         t.plugin().getServer().getPluginManager().callEvent(carried);
         t.assertFalse(carried.isCancelled(), "carrying a cow from the field is no region's business");
+    }
+
+    @HadronTest
+    void settingAPlayerAlightInASafeZoneIsRefused(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "fire-safe", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        alice.command("rg flag fire-safe pvp deny");
+        TestPlayer bob = t.player("bob");
+        TestPlayer carol = t.player("carol");
+        standAt(carol, t.pos(3, 0, 0));
+        EntityCombustEvent fire = new EntityCombustEvent(carol.player(), 100, new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(fire);
+        t.assertTrue(fire.isCancelled(), "bob should not set carol alight in a safe zone");
+    }
+
+    @HadronTest
+    void aTurretInASafeZoneCantHitAPlayerInAnotherWorld(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "world-safe", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        alice.command("rg flag world-safe pvp deny");
+        TestPlayer bob = t.player("bob");
+        TestPlayer carol = t.player("carol");
+        ServerLevel nether = t.plugin().getServer().getMinecraftServer().getLevel(Level.NETHER);
+        t.assertTrue(nether != null, "the server should have a Nether");
+        carol.player().teleportTo(nether, 0.5, 64, 0.5, 0f, 0f);
+        Actor turret = new Actor.Machine(t.level(), t.pos(3, 0, 0), Attribution.of(bob.uuid()));
+        EntityDamageEvent shot = new EntityDamageEvent(carol.player(), t.level().damageSources().generic(), 4f, turret);
+        t.plugin().getServer().getPluginManager().callEvent(shot);
+        t.assertTrue(shot.isCancelled(), "a turret in a safe zone should not hurt carol in the Nether either");
+    }
+
+    @HadronTest
+    void theServerAndABypassingOpPlaceAndRemoveArmorStandsInside(TestContext t) {
+        define(t, admin(t), "stand-trust", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        ArmorStand stand = EntityType.ARMOR_STAND.create(t.level());
+        BlockPos at = t.pos(1, 0, 1);
+        stand.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5);
+        EntitySpawnEvent spawn = new EntitySpawnEvent(stand, null, new Actor.Server("a plugin's arena reset"));
+        t.plugin().getServer().getPluginManager().callEvent(spawn);
+        t.assertFalse(spawn.isCancelled(), "the server's own spawn is trusted");
+        EntityRemoveEvent remove = new EntityRemoveEvent(stand, EntityRemoveEvent.Cause.KILLED,
+                new Actor.Server("a plugin's arena reset"));
+        t.plugin().getServer().getPluginManager().callEvent(remove);
+        t.assertFalse(remove.isCancelled(), "the server's own removal is trusted");
+        TestPlayer erin = t.player("erin");
+        erin.setOp(true);
+        erin.command("rg bypass");
+        t.assertChat(erin, "Region bypass is on");
+        erin.hold(new ItemStack(Items.ARMOR_STAND));
+        erin.useBlock(t.pos(1, -1, 1));
+        t.tick(2);
+        t.assertFalse(t.level().getEntitiesOfClass(ArmorStand.class, new AABB(at).inflate(3)).isEmpty(),
+                "erin, bypassing, should place an armor stand inside");
+        erin.command("rg bypass");
+        t.assertChat(erin, "Region bypass is off");
     }
 }
