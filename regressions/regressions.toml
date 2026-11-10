@@ -822,3 +822,108 @@ guards = [
     { test = "HostileTests.aPluginCanNotReplaceOrClearWhatTheHostInstalled", tier = "in-game" },
 ]
 note = "Hand-made: keeps the HostKey parameters (every caller passes one) and drops only the three HostKey.require lines."
+
+[[regression]]
+id = "refused-action-sounds"
+bug = "A refused action still played its sounds and numbered level events: a refused lever clicked, a refused place played the block's place sound (and a door's half put back its break), a refused strip or ignite scraped or struck, and a refused snowball, arrow or item frame sounded its throw, shot or placing."
+fix = "8c76ce2"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/world/ServerLevelMixin.java",
+]
+guards = [
+    { test = "BreakPlaceTests.aRefusedLeverFlipClicksForNobodyNear", tier = "in-game" },
+    { test = "BreakPlaceTests.cancelledLeverFlipLeavesItOff", tier = "in-game" },
+    { test = "BreakPlaceTests.cancelledPlaceLeavesAirAndKeepsTheItem", tier = "in-game" },
+    { test = "SpawnTests.aRefusedSnowballIsGivenBack", tier = "in-game" },
+]
+
+[[regression]]
+id = "refused-dispenser-shot-sounds"
+bug = "A dispenser whose every spawn was refused (a cod bucket whose cod was refused) kept its item but still clicked and splashed as if it had poured."
+fix = "f351529"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java",
+]
+guards = [
+    { test = "BucketTests.refusedCodFromADispenserPoursNoWaterAndKeepsTheBucketInside", tier = "in-game" },
+]
+
+[[regression]]
+id = "held-sound-loses-visibility"
+bug = "A held sound replayed after NetVisibility's sound source was restored, so it went out unfiltered: with a spawn listener registered, a player hidden from bob still let bob hear their spyglass."
+fix = "751835f"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/HeldEffects.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetVisibility.java",
+]
+guards = [
+    { test = "VisibilityTests.aHiddenPlayersSoundHeldWhileTheirUseIsDecidedStaysHidden", tier = "in-game" },
+]
+
+[[regression]]
+id = "watch-misses-direct-sounds"
+bug = "watchSideEffects read sounds only at a world's broadcast and playNotifySound, so a sound sent straight to a player (/playsound, a raid's horn, a portal's whoosh) was never recorded and assertNone passed."
+fix = "4f35218"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/PlayerConnectionSoundMixin.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerLevelSoundMixin.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerPlayerNotifySoundMixin.java",
+    "neoforge/src/harness/resources/hadron_test.mixins.json",
+]
+guards = [
+    { test = "SideEffectsTests.aSoundSentStraightToAPlayerIsRecordedOnce", tier = "in-game" },
+]
+note = "Hand-made: drops the connection hook and brings back the playNotifySound hook; the broadcast marks and their carry through a replacement stay, unused."
+
+[[regression]]
+id = "watch-broadcast-hides-other-sounds"
+bug = "While a world's sound broadcast ran, the watch skipped every packet sent, so a sound a packet handler sent a player during a broadcast that left them out was never recorded and assertNone passed."
+fix = "a564142"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerLevelSoundMixin.java",
+]
+guards = [
+    { test = "SideEffectsTests.aSoundAHandlerSendsDuringABroadcastIsRecorded", tier = "in-game" },
+]
+note = "Hand-made: keeps the per-thread broadcast marks the later fixes use, and skips every packet sent while one runs, as before the fix."
+
+[[regression]]
+id = "watch-ambient-depth-global"
+bug = "The watch's ambient-trigger suppression was one counter for every thread, so another thread's sound sent while the server thread was inside an ambient trigger was never recorded."
+fix = "836c571"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java",
+]
+guards = [
+    { test = "SideEffectsTests.aSoundAnotherThreadSendsDuringAnAmbientTriggerIsRecorded", tier = "in-game" },
+]
+
+[[regression]]
+id = "watch-broadcast-content-match"
+bug = "The watch took any packet with a broadcast's sound, place and source as the broadcast's copy, so an independent sound with the same content sent to the player the broadcast left out was hidden, and assertNone passed for a watch started inside the broadcast or watching another world."
+fix = "69c76f4"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java",
+]
+guards = [
+    { test = "SideEffectsTests.aSoundLikeTheBroadcastsSentToThePlayerItLeftOutIsRecorded", tier = "in-game" },
+    { test = "SideEffectsTests.aWatchStartedDuringABroadcastRecordsASoundLikeIt", tier = "in-game" },
+    { test = "SideEffectsTests.anotherWorldsBroadcastHidesNoSoundFromTheWatch", tier = "in-game" },
+]
+note = "Hand-made: brings back matching by content alongside the identity marks, which the replacement fix after it still needs."
+
+[[regression]]
+id = "watch-replaced-broadcast-packet"
+bug = "A broadcast packet a handler replaced with setPacket lost its place in the broadcast, so one delivered sound was recorded twice."
+fix = "796f116"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/NetHooksBroadcastMarkMixin.java",
+    "neoforge/src/harness/resources/hadron_test.mixins.json",
+]
+guards = [
+    { test = "SideEffectsTests.aBroadcastsPacketAHandlerReplacesIsStillOneSound", tier = "in-game" },
+    { test = "SideEffectsTests.aBroadcastsPacketAHandlerChangesTheSourceOfIsStillOneSound", tier = "in-game" },
+]

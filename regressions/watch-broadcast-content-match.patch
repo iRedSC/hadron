@@ -1,0 +1,33 @@
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
+index f7c3149..192ef55 100644
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
+@@ -268,10 +268,27 @@ public final class TestSideEffects implements SideEffects {
+ 
+     /** Whether {@code sent} is one of the very packet instances a broadcast running on this thread marked. */
+     private static boolean ofBroadcast(Packet<?> sent) {
+-        for (Packet<?> marked : BROADCAST.get()) if (marked == sent) return true;
++        for (Packet<?> marked : BROADCAST.get()) if (marked == sent || sameContent(sent, marked)) return true;
+         return false;
+     }
+ 
++    private static boolean sameContent(Packet<?> sent, Packet<?> b) {
++        return switch (sent) {
++            case ClientboundSoundPacket p when b instanceof ClientboundSoundPacket q -> sameSound(p.getSound(),
++                    q.getSound()) && p.getSource() == q.getSource() && p.getX() == q.getX() && p.getY() == q.getY()
++                    && p.getZ() == q.getZ();
++            case ClientboundSoundEntityPacket p when b instanceof ClientboundSoundEntityPacket q -> sameSound(
++                    p.getSound(), q.getSound()) && p.getSource() == q.getSource() && p.getId() == q.getId();
++            case ClientboundLevelEventPacket p when b instanceof ClientboundLevelEventPacket q -> p.getType()
++                    == q.getType() && p.getPos().equals(q.getPos()) && p.getData() == q.getData();
++            default -> false;
++        };
++    }
++
++    private static boolean sameSound(Holder<SoundEvent> a, Holder<SoundEvent> b) {
++        return a.value().getLocation().equals(b.value().getLocation());
++    }
++
+     /**
+      * From {@code PlayerConnectionSoundMixin}, for every packet the server sends a player: a sound or numbered event
+      * sent straight to them ({@code /playsound}, a raid's horn, a portal's whoosh, a locked chest), recorded as sent to

@@ -1,5 +1,8 @@
 package dev.iredsc.hadron.selftest.platform;
 
+import dev.iredsc.hadron.api.event.EventHandler;
+import dev.iredsc.hadron.api.event.Listener;
+import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.net.Visibility;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
@@ -107,6 +110,41 @@ public final class VisibilityTests {
         alice.player().hurt(t.level().damageSources().genericKill(), 1);
         t.tick();
         t.assertEquals(0L, hurtSounds(bob), "player hurt sounds bob received from hidden alice");
+    }
+
+    private static long spyglassSounds(TestPlayer viewer) {
+        return viewer.received(ClientboundSoundPacket.class).stream()
+                .filter(p -> p.getSound().value() == SoundEvents.SPYGLASS_USE).count();
+    }
+
+    @HadronTest
+    @Covers(value = Visibility.class, method = "hidePlayer")
+    void aHiddenPlayersSoundHeldWhileTheirUseIsDecidedStaysHidden(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        // With a spawn listener, what an item use does waits until it is known whether a spawn of it was refused, and
+        // plays once the use returns: alice's spyglass sound is held, then played.
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntitySpawnEvent e) {
+                // only listening
+            }
+        });
+        alice.hold(new ItemStack(Items.SPYGLASS));
+        // Visible first, so this test can't pass because the sound never arrives at all.
+        t.tick();
+        bob.clearReceived();
+        alice.useItem();
+        t.tick();
+        t.assertTrue(spyglassSounds(bob) > 0, "bob should hear visible alice's spyglass; without that this test proves "
+                + "nothing");
+        alice.player().stopUsingItem();
+        Visibility.hidePlayer(t.plugin(), bob.player(), alice.player());
+        t.tick();
+        bob.clearReceived();
+        alice.useItem();
+        t.tick();
+        t.assertEquals(0L, spyglassSounds(bob), "spyglass sounds bob received from hidden alice");
     }
 
     @HadronTest

@@ -1,0 +1,89 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/HeldEffects.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/HeldEffects.java
+index c6a8065..16d225b 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/HeldEffects.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/HeldEffects.java
+@@ -1,7 +1,5 @@
+ package dev.iredsc.hadron.neoforge;
+ 
+-import dev.iredsc.hadron.api.actor.Actor;
+-import dev.iredsc.hadron.api.actor.Actors;
+ import dev.iredsc.hadron.checks.StaticState;
+ import java.util.ArrayList;
+ import java.util.List;
+@@ -9,7 +7,6 @@ import java.util.function.BooleanSupplier;
+ import java.util.function.Supplier;
+ import net.minecraft.world.InteractionResult;
+ import net.minecraft.world.ItemInteractionResult;
+-import net.minecraft.world.entity.Entity;
+ import org.jspecify.annotations.Nullable;
+ 
+ /**
+@@ -74,36 +71,15 @@ public final class HeldEffects {
+ 
+     /**
+      * Holds {@code effect} until the innermost open hold is decided, and returns true; returns false, holding nothing,
+-     * when none is open on this thread, so the caller lets it happen now. A kept effect happens as it would have now:
+-     * under what is set around this one call ({@link #replaying}).
++     * when none is open on this thread, so the caller lets it happen now.
+      */
+     public static boolean hold(Runnable effect) {
+         Hold hold = current();
+         if (hold == null) return false;
+-        hold.held.add(replaying(effect));
++        hold.held.add(effect);
+         return true;
+     }
+ 
+-    /**
+-     * {@code effect} with what was set around the call that emitted it, put back while it runs later: the entity whose
+-     * own sound it is, which decides who may hear it ({@link NetVisibility#soundSource}), and the actor behind it,
+-     * which anything it fires names. Both are set around a narrower call than the hold (an entity's {@code playSound},
+-     * a nested actor scope) and are gone by the time the hold is decided. A kept effect must go out exactly as it
+-     * would have: a hidden player's spyglass, held while their use is asked about, must stay unheard by those it is
+-     * hidden from.
+-     */
+-    private static Runnable replaying(Runnable effect) {
+-        @Nullable Entity source = NetVisibility.soundSource();
+-        @Nullable Actor actor = Actors.current().orElse(null);
+-        return () -> NetVisibility.withSoundSource(source, () -> {
+-            if (actor == null || Actors.current().orElse(null) == actor) {
+-                effect.run();
+-            } else {
+-                Actors.acting(actor, effect);
+-            }
+-        });
+-    }
+-
+     /**
+      * NeoForge's {@code onPlaceItemIntoWorld}: the item's use, the place event and, if that was cancelled, putting the
+      * blocks back. What it caused is dropped if the event was cancelled ({@link #decidingPlace}), and happens otherwise.
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetVisibility.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetVisibility.java
+index 21fedad..4069ab0 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetVisibility.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetVisibility.java
+@@ -337,25 +337,6 @@ public final class NetVisibility {
+         }
+     }
+ 
+-    /** The entity whose own sound is being played right now, for a hold to replay it the same way. */
+-    static @Nullable Entity soundSource() {
+-        return soundSource;
+-    }
+-
+-    /**
+-     * Runs {@code play} with {@code source} (or none) as the source of the sounds it plays, whatever is set now: a held
+-     * sound's replay goes out filtered as it would have been when first played ({@link HeldEffects}).
+-     */
+-    static void withSoundSource(@Nullable Entity source, Runnable play) {
+-        Entity previous = soundSource;
+-        soundSource = source;
+-        try {
+-            play.run();
+-        } finally {
+-            soundSource = previous;
+-        }
+-    }
+-
+     /**
+      * Removes hidden players' tab entries, drops packets naming a hidden entity outside its own tracking, and takes a
+      * hidden entity out of the packets of entities the viewer does see: riders, leash holders, damage sources and

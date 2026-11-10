@@ -2,12 +2,25 @@ package dev.iredsc.hadron.selftest.harness;
 
 import static dev.iredsc.hadron.selftest.entities.Fixtures.spawnWithAi;
 
+import dev.iredsc.hadron.api.net.PacketRegistration;
+import dev.iredsc.hadron.api.net.Packets;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import net.minecraft.advancements.CriteriaTriggers;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.protocol.game.ClientboundBundlePacket;
+import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
+import net.minecraft.network.protocol.game.ClientboundRecipePacket;
+import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -15,6 +28,7 @@ import net.minecraft.world.entity.animal.Cow;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.gameevent.GameEvent;
 
 /**
@@ -47,8 +61,288 @@ public final class SideEffectsTests {
         SideEffects effects = t.watchSideEffects();
         t.tick(45); // past the 20-tick location trigger twice, with every tick's stats and the cow's AI running
         cow.gameEvent(GameEvent.STEP); // a mob's own footsteps are motion, not an action's
+        cow.playAmbientSound(); // nor is its moo, which its tick plays now and then
+        // nor the sound of a hit that did nothing, which is what a refused hit is
+        t.level().playSound(null, t.pos(1, 0, 0), SoundEvents.PLAYER_ATTACK_NODAMAGE, SoundSource.PLAYERS, 1.0F, 1.0F);
+        t.level().levelEvent(LevelEvent.PARTICLES_SHOOT_SMOKE, t.pos(1, 0, 0), 0); // a silent numbered event
         effects.assertNone("45 idle ticks beside a cow, shears in hand");
         t.assertEquals(0, effects.seen().size(), "side effects seen");
+    }
+
+    @HadronTest
+    void aSoundIsNamedWithWhereAndWhoWasSentIt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        BlockPos at = t.pos(2, 0, 0);
+        t.level().playSound(null, at, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1.0F, 1.0F);
+        t.level().playSound(alice.player(), at, SoundEvents.WOODEN_DOOR_OPEN, SoundSource.BLOCKS, 1.0F, 1.0F);
+        alice.player().playNotifySound(SoundEvents.CHEST_LOCKED, SoundSource.BLOCKS, 1.0F, 1.0F);
+        t.level().levelEvent(LevelEvent.SOUND_DISPENSER_DISPENSE, at, 0);
+        String where = at.getX() + " " + at.getY() + " " + at.getZ() + " in " + t.level().dimension().location();
+        assertNames(t, failure(effects, "planted sounds"), "left 4:",
+                "sound minecraft:block.lever.click (block) at " + where + ", sent to all near",
+                "sound minecraft:block.wooden_door.open (block) at " + where
+                        + ", sent to all near but alice, whose client plays it itself",
+                "sound minecraft:block.chest.locked (block) at ", "sent to alice only",
+                "level event 1000 SOUND_DISPENSER_DISPENSE at " + where + ", sent to all near",
+                "from SideEffectsTests.aSoundIsNamedWithWhereAndWhoWasSentIt(SideEffectsTests.java:");
+        SideEffects.SoundPlayed click = effects.seen(SideEffects.SoundPlayed.class).get(0);
+        t.assertEquals(SoundEvents.LEVER_CLICK, click.sound().value(), "the first sound recorded");
+        t.assertEquals(t.level(), click.level(), "the click's world");
+    }
+
+    @HadronTest
+    void aSoundSentStraightToAPlayerIsRecordedOnce(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        t.server().getCommands().performPrefixedCommand(t.server().createCommandSourceStack().withLevel(t.level()),
+                "execute at alice run playsound minecraft:block.lever.click master alice");
+        // A portal's whoosh, sent to the player who went through it alone.
+        alice.player().connection.send(new ClientboundLevelEventPacket(LevelEvent.SOUND_PORTAL_TRAVEL, t.pos(0, 0, 0),
+                0, false));
+        t.tick(); // the packets reach alice's client
+        assertNames(t, failure(effects, "sounds sent to alice alone"), "left 2:",
+                "sound minecraft:block.lever.click (master) at ", "level event 1032 SOUND_PORTAL_TRAVEL at ",
+                "sent to alice only", "from SideEffectsTests.aSoundSentStraightToAPlayerIsRecordedOnce(");
+        t.assertEquals(1L, alice.received(ClientboundSoundPacket.class).stream()
+                // /playsound sends a sound made from its name, so compare names
+                .filter(p -> p.getSound().value().getLocation().equals(SoundEvents.LEVER_CLICK.getLocation())).count(),
+                "lever clicks alice was sent");
+    }
+
+    @HadronTest
+    void aBroadcastTwoPlayersHearIsRecordedOnce(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        alice.clearReceived();
+        bob.clearReceived();
+        SideEffects effects = t.watchSideEffects();
+        t.level().playSound(null, t.pos(1, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1.0F, 1.0F);
+        t.tick();
+        t.assertEquals(1, alice.received(ClientboundSoundPacket.class).size(), "sound packets alice was sent");
+        t.assertEquals(1, bob.received(ClientboundSoundPacket.class).size(), "sound packets bob was sent");
+        t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "sounds recorded for one broadcast "
+                + "both heard; seen: " + effects.seen());
+    }
+
+    @HadronTest
+    void aSoundAHandlerSendsDuringABroadcastIsRecorded(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        t.player("bob");
+        t.tick();
+        alice.clearReceived();
+        // While the click goes to bob (alice's own client plays it), a handler sends alice a portal's whoosh.
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class, e -> {
+            if (e.getPacket().getSound().value() == SoundEvents.LEVER_CLICK) alice.player().connection.send(whoosh(t));
+        });
+        try {
+            SideEffects effects = t.watchSideEffects();
+            t.level().playSound(alice.player(), t.pos(0, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, alice.received(ClientboundLevelEventPacket.class).size(), "whooshes alice was sent");
+            t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "the click, recorded once");
+            t.assertEquals(1, effects.seen(SideEffects.LevelEventPlayed.class).size(), "the whoosh sent during it");
+        } finally {
+            handler.unregister();
+        }
+    }
+
+    @HadronTest
+    void aSoundAnotherThreadSendsDuringABroadcastIsRecorded(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        t.player("bob");
+        t.tick();
+        alice.clearReceived();
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class, e -> {
+            if (e.getPacket().getSound().value() == SoundEvents.LEVER_CLICK) {
+                CompletableFuture.runAsync(() -> alice.player().connection.send(whoosh(t))).join();
+            }
+        });
+        try {
+            SideEffects effects = t.watchSideEffects();
+            t.level().playSound(alice.player(), t.pos(0, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, alice.received(ClientboundLevelEventPacket.class).size(), "whooshes alice was sent");
+            t.assertEquals(1, effects.seen(SideEffects.LevelEventPlayed.class).size(), "the other thread's whoosh");
+        } finally {
+            handler.unregister();
+        }
+    }
+
+    @HadronTest
+    void soundsInABundleAreRecorded(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        alice.player().connection.send(new ClientboundBundlePacket(List.of(whoosh(t), new ClientboundSoundEntityPacket(
+                BuiltInRegistries.SOUND_EVENT.wrapAsHolder(SoundEvents.LEVER_CLICK), SoundSource.BLOCKS, alice.player(),
+                1, 1, 1))));
+        t.tick();
+        t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "entity sounds in the bundle");
+        t.assertEquals(1, effects.seen(SideEffects.LevelEventPlayed.class).size(), "whooshes in the bundle");
+    }
+
+    @HadronTest
+    void aSoundAnotherThreadSendsDuringAnAmbientTriggerIsRecorded(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        t.tick();
+        SideEffects effects = t.watchSideEffects();
+        // A worker thread's own action, held at a gate only so that it overlaps the server thread's ambient trigger.
+        CompletableFuture<Void> gate = new CompletableFuture<>();
+        CompletableFuture<Void> worker = CompletableFuture.runAsync(() -> {
+            gate.join();
+            alice.player().connection.send(whoosh(t));
+        });
+        boolean[] released = {false};
+        // Entering water unlocks the boat recipes, sending alice their recipe packet from inside the trigger.
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundRecipePacket.class, e -> {
+            if (released[0]) return;
+            released[0] = true;
+            gate.complete(null);
+            worker.join();
+        });
+        try {
+            CriteriaTriggers.ENTER_BLOCK.trigger(alice.player(), Blocks.WATER.defaultBlockState());
+            t.tick();
+            t.assertTrue(released[0], "entering water should send a recipe packet, releasing the worker inside the "
+                    + "trigger; without that this test proves nothing");
+            t.assertEquals(1, alice.received(ClientboundLevelEventPacket.class).size(), "whooshes alice was sent");
+            t.assertEquals(1, effects.seen(SideEffects.LevelEventPlayed.class).size(), "the worker's whoosh, sent "
+                    + "while the server thread was inside an ambient trigger");
+        } finally {
+            handler.unregister();
+            gate.complete(null);
+        }
+    }
+
+    /** {@code p} again, as a new packet: the same sound, place, source, volume, pitch and seed. */
+    private static ClientboundSoundPacket copy(ClientboundSoundPacket p) {
+        return new ClientboundSoundPacket(p.getSound(), p.getSource(), p.getX(), p.getY(), p.getZ(), p.getVolume(),
+                p.getPitch(), p.getSeed());
+    }
+
+    @HadronTest
+    void aSoundLikeTheBroadcastsSentToThePlayerItLeftOutIsRecorded(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        t.tick();
+        alice.clearReceived();
+        // The broadcast leaves alice out (her client plays it); a handler plays the same click for her separately.
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class, e -> {
+            if (e.getPlayer() == bob.player()) alice.player().connection.send(copy(e.getPacket()));
+        });
+        try {
+            SideEffects effects = t.watchSideEffects();
+            t.level().playSound(alice.player(), t.pos(0, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, alice.received(ClientboundSoundPacket.class).size(), "clicks alice was sent");
+            t.assertEquals(2, effects.seen(SideEffects.SoundPlayed.class).size(), "the broadcast, and the click sent "
+                    + "to alice apart from it; seen: " + effects.seen());
+        } finally {
+            handler.unregister();
+        }
+    }
+
+    @HadronTest
+    void aWatchStartedDuringABroadcastRecordsASoundLikeIt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        t.tick();
+        alice.clearReceived();
+        SideEffects[] step = new SideEffects[1];
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class, e -> {
+            if (e.getPlayer() == bob.player()) {
+                step[0] = t.watchSideEffects(); // the next step starts while the broadcast is still being sent
+                alice.player().connection.send(copy(e.getPacket()));
+            }
+        });
+        try {
+            t.level().playSound(alice.player(), t.pos(0, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, alice.received(ClientboundSoundPacket.class).size(), "clicks alice was sent");
+            SideEffects effects = step[0];
+            t.assertTrue(effects != null, "the handler should have started a watch; without it this proves nothing");
+            t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "the click sent to alice after the "
+                    + "watch started");
+        } finally {
+            handler.unregister();
+        }
+    }
+
+    @HadronTest
+    void anotherWorldsBroadcastHidesNoSoundFromTheWatch(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        bob.player().teleportTo(t.server().overworld(), 0.5, 120, 0.5, 0.0F, 0.0F);
+        t.tick();
+        alice.clearReceived();
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class, e -> {
+            if (e.getPlayer() == bob.player()) alice.player().connection.send(copy(e.getPacket()));
+        });
+        try {
+            SideEffects effects = t.watchSideEffects();
+            // The overworld's click isn't this watch's; the click a handler then sends alice, in the test's world, is.
+            t.server().overworld().playSound(null, bob.player().blockPosition(), SoundEvents.LEVER_CLICK,
+                    SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, alice.received(ClientboundSoundPacket.class).size(), "clicks alice was sent");
+            t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "the click sent to alice during "
+                    + "another world's broadcast; seen: " + effects.seen());
+        } finally {
+            handler.unregister();
+        }
+    }
+
+    @HadronTest
+    void aBroadcastsPacketAHandlerReplacesIsStillOneSound(TestContext t) {
+        t.player("alice");
+        t.player("bob");
+        t.tick();
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class,
+                e -> e.setPacket(copy(e.getPacket())));
+        try {
+            SideEffects effects = t.watchSideEffects();
+            t.level().playSound(null, t.pos(0, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "sounds recorded for one broadcast "
+                    + "whose packet a handler replaced for each player; seen: " + effects.seen());
+        } finally {
+            handler.unregister();
+        }
+    }
+
+    @HadronTest
+    void aBroadcastsPacketAHandlerChangesTheSourceOfIsStillOneSound(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        t.tick();
+        alice.clearReceived();
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class, e -> {
+            ClientboundSoundPacket p = e.getPacket();
+            e.setPacket(new ClientboundSoundPacket(p.getSound(), SoundSource.MASTER, p.getX(), p.getY(), p.getZ(),
+                    p.getVolume(), p.getPitch(), p.getSeed()));
+        });
+        try {
+            SideEffects effects = t.watchSideEffects();
+            t.level().playSound(null, t.pos(0, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, alice.received(ClientboundSoundPacket.class).size(), "clicks alice was sent");
+            t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "sounds recorded for one broadcast "
+                    + "whose source a handler changed; seen: " + effects.seen());
+        } finally {
+            handler.unregister();
+        }
+    }
+
+    /** A portal's whoosh, which the server sends straight to the player who went through. */
+    private static ClientboundLevelEventPacket whoosh(TestContext t) {
+        return new ClientboundLevelEventPacket(LevelEvent.SOUND_PORTAL_TRAVEL, t.pos(0, 0, 0), 0, false);
+    }
+
+    @HadronTest
+    void aSoundNobodyIsNearIsStillRecorded(TestContext t) {
+        t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        t.level().playSound(null, t.pos(0, 0, 200), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1.0F, 1.0F);
+        assertNames(t, failure(effects, "a sound far from everyone"), "sound minecraft:block.lever.click");
     }
 
     @HadronTest

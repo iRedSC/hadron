@@ -63,7 +63,7 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **In-game tier**: `@HadronTest`s in a headless server with real players over an in-memory connection, for anything that acts. `hadronTest`. Runs before a release.
 - **Suite**: one plugin's in-game tests. Suites share a server, but only the running suite's plugin is enabled.
 - **Self-tests**: Hadron's own in-game suite, in `selftest/`.
-- **Side effect**: what an action did to players and listeners beyond blocks and items: a statistic, an advancement trigger, a game event, experience or hunger. `t.watchSideEffects()` records them; a refused action must leave none. ([testing](testing.md#what-a-test-looks-like))
+- **Side effect**: what an action did to players and listeners beyond blocks and items: a statistic, an advancement trigger, a game event, a sound, experience or hunger. `t.watchSideEffects()` records them; a refused action must leave none. ([testing](testing.md#what-a-test-looks-like))
 - **Hold**: where core keeps an action's side effects while its refusal is still to come (a placement NeoForge asks about only after it happened, a block use whose change was refused, an item use whose spawns were refused): kept and replayed in order if it stands, dropped if refused. It covers only that action: what an event's handlers do while it is dispatched is theirs and passes through. `HeldEffects` in the port.
 - **Warm server**: a test server kept running by `hadronWatch`, so `hadronRerun` reruns a suite without a boot.
 - **`@Covers`**: what a test declares it proves. `coverageCheck` fails the build if any shipped event or public API method has none.

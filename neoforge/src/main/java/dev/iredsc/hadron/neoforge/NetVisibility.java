@@ -337,6 +337,25 @@ public final class NetVisibility {
         }
     }
 
+    /** The entity whose own sound is being played right now, for a hold to replay it the same way. */
+    static @Nullable Entity soundSource() {
+        return soundSource;
+    }
+
+    /**
+     * Runs {@code play} with {@code source} (or none) as the source of the sounds it plays, whatever is set now: a held
+     * sound's replay goes out filtered as it would have been when first played ({@link HeldEffects}).
+     */
+    static void withSoundSource(@Nullable Entity source, Runnable play) {
+        Entity previous = soundSource;
+        soundSource = source;
+        try {
+            play.run();
+        } finally {
+            soundSource = previous;
+        }
+    }
+
     /**
      * Removes hidden players' tab entries, drops packets naming a hidden entity outside its own tracking, and takes a
      * hidden entity out of the packets of entities the viewer does see: riders, leash holders, damage sources and

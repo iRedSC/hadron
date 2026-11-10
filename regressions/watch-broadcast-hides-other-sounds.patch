@@ -1,0 +1,13 @@
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
+index f7c3149..9f6277f 100644
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
+@@ -284,7 +284,7 @@ public final class TestSideEffects implements SideEffects {
+             for (Packet<?> part : bundle.subPackets()) packetSent(to, part);
+             return;
+         }
+-        if (ofBroadcast(packet)) return;
++        if (!BROADCAST.get().isEmpty()) return; // whatever is sent while a broadcast runs
+         ServerLevel level = to.serverLevel();
+         Optional<Player> only = Optional.of(to);
+         switch (packet) {

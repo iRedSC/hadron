@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.checks.StaticState;
 import java.util.ArrayList;
 import java.util.List;
@@ -7,11 +9,13 @@ import java.util.function.BooleanSupplier;
 import java.util.function.Supplier;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.ItemInteractionResult;
+import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.Nullable;
 
 /**
  * What a player's action did beyond the world, held until it is known whether the action stands: the statistics it
- * counted, the advancement criteria it met and the game events (what sculk sensors hear) it emitted. Some refusals
+ * counted, the advancement criteria it met, the game events (what sculk sensors hear) it emitted and the sounds and
+ * numbered level events (a lever's click, a block breaking) it played. Some refusals
  * come only after vanilla did the work: NeoForge asks about a placement once the item has placed its blocks and
  * undoes them on a cancel, a block's use goes on after its {@code setBlock} was refused, and an item whose every spawn
  * was refused is given back only once its use is over. Putting things back doesn't take back a vibration already
@@ -19,7 +23,7 @@ import org.jspecify.annotations.Nullable;
  * them happen, in order, as it ends.
  *
  * <p>A criterion is still tested when its trigger fires, against the world and item as they are then; only its grant
- * waits. A statistic and a game event wait whole. Experience and hunger aren't held: no held action changes them
+ * waits. A statistic, a game event, a sound and a level event wait whole. Experience and hunger aren't held: no held action changes them
  * before it is decided. Holds open only on the server thread and nest: what an inner hold keeps waits on the outer
  * one, and what an inner hold drops is gone even if the outer one is kept. A hold covers only the action that opened
  * it: while an event's handlers run, it is set aside ({@link HandlerScope}).
@@ -70,13 +74,34 @@ public final class HeldEffects {
 
     /**
      * Holds {@code effect} until the innermost open hold is decided, and returns true; returns false, holding nothing,
-     * when none is open on this thread, so the caller lets it happen now.
+     * when none is open on this thread, so the caller lets it happen now. A kept effect happens as it would have now:
+     * under what is set around this one call ({@link #replaying}).
      */
     public static boolean hold(Runnable effect) {
         Hold hold = current();
         if (hold == null) return false;
-        hold.held.add(effect);
+        hold.held.add(replaying(effect));
         return true;
+    }
+
+    /**
+     * {@code effect} with what was set around the call that emitted it, put back while it runs later: the entity whose
+     * own sound it is, which decides who may hear it ({@link NetVisibility#soundSource}), and the actor behind it,
+     * which anything it fires names. Both are set around a narrower call than the hold (an entity's {@code playSound},
+     * a nested actor scope) and are gone by the time the hold is decided. A kept effect must go out exactly as it
+     * would have: a hidden player's spyglass, held while their use is asked about, must stay unheard by those it is
+     * hidden from.
+     */
+    private static Runnable replaying(Runnable effect) {
+        @Nullable Entity source = NetVisibility.soundSource();
+        @Nullable Actor actor = Actors.current().orElse(null);
+        return () -> NetVisibility.withSoundSource(source, () -> {
+            if (actor == null || Actors.current().orElse(null) == actor) {
+                effect.run();
+            } else {
+                Actors.acting(actor, effect);
+            }
+        });
     }
 
     /**

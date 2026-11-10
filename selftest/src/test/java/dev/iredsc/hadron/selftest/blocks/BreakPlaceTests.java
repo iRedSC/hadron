@@ -26,14 +26,16 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvents;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.Block;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.LeverBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.AttachFace;
@@ -365,6 +367,37 @@ public final class BreakPlaceTests {
         t.tick();
         t.assertBlock(at, lever());
         effects.assertNone("a refused lever flip");
+    }
+
+    /** The lever clicks bob was sent: what a player standing beside it hears. */
+    private static long clicksSent(TestPlayer bob) {
+        return bob.received(ClientboundSoundPacket.class).stream()
+                .filter(p -> p.getSound().value() == SoundEvents.LEVER_CLICK).count();
+    }
+
+    @HadronTest
+    @Covers(BlockChangeEvent.class)
+    void aRefusedLeverFlipClicksForNobodyNear(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        BlockPos at = t.pos(1, 0, 0);
+        t.setBlock(at, lever());
+        boolean[] refuse = {true};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockChangeEvent e) {
+                e.setCancelled(refuse[0]);
+            }
+        });
+        t.tick();
+        bob.clearReceived();
+        alice.useBlock(at);
+        t.tick();
+        t.assertEquals(0L, clicksSent(bob), "lever clicks bob heard from alice's refused flip");
+        refuse[0] = false;
+        alice.useBlock(at);
+        t.tick();
+        t.assertEquals(1L, clicksSent(bob), "lever clicks bob heard from alice's flip");
     }
 
     private static void assertTriggered(TestContext t, SideEffects effects, CriterionTrigger<?> trigger, String step) {
