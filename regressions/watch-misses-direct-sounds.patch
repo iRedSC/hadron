@@ -1,0 +1,262 @@
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
+index f702156..c374160 100644
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
+@@ -15,12 +15,8 @@ import net.minecraft.advancements.CriteriaTriggers;
+ import net.minecraft.advancements.CriterionTrigger;
+ import net.minecraft.core.BlockPos;
+ import net.minecraft.core.Holder;
++import net.minecraft.core.registries.BuiltInRegistries;
+ import net.minecraft.resources.ResourceLocation;
+-import net.minecraft.network.protocol.Packet;
+-import net.minecraft.network.protocol.game.ClientboundBundlePacket;
+-import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
+-import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket;
+-import net.minecraft.network.protocol.game.ClientboundSoundPacket;
+ import net.minecraft.server.level.ServerLevel;
+ import net.minecraft.server.level.ServerPlayer;
+ import net.minecraft.sounds.SoundEvent;
+@@ -42,9 +38,8 @@ import org.jspecify.annotations.Nullable;
+ /**
+  * One {@link SideEffects} watch of one test. NeoForge's events report statistics, game events and experience; the
+  * harness's mixins report advancement triggers ({@code SimpleCriterionTriggerMixin}), food exhaustion
+- * ({@code PlayerExhaustionMixin}) and sounds, as the server sends them: once per broadcast from a world
+- * ({@code ServerLevelSoundMixin}), and once per packet sent straight to a player ({@code PlayerConnectionSoundMixin}).
+- * Every hook returns at once while no watch is running.
++ * ({@code PlayerExhaustionMixin}) and sounds, as the server sends them ({@code ServerLevelSoundMixin},
++ * {@code ServerPlayerNotifySoundMixin}). Every hook returns at once while no watch is running.
+  */
+ public final class TestSideEffects implements SideEffects {
+     @StaticState(reason = "the running test's watches; TestWorld.close stops each at the test's end")
+@@ -57,21 +52,13 @@ public final class TestSideEffects implements SideEffects {
+     @StaticState(reason = "a depth counter of trigger calls on the server thread, back to 0 as each call returns")
+     private static int ambientDepth;
+ 
+-    /**
+-     * How deep the server thread is inside a world's sound broadcast, which is recorded once as a whole: the packets it
+-     * then sends each player near aren't recorded again.
+-     */
+-    @StaticState(reason = "a depth counter of broadcasts on the server thread, back to 0 as each one returns")
+-    private static int broadcasting;
+-
+     /** Frames of the bookkeeping between an action and the hook, skipped so {@code from} starts at the action. */
+     private static final Set<String> BOOKKEEPING_METHODS = Set.of("awardStat", "resetStat", "gameEvent",
+             "giveExperiencePoints", "giveExperienceLevels", "onEnchantmentPerformed", "causeFoodExhaustion",
+             "awardRecipes", "awardRecipesByKey", "playSound", "playSeededSound", "levelEvent", "globalLevelEvent",
+-            "playNotifySound", "send", "broadcast", "broadcastAll");
++            "playNotifySound");
+     private static final List<String> BOOKKEEPING_PACKAGES = List.of("dev.iredsc.hadron.harness.",
+-            "dev.iredsc.hadron.neoforge.HeldEffects", "dev.iredsc.hadron.neoforge.NetVisibility",
+-            "dev.iredsc.hadron.api.actor.Actors",
++            "dev.iredsc.hadron.neoforge.HeldEffects",
+             "net.minecraft.advancements.", "net.minecraft.server.PlayerAdvancements", "net.minecraft.stats.", "net.minecraft.world.level.gameevent.",
+             "net.neoforged.bus.", "net.neoforged.neoforge.event.EventHooks", "net.neoforged.neoforge.common.CommonHooks",
+             "java.", "jdk.");
+@@ -230,52 +217,11 @@ public final class TestSideEffects implements SideEffects {
+                 from()));
+     }
+ 
+-    /** From {@code ServerLevelSoundMixin}: runs a broadcast it has just recorded, so its packets aren't recorded too. */
+-    public static void broadcasting(Runnable broadcast) {
+-        broadcasting++;
+-        try {
+-            broadcast.run();
+-        } finally {
+-            broadcasting--;
+-        }
+-    }
+-
+-    /**
+-     * From {@code PlayerConnectionSoundMixin}, for every packet the server sends a player: a sound or numbered event
+-     * sent straight to them ({@code /playsound}, a raid's horn, a portal's whoosh, a locked chest), recorded as sent to
+-     * them only. One that is part of a world's broadcast was recorded with it.
+-     */
+-    public static void packetSent(ServerPlayer to, Packet<?> packet) {
++    /** From {@code ServerPlayerNotifySoundMixin}, as the server sends a sound to one player alone. */
++    public static void notifySoundSent(ServerPlayer to, SoundEvent sound, SoundSource source) {
+         if (ACTIVE.isEmpty() || ambientDepth > 0) return;
+-        boolean serverThread = to.server.isSameThread();
+-        if (broadcasting > 0 && serverThread) return;
+-        if (packet instanceof ClientboundBundlePacket bundle) {
+-            for (Packet<?> part : bundle.subPackets()) packetSent(to, part);
+-            return;
+-        }
+-        ServerLevel level = to.serverLevel();
+-        Optional<Player> only = Optional.of(to);
+-        switch (packet) {
+-            case ClientboundSoundPacket p -> {
+-                if (p.getSound().value() == AmbientSounds.NO_DAMAGE) return;
+-                sent(level, to, () -> new SoundPlayed(p.getSound(), p.getSource(), level,
+-                        new Vec3(p.getX(), p.getY(), p.getZ()), Optional.empty(), Heard.PLAYER_ONLY, only, from()));
+-            }
+-            case ClientboundSoundEntityPacket p -> {
+-                if (p.getSound().value() == AmbientSounds.NO_DAMAGE) return;
+-                // Entity ids resolve only on the server thread.
+-                Optional<Entity> on = serverThread ? Optional.ofNullable(level.getEntity(p.getId())) : Optional.empty();
+-                sent(level, to, () -> new SoundPlayed(p.getSound(), p.getSource(), level,
+-                        on.map(Entity::position).orElse(to.position()), on, Heard.PLAYER_ONLY, only, from()));
+-            }
+-            case ClientboundLevelEventPacket p -> {
+-                if (AmbientSounds.SILENT_OR_AMBIENT_EVENTS.contains(p.getType())) return;
+-                sent(level, to, () -> new LevelEventPlayed(p.getType(), level, p.getPos(), p.getData(),
+-                        Heard.PLAYER_ONLY, only, from()));
+-            }
+-            default -> {
+-            }
+-        }
++        sent(to.serverLevel(), to, () -> new SoundPlayed(BuiltInRegistries.SOUND_EVENT.wrapAsHolder(sound), source,
++                to.serverLevel(), to.position(), Optional.empty(), Heard.PLAYER_ONLY, Optional.of(to), from()));
+     }
+ 
+     /**
+@@ -332,16 +278,6 @@ public final class TestSideEffects implements SideEffects {
+         if (!HeldEffects.hold(commit)) commit.run();
+     }
+ 
+-    /**
+-     * The method a mixin's frame stands for: {@code send} for MixinExtras' {@code send$mixinextras$wrapped$34} and for
+-     * a {@code @WrapMethod} handler {@code wrapMethod$zhg000$hadron$send}; any other name as it is.
+-     */
+-    private static String named(String method) {
+-        if (method.contains("$mixinextras$wrapped$")) return method.substring(0, method.indexOf('$'));
+-        if (method.startsWith("wrapMethod$")) return method.substring(method.lastIndexOf('$') + 1);
+-        return method;
+-    }
+-
+     /** The code that caused the effect: the first frames outside the bookkeeping that reports it. */
+     private static List<StackTraceElement> from() {
+         return StackWalker.getInstance().walk(frames -> frames.map(StackWalker.StackFrame::toStackTraceElement)
+@@ -353,7 +289,7 @@ public final class TestSideEffects implements SideEffects {
+         String method = frame.getMethodName();
+         // Core's hold on what may yet be refused (HeldEffects and the mixins that hand it over) is bookkeeping too, and
+         // so is a trampoline MixinExtras generates, which has no line of its own.
+-        if (BOOKKEEPING_METHODS.contains(named(method)) || method.contains("hadron$record") || method.contains("hadron$hold")
++        if (BOOKKEEPING_METHODS.contains(method) || method.contains("hadron$record") || method.contains("hadron$hold")
+                 || method.startsWith("mixinextras$bridge$")) {
+             return true;
+         }
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/PlayerConnectionSoundMixin.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/PlayerConnectionSoundMixin.java
+deleted file mode 100644
+index 19e9c88..0000000
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/PlayerConnectionSoundMixin.java
++++ /dev/null
+@@ -1,25 +0,0 @@
+-package dev.iredsc.hadron.harness.mixin;
+-
+-import dev.iredsc.hadron.harness.TestSideEffects;
+-import net.minecraft.network.PacketSendListener;
+-import net.minecraft.network.protocol.Packet;
+-import net.minecraft.server.network.ServerCommonPacketListenerImpl;
+-import net.minecraft.server.network.ServerGamePacketListenerImpl;
+-import org.jspecify.annotations.Nullable;
+-import org.spongepowered.asm.mixin.Mixin;
+-import org.spongepowered.asm.mixin.injection.At;
+-import org.spongepowered.asm.mixin.injection.Inject;
+-import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+-
+-/**
+- * Every packet the server sends a player in game, for {@code SideEffects}: where a sound sent straight to one player
+- * ({@code /playsound}, a raid's horn, a portal's whoosh, a locked chest) shows up, since no world broadcasts it.
+- */
+-@Mixin(ServerCommonPacketListenerImpl.class)
+-abstract class PlayerConnectionSoundMixin {
+-    @Inject(method = "send(Lnet/minecraft/network/protocol/Packet;Lnet/minecraft/network/PacketSendListener;)V",
+-            at = @At("HEAD"))
+-    private void hadron$recordSentSound(Packet<?> packet, @Nullable PacketSendListener listener, CallbackInfo ci) {
+-        if ((Object) this instanceof ServerGamePacketListenerImpl game) TestSideEffects.packetSent(game.player, packet);
+-    }
+-}
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerLevelSoundMixin.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerLevelSoundMixin.java
+index 0ef4d23..b4acb83 100644
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerLevelSoundMixin.java
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerLevelSoundMixin.java
+@@ -23,10 +23,8 @@ import org.spongepowered.asm.mixin.Mixin;
+ import org.spongepowered.asm.mixin.injection.At;
+ 
+ /**
+- * Every sound and numbered event a world sends, for {@code SideEffects}: read at the broadcast itself, once whoever
+- * it reaches (nobody near, or everyone but the player whose client plays it), so a sound NeoForge's event cancelled
+- * or a hold dropped is never seen, and one a hold kept is seen once, when it plays. The packets the broadcast then
+- * sends aren't recorded again ({@code PlayerConnectionSoundMixin}).
++ * Every sound and numbered event a world sends, for {@code SideEffects}: read at the broadcast itself, so a sound
++ * NeoForge's event cancelled or a hold dropped is never seen, and one a hold kept is seen once, when it plays.
+  */
+ @Mixin(ServerLevel.class)
+ abstract class ServerLevelSoundMixin {
+@@ -40,7 +38,7 @@ abstract class ServerLevelSoundMixin {
+             TestSideEffects.soundSent((ServerLevel) (Object) this, except, sound.getSound(), sound.getSource(),
+                     new Vec3(x, y, z), null);
+         }
+-        TestSideEffects.broadcasting(() -> original.call(players, except, x, y, z, range, dimension, packet));
++        original.call(players, except, x, y, z, range, dimension, packet);
+     }
+ 
+     @WrapOperation(method = "playSeededSound(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V",
+@@ -52,7 +50,7 @@ abstract class ServerLevelSoundMixin {
+             TestSideEffects.soundSent((ServerLevel) (Object) this, except, sound.getSound(), sound.getSource(),
+                     new Vec3(x, y, z), entity);
+         }
+-        TestSideEffects.broadcasting(() -> original.call(players, except, x, y, z, range, dimension, packet));
++        original.call(players, except, x, y, z, range, dimension, packet);
+     }
+ 
+     @WrapOperation(method = "levelEvent", at = @At(value = "INVOKE", target = BROADCAST))
+@@ -62,7 +60,7 @@ abstract class ServerLevelSoundMixin {
+             TestSideEffects.levelEventSent((ServerLevel) (Object) this, except, event.getType(), event.getPos(),
+                     event.getData(), false);
+         }
+-        TestSideEffects.broadcasting(() -> original.call(players, except, x, y, z, range, dimension, packet));
++        original.call(players, except, x, y, z, range, dimension, packet);
+     }
+ 
+     @WrapOperation(method = "globalLevelEvent", at = @At(value = "INVOKE",
+@@ -72,6 +70,6 @@ abstract class ServerLevelSoundMixin {
+             TestSideEffects.levelEventSent((ServerLevel) (Object) this, null, event.getType(), event.getPos(),
+                     event.getData(), true);
+         }
+-        TestSideEffects.broadcasting(() -> original.call(players, packet));
++        original.call(players, packet);
+     }
+ }
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerPlayerNotifySoundMixin.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerPlayerNotifySoundMixin.java
+new file mode 100644
+index 0000000..321e421
+--- /dev/null
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerPlayerNotifySoundMixin.java
+@@ -0,0 +1,20 @@
++package dev.iredsc.hadron.harness.mixin;
++
++import dev.iredsc.hadron.harness.TestSideEffects;
++import net.minecraft.server.level.ServerPlayer;
++import net.minecraft.sounds.SoundEvent;
++import net.minecraft.sounds.SoundSource;
++import org.spongepowered.asm.mixin.Mixin;
++import org.spongepowered.asm.mixin.injection.At;
++import org.spongepowered.asm.mixin.injection.Inject;
++import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
++
++/** A sound sent to one player alone (a locked chest's), for {@code SideEffects}: it never goes through a world. */
++@Mixin(ServerPlayer.class)
++abstract class ServerPlayerNotifySoundMixin {
++    @Inject(method = "playNotifySound", at = @At("HEAD"))
++    private void hadron$recordNotifySound(SoundEvent sound, SoundSource source, float volume, float pitch,
++            CallbackInfo ci) {
++        TestSideEffects.notifySoundSent((ServerPlayer) (Object) this, sound, source);
++    }
++}
+diff --git a/neoforge/src/harness/resources/hadron_test.mixins.json b/neoforge/src/harness/resources/hadron_test.mixins.json
+index a3138c2..3ee5691 100644
+--- a/neoforge/src/harness/resources/hadron_test.mixins.json
++++ b/neoforge/src/harness/resources/hadron_test.mixins.json
+@@ -5,10 +5,10 @@
+   "compatibilityLevel": "JAVA_21",
+   "mixins": [
+     "NetworkRegistryAccessor",
+-    "PlayerConnectionSoundMixin",
+     "PlayerExhaustionMixin",
+     "ServerLevelEntitiesAccessor",
+     "ServerLevelSoundMixin",
++    "ServerPlayerNotifySoundMixin",
+     "SimpleCriterionTriggerMixin"
+   ],
+   "injectors": {

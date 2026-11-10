@@ -847,3 +847,30 @@ paths = [
 guards = [
     { test = "BucketTests.refusedCodFromADispenserPoursNoWaterAndKeepsTheBucketInside", tier = "in-game" },
 ]
+
+[[regression]]
+id = "held-sound-loses-visibility"
+bug = "A held sound replayed after NetVisibility's sound source was restored, so it went out unfiltered: with a spawn listener registered, a player hidden from bob still let bob hear their spyglass."
+fix = "751835f"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/HeldEffects.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetVisibility.java",
+]
+guards = [
+    { test = "VisibilityTests.aHiddenPlayersSoundHeldWhileTheirUseIsDecidedStaysHidden", tier = "in-game" },
+]
+
+[[regression]]
+id = "watch-misses-direct-sounds"
+bug = "watchSideEffects read sounds only at a world's broadcast and playNotifySound, so a sound sent straight to a player (/playsound, a raid's horn, a portal's whoosh) was never recorded and assertNone passed."
+fix = "4f35218"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/PlayerConnectionSoundMixin.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerLevelSoundMixin.java",
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerPlayerNotifySoundMixin.java",
+    "neoforge/src/harness/resources/hadron_test.mixins.json",
+]
+guards = [
+    { test = "SideEffectsTests.aSoundSentStraightToAPlayerIsRecordedOnce", tier = "in-game" },
+]
