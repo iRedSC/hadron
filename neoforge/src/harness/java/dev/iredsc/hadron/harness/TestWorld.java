@@ -456,6 +456,7 @@ final class TestWorld implements TestContext {
             }
             resetBalances(c, problems);
             forget(c.uuid(), problems);
+            verifyReset(c, problems);
         }
         TestMod.forget();
         try {
@@ -498,6 +499,31 @@ final class TestWorld implements TestContext {
                     problems.add("deleting " + folder.resolve(file) + ": " + e);
                 }
             }
+        }
+    }
+
+    /**
+     * Looks, after the resets, at what the next test's player of that name would find: a balance or a saved player
+     * file left over is a failure of this test's cleanup, so a reset that is skipped or broken can't pass unseen
+     * whichever tests a run selects.
+     */
+    private void verifyReset(TestClient c, List<String> problems) {
+        try {
+            Economy economy = Economy.get();
+            for (Currency currency : economy.getCurrencies()) {
+                BigDecimal balance = economy.getBalance(c.uuid(), currency);
+                if (balance.signum() != 0) {
+                    problems.add(c.name() + " still has " + balance.toPlainString() + " " + currency.name()
+                            + " after the reset, so the next test's " + c.name() + " would start with it");
+                }
+            }
+        } catch (RuntimeException e) {
+            problems.add("checking " + c.name() + "'s balances after the reset: " + e);
+        }
+        Path saved = server.getWorldPath(LevelResource.PLAYER_DATA_DIR).resolve(c.uuid() + ".dat");
+        if (Files.exists(saved)) {
+            problems.add(c.name() + "'s saved player data " + saved + " is still there after the reset, so the next "
+                    + "test's " + c.name() + " would start with this test's inventory");
         }
     }
 
