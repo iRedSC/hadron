@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.server.level.ServerPlayer;
@@ -75,6 +76,17 @@ public class InventoryOpenEvent extends InventoryEvent implements Cancellable {
      * Where {@link #getHolder()} is, then, once the menu exists, every inventory behind its slots (both halves of a
      * double chest), as for {@link InventoryClickEvent#getPlaces()}.
      */
+    /**
+     * What holds each inventory behind the menu's slots, each once: a chest and the viewer (as {@link
+     * InventoryHolder.Entity}), both halves of a double chest, {@link #getMenuHolder()} for the menu's own slots (a
+     * crafting grid), and {@link InventoryHolder.Unknown} for any nothing identifies. {@link #getPlaces()} places these and
+     * {@link #getHolder()}; this says which inventory is which, so a plugin can leave out one it treats apart, such as
+     * the viewer's own, and still check every other. Empty while the menu doesn't exist yet (a horse's).
+     */
+    public List<InventoryHolder> getSlotHolders() {
+        return menu == null ? List.of() : Menus.holders(menu, viewer, menuHolder, getHolder());
+    }
+
     @Override
     public Places getPlaces() {
         Places own = Place.of(getHolder());

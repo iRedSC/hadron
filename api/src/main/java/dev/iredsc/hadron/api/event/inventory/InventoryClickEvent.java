@@ -5,6 +5,7 @@ import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.server.level.ServerPlayer;
@@ -120,6 +121,17 @@ public class InventoryClickEvent extends InventoryEvent implements Cancellable {
      * menu that says nothing of where it is adds {@link Place.Unknown.Reason#UNDESCRIBED_MENU}. An inventory nothing
      * identifies, such as a double chest's half that isn't a chest, adds its own {@code Unknown}.
      */
+    /**
+     * What holds each inventory behind the menu's slots, each once: a chest and the viewer (as {@link
+     * InventoryHolder.Entity}), both halves of a double chest, {@link #getMenuHolder()} for the menu's own slots (a
+     * crafting grid), and {@link InventoryHolder.Unknown} for any nothing identifies. {@link #getPlaces()} places these and
+     * {@link #getHolder()}; this says which inventory is which, so a plugin can leave out one it treats apart, such as
+     * the viewer's own, and still check every other.
+     */
+    public List<InventoryHolder> getSlotHolders() {
+        return Menus.holders(menu, viewer, menuHolder, getHolder());
+    }
+
     @Override
     public Places getPlaces() {
         return Place.of(getHolder()).and(Menus.places(menu, viewer, menuHolder, getHolder()));
