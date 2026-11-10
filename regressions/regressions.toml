@@ -809,3 +809,16 @@ guards = [
     { test = "AcceptanceKitTests.aPlayersVibrationAtTheSameCoordinatesInAnotherWorldIsNoChange", tier = "in-game" },
 ]
 note = "The patch drops only the world comparison; SideEffects.GameEventEmitted keeps its level, which the guard doesn't read."
+
+[[regression]]
+id = "plugin-pushes-port-actor"
+bug = "Any plugin could push or pop actors through Actors.Port.enter and exit, which have no scope to close, so a mistake left an actor on the stack or popped the host's."
+fix = "3684f1e"
+paths = [
+    "api/src/main/java/dev/iredsc/hadron/api/actor/Actors.java",
+]
+guards = [
+    { test = "HostKeyTest.pushingAnActorThroughThePortWithoutTheKeyIsRefusedSayingToUsePush", tier = "fast" },
+    { test = "HostileTests.aPluginCanNotReplaceOrClearWhatTheHostInstalled", tier = "in-game" },
+]
+note = "Hand-made: keeps the HostKey parameters (every caller passes one) and drops only the three HostKey.require lines."
