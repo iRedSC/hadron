@@ -15,6 +15,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
+import net.minecraft.network.protocol.game.ClientboundRecipePacket;
 import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.resources.ResourceLocation;
@@ -178,6 +179,39 @@ public final class SideEffectsTests {
         t.tick();
         t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "entity sounds in the bundle");
         t.assertEquals(1, effects.seen(SideEffects.LevelEventPlayed.class).size(), "whooshes in the bundle");
+    }
+
+    @HadronTest
+    void aSoundAnotherThreadSendsDuringAnAmbientTriggerIsRecorded(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        t.tick();
+        SideEffects effects = t.watchSideEffects();
+        // A worker thread's own action, held at a gate only so that it overlaps the server thread's ambient trigger.
+        CompletableFuture<Void> gate = new CompletableFuture<>();
+        CompletableFuture<Void> worker = CompletableFuture.runAsync(() -> {
+            gate.join();
+            alice.player().connection.send(whoosh(t));
+        });
+        boolean[] released = {false};
+        // Entering water unlocks the boat recipes, sending alice their recipe packet from inside the trigger.
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundRecipePacket.class, e -> {
+            if (released[0]) return;
+            released[0] = true;
+            gate.complete(null);
+            worker.join();
+        });
+        try {
+            CriteriaTriggers.ENTER_BLOCK.trigger(alice.player(), Blocks.WATER.defaultBlockState());
+            t.tick();
+            t.assertTrue(released[0], "entering water should send a recipe packet, releasing the worker inside the "
+                    + "trigger; without that this test proves nothing");
+            t.assertEquals(1, alice.received(ClientboundLevelEventPacket.class).size(), "whooshes alice was sent");
+            t.assertEquals(1, effects.seen(SideEffects.LevelEventPlayed.class).size(), "the worker's whoosh, sent "
+                    + "while the server thread was inside an ambient trigger");
+        } finally {
+            handler.unregister();
+            gate.complete(null);
+        }
     }
 
     /** A portal's whoosh, which the server sends straight to the player who went through. */

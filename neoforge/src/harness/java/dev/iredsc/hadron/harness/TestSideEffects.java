@@ -51,11 +51,19 @@ public final class TestSideEffects implements SideEffects {
     private static final List<TestSideEffects> ACTIVE = new CopyOnWriteArrayList<>();
 
     /**
-     * How deep the server thread is inside an ambient trigger: what one causes (standing in water completes the boat
+     * How deep each thread is inside an ambient trigger: what one causes (standing in water completes the boat
      * recipes' advancements, which unlock recipes and pay rewards) is as ambient as the trigger, so it isn't recorded.
      */
-    @StaticState(reason = "a depth counter of trigger calls on the server thread, back to 0 as each call returns")
-    private static int ambientDepth;
+    @StaticState(reason = "each thread's depth counter of ambient trigger calls, back to 0 as each call returns")
+    private static final ThreadLocal<int[]> AMBIENT_DEPTH = ThreadLocal.withInitial(() -> new int[1]);
+
+    /**
+     * Whether this thread is inside an ambient trigger. Only this thread: another thread's effect meanwhile (a worker
+     * sending a sound) isn't the trigger's, so it is recorded.
+     */
+    private static boolean inAmbientTrigger() {
+        return AMBIENT_DEPTH.get()[0] > 0;
+    }
 
     /**
      * The packet of the world broadcast this thread is running, which was recorded once as a whole: its copies, sent
@@ -180,7 +188,7 @@ public final class TestSideEffects implements SideEffects {
     }
 
     private static void onGameEvent(VanillaGameEvent e) {
-        if (ACTIVE.isEmpty() || ambientDepth > 0) return;
+        if (ACTIVE.isEmpty() || inAmbientTrigger()) return;
         @Nullable Entity cause = e.getCause();
         for (TestSideEffects watch : ACTIVE) {
             boolean byPlayer = cause != null && watch.world.testPlayer(cause) != null;
@@ -198,11 +206,12 @@ public final class TestSideEffects implements SideEffects {
         if (ACTIVE.isEmpty()) {
             fire.run();
         } else if (Ambient.CLOCK_TRIGGERS.contains(trigger)) {
-            ambientDepth++;
+            int[] depth = AMBIENT_DEPTH.get();
+            depth[0]++;
             try {
                 fire.run();
             } finally {
-                ambientDepth--;
+                depth[0]--;
             }
         } else {
             recordUnlessDropped(player, p -> new CriterionTriggered(p, trigger, from()));
@@ -216,7 +225,7 @@ public final class TestSideEffects implements SideEffects {
      */
     public static void soundSent(ServerLevel level, @Nullable Player except, Holder<SoundEvent> sound,
             SoundSource source, Vec3 pos, @Nullable Entity following) {
-        if (ACTIVE.isEmpty() || ambientDepth > 0 || sound.value() == AmbientSounds.NO_DAMAGE) return;
+        if (ACTIVE.isEmpty() || inAmbientTrigger() || sound.value() == AmbientSounds.NO_DAMAGE) return;
         Heard heard = except == null ? Heard.ALL_NEAR : Heard.ALL_NEAR_BUT_PLAYER;
         sent(level, except != null ? except : following, () -> new SoundPlayed(sound, source, level, pos,
                 Optional.ofNullable(following), heard, Optional.ofNullable(except), from()));
@@ -225,7 +234,7 @@ public final class TestSideEffects implements SideEffects {
     /** From {@code ServerLevelSoundMixin}, as the server sends one of vanilla's numbered events. */
     public static void levelEventSent(ServerLevel level, @Nullable Player except, int type, BlockPos pos, int data,
             boolean global) {
-        if (ACTIVE.isEmpty() || ambientDepth > 0 || AmbientSounds.SILENT_OR_AMBIENT_EVENTS.contains(type)) return;
+        if (ACTIVE.isEmpty() || inAmbientTrigger() || AmbientSounds.SILENT_OR_AMBIENT_EVENTS.contains(type)) return;
         Heard heard = global ? Heard.EVERYONE : except == null ? Heard.ALL_NEAR : Heard.ALL_NEAR_BUT_PLAYER;
         sent(level, except, () -> new LevelEventPlayed(type, level, pos, data, heard, Optional.ofNullable(except),
                 from()));
@@ -276,7 +285,7 @@ public final class TestSideEffects implements SideEffects {
      * them only. One that is part of a world's broadcast was recorded with it.
      */
     public static void packetSent(ServerPlayer to, Packet<?> packet) {
-        if (ACTIVE.isEmpty() || ambientDepth > 0) return;
+        if (ACTIVE.isEmpty() || inAmbientTrigger()) return;
         boolean serverThread = to.server.isSameThread();
         if (packet instanceof ClientboundBundlePacket bundle) {
             for (Packet<?> part : bundle.subPackets()) packetSent(to, part);
@@ -337,7 +346,7 @@ public final class TestSideEffects implements SideEffects {
     }
 
     private static void record(Player player, Function<TestPlayer, Effect> effect) {
-        if (ambientDepth > 0) return;
+        if (inAmbientTrigger()) return;
         for (TestSideEffects watch : ACTIVE) {
             TestPlayer testPlayer = watch.world.testPlayer(player);
             if (testPlayer != null) watch.seen.add(effect.apply(testPlayer));
@@ -350,7 +359,7 @@ public final class TestSideEffects implements SideEffects {
      * Read now, so it names the line that fired it.
      */
     private static void recordUnlessDropped(Player player, Function<TestPlayer, Effect> effect) {
-        if (ambientDepth > 0) return;
+        if (inAmbientTrigger()) return;
         List<Runnable> adds = new ArrayList<>();
         for (TestSideEffects watch : ACTIVE) {
             TestPlayer testPlayer = watch.world.testPlayer(player);
