@@ -156,12 +156,17 @@ public final class DamageTests {
             }
         });
         t.tick(10);
+        // Both speeds are read right after their own hit, before any tick decays them, so the only difference between
+        // the two pigs is the listener's multiplier.
         alice.attack(other);
+        double ordinary = horizontalSpeed(other);
         t.tick(10);
         alice.attack(pig);
-        t.assertTrue(horizontalSpeed(pig) > horizontalSpeed(other) * 2, "four times the knockback should push the pig "
-                + "much faster than an ordinary hit, but its speed is " + horizontalSpeed(pig) + " against "
-                + horizontalSpeed(other));
+        double stronger = horizontalSpeed(pig);
+        t.assertTrue(ordinary > 0.1, "an ordinary hit should knock the other pig back, but its horizontal speed is "
+                + ordinary);
+        t.assertTrue(stronger > ordinary * 2, "four times the knockback should push the pig much faster than an "
+                + "ordinary hit measured the same way, but its speed is " + stronger + " against " + ordinary);
     }
 
     @HadronTest
