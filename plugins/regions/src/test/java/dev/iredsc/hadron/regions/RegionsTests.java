@@ -2,6 +2,8 @@ package dev.iredsc.hadron.regions;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Attribution;
+import dev.iredsc.hadron.api.event.block.BlockBurnEvent;
+import dev.iredsc.hadron.api.event.block.BlockIgniteEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityPotionEffectEvent;
 import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
@@ -14,8 +16,12 @@ import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.SimpleContainer;
+import net.minecraft.world.entity.animal.horse.Horse;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.EntityType;
@@ -586,5 +592,67 @@ public final class RegionsTests {
                 new Actor.Server("plugin Test"));
         t.plugin().getServer().getPluginManager().callEvent(hit);
         t.assertFalse(hit.isCancelled(), "the server's own damage should go through");
+    }
+
+    @HadronTest
+    void fireFromOutsideCantBurnInside(TestContext t) {
+        BlockPos wool = t.pos(3, 0, 0);
+        t.setBlock(wool, Blocks.WHITE_WOOL);
+        define(t, admin(t), "fire-proof", t.pos(3, 0, 0), t.pos(4, 1, 1));
+        BlockBurnEvent fromOutside = new BlockBurnEvent(t.level(), wool, Blocks.WHITE_WOOL.defaultBlockState(),
+                t.pos(2, 0, 0), Actor.Nature.INSTANCE);
+        t.plugin().getServer().getPluginManager().callEvent(fromOutside);
+        t.assertTrue(fromOutside.isCancelled(), "fire burning in from outside should be refused");
+        BlockBurnEvent fromInside = new BlockBurnEvent(t.level(), wool, Blocks.WHITE_WOOL.defaultBlockState(),
+                t.pos(4, 0, 0), Actor.Nature.INSTANCE);
+        t.plugin().getServer().getPluginManager().callEvent(fromInside);
+        t.assertFalse(fromInside.isCancelled(), "fire already inside the region burns as it would");
+        BlockIgniteEvent unknown = new BlockIgniteEvent(t.level(), t.pos(3, 1, 0), Blocks.AIR.defaultBlockState(),
+                Blocks.FIRE.defaultBlockState(), Actor.Nature.INSTANCE);
+        t.plugin().getServer().getPluginManager().callEvent(unknown);
+        t.assertTrue(unknown.isCancelled(), "fire from nowhere known should not catch inside");
+    }
+
+    @HadronTest
+    void aMenuRegionsNeverSawOpenClosesOnTheFirstClick(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        // As if opened before Regions was listening, after a reload: no open event.
+        ServerPlayer viewer = bob.player();
+        viewer.containerMenu = ChestMenu.threeRows(99, viewer.getInventory(), new SimpleContainer(27));
+        bob.clickSlot(0);
+        t.tick(2);
+        t.assertTrue(viewer.containerMenu == viewer.inventoryMenu, "the untracked menu should have closed");
+    }
+
+    @HadronTest
+    void aHorsesInventoryWorksForAMemberAndNotOnceRemoved(TestContext t) {
+        BlockPos chest = t.pos(2, 0, 1);
+        t.setBlock(chest, Blocks.CHEST);
+        Horse horse = EntityType.HORSE.create(t.level());
+        BlockPos at = t.pos(3, 0, 0);
+        horse.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5);
+        horse.setTamed(true);
+        t.level().addFreshEntity(horse);
+        TestPlayer alice = admin(t);
+        define(t, alice, "horse-stable", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer carol = t.player("carol");
+        alice.command("rg addmember horse-stable carol");
+        t.assertChat(alice, "carol is a member of horse-stable");
+        carol.hold(new ItemStack(Items.SADDLE));
+        // A chest open first: the horse's menu opens before the chest's close arrives.
+        carol.useBlock(chest);
+        t.tick();
+        horse.openCustomInventoryScreen(carol.player());
+        t.tick();
+        t.assertFalse(carol.player().containerMenu == carol.player().inventoryMenu, "carol should have the horse open");
+        // A harmless click (an empty slot of her own) keeps the menu open: it was tracked though built late.
+        carol.clickSlot(5);
+        t.tick();
+        t.assertFalse(carol.player().containerMenu == carol.player().inventoryMenu, "a member's menu should stay open");
+        alice.command("rg removeplayer horse-stable carol");
+        // Her hotbar's first slot, after the horse's two and her 27 others.
+        carol.clickSlot(29, 0, ClickType.QUICK_MOVE);
+        t.tick();
+        t.assertFalse(horse.isSaddled(), "a removed member should not saddle the horse");
     }
 }

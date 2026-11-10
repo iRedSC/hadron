@@ -17,10 +17,14 @@ import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryMoveItemEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.event.player.PlayerQuitEvent;
+import dev.iredsc.hadron.api.event.block.BlockIgniteEvent;
+import dev.iredsc.hadron.api.event.block.BlockBurnEvent;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import java.util.HashMap;
+import java.util.WeakHashMap;
 import net.minecraft.world.effect.MobEffectCategory;
 import java.util.Map;
-import java.util.HashMap;
-import dev.iredsc.hadron.api.event.player.PlayerQuitEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryCloseEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
@@ -71,8 +75,13 @@ final class Protection implements Listener {
     private final RegionStore store;
     private final Feedback feedback;
     private final Bypass bypass;
-    /** What each player has open, for their clicks. */
-    private final Map<UUID, InventoryHolder> openMenus = new HashMap<>();
+    /**
+     * What each open menu shows, for clicks in it. Keyed by the menu, so a menu opened before the last one's close
+     * arrives isn't forgotten; weak, so a menu whose close never came isn't kept.
+     */
+    private final Map<AbstractContainerMenu, InventoryHolder> openMenus = new WeakHashMap<>();
+    /** A horse's inventory, opened before its menu exists: the menu it builds is the next untracked one clicked. */
+    private final Map<UUID, InventoryHolder> menuless = new HashMap<>();
 
     Protection(JavaPlugin plugin, RegionStore store, Feedback feedback, Bypass bypass) {
         this.plugin = plugin;
@@ -89,7 +98,7 @@ final class Protection implements Listener {
         if (!store.hasAny(level)) return;
         Flag flag = e instanceof BlockUseEvent ? Flag.USE : Flag.BUILD;
         if (e.getActor() instanceof Actor.Nature) {
-            List<Region> from = store.at(level, source(e));
+            List<Region> from = source(e).map(at -> store.at(level, at)).orElse(List.of());
             for (BlockPos pos : touched(e)) {
                 if (Rules.refusingCrossing(from, store.at(level, pos)).isPresent()) {
                     c.setCancelled(true);
@@ -385,9 +394,20 @@ final class Protection implements Listener {
             holders.add(move.getDestination().place());
         }
         // A click names the slot clicked, which may be the player's own, yet moves items to and from the whole menu.
-        if (e instanceof InventoryClickEvent click) {
-            InventoryHolder menu = openMenus.get(click.getViewer().getUUID());
-            if (menu != null) holders.add(menu);
+        if (e instanceof InventoryClickEvent click && click.getMenu() != click.getViewer().inventoryMenu) {
+            InventoryHolder menu = openMenus.get(click.getMenu());
+            if (menu == null) {
+                menu = menuless.remove(click.getViewer().getUUID());
+                if (menu != null) openMenus.put(click.getMenu(), menu);
+            }
+            if (menu == null) {
+                // Opened before Regions was listening (a reload): close it, so opening it again asks.
+                c.setCancelled(true);
+                ServerPlayer viewer = click.getViewer();
+                plugin.getServer().getScheduler().runTask(plugin, viewer::closeContainer);
+                return;
+            }
+            holders.add(menu);
         }
         List<List<Region>> places = new ArrayList<>();
         for (InventoryHolder holder : holders) places.addAll(regionsAt(holder));
@@ -402,17 +422,21 @@ final class Protection implements Listener {
     /** Remembers what each player has open, so their clicks are checked against it. */
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
     private void opened(InventoryOpenEvent e) {
-        openMenus.put(e.getViewer().getUUID(), e.getHolder().place());
+        if (e.getMenu().isPresent()) {
+            openMenus.put(e.getMenu().get(), e.getHolder().place());
+        } else {
+            menuless.put(e.getViewer().getUUID(), e.getHolder().place());
+        }
     }
 
     @EventHandler
     private void closed(InventoryCloseEvent e) {
-        openMenus.remove(e.getViewer().getUUID());
+        openMenus.remove(e.getMenu());
     }
 
     @EventHandler
     private void quit(PlayerQuitEvent e) {
-        openMenus.remove(e.getPlayer().getUUID());
+        menuless.remove(e.getPlayer().getUUID());
     }
 
     /** Nobody behind it: nature, or a machine or mob nobody owns. */
@@ -493,11 +517,17 @@ final class Protection implements Listener {
         if (e.getActor() instanceof Actor.Player p) feedback.refused(p.player(), pos, region);
     }
 
-    /** Where the world's own change comes from: the fluid's source, the spreading block, the piston. */
-    private static BlockPos source(BlockEvent e) {
-        if (e instanceof BlockFromToEvent f) return f.getFromPos();
-        if (e instanceof BlockSpreadEvent s) return s.getSourcePos();
-        return e.getPos();
+    /**
+     * Where the world's own change comes from: the fluid's source, the spreading block, the fire burning it, the
+     * piston. Empty when fire's origin isn't known (lava, spreading flames), which counts as outside every region, so
+     * fire that may have come from outside can't burn or catch inside one.
+     */
+    private static Optional<BlockPos> source(BlockEvent e) {
+        if (e instanceof BlockFromToEvent f) return Optional.of(f.getFromPos());
+        if (e instanceof BlockSpreadEvent s) return Optional.of(s.getSourcePos());
+        if (e instanceof BlockBurnEvent b) return b.getIgnitingPos();
+        if (e instanceof BlockIgniteEvent) return Optional.empty();
+        return Optional.of(e.getPos());
     }
 
     /** Every space the event touches, including all a move sweeps through. */
