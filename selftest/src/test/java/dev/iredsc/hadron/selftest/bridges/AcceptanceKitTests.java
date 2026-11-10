@@ -17,6 +17,7 @@ import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
 import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
 import dev.iredsc.hadron.api.event.item.ItemDropEvent;
 import dev.iredsc.hadron.api.event.item.ItemMergeEvent;
@@ -698,5 +699,48 @@ public final class AcceptanceKitTests {
                 new Actor.Player(bob.player()), t.level(), BoundingBox.fromCorners(t.pos(-2, 0, -1), t.pos(1, 1, 1)),
                 4));
         t.assertTrue(cancelled, "a field overlapping the area was refused: " + area.events());
+    }
+
+    @HadronTest
+    void aMergeIntoAnItemInTheAreaIsRefused(TestContext t) {
+        BlockPos in = t.pos(1, 0, 0), out = t.pos(0, 0, 0);
+        Acceptance area = t.acceptance(around(t));
+        ItemEntity donor = new ItemEntity(t.level(), out.getX() + 0.5, out.getY(), out.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND));
+        ItemEntity target = new ItemEntity(t.level(), in.getX() + 0.5, in.getY(), in.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND));
+        t.assertTrue(Hadron.getPluginManager().callEvent(new ItemMergeEvent(t.level(), donor, target,
+                Actor.Nature.INSTANCE)), "a merge into an item lying in the area was refused: " + area.events());
+    }
+
+    @HadronTest
+    void openingADoubleChestWithItsFirstHalfOutsideIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos outside = t.pos(3, 0, 3), inside = t.pos(3, 0, 2);
+        t.setBlock(outside, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, Direction.EAST)
+                .setValue(ChestBlock.TYPE, ChestType.LEFT));
+        t.setBlock(inside, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, Direction.EAST)
+                .setValue(ChestBlock.TYPE, ChestType.RIGHT));
+        Acceptance area = t.acceptance(around(t));
+        CompoundContainer both = new CompoundContainer((ChestBlockEntity) t.level().getBlockEntity(outside),
+                (ChestBlockEntity) t.level().getBlockEntity(inside));
+        ChestMenu menu = ChestMenu.sixRows(1, bob.player().getInventory(), both);
+        t.assertTrue(Hadron.getPluginManager().callEvent(new InventoryOpenEvent(bob.player(),
+                new InventoryHolder.Block(t.level(), outside), menu, new Actor.Player(bob.player()))),
+                "opening a double chest reaching into the area was refused: " + area.events());
+    }
+
+    @HadronTest
+    void aMobTakenToAnotherWorldAndDestroyedThereIsGone(TestContext t) {
+        Pig pig = pig(t, t.pos(2, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        ServerLevel nether = t.server().getLevel(Level.NETHER);
+        t.assertTrue(nether != null, "the test server has a Nether");
+        var copy = pig.changeDimension(new DimensionTransition(nether, new Vec3(0.5, 100, 0.5), Vec3.ZERO, 0, 0,
+                DimensionTransition.DO_NOTHING));
+        t.assertTrue(copy != null, "the pig went to the Nether");
+        copy.discard();
+        String why = failure(t, () -> area.assertUnchanged("a pig taken away and destroyed", Part.ENTITIES));
+        t.assertTrue(why.contains("minecraft:pig") && why.contains("is gone"), why);
     }
 }

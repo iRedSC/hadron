@@ -20,6 +20,7 @@ import dev.iredsc.hadron.api.event.entity.EntityVelocityEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
 import dev.iredsc.hadron.api.event.item.EquipEvent;
@@ -65,6 +66,8 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Inventory;
+import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ChunkPos;
@@ -72,6 +75,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
+import dev.iredsc.hadron.harness.mixin.ServerLevelEntitiesAccessor;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.items.IItemHandler;
 import org.jspecify.annotations.Nullable;
@@ -313,11 +317,13 @@ final class TestAcceptance implements Acceptance, Listener {
             Place lands = at(level, drop.getPosition());
             if (lands instanceof Place.In) return lands;
         }
-        if (event instanceof ItemEvent i && itemEntity(i).isPresent()) {
-            // A merge or a despawn happens where its item lies, whoever is behind it (nature, usually).
+        if (event instanceof ItemEvent i && !itemEntities(i).isEmpty()) {
+            // A merge or a despawn happens where its items lie, either of a merge's two, whoever is behind it.
             if (i.getLevel() != level) return OUT;
-            Place lies = at(level, itemEntity(i).get().position());
-            if (lies instanceof Place.In) return lies;
+            for (ItemEntity item : itemEntities(i)) {
+                Place lies = at(level, item.position());
+                if (lies instanceof Place.In) return lies;
+            }
         }
         if (event instanceof ItemEvent i) {
             if (i.getLevel() != level) return OUT;
@@ -338,25 +344,12 @@ final class TestAcceptance implements Acceptance, Listener {
                     : actorAt(i.getActor());
         }
         if (event instanceof InventoryClickEvent click) {
-            // Whichever slot was clicked, a menu open on a block in the box can change it: a shift-click from the
-            // player's own inventory fills the block's. What the menu is open on, as core works it out (a double
-            // chest, a machine's menu over its item handler), then any slot over a block entity in the box.
-            Place on = holder(InventoryHolders.ofMenu(click.getMenu(), click.getViewer()));
+            Place on = menu(click.getMenu(), click.getViewer());
             if (on instanceof Place.In) return on;
-            Map<BlockPos, Container> containers = null;
-            for (Slot slot : click.getMenu().slots) {
-                if (slot.container instanceof BlockEntity be && be.getLevel() == level
-                        && box.isInside(be.getBlockPos())) {
-                    return in(be.getBlockPos());
-                }
-                // A double chest: either half may be the one in the area.
-                if (slot.container instanceof CompoundContainer both) {
-                    if (containers == null) containers = containersInBox();
-                    for (Map.Entry<BlockPos, Container> half : containers.entrySet()) {
-                        if (both.contains(half.getValue())) return in(half.getKey());
-                    }
-                }
-            }
+        }
+        if (event instanceof InventoryOpenEvent open && open.getMenu().isPresent()
+                && menu(open.getMenu().get(), open.getViewer()) instanceof Place.In on) {
+            return on;
         }
         if (event instanceof InventoryEvent i) {
             Set<InventoryHolder> holders = i instanceof InventoryChangeEvent c ? c.getHolders() : Set.of(i.getHolder());
@@ -394,12 +387,12 @@ final class TestAcceptance implements Acceptance, Listener {
         return OUT;
     }
 
-    /** The item entity an item event is about, if it is about one lying in the world. */
-    static Optional<ItemEntity> itemEntity(ItemEvent event) {
+    /** The item entities an item event is about, when it is about ones lying in the world. */
+    static List<ItemEntity> itemEntities(ItemEvent event) {
         return switch (event) {
-            case ItemMergeEvent e -> Optional.of(e.getItemEntity());
-            case ItemDespawnEvent e -> Optional.of(e.getItemEntity());
-            default -> Optional.empty();
+            case ItemMergeEvent e -> List.of(e.getItemEntity(), e.getTarget());
+            case ItemDespawnEvent e -> List.of(e.getItemEntity());
+            default -> List.of();
         };
     }
 
@@ -427,6 +420,29 @@ final class TestAcceptance implements Acceptance, Listener {
             case TradeEvent e -> Optional.of(e.getTrader());
             default -> Optional.empty();
         };
+    }
+
+    /**
+     * A menu open on a block in the box, whichever slot a click hits: a shift-click from the player's own inventory
+     * fills the block's. What the menu is open on, as core works it out (a machine's menu over its item handler),
+     * then any slot over a block entity in the box, either half of a double chest included.
+     */
+    private Place menu(AbstractContainerMenu menu, Player viewer) {
+        Place on = holder(InventoryHolders.ofMenu(menu, viewer));
+        if (on instanceof Place.In) return on;
+        Map<BlockPos, Container> containers = null;
+        for (Slot slot : menu.slots) {
+            if (slot.container instanceof BlockEntity be && be.getLevel() == level && box.isInside(be.getBlockPos())) {
+                return in(be.getBlockPos());
+            }
+            if (slot.container instanceof CompoundContainer both) {
+                if (containers == null) containers = containersInBox();
+                for (Map.Entry<BlockPos, Container> half : containers.entrySet()) {
+                    if (both.contains(half.getValue())) return in(half.getKey());
+                }
+            }
+        }
+        return OUT;
     }
 
     private Map<BlockPos, Container> containersInBox() {
@@ -512,18 +528,22 @@ final class TestAcceptance implements Acceptance, Listener {
         for (Entity e : followed.values()) {
             if (!e.isRemoved()) {
                 present.putIfAbsent(e.getUUID(), e);
-            } else if (e.getRemovalReason() == Entity.RemovalReason.CHANGED_DIMENSION
-                    || e.getRemovalReason() == Entity.RemovalReason.UNLOADED_TO_CHUNK
+            } else if (e.getRemovalReason() == Entity.RemovalReason.UNLOADED_TO_CHUNK
                     || e.getRemovalReason() == Entity.RemovalReason.UNLOADED_WITH_PLAYER) {
-                // A mob changing worlds is replaced by a copy with the same id there: follow the copy, or, while
-                // the world it went to doesn't list it yet, the mob as it left. Changing worlds is motion, not a
-                // change.
-                Entity moved = e;
+                // Saved with its chunk, not destroyed: motion, so it counts as it left.
+                present.putIfAbsent(e.getUUID(), e);
+            } else if (e.getRemovalReason() == Entity.RemovalReason.CHANGED_DIMENSION) {
+                // Replaced by a copy with the same id in the world it went to: the copy, once that world lists it,
+                // or the mob as it left while the world only holds it. Held nowhere, it is gone.
+                Entity moved = null;
+                boolean held = false;
                 for (ServerLevel other : level.getServer().getAllLevels()) {
                     Entity copy = other.getEntity(e.getUUID());
-                    if (copy != null) moved = copy;
+                    if (copy != null && !copy.isRemoved()) moved = copy;
+                    held |= ((ServerLevelEntitiesAccessor) other).hadron$entityManager().isLoaded(e.getUUID());
                 }
-                present.putIfAbsent(e.getUUID(), moved);
+                if (moved != null) present.putIfAbsent(e.getUUID(), moved);
+                else if (held) present.putIfAbsent(e.getUUID(), e);
             }
         }
         for (Entity e : present.values()) {
