@@ -457,6 +457,8 @@ public final class PluginHost implements PluginManager {
                 steady = stamp.equals(new Stamp(jar));
             }
         } catch (IOException ex) {
+            // An earlier try may have copied before this one failed; Unusable carries no copy, so nothing else can.
+            delete(copy);
             return new Snapshot.Unusable(new Source(jar.getName(), stamp, PluginStatus.UNKNOWN),
                     "couldn't copy its jar to plugins/.loaded (" + ex.getMessage() + ")");
         }
