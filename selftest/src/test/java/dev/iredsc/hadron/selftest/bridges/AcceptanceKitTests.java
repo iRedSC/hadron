@@ -45,6 +45,7 @@ import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.List;
+import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.CompoundContainer;
@@ -1316,5 +1317,89 @@ public final class AcceptanceKitTests {
         String why = failure(t, () -> area.assertUnchanged("a breeding that cost a parent health", Part.ENTITIES));
         t.assertTrue(why.contains("minecraft:pig") && why.contains("health") && why.contains("EntityBreedEvent"),
                 why);
+    }
+
+    @HadronTest
+    @SuppressWarnings("unchecked")
+    void aChestsOwnModStoreIsCompared(TestContext t) throws ReflectiveOperationException {
+        BlockPos pos = t.pos(2, 0, 0);
+        t.setBlock(pos, Blocks.CHEST);
+        // A mod exposing a store of its own on a chest's north face, beside the vanilla wrapper. Through reflection:
+        // self-tests compile against vanilla only.
+        Class<?> handlerType = Class.forName("net.neoforged.neoforge.items.ItemStackHandler");
+        Object separate = handlerType.getConstructor(int.class).newInstance(1);
+        java.lang.reflect.Method set = handlerType.getMethod("setStackInSlot", int.class, ItemStack.class);
+        set.invoke(separate, 0, new ItemStack(Items.DIAMOND, 3));
+        Object capability = Class.forName("net.neoforged.neoforge.capabilities.Capabilities$ItemHandler")
+                .getField("BLOCK").get(null);
+        var field = Class.forName("net.neoforged.neoforge.capabilities.BlockCapability").getDeclaredField("providers");
+        field.setAccessible(true);
+        var providers = (Map<Block, List<Object>>) field.get(capability);
+        Class<?> providerType = Class.forName("net.neoforged.neoforge.capabilities.IBlockCapabilityProvider");
+        Object store = java.lang.reflect.Proxy.newProxyInstance(providerType.getClassLoader(),
+                new Class<?>[] {providerType}, (proxy, method, args) -> {
+                    if (!method.getName().equals("getCapability")) return method.invoke(this, args);
+                    return pos.equals(args[1]) && args[4] == Direction.NORTH ? separate : null;
+                });
+        List<Object> old = providers.get(Blocks.CHEST);
+        List<Object> withStore = new java.util.ArrayList<>();
+        withStore.add(store);
+        if (old != null) withStore.addAll(old);
+        providers.put(Blocks.CHEST, withStore);
+        try {
+            Acceptance area = t.acceptance(around(t));
+            set.invoke(separate, 0, ItemStack.EMPTY);
+            String why = failure(t, () -> area.assertUnchanged("a chest's own store drained", Part.INVENTORIES));
+            t.assertTrue(why.contains("north slot 0") && why.contains("diamond"), why);
+            area.mark();
+            ChestBlockEntity chest = (ChestBlockEntity) t.level().getBlockEntity(pos);
+            t.assertTrue(chest != null, "the chest");
+            chest.setItem(0, new ItemStack(Items.EMERALD));
+            String own = failure(t, () -> area.assertUnchanged("a chest filled", Part.INVENTORIES));
+            // Its own slots once, not again through the vanilla wrapper on every face.
+            t.assertTrue(own.contains("1 thing(s) changed") && own.contains("emerald"), own);
+        } finally {
+            if (old == null) providers.remove(Blocks.CHEST);
+            else providers.put(Blocks.CHEST, old);
+        }
+    }
+
+    /** A bridge's own event, nested and not public: its public getters still name its entities. */
+    private static final class HiddenPair extends EntityEvent implements Cancellable {
+        private final Entity other;
+        private boolean cancelled;
+
+        HiddenPair(Entity subject, Entity other) {
+            super(subject, Actor.Nature.INSTANCE);
+            this.other = other;
+        }
+
+        public Entity getOther() {
+            return other;
+        }
+
+        @Override
+        public boolean isCancelled() {
+            return cancelled;
+        }
+
+        @Override
+        public void setCancelled(boolean cancel) {
+            cancelled = cancel;
+        }
+    }
+
+    @HadronTest
+    void anEntityNamedByAPrivateEventsGetterIsChecked(TestContext t) {
+        Pig subject = pig(t, t.pos(-2, 0, 4));
+        Pig victim = pig(t, t.pos(0, 0, 4));
+        Acceptance area = t.acceptance(around(t));
+        BlockPos in = t.pos(2, 0, 0), out = t.pos(0, 0, 4);
+        victim.teleportTo(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        Hadron.getPluginManager().callEvent(new HiddenPair(subject, victim));
+        victim.setHealth(victim.getHealth() - 4);
+        victim.teleportTo(out.getX() + 0.5, out.getY(), out.getZ() + 0.5);
+        String why = failure(t, () -> area.assertUnchanged("a hidden event's victim hurt", Part.ENTITIES));
+        t.assertTrue(why.contains("minecraft:pig") && why.contains("health"), why);
     }
 }

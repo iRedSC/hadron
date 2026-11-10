@@ -538,6 +538,8 @@ final class TestAcceptance implements Acceptance, Listener {
                         || m.getName().equals("getActor")) {
                     continue;
                 }
+                // A public getter on an event class that isn't public (a bridge's nested one) is read all the same.
+                m.trySetAccessible();
                 out.add(m);
             }
             return List.copyOf(out);
@@ -792,6 +794,12 @@ final class TestAcceptance implements Acceptance, Listener {
                 health);
     }
 
+    /** Whether a handler is the vanilla wrapper over this chest, or over the double chest it is half of. */
+    private static boolean overChest(IItemHandler handler, ChestBlockEntity chest) {
+        return handler instanceof net.neoforged.neoforge.items.wrapper.InvWrapper w
+                && (w.getInv() == chest || w.getInv() instanceof CompoundContainer both && both.contains(chest));
+    }
+
     /**
      * Every slot a block exposes: {@code slot 3} for its own inventory (a container block entity's slots, or else
      * its sideless item handler's), then every other handler it offers (a container's sideless one, each face's), as
@@ -801,12 +809,10 @@ final class TestAcceptance implements Acceptance, Listener {
     private Map<String, ItemStack> items(BlockPos pos, @Nullable BlockEntity be) {
         Map<String, ItemStack> out = new LinkedHashMap<>();
         List<IItemHandler> handlers = new ArrayList<>();
-        // A chest's item handler is both halves of a double chest, so its own slots are the whole truth for it.
-        if (be instanceof ChestBlockEntity chest) {
-            for (int i = 0; i < chest.getContainerSize(); i++) out.put("slot " + i, chest.getItem(i).copy());
-            return out;
-        }
         @Nullable IItemHandler sideless = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, null);
+        // A chest's vanilla item handler is both halves of a double chest, so its own slots are the whole truth for
+        // it; any other handler it offers (a mod's) is a store of its own and is read as one.
+        if (be instanceof ChestBlockEntity chest && sideless != null && overChest(sideless, chest)) sideless = null;
         if (be instanceof Container c) {
             for (int i = 0; i < c.getContainerSize(); i++) out.put("slot " + i, c.getItem(i).copy());
             if (sideless != null) {
@@ -820,7 +826,10 @@ final class TestAcceptance implements Acceptance, Listener {
         if (sideless != null) handlers.add(sideless);
         for (Direction side : Direction.values()) {
             @Nullable IItemHandler h = level.getCapability(Capabilities.ItemHandler.BLOCK, pos, side);
-            if (h == null || handlers.stream().anyMatch(seen -> seen == h)) continue;
+            if (h == null || handlers.stream().anyMatch(seen -> seen == h)
+                    || be instanceof ChestBlockEntity chest && overChest(h, chest)) {
+                continue;
+            }
             handlers.add(h);
             for (int i = 0; i < h.getSlots(); i++) out.put(side.getName() + " slot " + i, h.getStackInSlot(i).copy());
         }
