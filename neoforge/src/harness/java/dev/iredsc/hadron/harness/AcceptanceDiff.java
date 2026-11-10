@@ -142,6 +142,9 @@ final class AcceptanceDiff {
                 continue;
             }
             if (was == null || is == null) continue;
+            if (!was.type().equals(is.type())) {
+                out.add(new Change("the " + was.type() + " at " + at(was.pos()) + " became a " + is.type(), concerns));
+            }
             if (!ItemStack.matches(was.stack(), is.stack())) {
                 out.add(new Change("the " + is.type() + " at " + at(is.pos()) + " went from " + was.stack() + " to "
                         + is.stack(), concerns));

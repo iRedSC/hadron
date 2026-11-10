@@ -5,6 +5,8 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
+import dev.iredsc.hadron.api.event.ActionEvent;
+import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockChange;
@@ -56,6 +58,7 @@ import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.ContainerLevelAccess;
 import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.world.entity.animal.Cow;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.item.ItemStack;
@@ -80,6 +83,25 @@ import net.minecraft.world.phys.Vec3;
  * would pass a bridge that covers nothing.
  */
 public final class AcceptanceKitTests {
+    /** An action of a family the kit doesn't know, as a bridge's own event type might be. */
+    public static final class OddEvent extends ActionEvent implements Cancellable {
+        private boolean cancelled;
+
+        public OddEvent(Actor actor) {
+            super(actor);
+        }
+
+        @Override
+        public boolean isCancelled() {
+            return cancelled;
+        }
+
+        @Override
+        public void setCancelled(boolean cancel) {
+            cancelled = cancel;
+        }
+    }
+
     private static BoundingBox around(TestContext t) {
         return BoundingBox.fromCorners(t.pos(1, 0, -2), t.pos(3, 2, 2));
     }
@@ -926,5 +948,75 @@ public final class AcceptanceKitTests {
         area.assertActingFor(alice, "alice breaking stone while nature fills somewhere unknown");
         t.assertTrue(area.events().stream().anyMatch(e -> e.event() instanceof InventoryChangeEvent
                 && e.pos().isEmpty()), "events() lists the event nothing could place: " + area.events());
+    }
+
+    @HadronTest
+    void anActionOfAnUnknownKindIsRefusedAndNamed(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        OddEvent odd = t.bridge().fire(new OddEvent(new Actor.Player(alice.player())));
+        t.assertTrue(odd.isCancelled(), "an action the kit can't place was refused, failing closed");
+        String why = failure(t, () -> area.assertActingFor(alice, "alice's machine firing its own kind"));
+        t.assertTrue(why.contains("doesn't know where a OddEvent happens"), why);
+    }
+
+    @HadronTest
+    void aCartDrainedOnItsWayThroughIsCaught(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos start = t.pos(0, 0, 4), in = t.pos(2, 0, 0);
+        MinecartChest cart = new MinecartChest(t.level(), start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+        cart.setItem(0, new ItemStack(Items.DIAMOND, 3));
+        t.level().addFreshEntity(cart);
+        t.tick();
+        Acceptance area = t.acceptance(around(t));
+        cart.teleportTo(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        t.assertTrue(Hadron.getPluginManager().callEvent(new InventoryChangeEvent(List.of(
+                new InventoryChangeEvent.Change(new InventoryHolder.Entity(cart), 0, new ItemStack(Items.DIAMOND, 3),
+                        ItemStack.EMPTY)), new Actor.Player(bob.player()))), "bob's drain was refused");
+        cart.setItem(0, ItemStack.EMPTY);
+        cart.teleportTo(start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+        String why = failure(t, () -> area.assertUnchanged("a pipe draining a cart as it passes", Part.ENTITIES));
+        t.assertTrue(why.contains("chest_minecart") && why.contains("diamond"), why);
+    }
+
+    @HadronTest
+    void anEntityReplacedByAnotherKindUnderItsIdIsCaught(TestContext t) {
+        Pig pig = pig(t, t.pos(2, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        Cow cow = EntityType.COW.create(t.level());
+        cow.moveTo(pig.getX(), pig.getY(), pig.getZ());
+        cow.setUUID(pig.getUUID());
+        cow.setHealth(pig.getHealth());
+        pig.discard();
+        try (Actors.Scope s = Actors.push(new Actor.Server("a transformation that ignored its refusal"))) {
+            t.level().addFreshEntity(cow);
+        }
+        String why = failure(t, () -> area.assertUnchanged("a pig turned into a cow", Part.ENTITIES));
+        t.assertTrue(why.contains("minecraft:pig") && why.contains("became a minecraft:cow"), why);
+    }
+
+    @HadronTest
+    void aRefusedSpawnLeavesNoPhantom(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Acceptance area = t.acceptance(around(t));
+        Pig pig = EntityType.PIG.create(t.level());
+        pig.moveTo(t.pos(2, 0, 0).getX() + 0.5, t.pos(2, 0, 0).getY(), t.pos(2, 0, 0).getZ() + 0.5);
+        boolean added;
+        try (Actors.Scope s = Actors.push(new Actor.Player(bob.player()))) {
+            added = t.level().addFreshEntity(pig);
+        }
+        t.assertFalse(added, "bob's spawn in the area was refused");
+        area.assertUnchanged("bob's refused spawn", Part.ENTITIES);
+    }
+
+    @HadronTest
+    void aDropKnownToLandOutsideIsLeftAlone(TestContext t) {
+        Acceptance area = t.acceptance(around(t));
+        BlockPos out = t.pos(-3, 0, 0);
+        boolean cancelled = Hadron.getPluginManager().callEvent(new ItemDropEvent(t.level(),
+                new Vec3(out.getX() + 0.5, out.getY(), out.getZ() + 0.5), new ItemStack(Items.DIAMOND),
+                Actor.Unknown.INSTANCE));
+        t.assertFalse(cancelled, "a drop landing outside the area isn't the area's");
     }
 }

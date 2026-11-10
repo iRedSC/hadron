@@ -397,6 +397,8 @@ final class TestAcceptance implements Acceptance, Listener {
             if (drop.getLevel() != level) return OUT;
             Place lands = at(level, drop.getPosition());
             if (lands instanceof Place.In) return lands;
+            // Known to land outside: the area's only if whoever dropped it stands in it.
+            return actorAt(drop.getActor());
         }
         if (event instanceof ItemEvent i && !itemEntities(i).isEmpty()) {
             // A merge or a despawn happens where its items lie, either of a merge's two, whoever is behind it.
@@ -466,8 +468,12 @@ final class TestAcceptance implements Acceptance, Listener {
                 }
                 return actorAt(r.getActor());
             }
+            return OUT;
         }
-        return OUT;
+        // Each family above says where its events happen. Any other action (a bridge's own event type, a family added
+        // later) might be in the area, so protection fails closed on it rather than letting it through unseen.
+        return new Place.Unplaced("the acceptance kit doesn't know where a " + event.getEventName() + " happens: "
+                + "make it a block, entity, item, inventory, resource or world event, whose place the kit reads");
     }
 
     /** Every entity an event names: its subject, and the other of a pair (a mount, a lead's holder), or its items. */
@@ -476,8 +482,22 @@ final class TestAcceptance implements Acceptance, Listener {
             case EntityMountEvent e -> List.of(e.getEntity(), e.getMount());
             case EntityLeashEvent e -> List.of(e.getEntity(), e.getHolder());
             case EntityEvent e -> List.of(e.getEntity());
+            case ItemPickupEvent p -> holderEntity(p.getDestination()).map(d -> List.<Entity>of(p.getItemEntity(), d))
+                    .orElse(List.of(p.getItemEntity()));
             case ItemEvent i -> List.copyOf(itemEntities(i));
+            case InventoryChangeEvent c -> c.getHolders().stream().flatMap(h -> holderEntity(h).stream()).toList();
+            case InventoryEvent i -> holderEntity(i.getHolder()).map(List::of).orElse(List.of());
             default -> List.of();
+        };
+    }
+
+    /** The entity holding an inventory (a cart, a donkey, a player), through items and per-player copies. */
+    private static Optional<Entity> holderEntity(InventoryHolder holder) {
+        return switch (holder) {
+            case InventoryHolder.Entity e -> Optional.of(e.entity());
+            case InventoryHolder.Item i -> holderEntity(i.outer());
+            case InventoryHolder.PerPlayer p -> holderEntity(p.at());
+            default -> Optional.empty();
         };
     }
 
@@ -623,7 +643,11 @@ final class TestAcceptance implements Acceptance, Listener {
         for (Map.Entry<UUID, Entity> f : new ArrayList<>(followed.entrySet())) {
             Entity e = f.getValue();
             if (!e.isRemoved()) {
-                present.putIfAbsent(f.getKey(), e);
+                // Only one its world holds: an entity whose spawn was refused was never added, though not removed.
+                if (e.level() instanceof ServerLevel at
+                        && ((ServerLevelEntitiesAccessor) at).hadron$entityManager().isLoaded(f.getKey())) {
+                    present.putIfAbsent(f.getKey(), e);
+                }
                 continue;
             }
             // Gone from this instance: a live one with the same id anywhere (reloaded from its chunk, a copy in the

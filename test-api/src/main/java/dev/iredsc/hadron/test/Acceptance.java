@@ -48,8 +48,11 @@ import net.minecraft.core.BlockPos;
  * targeting, air), so anyone may walk through. Protection
  * denies each that is cancellable unless the server or a trusted player is behind it and its kind isn't refused, so
  * {@link Actor.Unknown}, ownerless machines and other players are outsiders, as {@link Actor} says protection should
- * treat them. An event it can't place at all (an inventory event whose holder is unknown, an item event nobody is
- * behind) is denied too, unless the server is behind it, and {@link #assertActingFor} names it. The area is watched
+ * treat them. An event it can't place at all is denied too, unless the server is behind it, and
+ * {@link #assertActingFor} names it: an inventory event whose holder is unknown, an item event nobody is behind, and
+ * any action outside the block, entity, item, inventory, resource and world families, whose place the kit can't
+ * read. Protection fails closed, so a kind the kit doesn't understand shows up as a named refusal, never a silent
+ * pass. The area is watched
  * ({@code Areas.watch}), so a change with nobody behind it fires as Unknown there.
  *
  * <p><b>What it compares</b>, by {@link Part}: block states and which block entity is where; every slot of every
