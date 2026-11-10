@@ -77,7 +77,7 @@ public class InventoryOpenEvent extends InventoryEvent implements Cancellable {
      */
     @Override
     public Places getPlaces() {
-        Places own = Places.of(Place.of(getHolder()));
+        Places own = Place.of(getHolder());
         return menu == null ? own : own.and(Menus.places(menu, viewer, menuHolder, getHolder()));
     }
 }

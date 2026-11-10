@@ -37,6 +37,6 @@ public abstract class InventoryEvent extends ActionEvent {
     /** Where the inventory is ({@link Place#of(InventoryHolder)} of {@link #getHolder()}). */
     @Override
     public Places getPlaces() {
-        return Places.of(Place.of(getHolder()));
+        return Place.of(getHolder());
     }
 }

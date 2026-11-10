@@ -16,6 +16,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.portal.DimensionTransition;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.ServerChatEvent;
 import net.neoforged.neoforge.event.entity.living.LivingSwapItemsEvent;
@@ -30,7 +31,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerXpEvent;
  * Hadron's player events from NeoForge's. Login, kick, abilities, toggles, level changes and mods' packets come from
  * the world mixins instead.
  */
-final class PlayerEvents {
+public final class PlayerEvents {
     private PlayerEvents() {}
 
     static void register() {
@@ -38,7 +39,6 @@ final class PlayerEvents {
         NeoForge.EVENT_BUS.addListener(PlayerEvents::quit);
         NeoForge.EVENT_BUS.addListener(PlayerEvents::chat);
         NeoForge.EVENT_BUS.addListener(PlayerEvents::respawn);
-        NeoForge.EVENT_BUS.addListener(PlayerEvents::changedWorld);
         NeoForge.EVENT_BUS.addListener(PlayerEvents::gameMode);
         NeoForge.EVENT_BUS.addListener(PlayerEvents::experience);
         NeoForge.EVENT_BUS.addListener(PlayerEvents::advancement);
@@ -99,10 +99,14 @@ final class PlayerEvents {
         }
     }
 
-    private static void changedWorld(PlayerEvent.PlayerChangedDimensionEvent event) {
-        if (!(event.getEntity() instanceof ServerPlayer p) || !Hooks.listens(PlayerChangedWorldEvent.class)) return;
-        ServerLevel from = p.server.getLevel(event.getFrom());
-        if (from != null) Hooks.post(new PlayerChangedWorldEvent(p, from));
+    /**
+     * {@code ServerPlayer.changeDimension} moved a player to another level; {@code from} and {@code fromPosition}
+     * are where they stood just before. Vanilla's only path between levels for a player (teleports to another level
+     * and portals both go through it); a respawn is {@code PlayerRespawnEvent}.
+     */
+    public static void changedWorld(ServerPlayer player, ServerLevel from, Vec3 fromPosition) {
+        if (!Hooks.listens(PlayerChangedWorldEvent.class)) return;
+        Hooks.post(new PlayerChangedWorldEvent(player, from, fromPosition));
     }
 
     /** ServerPlayer.setGameMode, for every caller. */

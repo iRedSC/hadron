@@ -122,6 +122,6 @@ public class InventoryClickEvent extends InventoryEvent implements Cancellable {
      */
     @Override
     public Places getPlaces() {
-        return Places.of(Place.of(getHolder()), Menus.places(menu, viewer, menuHolder, getHolder()));
+        return Place.of(getHolder()).and(Menus.places(menu, viewer, menuHolder, getHolder()));
     }
 }

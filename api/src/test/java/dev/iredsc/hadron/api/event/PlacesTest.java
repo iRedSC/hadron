@@ -48,20 +48,20 @@ class PlacesTest {
         UUID alice = new UUID(1, 2);
         InventoryHolder ender = new InventoryHolder.Linked(InventoryHolder.Linked.ENDER_CHEST, alice.toString());
         assertEquals(new Place.Nowhere(InventoryHolder.Linked.ENDER_CHEST, alice.toString(), Optional.of(alice)),
-                Place.of(ender));
+                Place.of(ender).get(0));
         InventoryHolder tank = new InventoryHolder.Linked(ResourceLocation.fromNamespaceAndPath("enderstorage", "tank"),
                 alice.toString());
-        assertEquals(Optional.empty(), ((Place.Nowhere) Place.of(tank)).owner(), "only its mod's bridge knows a "
+        assertEquals(Optional.empty(), ((Place.Nowhere) Place.of(tank).get(0)).owner(), "only its mod's bridge knows a "
                 + "network's owner, even where its frequency looks like a UUID");
         assertEquals(Place.Nowhere.account(ResourceHolder.Account.player(alice)),
-                Place.of(ResourceHolder.Account.player(alice)));
+                Place.of(ResourceHolder.Account.player(alice)).get(0));
     }
 
     @Test
     void whatNothingIdentifiedIsUnknownWithItsReason() {
         Place unknown = Place.Unknown.anywhere(Place.Unknown.Reason.UNIDENTIFIED_INVENTORY);
-        assertEquals(unknown, Place.of(InventoryHolder.Unknown.INSTANCE));
-        assertEquals(unknown, Place.of(new InventoryHolder.PerPlayer(InventoryHolder.Unknown.INSTANCE,
+        assertEquals(List.of(unknown), Place.of(InventoryHolder.Unknown.INSTANCE));
+        assertEquals(List.of(unknown), Place.of(new InventoryHolder.PerPlayer(InventoryHolder.Unknown.INSTANCE,
                 new UUID(3, 4))), "whose copy, but not where");
     }
 

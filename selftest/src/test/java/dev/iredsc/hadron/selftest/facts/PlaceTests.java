@@ -31,6 +31,7 @@ import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
 import dev.iredsc.hadron.api.event.item.ItemEvent;
 import dev.iredsc.hadron.api.event.item.ItemSmeltEvent;
 import dev.iredsc.hadron.api.event.player.PlayerBedEnterEvent;
+import dev.iredsc.hadron.api.event.player.PlayerChangedWorldEvent;
 import dev.iredsc.hadron.api.event.player.PlayerLoginEvent;
 import dev.iredsc.hadron.api.event.player.PlayerRespawnEvent;
 import dev.iredsc.hadron.api.event.resource.Resource;
@@ -244,8 +245,8 @@ public final class PlaceTests {
     @Covers(EntityDismountEvent.class)
     @Covers(CommandExecuteEvent.class)
     void everyEventInAVanillaRunStatesWhereItHappens(TestContext t) {
-        TestPlayer alice = joined(t);
         List<Heard> heard = hear(t);
+        TestPlayer alice = joined(t);
         vanillaRun(t, alice);
         // A run that heard none of a family proves nothing about it.
         for (Class<?> family : List.of(BlockEvent.class, EntityEvent.class, ItemEvent.class, InventoryEvent.class,
@@ -261,8 +262,8 @@ public final class PlaceTests {
 
     @HadronTest(timeout = 800)
     void vanillaFixturesNeverSayUnknownButForACommand(TestContext t) {
-        TestPlayer alice = joined(t);
         List<Heard> heard = hear(t);
+        TestPlayer alice = joined(t);
         vanillaRun(t, alice);
         List<Heard> unknown = heard.stream().filter(h -> h.places().stream().anyMatch(p -> p instanceof Place.Unknown u
                 && u.reason() != Place.Unknown.Reason.COMMAND)).toList();
@@ -271,11 +272,14 @@ public final class PlaceTests {
         t.assertTrue(heard.stream().anyMatch(h -> h.event() instanceof CommandExecuteEvent
                 && h.places().equals(List.of(Place.Unknown.anywhere(Place.Unknown.Reason.COMMAND)))),
                 "the console's command should be Unknown, anywhere, for a command: " + kinds(heard));
+        t.assertTrue(heard.stream().anyMatch(h -> h.event() instanceof PlayerChangedWorldEvent),
+                "joining moves alice into the test's world, so the run should hear where she left from: "
+                + kinds(heard));
     }
 
     /**
-     * Alice, joined before anything is heard: joining moves her from the overworld into the test's world, whose
-     * {@code PlayerChangedWorldEvent} honestly can't say where in the overworld she left from. Not a fixture.
+     * Alice, joined while the run listens: joining moves her from the overworld into the test's world, so the run
+     * hears her {@code PlayerChangedWorldEvent}, which states where in the overworld she left from.
      */
     private static TestPlayer joined(TestContext t) {
         TestPlayer alice = t.player("alice");
@@ -457,6 +461,33 @@ public final class PlaceTests {
         t.await("the hopper to pull", () -> !places.isEmpty(), 40);
         t.assertEquals(List.of(Place.Spot.at(t.level(), chest), Place.Spot.at(t.level(), hopper)), places.get(0),
                 "a pull's places: the chest it leaves, then the hopper it enters");
+    }
+
+    @HadronTest
+    @Covers(InventoryMoveItemEvent.class)
+    void aHopperUnderOneHalfOfADoubleChestNamesBothHalves(TestContext t) {
+        BlockPos hopper = t.pos(2, 0, 0), under = t.pos(2, 1, 0), beside = t.pos(3, 1, 0);
+        awaitTicking(t, hopper);
+        t.setBlock(hopper, Blocks.HOPPER);
+        // A double chest facing north: the left half's other half is to its east.
+        BlockState half = Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, Direction.NORTH);
+        t.setBlock(under, half.setValue(ChestBlock.TYPE, ChestType.LEFT));
+        t.setBlock(beside, half.setValue(ChestBlock.TYPE, ChestType.RIGHT));
+        require(under.relative(ChestBlock.getConnectedDirection(t.level().getBlockState(under))).equals(beside),
+                "the halves should join");
+        List<List<Place>> places = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(InventoryMoveItemEvent e) {
+                places.add(List.copyOf(e.getPlaces()));
+            }
+        });
+        // In the half the hopper isn't under: it pulls through the double chest's one inventory.
+        ((net.minecraft.world.Container) t.level().getBlockEntity(beside)).setItem(0, new ItemStack(Items.DIAMOND));
+        t.await("the hopper to pull", () -> !places.isEmpty(), 40);
+        t.assertEquals(Set.of(Place.Spot.at(t.level(), under), Place.Spot.at(t.level(), beside),
+                Place.Spot.at(t.level(), hopper)), Set.copyOf(places.get(0)),
+                "a pull's places: both halves of the double chest it leaves, and the hopper it enters");
     }
 
     @HadronTest

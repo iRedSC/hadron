@@ -72,6 +72,6 @@ public abstract class ResourceEvent extends ActionEvent implements Cancellable {
             // A leaf that names no holder is a bridge's bug; say so as a place rather than claim none.
             return Places.of(Place.Unknown.anywhere(Place.Unknown.Reason.UNPLACEABLE_OPERATION));
         }
-        return Places.of(Place.of(holders.get(0)), holders.stream().map(Place::of).toList());
+        return Place.of(holders.get(0)).and(holders.stream().flatMap(h -> Place.of(h).stream()).toList());
     }
 }

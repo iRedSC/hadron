@@ -450,7 +450,7 @@ public final class BridgeContractTests {
         InventoryHolder.PerPlayer copy = (InventoryHolder.PerPlayer) e.getChanges().get(0).holder();
         t.assertEquals(chest, copy.at(), "where the copy is, for protection");
         t.assertEquals(alice.uuid(), copy.owner(), "whose copy");
-        Place chestSpot = Place.Spot.at(t.level(), pos);
+        List<Place> chestSpot = List.of(Place.Spot.at(t.level(), pos));
         t.assertEquals(chestSpot, Place.of(chest), "a chest is at its block");
         t.assertEquals(chestSpot, Place.of(alices), "a copy is at its chest");
         InventoryHolder cart = new InventoryHolder.Entity(EntityType.CHEST_MINECART.create(t.level()));
@@ -458,11 +458,11 @@ public final class BridgeContractTests {
         t.assertEquals(chestSpot, Place.of(new InventoryHolder.Item(alices, loot)), "a backpack in a copy is at its "
                 + "chest");
         InventoryHolder ender = new InventoryHolder.Linked(InventoryHolder.Linked.ENDER_CHEST, alice.uuid().toString());
-        t.assertEquals(new Place.Nowhere(InventoryHolder.Linked.ENDER_CHEST, alice.uuid().toString(),
-                java.util.Optional.of(alice.uuid())), Place.of(new InventoryHolder.Item(ender, loot)),
+        t.assertEquals(List.of(new Place.Nowhere(InventoryHolder.Linked.ENDER_CHEST, alice.uuid().toString(),
+                java.util.Optional.of(alice.uuid()))), Place.of(new InventoryHolder.Item(ender, loot)),
                 "a backpack in an ender chest has no place: its frequency, owned by alice");
         InventoryHolder unplaced = new InventoryHolder.PerPlayer(InventoryHolder.Unknown.INSTANCE, alice.uuid());
-        t.assertEquals(Place.Unknown.anywhere(Place.Unknown.Reason.UNIDENTIFIED_INVENTORY), Place.of(unplaced),
+        t.assertEquals(List.of(Place.Unknown.anywhere(Place.Unknown.Reason.UNIDENTIFIED_INVENTORY)), Place.of(unplaced),
                 "whose copy, but not where, is Unknown");
         t.assertFalse(unplaced.equals(new InventoryHolder.PerPlayer(InventoryHolder.Unknown.INSTANCE, bob.uuid())),
                 "and still never merges two players' copies");

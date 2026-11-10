@@ -55,6 +55,6 @@ public class InventoryCloseEvent extends InventoryEvent {
     /** Where {@link #getHolder()} is, then every inventory behind the menu's slots, as for a click. */
     @Override
     public Places getPlaces() {
-        return Places.of(Place.of(getHolder()), Menus.places(menu, viewer, menuHolder, getHolder()));
+        return Place.of(getHolder()).and(Menus.places(menu, viewer, menuHolder, getHolder()));
     }
 }

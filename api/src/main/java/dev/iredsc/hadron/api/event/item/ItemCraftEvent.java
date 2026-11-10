@@ -99,6 +99,6 @@ public class ItemCraftEvent extends ItemEvent implements Cancellable {
     /** Where the inventory holding the stack is ({@link #getHolder()}). */
     @Override
     public Places getPlaces() {
-        return Places.of(Place.of(getHolder()));
+        return Place.of(getHolder());
     }
 }

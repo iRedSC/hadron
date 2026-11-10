@@ -6,10 +6,14 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 
@@ -162,7 +166,7 @@ public sealed interface Place {
             UNDESCRIBED_MENU,
             /** An operation that has no place core can state, such as an action of a kind it doesn't know. */
             UNPLACEABLE_OPERATION,
-            /** Where something came from that nobody saw, such as the spot a player left another level from. */
+            /** Where something came from that nobody saw, such as where a bridge's transfer set out that it didn't record. */
             UNSEEN_ORIGIN,
             /** A command: its source (the console sits at spawn) isn't where it acts; what it does places itself. */
             COMMAND,
@@ -182,33 +186,56 @@ public sealed interface Place {
     }
 
     /**
-     * Where an inventory is: a {@link Spot} for a block, where an entity stands for an entity's, where its holder is
-     * for an item's ({@link InventoryHolder.Item#outer()}) or a per-player copy's ({@link InventoryHolder.PerPlayer#at()}),
-     * {@link Nowhere} for linked storage, and {@link Unknown} for one nothing identified.
+     * Where an inventory is: a block's {@link Spot}, and both halves' for a connected double chest, which share one
+     * inventory; where an entity stands for an entity's; where its holder is for an item's ({@link
+     * InventoryHolder.Item#outer()}) or a per-player copy's ({@link InventoryHolder.PerPlayer#at()}); {@link Nowhere}
+     * for linked storage; and {@link Unknown} for one nothing identified.
      */
-    static Place of(InventoryHolder holder) {
+    static Places of(InventoryHolder holder) {
         return switch (Objects.requireNonNull(holder, "holder")) {
-            case InventoryHolder.Block b -> Spot.at(b.level(), b.pos());
-            case InventoryHolder.Entity e -> of(e.entity());
+            case InventoryHolder.Block b -> holding(b.level(), b.pos());
+            case InventoryHolder.Entity e -> Places.of(of(e.entity()));
             case InventoryHolder.Item i -> of(i.outer());
             case InventoryHolder.PerPlayer p -> of(p.at());
-            case InventoryHolder.Linked l -> Nowhere.linked(l);
-            case InventoryHolder.Unknown u -> Unknown.anywhere(Unknown.Reason.UNIDENTIFIED_INVENTORY);
+            case InventoryHolder.Linked l -> Places.of(Nowhere.linked(l));
+            case InventoryHolder.Unknown u -> Places.of(Unknown.anywhere(Unknown.Reason.UNIDENTIFIED_INVENTORY));
         };
     }
 
     /**
-     * Where a resource is held: a block's or chunk's {@link Spot}, where an entity stands, where the item holding it is
-     * ({@link ResourceHolder.Item#heldIn()}), or {@link Nowhere} for an account.
+     * Where a resource is held: a block's {@link Spot} (both halves' for a connected double chest), a chunk's, where an
+     * entity stands, where the item holding it is ({@link ResourceHolder.Item#heldIn()}), or {@link Nowhere} for an
+     * account.
      */
-    static Place of(ResourceHolder holder) {
+    static Places of(ResourceHolder holder) {
         return switch (Objects.requireNonNull(holder, "holder")) {
-            case ResourceHolder.Block b -> Spot.at(b.level(), b.pos());
-            case ResourceHolder.Entity e -> of(e.entity());
+            case ResourceHolder.Block b -> holding(b.level(), b.pos());
+            case ResourceHolder.Entity e -> Places.of(of(e.entity()));
             case ResourceHolder.Item i -> of(i.heldIn());
-            case ResourceHolder.Chunk c -> Spot.chunk(c.level(), c.pos());
-            case ResourceHolder.Account a -> Nowhere.account(a);
+            case ResourceHolder.Chunk c -> Places.of(Spot.chunk(c.level(), c.pos()));
+            case ResourceHolder.Account a -> Places.of(Nowhere.account(a));
         };
+    }
+
+    /**
+     * The block holding an inventory: the block, then, for a connected double chest, the other half, when the chest's
+     * block state says the half at {@code pos} is joined to the one beside it and that one says the same back.
+     */
+    private static Places holding(ServerLevel level, BlockPos pos) {
+        Places one = Places.of(Spot.at(level, pos));
+        if (!level.isLoaded(pos)) return one;
+        BlockState state = level.getBlockState(pos);
+        if (!(state.getBlock() instanceof ChestBlock) || state.getValue(ChestBlock.TYPE) == ChestType.SINGLE) {
+            return one;
+        }
+        Direction toOther = ChestBlock.getConnectedDirection(state);
+        BlockPos other = pos.relative(toOther);
+        if (!level.isLoaded(other)) return one;
+        BlockState otherState = level.getBlockState(other);
+        boolean joined = otherState.getBlock() == state.getBlock()
+                && otherState.getValue(ChestBlock.TYPE) == state.getValue(ChestBlock.TYPE).getOpposite()
+                && ChestBlock.getConnectedDirection(otherState) == toOther.getOpposite();
+        return joined ? one.and(Spot.at(level, other)) : one;
     }
 
     /** The block an entity stands in now. */

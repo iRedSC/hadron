@@ -69,6 +69,6 @@ public class TradeEvent extends ItemEvent implements Cancellable {
     /** Where the trader is ({@link #getTrader()}). */
     @Override
     public Places getPlaces() {
-        return Places.of(Place.of(getTrader()));
+        return Place.of(getTrader());
     }
 }

@@ -62,13 +62,16 @@ final class Menus {
         }
 
         List<Place> out = new ArrayList<>();
-        for (InventoryHolder h : holders) out.add(Place.of(h));
+        for (InventoryHolder h : holders) out.addAll(Place.of(h));
         for (int i = 0; i < unidentifiedHalves; i++) {
             out.add(Place.Unknown.anywhere(Place.Unknown.Reason.UNIDENTIFIED_INVENTORY));
         }
         if (menusOwn) {
-            out.add(openOn instanceof InventoryHolder.Unknown
-                    ? Place.Unknown.anywhere(Place.Unknown.Reason.UNDESCRIBED_MENU) : Place.of(openOn));
+            if (openOn instanceof InventoryHolder.Unknown) {
+                out.add(Place.Unknown.anywhere(Place.Unknown.Reason.UNDESCRIBED_MENU));
+            } else {
+                out.addAll(Place.of(openOn));
+            }
         }
         return out;
     }

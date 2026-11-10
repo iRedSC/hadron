@@ -163,6 +163,6 @@ public class InventoryChangeEvent extends InventoryEvent implements Cancellable 
     /** Where each inventory it changes is, in {@link #getHolders()}'s order. */
     @Override
     public Places getPlaces() {
-        return Places.of(Place.of(getHolder()), getHolders().stream().map(Place::of).toList());
+        return Place.of(getHolder()).and(getHolders().stream().flatMap(h -> Place.of(h).stream()).toList());
     }
 }
