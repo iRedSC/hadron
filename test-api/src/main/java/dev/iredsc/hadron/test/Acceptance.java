@@ -129,8 +129,9 @@ public interface Acceptance {
     /**
      * That every event in the area since the last {@link #mark} acts for {@code player}, leaving out the server's and
      * nature's (water flowing, gravel falling), which are nobody's to attribute, and that at least one does. Events
-     * that couldn't be placed fail it too, unless the server or nature is behind them. A failure names each: an attribution gap ({@link Actor.Unknown}, or an
-     * actor with no owner), an event acting for someone else, or one that couldn't be placed, with what to fix.
+     * that couldn't be placed fail it too, unless the server or nature is behind them. A failure names each: an
+     * attribution gap ({@link Actor.Unknown}, or an actor with no owner), an event acting for someone else, or one that
+     * couldn't be placed, with what to fix.
      */
     void assertActingFor(TestPlayer player, String step);
 
