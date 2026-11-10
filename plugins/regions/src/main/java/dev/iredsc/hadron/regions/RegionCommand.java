@@ -115,7 +115,11 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
             case "info" -> info(sender, args);
             case "show" -> {
                 Region r = managed(sender, arg(args, 1, "/region show <region>"));
-                feedback.outline(player(sender), r.box(), Feedback.Look.REGION);
+                ServerPlayer p = player(sender);
+                if (!p.serverLevel().dimension().location().equals(r.world())) {
+                    throw new Refusal(r.id() + " is in " + r.world() + "; go there to see it");
+                }
+                feedback.outline(p, r.world(), r.box(), Feedback.Look.REGION);
             }
             case "flag" -> flag(sender, args);
             case "priority" -> {
@@ -166,7 +170,7 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
         }
         store.put(next);
         wand.clear(p);
-        feedback.outline(p, box, Feedback.Look.REGION);
+        feedback.outline(p, s.world(), box, Feedback.Look.REGION);
         ok(sender, (redefine ? "Moved " : "Defined ") + id + " · " + Selection.size(box));
     }
 
@@ -216,7 +220,7 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
             List<String> flags = new ArrayList<>();
             for (Flag f : Flag.values()) r.flag(f).ifPresent(v -> flags.add(f.key() + " " + word(v)));
             ok(sender, "  flags: " + (flags.isEmpty() ? "defaults" : String.join(", ", flags)));
-            if (sender.getEntity() instanceof ServerPlayer p) feedback.outline(p, b, Feedback.Look.REGION);
+            if (sender.getEntity() instanceof ServerPlayer p) feedback.outline(p, r.world(), b, Feedback.Look.REGION);
         }
     }
 
@@ -245,7 +249,7 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
     }
 
     private void showIfPlayer(CommandSourceStack sender, Region r) {
-        if (sender.getEntity() instanceof ServerPlayer p) feedback.outline(p, r.box(), Feedback.Look.REGION);
+        if (sender.getEntity() instanceof ServerPlayer p) feedback.outline(p, r.world(), r.box(), Feedback.Look.REGION);
     }
 
     /** Refuses anyone without {@code regions.manage}. */

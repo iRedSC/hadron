@@ -10,6 +10,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.particles.DustParticleOptions;
 import net.minecraft.core.particles.ParticleTypes;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -57,8 +58,11 @@ final class Feedback {
         this.plugin = plugin;
     }
 
-    /** Traces the box's edges for this player for five seconds, replacing any box shown to them before. */
-    void outline(ServerPlayer player, BoundingBox box, Look look) {
+    /**
+     * Traces the box's edges for this player for five seconds, replacing any box shown to them before. Drawn only
+     * while the player is in {@code world}, the box's own.
+     */
+    void outline(ServerPlayer player, ResourceLocation world, BoundingBox box, Look look) {
         Task old = outlines.remove(player.getUUID());
         if (old != null) old.cancel();
         int[] left = {OUTLINE_TICKS / OUTLINE_EVERY};
@@ -69,7 +73,7 @@ final class Feedback {
                 outlines.remove(player.getUUID(), self[0]);
                 return;
             }
-            trace(player, box, look);
+            if (player.serverLevel().dimension().location().equals(world)) trace(player, box, look);
         }, 0, OUTLINE_EVERY);
         outlines.put(player.getUUID(), self[0]);
     }

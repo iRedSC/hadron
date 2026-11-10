@@ -65,7 +65,7 @@ final class Wand implements Listener {
         Selection next = first ? old.withFirst(world, pos) : old.withSecond(world, pos);
         selections.put(player.getUUID(), next);
         BoundingBox shown = next.partial().orElseThrow();
-        feedback.outline(player, shown, Feedback.Look.SELECTING);
+        feedback.outline(player, world, shown, Feedback.Look.SELECTING);
         String what = next.box().map(Selection::size)
                 .orElse((first ? "1" : "2") + ": " + pos.getX() + " " + pos.getY() + " " + pos.getZ());
         player.displayClientMessage(Component.literal(what).withStyle(ChatFormatting.YELLOW), true);

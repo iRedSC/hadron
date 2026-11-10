@@ -1,6 +1,8 @@
 package dev.iredsc.hadron.regions;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Attribution;
+import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
 import dev.iredsc.hadron.test.HadronTest;
@@ -299,5 +301,55 @@ public final class RegionsTests {
                 TeleportCause.COMMAND, new Actor.Player(bob.player()));
         t.plugin().getServer().getPluginManager().callEvent(exact);
         t.assertFalse(exact.isCancelled(), "a teleport to just above the vault should go ahead");
+    }
+
+    @HadronTest
+    void anOutsiderCantBoardABoatInside(TestContext t) {
+        // The boat comes first: once the region exists, the test's own spawn inside it is refused.
+        Boat boat = EntityType.BOAT.create(t.level());
+        BlockPos inside = t.pos(2, 0, 0);
+        boat.moveTo(inside.getX() + 0.5, inside.getY(), inside.getZ() + 0.5);
+        t.level().addFreshEntity(boat);
+        TestPlayer alice = admin(t);
+        define(t, alice, "boat-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        alice.command("rg flag boat-vault entry deny");
+        alice.command("rg flag boat-vault use allow");
+        TestPlayer bob = t.player("bob");
+        bob.interact(boat);
+        t.tick(2);
+        t.assertTrue(bob.player().getVehicle() == null, "bob should not board a boat inside a region he may not enter");
+        t.assertFalse(boat.isRemoved(), "the boat should still be there");
+    }
+
+    @HadronTest
+    void aTeleportThatLandsInsideAnywaySendsThemBack(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "landing-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        alice.command("rg flag landing-vault entry deny");
+        TestPlayer bob = t.player("bob");
+        Vec3 start = bob.player().position();
+        BlockPos above = t.pos(3, 6, 0);
+        // A mod's random teleport asks for a spot above the vault, which entry allows, then settles on the ground
+        // inside it.
+        t.assertTrue(bob.player().randomTeleport(above.getX() + 0.5, above.getY(), above.getZ() + 0.5, false),
+                "the random teleport should find ground");
+        t.tick(2);
+        t.assertTrue(bob.player().position().distanceTo(start) < 1,
+                "bob should be sent back to where he came from, but stands at " + bob.player().blockPosition());
+    }
+
+    @HadronTest
+    void aMachineCantAttackOutOfASafeZone(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "safe-zone", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        alice.command("rg flag safe-zone pvp deny");
+        TestPlayer bob = t.player("bob");
+        TestPlayer carol = t.player("carol");
+        // Bob's turret stands in the safe zone; bob and carol are both outside it.
+        Actor turret = new Actor.Machine(t.level(), t.pos(3, 0, 0), Attribution.of(bob.uuid()));
+        EntityDamageEvent shot = new EntityDamageEvent(carol.player(), t.level().damageSources().generic(), 4f,
+                turret);
+        t.plugin().getServer().getPluginManager().callEvent(shot);
+        t.assertTrue(shot.isCancelled(), "a turret inside a pvp deny region should not hurt a player");
     }
 }

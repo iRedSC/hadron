@@ -14,6 +14,7 @@ import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.block.BlockSpreadEvent;
 import dev.iredsc.hadron.api.event.block.BlockUseEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
+import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityUseEvent;
 import dev.iredsc.hadron.api.event.entity.HangingBreakEvent;
@@ -22,6 +23,7 @@ import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
+import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -37,6 +39,7 @@ import net.minecraft.world.entity.decoration.HangingEntity;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.VehicleEntity;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * Refuses what regions forbid, through Hadron's events, so it covers every mod whose bridge is installed and treats
@@ -45,11 +48,13 @@ import net.minecraft.world.entity.vehicle.VehicleEntity;
  * {@link Rules#refusingCrossing}.
  */
 final class Protection implements Listener {
+    private final JavaPlugin plugin;
     private final RegionStore store;
     private final Feedback feedback;
     private final Bypass bypass;
 
-    Protection(RegionStore store, Feedback feedback, Bypass bypass) {
+    Protection(JavaPlugin plugin, RegionStore store, Feedback feedback, Bypass bypass) {
+        this.plugin = plugin;
         this.store = store;
         this.feedback = feedback;
         this.bypass = bypass;
@@ -133,14 +138,7 @@ final class Protection implements Listener {
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void teleport(EntityTeleportEvent e) {
-        if (e.getActor() instanceof Actor.Server) return;
-        Set<ServerPlayer> going = new LinkedHashSet<>();
-        if (e.getEntity() instanceof ServerPlayer p) going.add(p);
-        for (Entity rider : e.getPassengers()) {
-            if (rider instanceof ServerPlayer p) going.add(p);
-            going.addAll(riders(rider));
-        }
-        going.removeIf(bypass::active);
+        Set<ServerPlayer> going = going(e);
         if (going.isEmpty()) return;
         List<Region> from = store.at(e.getFromLevel(), BlockPos.containing(e.getFrom()));
         for (BlockPos spot : arrival(e)) {
@@ -152,6 +150,63 @@ final class Protection implements Listener {
                 for (ServerPlayer told : going) feedback.refused(told, spot, no.get());
                 return;
             }
+        }
+    }
+
+    /**
+     * Where a teleport really ends can differ from where it asked (a mod's random teleport settles on the ground, a
+     * waystone steps aside to a safe spot), so each player is checked again where they stand a tick later, and sent
+     * back where they came from if a region they may not enter holds them.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    private void landed(EntityTeleportEvent e) {
+        Set<ServerPlayer> going = going(e);
+        if (going.isEmpty()) return;
+        ServerLevel fromLevel = e.getFromLevel();
+        Vec3 from = e.getFrom();
+        List<Region> before = store.at(fromLevel, BlockPos.containing(from));
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            for (ServerPlayer p : going) {
+                if (p.hasDisconnected() || p.isRemoved() || bypass.active(p)) continue;
+                Optional<Region> no = Rules.refusingEntry(before, store.at(p.serverLevel(), p.blockPosition()),
+                        Optional.of(p.getUUID()));
+                if (no.isEmpty()) continue;
+                feedback.refused(p, p.blockPosition(), no.get());
+                p.teleportTo(fromLevel, from.x, from.y, from.z, p.getYRot(), p.getXRot());
+            }
+        });
+    }
+
+    /** The players a teleport moves who answer to entry: not the server's own teleports, nor bypassing players. */
+    private Set<ServerPlayer> going(EntityTeleportEvent e) {
+        Set<ServerPlayer> going = new LinkedHashSet<>();
+        if (e.getActor() instanceof Actor.Server) return going;
+        if (e.getEntity() instanceof ServerPlayer p) going.add(p);
+        for (Entity rider : e.getPassengers()) {
+            if (rider instanceof ServerPlayer p) going.add(p);
+            going.addAll(riders(rider));
+        }
+        going.removeIf(bypass::active);
+        return going;
+    }
+
+    /** Boarding is entering where the mount stands: a player stepping into a boat inside a region rides in. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    private void mount(EntityMountEvent e) {
+        List<ServerPlayer> boarding = new ArrayList<>();
+        if (e.getEntity() instanceof ServerPlayer p) boarding.add(p);
+        boarding.addAll(riders(e.getEntity()));
+        if (!(e.getMount().level() instanceof ServerLevel level)) return;
+        BlockPos at = e.getMount().blockPosition();
+        List<Region> to = store.at(level, at);
+        for (ServerPlayer p : boarding) {
+            if (bypass.active(p) || e.getActor() instanceof Actor.Server) continue;
+            Optional<Region> no = Rules.refusingEntry(store.at(level, p.blockPosition()), to,
+                    Optional.of(p.getUUID()));
+            if (no.isEmpty()) continue;
+            e.setCancelled(true);
+            feedback.refused(p, at, no.get());
+            return;
         }
     }
 
@@ -192,6 +247,13 @@ final class Protection implements Listener {
         sides.add(hurt.blockPosition());
         e.getActingPlayer().filter(a -> a.level() == level).ifPresent(a -> sides.add(a.blockPosition()));
         e.getDamager().filter(d -> d.level() == level).ifPresent(d -> sides.add(d.blockPosition()));
+        // Where the attack comes from: a turret block, a fake player, a mob someone controls.
+        switch (e.getActor()) {
+            case Actor.Machine m when m.level() == level -> sides.add(m.pos());
+            case Actor.FakePlayer f when f.fake().level() == level -> sides.add(f.fake().blockPosition());
+            case Actor.EntityActor a when a.entity().level() == level -> sides.add(a.entity().blockPosition());
+            default -> { }
+        }
         for (BlockPos side : sides) {
             Optional<Region> no = Rules.refusing(store.at(level, side), Flag.PVP, who);
             if (no.isPresent()) {

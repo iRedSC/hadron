@@ -40,7 +40,7 @@ public final class RegionsPlugin extends JavaPlugin implements Listener {
         for (ServerLevel level : getServer().getMinecraftServer().getAllLevels()) loaded.watch(level);
         Feedback feedback = new Feedback(this);
         Wand wand = new Wand(feedback);
-        getServer().getPluginManager().registerEvents(new Protection(loaded, feedback, bypass), this);
+        getServer().getPluginManager().registerEvents(new Protection(this, loaded, feedback, bypass), this);
         getServer().getPluginManager().registerEvents(bypass, this);
         getServer().getPluginManager().registerEvents(wand, this);
         getServer().getPluginManager().registerEvents(this, this);
