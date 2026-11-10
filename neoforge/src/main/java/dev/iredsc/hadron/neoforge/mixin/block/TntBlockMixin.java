@@ -32,8 +32,9 @@ public abstract class TntBlockMixin {
         if (level instanceof ServerLevel && (stack.is(Items.FLINT_AND_STEEL) || stack.is(Items.FIRE_CHARGE))
                 && BlockHooks.cancelIgnition(level, pos, state, player)) {
             BlockHooks.forgetIgnition();
-            // Not FAIL: that lets the item act next, and flint and steel would light a fire on top of the TNT.
-            return ItemInteractionResult.CONSUME;
+            // FAIL, which ServerPlayerGameModeClickMixin ends the click on: no advancement counts it, and the flint
+            // and steel doesn't get to light a fire on top of the TNT instead.
+            return ItemInteractionResult.FAIL;
         }
         return original.call(stack, state, level, pos, player, hand, hit);
     }
