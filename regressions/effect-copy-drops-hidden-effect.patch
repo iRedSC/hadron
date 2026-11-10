@@ -1,0 +1,13 @@
+diff --git a/api/src/main/java/dev/iredsc/hadron/api/event/entity/EffectCopies.java b/api/src/main/java/dev/iredsc/hadron/api/event/entity/EffectCopies.java
+index 247fbd4..6d016f2 100644
+--- a/api/src/main/java/dev/iredsc/hadron/api/event/entity/EffectCopies.java
++++ b/api/src/main/java/dev/iredsc/hadron/api/event/entity/EffectCopies.java
+@@ -14,7 +14,7 @@ final class EffectCopies {
+      */
+     static MobEffectInstance copy(MobEffectInstance effect) {
+         Objects.requireNonNull(effect, "effect");
+-        MobEffectInstance copy = effect.save() instanceof CompoundTag saved ? MobEffectInstance.load(saved) : null;
++        MobEffectInstance copy = new MobEffectInstance(effect);
+         if (copy == null) {
+             throw new IllegalStateException("Minecraft couldn't reload the effect it just saved (" + effect + "); "
+                     + "this is a Hadron bug, so report it with this message");

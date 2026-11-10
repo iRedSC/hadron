@@ -557,6 +557,7 @@ paths = ["api/src/main/java/dev/iredsc/hadron/api/event/item/ItemDamageEvent.jav
 guards = [
     { test = "EventInvariantTests.hugeItemDamageBreaksTheItemRatherThanWrappingAround", tier = "in-game" },
 ]
+note = "Undoes only the event's prediction (ItemDamageEvent.breaks); the hook applying it is item-damage-hook-applies-full-amount."
 
 [[regression]]
 id = "item-damage-negative-constructor"
@@ -610,3 +611,34 @@ guards = [
     { test = "DamageAmountTests.aNaNHitCanBeRefusedAndUnrefusedDealsNothing", tier = "in-game" },
 ]
 note = "Puts back only the early return for amounts below 0 or NaN, in both places; the reporting of such amounts as 0 stays."
+
+[[regression]]
+id = "item-damage-hook-applies-full-amount"
+bug = "A durability loss ItemDamageEvent said would break the item reached vanilla's int addition whole, which wrapped a huge amount around to a repair, so the item survived the break its event predicted."
+fix = "47f7716"
+paths = ["neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java"]
+guards = [
+    { test = "EventInvariantTests.hugeDurabilityDamageBreaksTheItemAsTheEventSaid", tier = "in-game" },
+]
+note = "Undoes only the hook's use of ItemHooks.applied, which stays unused; the event's own long arithmetic stays (that is item-damage-wraps-around)."
+
+[[regression]]
+id = "effect-copy-drops-hidden-effect"
+bug = "The potion events copied effect instances with MobEffectInstance's copy constructor, which drops the hidden weaker effect, so a saved-and-restored instance lost the effect that should resume after it."
+fix = "47f7716"
+paths = ["api/src/main/java/dev/iredsc/hadron/api/event/entity/EffectCopies.java"]
+guards = [
+    { test = "EntityPotionEffectEventTest.everyCopyKeepsTheHiddenWeakerEffect", tier = "fast" },
+    { test = "EntityPotionEffectEventTest.anEditToTheCallersInstanceOrAReadCopyReachesNoOne", tier = "fast" },
+]
+note = "Swaps the save-and-load copy in EffectCopies.copy for the copy constructor; every copy path still goes through the helper."
+
+[[regression]]
+id = "infinite-damage-compared-with-report"
+bug = "Core applied an EntityDamageEvent's amount only when it differed from the reported one, so an infinite hit (reported as Float.MAX_VALUE, untouched or set to it) reached Minecraft as infinity and left NaN health."
+fix = "47f7716"
+paths = ["neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java"]
+guards = [
+    { test = "DamageAmountTests.anInfiniteHitKillsWithoutNaNHealthWhetherOrNotAListenerSetsIt", tier = "in-game" },
+]
+note = "Compares the event's amount with the report instead of the raw incoming amount; every hit still fires the event."

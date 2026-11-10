@@ -1,0 +1,13 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java
+index 54c692f..0e13326 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java
+@@ -305,7 +305,7 @@ public final class ItemHooks {
+         if (damage <= 0 || !Hooks.listens(ItemDamageEvent.class)) return damage;
+         Actor actor = entity != null ? actor(entity) : Actors.currentOr(Actor.Unknown.INSTANCE);
+         ItemDamageEvent event = Hooks.post(new ItemDamageEvent(level, holder(entity), entity, stack, damage, actor));
+-        return event.isCancelled() ? 0 : applied(stack, event);
++        return event.isCancelled() ? 0 : event.getDamage();
+     }
+ 
+     /**
