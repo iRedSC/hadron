@@ -22,7 +22,8 @@ import java.util.List;
  * What a test run found, written twice: as plain text an agent reads top to bottom (a line per test, the failures in
  * full, and a summary), and as JSON beside it for tools ({@code report.json}; its schema is in docs/testing.md). Two
  * kinds of text line are also for machines, and keep their shape: {@code SUMMARY <jar> ...: N passed, M failed} per
- * suite, and the last line, {@code RESULT: PASSED} or {@code RESULT: FAILED}.
+ * suite (a known gap is neither; {@code GAPS <jar>: N known gaps} follows when there are any), and the last line,
+ * {@code RESULT: PASSED} or {@code RESULT: FAILED}.
  *
  * <p>Written by the runner when it finishes, and by the watchdog if a test hangs, so it's synchronized.
  */
@@ -30,7 +31,8 @@ final class TestReport {
     /** Bumped when a field changes meaning or goes away; new fields don't bump it. */
     static final int SCHEMA = 1;
 
-    enum Status { PASS, FAIL, HUNG }
+    /** {@code GAP}: a {@code @KnownGap} test failing as expected, which doesn't fail the run. */
+    enum Status { PASS, FAIL, HUNG, GAP }
 
     /**
      * One test's outcome.
@@ -118,7 +120,7 @@ final class TestReport {
         if (!problems.isEmpty() || suites.isEmpty()) return false;
         for (Suite s : suites) {
             if (s.broken != null) return false;
-            for (Result r : s.results) if (r.status() != Status.PASS) return false;
+            for (Result r : s.results) if (r.status() != Status.PASS && r.status() != Status.GAP) return false;
         }
         return true;
     }
@@ -134,7 +136,7 @@ final class TestReport {
             if (s.broken != null) out.append("BROKEN ").append(s.broken).append('\n');
             for (Result r : s.results) {
                 out.append(r.status()).append(' ').append(r.id());
-                if (r.status() == Status.PASS) {
+                if (r.status() == Status.PASS || r.status() == Status.GAP) {
                     out.append("  (").append(r.ticks()).append(r.ticks() == 1 ? " tick, " : " ticks, ").append(seconds(r.millis())).append(")");
                 } else if (r.location() != null) {
                     out.append("  (").append(r.location()).append(')');
@@ -143,19 +145,32 @@ final class TestReport {
             }
         }
         boolean anyFailure = false;
-        for (Suite s : suites) for (Result r : s.results) anyFailure |= r.status() != Status.PASS;
+        for (Suite s : suites) for (Result r : s.results) anyFailure |= r.status() != Status.PASS && r.status() != Status.GAP;
         if (anyFailure || !problems.isEmpty()) {
             out.append("\nFailures\n");
             for (String p : problems) out.append("\nRUN ").append(indent(p)).append('\n');
             for (Suite s : suites) {
                 for (Result r : s.results) {
-                    if (r.status() == Status.PASS) continue;
+                    if (r.status() == Status.PASS || r.status() == Status.GAP) continue;
                     out.append('\n').append(r.status()).append(' ').append(r.id());
                     if (r.location() != null) out.append("  (").append(r.location()).append(')');
                     out.append("\n    ").append(indent(r.message())).append('\n');
                     if (r.detail() != null && !r.detail().isBlank()) out.append("    ").append(indent(r.detail())).append('\n');
                     FailureContext context = r.context();
                     if (context != null) context.render(out, "    ", r.status() == Status.HUNG);
+                }
+            }
+        }
+        boolean anyGap = false;
+        for (Suite s : suites) for (Result r : s.results) anyGap |= r.status() == Status.GAP;
+        if (anyGap) {
+            out.append("\nKnown gaps\n");
+            for (Suite s : suites) {
+                for (Result r : s.results) {
+                    if (r.status() != Status.GAP) continue;
+                    out.append('\n').append("GAP ").append(r.id());
+                    if (r.location() != null) out.append("  (").append(r.location()).append(')');
+                    out.append("\n    ").append(indent(r.message())).append('\n');
                 }
             }
         }
@@ -166,7 +181,10 @@ final class TestReport {
             passed += c.passed;
             failed += c.failed();
             out.append("SUMMARY ").append(s.jar).append(" (").append(s.plugin).append("): ").append(c.passed)
-                    .append(" passed, ").append(c.failed()).append(" failed\n");
+                    .append(" passed, ").append(c.failed()).append(" failed\n");            if (c.gaps > 0) {
+                out.append("GAPS ").append(s.jar).append(": ").append(c.gaps)
+                        .append(c.gaps == 1 ? " known gap\n" : " known gaps\n");
+            }
         }
         if (suites.isEmpty()) {
             out.append("No test suites ran: no jar in plugins/ has META-INF/hadron-tests.txt. Run tests with "
@@ -293,7 +311,7 @@ final class TestReport {
     }
 
     private static final class Counts {
-        int passed, failed, hung, broken;
+        int passed, failed, hung, broken, gaps;
 
         int failed() {
             return failed + hung + broken;
@@ -304,15 +322,17 @@ final class TestReport {
             failed += c.failed;
             hung += c.hung;
             broken += c.broken;
+            gaps += c.gaps;
         }
 
         JsonObject json() {
             JsonObject o = new JsonObject();
-            o.addProperty("total", passed + failed + hung);
+            o.addProperty("total", passed + failed + hung + gaps);
             o.addProperty("passed", passed);
             o.addProperty("failed", failed);
             o.addProperty("hung", hung);
             o.addProperty("broken", broken);
+            o.addProperty("gaps", gaps);
             return o;
         }
     }
@@ -324,6 +344,7 @@ final class TestReport {
                 case PASS -> c.passed++;
                 case FAIL -> c.failed++;
                 case HUNG -> c.hung++;
+                case GAP -> c.gaps++;
             }
         }
         if (s.broken != null) c.broken++;
