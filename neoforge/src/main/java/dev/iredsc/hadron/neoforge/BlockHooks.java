@@ -370,7 +370,7 @@ public final class BlockHooks {
         long scope = 0;
         if (modded(block)) {
             actor = Actor.Unknown.INSTANCE;
-            if (Actors.isEmpty()) scope = Actors.Port.enter(actor);
+            if (Actors.isEmpty()) scope = Actors.Port.enter(PortKey.KEY, actor);
         }
         ctx.tickBlocks[i] = block;
         ctx.tickPositions[i] = pos.asLong();
@@ -386,7 +386,7 @@ public final class BlockHooks {
         ctx.tickBlocks[i] = null;
         ctx.tickActors[i] = null;
         ctx.tickScopes[i] = 0;
-        if (scope != 0) Actors.Port.exit(scope);
+        if (scope != 0) Actors.Port.exit(PortKey.KEY, scope);
     }
 
     /** Weather forming snow and ice: every change while it runs is a {@link BlockFormEvent}. */
@@ -628,7 +628,7 @@ public final class BlockHooks {
             }
         } finally {
             if (ctx.built != null) unsuppress(); // the build threw after it was allowed
-            if (ctx.buildScope != 0) Actors.Port.exit(ctx.buildScope);
+            if (ctx.buildScope != 0) Actors.Port.exit(PortKey.KEY, ctx.buildScope);
             ctx.building = outerBuilding;
             ctx.built = outerBuilt;
             ctx.builtCreature = outerCreature;
@@ -646,7 +646,7 @@ public final class BlockHooks {
         Context ctx = CONTEXT.get();
         dev.iredsc.hadron.api.actor.Operation operation = ctx.buildOperation;
         if (!ctx.building || ctx.builtCreature != entity || operation == null || ctx.buildScope != 0) return 0;
-        return Actors.Port.enter(operation.actor(), operation);
+        return Actors.Port.enter(PortKey.KEY, operation.actor(), operation);
     }
 
     /**
@@ -669,7 +669,7 @@ public final class BlockHooks {
         if (ctx.suppressed <= ctx.suppressedFloor) {
             if (actor != null && ctx.building && ctx.buildOperation == null) {
                 ctx.buildOperation = dev.iredsc.hadron.api.actor.Operation.single(actor);
-                ctx.buildScope = Actors.Port.enter(actor, ctx.buildOperation);
+                ctx.buildScope = Actors.Port.enter(PortKey.KEY, actor, ctx.buildOperation);
             }
             BlockState air = Blocks.AIR.defaultBlockState();
             for (BlockSnapshot block : blocks) {
@@ -684,12 +684,12 @@ public final class BlockHooks {
                     ctx.buildOperation = dev.iredsc.hadron.api.actor.Operation.single(who);
                 }
                 long making = ctx.buildScope == 0 && ctx.buildOperation != null
-                        ? Actors.Port.enter(who, ctx.buildOperation) : 0;
+                        ? Actors.Port.enter(PortKey.KEY, who, ctx.buildOperation) : 0;
                 BlockChangeEvent event;
                 try {
                     event = build(kind, server, BlockChange.of(server, block.getPos(), before, air), NO_POS, who);
                 } finally {
-                    if (making != 0) Actors.Port.exit(making);
+                    if (making != 0) Actors.Port.exit(PortKey.KEY, making);
                 }
                 if (Hooks.post(event).isCancelled()) return true;
             }

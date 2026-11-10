@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.api.bridge.Bridge;
 import dev.iredsc.hadron.api.event.Event;
 import net.neoforged.fml.ModContainer;
@@ -11,8 +12,8 @@ import org.jspecify.annotations.Nullable;
 final class BridgePort implements Bridge.Backend {
     private BridgePort() {}
 
-    static void register() {
-        Bridge.Port.install(new BridgePort());
+    static void register(HostKey key) {
+        Bridge.Port.install(key, new BridgePort());
     }
 
     @Override

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.world;
 
+import dev.iredsc.hadron.neoforge.PortKey;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.iredsc.hadron.api.actor.Actors;
@@ -26,11 +27,11 @@ public abstract class PacketUtilsMixin {
             original.call(packet, listener);
             return;
         }
-        long scope = Actors.Port.enter(WorldActors.player(game.player));
+        long scope = Actors.Port.enter(PortKey.KEY, WorldActors.player(game.player));
         try {
             original.call(packet, listener);
         } finally {
-            Actors.Port.exit(scope);
+            Actors.Port.exit(PortKey.KEY, scope);
         }
     }
 }

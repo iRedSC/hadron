@@ -19,6 +19,8 @@ dependencies {
     compileOnly(project(":build-checks"))
     testCompileOnly(project(":api"))
     testCompileOnly(project(":test-api"))
+    // Only so the hostile plugin can call into the host directly, as an old jar might; Hadron refuses it at runtime.
+    testCompileOnly(project(":common"))
     // @Nondeterministic, for the self-tests that test waits on other threads; Hadron's code only.
     testCompileOnly(project(":build-checks"))
 }

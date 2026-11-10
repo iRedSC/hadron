@@ -47,7 +47,7 @@ import javax.tools.ToolProvider;
  */
 public final class ContractLeakCheck {
     static final String STUB_THROW = "thrownewUnsupportedOperationException(\"contractstub\");";
-    static final Set<String> PORT_TYPES = Set.of("Port", "Lifecycle", "Backend", "NetBackend", "Memory", "PluginContext");
+    static final Set<String> PORT_TYPES = Set.of("Port", "Lifecycle", "Backend", "NetBackend", "Memory", "PluginContext", "HostKey");
     static final Set<String> BOXED = Set.of("Byte", "Short", "Integer", "Long", "Float", "Double", "Character");
     /** English uses of a word that is also an implementation class name; reviewed, exact phrases only. */
     static final List<String> ENGLISH = List.of("Platform APIs");

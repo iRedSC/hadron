@@ -54,7 +54,7 @@ class ServicesTest {
 
     /** A host with no Minecraft server: Services only needs its plugin checks and its event bus. */
     static PluginHost hostWithoutServer(File serverDir) {
-        return new PluginHost(null, serverDir, new Platform() {
+        return new PluginHost(TestHost.KEY, null, serverDir, new Platform() {
             @Override
             public String loader() {
                 return "test";
@@ -236,7 +236,7 @@ class ServicesTest {
         Economy running = (Economy) Proxy.newProxyInstance(Economy.class.getClassLoader(),
                 new Class<?>[] {Economy.class}, (p, m, a) -> null);
         Economy before = Economy.Lifecycle.running();
-        Economy.Lifecycle.install(running);
+        Economy.Lifecycle.install(TestHost.KEY, running);
         try {
             Economy imposter = (Economy) Proxy.newProxyInstance(Economy.class.getClassLoader(),
                     new Class<?>[] {Economy.class}, (p, m, a) -> null);
@@ -244,7 +244,7 @@ class ServicesTest {
             assertSame(running, services.load(Economy.class),
                     "plugins looking the economy up as a service, Vault-style, get Hadron's");
         } finally {
-            Economy.Lifecycle.install(before);
+            Economy.Lifecycle.install(TestHost.KEY, before);
         }
     }
 
@@ -252,11 +252,11 @@ class ServicesTest {
     @Test
     void theEconomyServiceIsNullWhileNoServerRuns() {
         Economy before = Economy.Lifecycle.running();
-        Economy.Lifecycle.install(null);
+        Economy.Lifecycle.install(TestHost.KEY, null);
         try {
             assertNull(services.load(Economy.class));
         } finally {
-            Economy.Lifecycle.install(before);
+            Economy.Lifecycle.install(TestHost.KEY, before);
         }
     }
 

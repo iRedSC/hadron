@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.world;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.checks.StaticState;
@@ -74,8 +75,9 @@ public final class Areas {
     public static final class Port {
         private Port() {}
 
-        /** Null between servers. */
-        public static void install(@Nullable Backend installed) {
+        /** Null between servers. Takes the {@link HostKey}. */
+        public static void install(HostKey key, @Nullable Backend installed) {
+            HostKey.require(key, "Areas.Port.install", "watch an area with Areas.watch");
             backend = installed;
         }
     }

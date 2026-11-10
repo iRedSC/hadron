@@ -119,7 +119,7 @@ class NodeTest {
     void aNodeIsOwnedByTheLoaderOfTheClassThatDeclaredIt() {
         String id = id();
         Node.declare(id, Default.OPS, "");
-        Node.Lifecycle.release(NodeTest.class.getClassLoader());
+        Node.Lifecycle.release(TestHost.KEY, NodeTest.class.getClassLoader());
         assertNull(Node.get(id), "unloading the declaring plugin's loader must take its node with it");
     }
 
@@ -143,17 +143,18 @@ class NodeTest {
     @ParameterizedTest
     @ValueSource(strings = {"use", "place", "break", "open", "attack", "command", "packet", "hadron"})
     void aPluginCantDeclareUnderAReservedRoot(String root) {
-        PluginException e = assertThrows(PluginException.class, () -> Node.Lifecycle.declare(root + ".x",
+        PluginException e = assertThrows(PluginException.class, () -> Node.Lifecycle.declare(TestHost.KEY, root + ".x",
                 Default.OPS, "", new PluginLoaderStandIn()));
         assertTrue(e.getMessage().contains("such as homes.x"), e.getMessage());
     }
     @Test
     void hadronItselfMayDeclareUnderAReservedRoot() {
-        assertNotNull(Node.Lifecycle.declare("hadron.nodetest" + IDS.incrementAndGet(), Default.OPS, "", null));
+        assertNotNull(Node.Lifecycle.declare(TestHost.KEY, "hadron.nodetest" + IDS.incrementAndGet(), Default.OPS, "",
+                null));
     }
     @Test
     void aReservedWordFurtherInIsFine() {
-        assertNotNull(Node.Lifecycle.declare("homes.use" + IDS.incrementAndGet(), Default.OPS, "",
+        assertNotNull(Node.Lifecycle.declare(TestHost.KEY, "homes.use" + IDS.incrementAndGet(), Default.OPS, "",
                 new PluginLoaderStandIn()));
     }
 
@@ -162,13 +163,13 @@ class NodeTest {
     void anImplicitNodeGivesWayToTheExplicitDeclaration() {
         String id = id();
         ClassLoader owner = new PluginLoaderStandIn();
-        Node implicit = Node.Lifecycle.declareImplicit(id, "command permission", owner);
+        Node implicit = Node.Lifecycle.declareImplicit(TestHost.KEY, id, "command permission", owner);
         assertEquals(Default.OPS, implicit.fallback);
-        Node explicit = Node.Lifecycle.declare(id, Default.EVERYONE, "real", owner);
+        Node explicit = Node.Lifecycle.declare(TestHost.KEY, id, Default.EVERYONE, "real", owner);
         assertNotSame(implicit, explicit);
         assertEquals(Default.EVERYONE, Node.get(id).fallback);
         // An implicit declaration after the explicit one keeps the explicit one.
-        assertSame(explicit, Node.Lifecycle.declareImplicit(id, "again", owner));
+        assertSame(explicit, Node.Lifecycle.declareImplicit(TestHost.KEY, id, "again", owner));
     }
 
     @Covers(value = Node.Lifecycle.class, method = "release")
@@ -177,11 +178,11 @@ class NodeTest {
         String id = id();
         ClassLoader first = new PluginLoaderStandIn();
         ClassLoader second = new PluginLoaderStandIn();
-        Node.Lifecycle.declare(id, Default.OPS, "", first);
-        Node.Lifecycle.declare(id, Default.OPS, "", second);
-        Node.Lifecycle.release(first);
+        Node.Lifecycle.declare(TestHost.KEY, id, Default.OPS, "", first);
+        Node.Lifecycle.declare(TestHost.KEY, id, Default.OPS, "", second);
+        Node.Lifecycle.release(TestHost.KEY, first);
         assertNotNull(Node.get(id), "another plugin version still declares it");
-        Node.Lifecycle.release(second);
+        Node.Lifecycle.release(TestHost.KEY, second);
         assertNull(Node.get(id));
     }
 
@@ -189,9 +190,9 @@ class NodeTest {
     @Test
     void aDeclarationWithNoClassLoaderIsPermanent() {
         String id = id();
-        Node.Lifecycle.declare(id, Default.OPS, "", null);
-        Node.Lifecycle.release(null);
-        Node.Lifecycle.release(getClass().getClassLoader());
+        Node.Lifecycle.declare(TestHost.KEY, id, Default.OPS, "", null);
+        Node.Lifecycle.release(TestHost.KEY, null);
+        Node.Lifecycle.release(TestHost.KEY, getClass().getClassLoader());
         assertNotNull(Node.get(id));
     }
 }

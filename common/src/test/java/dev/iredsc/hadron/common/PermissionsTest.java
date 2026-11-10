@@ -60,12 +60,12 @@ class PermissionsTest {
         JavaPlugin ranks = TestPlugins.create("Ranks", host.server());
         host.services().register(PermissionProvider.class, new Broken(), ranks, ServicePriority.Normal);
         before = Hadron.Lifecycle.running();
-        Hadron.Lifecycle.install(host.server());
+        Hadron.Lifecycle.install(TestHost.KEY, host.server());
     }
 
     @AfterEach
     void restore() {
-        Hadron.Lifecycle.install(before);
+        Hadron.Lifecycle.install(TestHost.KEY, before);
     }
 
     @Covers(value = Permissions.class, method = "has")

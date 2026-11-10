@@ -21,17 +21,19 @@ class PluginNodesTest {
     void aLoadedPluginDeclaresAndAnUnloadingOneCant() {
         JavaPlugin plugin = TestPlugins.create("Gone", null);
         ClassLoader loader = plugin.getClass().getClassLoader();
-        assertNotNull(Node.Lifecycle.declare("gone.early", Default.OPS, "", loader), "while loaded, as in onLoad");
+        assertNotNull(Node.Lifecycle.declare(TestHost.KEY, "gone.early", Default.OPS, "", loader),
+                "while loaded, as in onLoad");
 
         TestPlugins.beginUnload(plugin);
         IllegalStateException e = assertThrows(IllegalStateException.class,
-                () -> Node.Lifecycle.declare("gone.late", Default.OPS, "", loader));
+                () -> Node.Lifecycle.declare(TestHost.KEY, "gone.late", Default.OPS, "", loader));
         assertTrue(e.getMessage().contains("gone.late") && e.getMessage().contains("Gone")
                 && e.getMessage().contains("onDisable"), e.getMessage());
         assertNull(Node.get("gone.late"), "a refused declaration leaves nothing behind");
 
-        Node.Lifecycle.release(loader);
-        assertThrows(IllegalStateException.class, () -> Node.Lifecycle.declare("gone.early", Default.OPS, "", loader));
+        Node.Lifecycle.release(TestHost.KEY, loader);
+        assertThrows(IllegalStateException.class,
+                () -> Node.Lifecycle.declare(TestHost.KEY, "gone.early", Default.OPS, "", loader));
         assertNull(Node.get("gone.early"), "released, and not put back");
     }
 }

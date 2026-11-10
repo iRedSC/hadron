@@ -66,11 +66,13 @@ public final class Hadron {
         return getServer().getScheduler().isPrimaryThread();
     }
 
-    /** For Hadron's plugin host only. */
+    /** For Hadron's plugin host only: replacing or clearing the server takes the {@link HostKey}. */
     public static final class Lifecycle {
         private Lifecycle() {}
 
-        public static void install(@Nullable Server running) {
+        public static void install(HostKey key, @Nullable Server running) {
+            HostKey.require(key, "Hadron.Lifecycle.install", "read the running server with Hadron.getServer() or "
+                    + "your plugin's getServer()");
             server = running;
         }
 
