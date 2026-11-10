@@ -20,6 +20,8 @@ dependencies {
     testImplementation(platform("org.junit:junit-bom:5.13.4"))
     testImplementation("org.junit.jupiter:junit-jupiter")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    // ChecksScriptTest runs gradle/hadron-checks.gradle.kts in a throwaway plugin build.
+    testImplementation(gradleTestKit())
 }
 
 // Error Prone reaches into javac's internals; Java 16+ hides them unless opened.
@@ -35,6 +37,9 @@ tasks.withType<JavaCompile>().configureEach {
 
 tasks.test {
     useJUnitPlatform()
+    val script = rootProject.file("gradle/hadron-checks.gradle.kts")
+    inputs.file(script)
+    systemProperty("hadron.checksScript", script.absolutePath)
     jvmArgs(javacExports)
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }
