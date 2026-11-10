@@ -5,6 +5,7 @@ import static dev.iredsc.hadron.selftest.entities.Fixtures.spawn;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
+import dev.iredsc.hadron.api.event.entity.VehicleDamageEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
@@ -16,6 +17,7 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -98,5 +100,33 @@ public final class DamageAmountTests {
         set.hurt(t.level().damageSources().generic(), Float.POSITIVE_INFINITY);
         t.assertTrue(set.isDeadOrDying() && !Float.isNaN(set.getHealth()), "a listener setting Float.MAX_VALUE "
                 + "should kill, but the pig's health is " + set.getHealth());
+    }
+
+    @HadronTest
+    @Covers(VehicleDamageEvent.class)
+    void aNaNOrNegativeHitOnABoatCanBeRefusedAndUnrefusedDealsWhatWasReported(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Boat boat = spawn(t, EntityType.BOAT, t.pos(2, 0, 0));
+        boolean[] refuse = {true};
+        List<VehicleDamageEvent> heard = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(VehicleDamageEvent e) {
+                if (e.getEntity() != boat) return;
+                heard.add(e);
+                e.setCancelled(refuse[0]);
+            }
+        });
+        boat.hurt(t.level().damageSources().playerAttack(alice.player()), -1f);
+        boat.hurt(t.level().damageSources().generic(), Float.NaN);
+        t.assertEquals(2, heard.size(), "vehicle damage events for a negative and a NaN hit");
+        t.assertEquals(0f, heard.get(1).getDamage(), "the damage a NaN hit is reported as");
+        t.assertEquals(0f, boat.getDamage(), "the boat's wear after two refused hits");
+
+        refuse[0] = false;
+        boat.hurt(t.level().damageSources().generic(), Float.NaN);
+        t.assertEquals(0f, boat.getDamage(), "an unrefused NaN hit should deal the 0 it reported, but the boat's wear "
+                + "is " + boat.getDamage());
+        t.assertFalse(boat.isRemoved(), "a hit dealing 0 shouldn't break the boat");
     }
 }

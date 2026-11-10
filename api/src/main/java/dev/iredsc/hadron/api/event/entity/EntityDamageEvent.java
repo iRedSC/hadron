@@ -34,17 +34,7 @@ public class EntityDamageEvent extends EntityEvent implements Cancellable {
     public EntityDamageEvent(LivingEntity entity, DamageSource source, float damage, Actor actor) {
         super(entity, actor);
         this.source = Objects.requireNonNull(source, "source");
-        this.damage = checked(damage);
-    }
-
-    /** The one rule for an amount, from the constructor and {@link #setDamage} alike. */
-    private static float checked(float damage) {
-        if (!(damage >= 0) || Float.isInfinite(damage)) {
-            throw new IllegalArgumentException("Damage must be a finite number of at least 0, got " + damage
-                    + "; to stop the damage use setCancelled(true), and for a blow that should kill anything use "
-                    + "Float.MAX_VALUE");
-        }
-        return damage;
+        this.damage = DamageAmounts.checked(damage);
     }
 
     @Override
@@ -75,7 +65,7 @@ public class EntityDamageEvent extends EntityEvent implements Cancellable {
 
     /** Deal this much instead: finite and at least 0. */
     public void setDamage(float damage) {
-        this.damage = checked(damage);
+        this.damage = DamageAmounts.checked(damage);
     }
 
     @Override
