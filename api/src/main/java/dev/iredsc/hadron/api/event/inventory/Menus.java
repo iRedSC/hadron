@@ -40,6 +40,39 @@ final class Menus {
      */
     static List<Place> places(AbstractContainerMenu menu, @Nullable Player viewer, InventoryHolder openOn,
             InventoryHolder... known) {
+        Found found = find(menu, viewer, openOn, known);
+        List<Place> out = new ArrayList<>();
+        for (InventoryHolder h : found.holders()) out.addAll(Place.of(h));
+        for (int i = 0; i < found.unidentifiedHalves(); i++) {
+            out.add(Place.Unknown.anywhere(Place.Unknown.Reason.UNIDENTIFIED_INVENTORY));
+        }
+        if (found.menusOwn()) {
+            if (openOn instanceof InventoryHolder.Unknown) {
+                out.add(Place.Unknown.anywhere(Place.Unknown.Reason.UNDESCRIBED_MENU));
+            } else {
+                out.addAll(Place.of(openOn));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * What holds each inventory behind the menu's slots, as {@link #places} reads them: {@code openOn} for the menu's
+     * own slots, and {@link InventoryHolder.Unknown} once for anything nothing identifies.
+     */
+    static List<InventoryHolder> holders(AbstractContainerMenu menu, @Nullable Player viewer, InventoryHolder openOn,
+            InventoryHolder... known) {
+        Found found = find(menu, viewer, openOn, known);
+        Set<InventoryHolder> out = new LinkedHashSet<>(found.holders());
+        if (found.unidentifiedHalves() > 0) out.add(InventoryHolder.Unknown.INSTANCE);
+        if (found.menusOwn()) out.add(openOn);
+        return List.copyOf(out);
+    }
+
+    private record Found(Set<InventoryHolder> holders, int unidentifiedHalves, boolean menusOwn) {}
+
+    private static Found find(AbstractContainerMenu menu, @Nullable Player viewer, InventoryHolder openOn,
+            InventoryHolder... known) {
         Set<Container> candidates = Collections.newSetFromMap(new IdentityHashMap<>());
         candidate(openOn, candidates);
         for (InventoryHolder h : known) candidate(h, candidates);
@@ -60,20 +93,7 @@ final class Menus {
                 menusOwn = true;
             }
         }
-
-        List<Place> out = new ArrayList<>();
-        for (InventoryHolder h : holders) out.addAll(Place.of(h));
-        for (int i = 0; i < unidentifiedHalves; i++) {
-            out.add(Place.Unknown.anywhere(Place.Unknown.Reason.UNIDENTIFIED_INVENTORY));
-        }
-        if (menusOwn) {
-            if (openOn instanceof InventoryHolder.Unknown) {
-                out.add(Place.Unknown.anywhere(Place.Unknown.Reason.UNDESCRIBED_MENU));
-            } else {
-                out.addAll(Place.of(openOn));
-            }
-        }
-        return out;
+        return new Found(holders, unidentifiedHalves, menusOwn);
     }
 
     /** Adds the holder of {@code container} to {@code out}; false when nothing identifies it. */

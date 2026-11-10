@@ -372,6 +372,9 @@ public final class PlaceTests {
                 Place.of(alice.player()));
         t.assertEquals(expected, Set.copyOf(places.get(0)), "a shift-click's places: both halves the dirt can go into, "
                 + "and alice's own inventory it leaves");
+        t.assertEquals(Set.of(new InventoryHolder.Block(t.level(), t.pos(2, 0, 0)),
+                new InventoryHolder.Block(t.level(), t.pos(3, 0, 0)), new InventoryHolder.Entity(alice.player())),
+                Set.copyOf(clicks.get(0).getSlotHolders()), "which inventories those are: each half, and alice's");
     }
 
     @HadronTest
@@ -389,6 +392,9 @@ public final class PlaceTests {
         t.assertEquals(Set.of(Place.Spot.at(t.level(), chest), Place.of(alice.player()),
                 Place.Unknown.anywhere(Place.Unknown.Reason.UNIDENTIFIED_INVENTORY)), Set.copyOf(e.getPlaces()),
                 "the chest, alice's inventory, and an Unknown for the half nothing identifies, never the chest's place");
+        t.assertEquals(Set.of(new InventoryHolder.Block(t.level(), chest), new InventoryHolder.Entity(alice.player()),
+                InventoryHolder.Unknown.INSTANCE), Set.copyOf(e.getSlotHolders()),
+                "the chest, alice, and Unknown for the half nothing identifies");
     }
 
     @HadronTest
