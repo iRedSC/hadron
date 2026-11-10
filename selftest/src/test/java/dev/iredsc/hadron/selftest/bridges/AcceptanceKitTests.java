@@ -7,8 +7,12 @@ import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.event.item.ItemDropEvent;
+import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
+import dev.iredsc.hadron.api.event.item.ItemUseEvent;
 import dev.iredsc.hadron.api.event.resource.Resource;
 import dev.iredsc.hadron.api.event.resource.ResourceConsumeEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
@@ -20,7 +24,12 @@ import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.inventory.ClickType;
+import net.minecraft.world.inventory.ContainerLevelAccess;
+import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.item.ItemStack;
@@ -31,6 +40,7 @@ import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.phys.Vec3;
 
 /**
  * The acceptance kit on vanilla blocks: it passes what core already covers, and each assertion fails, naming the right
@@ -257,7 +267,7 @@ public final class AcceptanceKitTests {
         t.tick(2);
         t.assertBlock(stone, Blocks.STONE);
         area.assertUnchanged("alice breaking stone with block changes refused", Part.BLOCKS);
-        area.refuse().mark();
+        area.refuseNothing().mark();
         alice.breakBlock(stone);
         t.tick(2);
         t.assertBlock(stone, Blocks.AIR);
@@ -385,5 +395,100 @@ public final class AcceptanceKitTests {
         t.assertTrue(cancelled, "an event nothing can place is refused, even from someone trusted");
         String why = failure(t, () -> area.assertActingFor(alice, "a pipe that can't say which chest it filled"));
         t.assertTrue(why.contains("its holder is unknown") && why.contains("name the holder"), why);
+    }
+
+    // ---- Where events are placed -----------------------------------------------------------------------------------
+
+    @HadronTest
+    void aShiftClickIntoAMenuOpenOnABlockInTheAreaIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos table = t.pos(2, 0, 0);
+        t.setBlock(table, Blocks.CRAFTING_TABLE);
+        Acceptance area = t.acceptance(around(t));
+        // A menu whose slots sit over no block entity (a modded machine's over its item handler, a crafting grid),
+        // open on a block in the area; bob, outside it, shift-clicks from his own inventory.
+        CraftingMenu menu = new CraftingMenu(1, bob.player().getInventory(),
+                ContainerLevelAccess.create(t.level(), table));
+        boolean cancelled = Hadron.getPluginManager().callEvent(new InventoryClickEvent(bob.player(),
+                new InventoryHolder.Entity(bob.player()), menu, 20, 0, ClickType.QUICK_MOVE,
+                new Actor.Player(bob.player())));
+        t.assertTrue(cancelled, "the click into a menu open on the area was refused: " + area.events());
+    }
+
+    @HadronTest
+    void aPickupIntoAnInventoryInTheAreaIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos hopper = t.pos(2, 0, 0);
+        t.setBlock(hopper, Blocks.HOPPER);
+        Acceptance area = t.acceptance(around(t));
+        ItemEntity item = new ItemEntity(t.level(), t.pos(-3, 0, 0).getX() + 0.5, t.pos(-3, 0, 0).getY(),
+                t.pos(-3, 0, 0).getZ() + 0.5, new ItemStack(Items.DIAMOND));
+        boolean cancelled = Hadron.getPluginManager().callEvent(new ItemPickupEvent(t.level(), item,
+                new InventoryHolder.Block(t.level(), hopper), new Actor.Player(bob.player())));
+        t.assertTrue(cancelled, "a pickup into the area's hopper was refused: " + area.events());
+    }
+
+    @HadronTest
+    void anItemUsedByAMachineInTheAreaIsRefused(TestContext t) {
+        Pig pig = pig(t, t.pos(-3, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        Actor machine = new Actor.Machine(t.level(), t.pos(2, 0, 0), Attribution.none());
+        boolean cancelled = Hadron.getPluginManager().callEvent(new ItemUseEvent(t.level(), pig,
+                InteractionHand.MAIN_HAND, new ItemStack(Items.BONE_MEAL), machine));
+        t.assertTrue(cancelled, "an item used by a machine standing in the area was refused: " + area.events());
+    }
+
+    @HadronTest
+    void anItemDroppedIntoTheAreaIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Acceptance area = t.acceptance(around(t));
+        BlockPos in = t.pos(2, 0, 0);
+        boolean cancelled = Hadron.getPluginManager().callEvent(new ItemDropEvent(t.level(),
+                new Vec3(in.getX() + 0.5, in.getY(), in.getZ() + 0.5), new ItemStack(Items.DIAMOND),
+                new Actor.Player(bob.player())));
+        t.assertTrue(cancelled, "an item landing in the area was refused: " + area.events());
+    }
+
+    @HadronTest
+    void aBlastCentredInTheAreaIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos dirt = t.pos(2, 0, 0);
+        t.setBlock(dirt, Blocks.DIRT);
+        Acceptance area = t.acceptance(around(t));
+        try (Actors.Scope s = Actors.push(new Actor.Player(bob.player()))) {
+            t.level().explode(null, dirt.getX() + 0.5, dirt.getY() + 1.5, dirt.getZ() + 0.5, 2f,
+                    Level.ExplosionInteraction.TNT);
+        }
+        t.tick(2);
+        area.assertUnchanged("bob's blast in an area he isn't trusted in");
+    }
+
+    @HadronTest
+    void refusedKindsAddUp(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos stone = t.pos(2, 0, 0);
+        BlockPos chest = t.pos(3, 0, 0);
+        t.setBlock(stone, Blocks.STONE);
+        t.setBlock(chest, Blocks.CHEST);
+        alice.hold(new ItemStack(Items.IRON_PICKAXE));
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).refuse(BlockEvent.class).refuse(InventoryEvent.class).mark();
+        alice.breakBlock(stone);
+        t.tick(2);
+        t.assertBlock(stone, Blocks.STONE);
+        boolean cancelled = Hadron.getPluginManager().callEvent(new InventoryChangeEvent(List.of(
+                new InventoryChangeEvent.Change(new InventoryHolder.Block(t.level(), chest), 0, ItemStack.EMPTY,
+                        new ItemStack(Items.DIAMOND))), new Actor.Player(alice.player())));
+        t.assertTrue(cancelled, "the second kind refused is refused too");
+    }
+
+    @HadronTest
+    void assertingTwiceComparesWithTheSameMark(TestContext t) {
+        Pig pig = pig(t, t.pos(2, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        // Out to where the world doesn't list entities yet: only following it keeps it from looking gone.
+        pig.teleportTo(t.pos(-5, 0, 0).getX() + 0.5, t.pos(-5, 0, 0).getY(), t.pos(-5, 0, 0).getZ() + 0.5);
+        area.assertUnchanged("a pig walking off", Part.ENTITIES);
+        area.assertUnchanged("a pig walking off, asked again", Part.ENTITIES);
     }
 }

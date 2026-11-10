@@ -20,12 +20,14 @@ import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.event.item.ItemDropEvent;
 import dev.iredsc.hadron.api.event.item.ItemEvent;
 import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceEvent;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
 import dev.iredsc.hadron.api.world.Areas;
+import dev.iredsc.hadron.neoforge.InventoryHolders;
 import dev.iredsc.hadron.test.Acceptance;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -105,6 +107,7 @@ final class TestAcceptance implements Acceptance, Listener {
         Areas.watch(t.plugin(), level, box);
         t.registerEvents(this);
         this.before = snapshot();
+        follow(before);
     }
 
     @Override
@@ -127,14 +130,20 @@ final class TestAcceptance implements Acceptance, Listener {
                         + "such as BlockEvent.class or InventoryEvent.class");
             }
         }
-        refused.clear();
         refused.addAll(List.of(kinds));
+        return this;
+    }
+
+    @Override
+    public Acceptance refuseNothing() {
+        refused.clear();
         return this;
     }
 
     @Override
     public void mark() {
         before = snapshot();
+        follow(before);
         seen.clear();
         unplaced.clear();
     }
@@ -245,6 +254,12 @@ final class TestAcceptance implements Acceptance, Listener {
             Place into = holder(pickup.getDestination());
             return into instanceof Place.In ? into : at(level, pickup.getItemEntity().position());
         }
+        if (event instanceof ItemDropEvent drop) {
+            // Where the item lands, or where whoever dropped it stands.
+            if (drop.getLevel() != level) return OUT;
+            Place lands = at(level, drop.getPosition());
+            if (lands instanceof Place.In) return lands;
+        }
         if (event instanceof ItemEvent i) {
             if (i.getLevel() != level) return OUT;
             return i.getActor() instanceof Actor.Unknown
@@ -253,8 +268,11 @@ final class TestAcceptance implements Acceptance, Listener {
                     : actorAt(i.getActor());
         }
         if (event instanceof InventoryClickEvent click) {
-            // Whichever slot was clicked, a menu showing a block in the box can change it: a shift-click from the
-            // player's own inventory fills the block's.
+            // Whichever slot was clicked, a menu open on a block in the box can change it: a shift-click from the
+            // player's own inventory fills the block's. What the menu is open on, as core works it out (a double
+            // chest, a machine's menu over its item handler), then any slot over a block entity in the box.
+            Place on = holder(InventoryHolders.ofMenu(click.getMenu(), click.getViewer()));
+            if (on instanceof Place.In) return on;
             for (Slot slot : click.getMenu().slots) {
                 if (slot.container instanceof BlockEntity be && be.getLevel() == level
                         && box.isInside(be.getBlockPos())) {
@@ -332,6 +350,16 @@ final class TestAcceptance implements Acceptance, Listener {
 
     // ---- Recording the box ----------------------------------------------------------------------------------------
 
+    /** From a mark on, every entity in the box then is followed, however many times the step is asserted. */
+    private void follow(AcceptanceDiff.Snapshot at) {
+        followed.clear();
+        for (AcceptanceDiff.Thing thing : at.entities().values()) {
+            if (!thing.inBox()) continue;
+            Entity e = level.getEntity(thing.id());
+            if (e != null) followed.put(thing.id(), e);
+        }
+    }
+
     private AcceptanceDiff.Snapshot snapshot() {
         Map<BlockPos, BlockState> blocks = new LinkedHashMap<>();
         Map<BlockPos, String> blockEntities = new LinkedHashMap<>();
@@ -351,10 +379,8 @@ final class TestAcceptance implements Acceptance, Listener {
         Map<UUID, Entity> present = new LinkedHashMap<>();
         for (Entity e : level.getAllEntities()) present.put(e.getUUID(), e);
         for (Entity e : followed.values()) if (!e.isRemoved()) present.putIfAbsent(e.getUUID(), e);
-        followed.clear();
         for (Entity e : present.values()) {
             if (e instanceof ServerPlayer) continue;
-            if (box.isInside(e.blockPosition())) followed.put(e.getUUID(), e);
             ItemStack stack = e instanceof ItemEntity item ? item.getItem().copy() : ItemStack.EMPTY;
             Map<String, ItemStack> held = new LinkedHashMap<>();
             if (e instanceof Container c) {

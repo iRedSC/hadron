@@ -23,14 +23,15 @@ import net.minecraft.core.BlockPos;
  * t.tick(100);
  * area.assertUnchanged("bob's quarry where he isn't trusted");
  *
- * // trusted, but its block changes refused: it runs, and no block may change
+ * // trusted, but its block changes refused: it runs, yet with every dig refused nothing may change at all, not
+ * // even its own buffer (a drop kept from a refused break is a dupe)
  * area.trust(bob).refuse(BlockEvent.class).mark();
  * t.tick(100);
- * area.assertUnchanged("bob's quarry with its block changes refused", Acceptance.Part.BLOCKS);
+ * area.assertUnchanged("bob's quarry with its block changes refused");
  * area.assertActingFor(bob, "bob's quarry");
  *
- * // and its inventory changes: it digs, and no chest it reaches may change
- * area.refuse(InventoryEvent.class).mark();
+ * // digging allowed, its inventory changes refused: blocks go, but no chest it reaches may change
+ * area.refuseNothing().refuse(InventoryEvent.class).mark();
  * t.tick(100);
  * area.assertUnchanged("bob's quarry with its inventory changes refused", Acceptance.Part.INVENTORIES);
  * }</pre>
@@ -81,12 +82,14 @@ public interface Acceptance {
 
     /**
      * Refuses events of these kinds, Hadron event classes such as {@code BlockEvent.class} (their subclasses too),
-     * from trusted players as well, replacing the kinds refused before; {@code refuse()} refuses none again. The
-     * server is never refused. Returns this.
+     * from trusted players as well, on top of any refused before. The server is never refused. Returns this.
      *
      * @throws IllegalArgumentException for a class that isn't a Hadron event.
      */
     Acceptance refuse(Class<?>... kinds);
+
+    /** Refuses no kind from trusted players again. Returns this. */
+    Acceptance refuseNothing();
 
     /** Records the area as it is now and forgets the events so far: the start of the next step. */
     void mark();

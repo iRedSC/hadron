@@ -46,7 +46,6 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **Attribution gap**: an action Hadron sees but can't tie to a person (`Unknown`, or no owner). Fails closed: protection treats it as an outsider. ([bridges](bridges.md#two-kinds-of-gap))
 - **Interception gap**: an effect that skips every chokepoint, so no event fires and nothing can deny it. Only a bridge closes it.
 - **Fail closed**: an uncertain actor is denied where outsiders are denied, so a missing bridge shows up as a machine that won't work, never as silent griefing.
-- **Acceptance kit**: `t.acceptance(box)`, the bridge acceptance test as an in-game helper: a protection plugin and a logger that know no mod, and assertions that name each interception or attribution gap they find. ([bridges](bridges.md#the-acceptance-kit))
 - **Acceptance kit**: `t.acceptance(box)`, the bridge acceptance test as an in-game helper: a protection plugin and a logger that know no mod, and a record of the box. A refused step must change nothing, which proves interception; `refuse(kind)` lets a trusted machine run while one kind is refused. ([bridges](bridges.md#the-acceptance-kit))
 - **Coverage report**: Hadron's list, at startup and on `/hadron coverage`, of installed mods without a bridge and what that leaves uncovered. Not the same as `coverageCheck`.
 - **Trace**: `/hadron trace`, which prints events live as they fire, with actor, operation and outcome.
