@@ -3,6 +3,7 @@ package dev.iredsc.hadron.regions;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
+import dev.iredsc.hadron.api.event.entity.EntityPotionEffectEvent;
 import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -13,6 +14,9 @@ import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.inventory.ClickType;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.decoration.ArmorStand;
@@ -533,5 +537,54 @@ public final class RegionsTests {
         bob.attack(boat);
         t.tick();
         t.assertFalse(boat.isRemoved(), "an outsider's hit should not break a boat in a region");
+    }
+
+    @HadronTest
+    void aRemovedMemberCantShiftClickIntoAMenuTheyHadOpen(TestContext t) {
+        BlockPos chest = t.pos(3, 0, 0);
+        t.setBlock(chest, Blocks.CHEST);
+        TestPlayer alice = admin(t);
+        define(t, alice, "shift-menu", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer carol = t.player("carol");
+        alice.command("rg addmember shift-menu carol");
+        t.assertChat(alice, "carol is a member of shift-menu");
+        carol.useBlock(chest);
+        t.tick();
+        t.assertFalse(carol.player().containerMenu == carol.player().inventoryMenu, "carol should have the chest open");
+        carol.hold(new ItemStack(Items.DIRT, 16));
+        alice.command("rg removeplayer shift-menu carol");
+        // Her own hotbar's first slot, below the chest's 27 and her 27 others.
+        carol.clickSlot(54, 0, ClickType.QUICK_MOVE);
+        t.tick();
+        ChestBlockEntity box = (ChestBlockEntity) t.level().getBlockEntity(chest);
+        for (int i = 0; i < box.getContainerSize(); i++) {
+            t.assertTrue(box.getItem(i).isEmpty(), "the chest should stay empty, but slot " + i + " holds " + box.getItem(i));
+        }
+    }
+
+    @HadronTest
+    void aThrownPoisonCantReachASafeZone(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "poison-safe", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        alice.command("rg flag poison-safe pvp deny");
+        TestPlayer bob = t.player("bob");
+        TestPlayer carol = t.player("carol");
+        EntityPotionEffectEvent poison = new EntityPotionEffectEvent(carol.player(), MobEffects.POISON, null,
+                new MobEffectInstance(MobEffects.POISON, 100), EntityPotionEffectEvent.Action.ADDED,
+                new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(poison);
+        t.assertTrue(poison.isCancelled(), "bob's poison should not take hold on a player in a pvp deny region");
+    }
+
+    @HadronTest
+    void theServersDamageIsntPvp(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "server-safe", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        alice.command("rg flag server-safe pvp deny");
+        TestPlayer carol = t.player("carol");
+        EntityDamageEvent hit = new EntityDamageEvent(carol.player(), t.level().damageSources().generic(), 4f,
+                new Actor.Server("plugin Test"));
+        t.plugin().getServer().getPluginManager().callEvent(hit);
+        t.assertFalse(hit.isCancelled(), "the server's own damage should go through");
     }
 }

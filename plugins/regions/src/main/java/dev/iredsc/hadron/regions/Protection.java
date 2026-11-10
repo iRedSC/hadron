@@ -17,6 +17,14 @@ import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryMoveItemEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import net.minecraft.world.effect.MobEffectCategory;
+import java.util.Map;
+import java.util.HashMap;
+import dev.iredsc.hadron.api.event.player.PlayerQuitEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryCloseEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
+import dev.iredsc.hadron.api.event.entity.EntityPotionEffectEvent;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.ChestBlock;
@@ -63,6 +71,8 @@ final class Protection implements Listener {
     private final RegionStore store;
     private final Feedback feedback;
     private final Bypass bypass;
+    /** What each player has open, for their clicks. */
+    private final Map<UUID, InventoryHolder> openMenus = new HashMap<>();
 
     Protection(JavaPlugin plugin, RegionStore store, Feedback feedback, Bypass bypass) {
         this.plugin = plugin;
@@ -265,20 +275,43 @@ final class Protection implements Listener {
             return;
         }
         if (!(victim instanceof ServerPlayer hurt)) return;
+        pvp(e, hurt, e.getDamager()).ifPresent(no -> {
+            e.setCancelled(true);
+            tell(e, hurt.blockPosition(), no);
+        });
+    }
+
+    /**
+     * A harmful effect put on a player (a splash of poison, a lingering cloud) is an attack, refused where the hit
+     * would be: its later ticks come from nobody, so this is the one moment to ask.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    private void effect(EntityPotionEffectEvent e) {
+        if (!(e.getEntity() instanceof ServerPlayer hurt) || e.getAction() == EntityPotionEffectEvent.Action.REMOVED
+                || e.getEffect().value().getCategory() != MobEffectCategory.HARMFUL) return;
+        pvp(e, hurt, Optional.empty()).ifPresent(no -> {
+            e.setCancelled(true);
+            tell(e, hurt.blockPosition(), no);
+        });
+    }
+
+    /** The region refusing this attack on {@code hurt}, if it is PvP and a region on either side denies it. */
+    private Optional<Region> pvp(ActionEvent e, ServerPlayer hurt, Optional<Entity> damager) {
+        if (e.getActor() instanceof Actor.Server) return Optional.empty();
         // Whoever answers for it, online or not: a turret keeps its owner while they're away. Anything else made to
         // hurt (a machine, an arrow, something unknown) is an outsider when nobody owns it; only the world (lava, a
         // fall) and a mob acting on its own aren't PvP.
         Optional<UUID> who = e.getActor().actingFor();
-        if (who.isPresent() && who.get().equals(hurt.getUUID())) return;
+        if (who.isPresent() && who.get().equals(hurt.getUUID())) return Optional.empty();
         if (who.isEmpty() && (e.getActor() instanceof Actor.Nature
-                || e.getActor() instanceof Actor.EntityActor a && a.entity() instanceof Mob)) return;
+                || e.getActor() instanceof Actor.EntityActor a && a.entity() instanceof Mob)) return Optional.empty();
         // Both sides count: nobody fights out of a safe zone or into one.
-        ServerLevel level = e.getLevel();
+        ServerLevel level = hurt.serverLevel();
         List<BlockPos> sides = new ArrayList<>(3);
         sides.add(hurt.blockPosition());
         e.getActingPlayer().filter(a -> a.level() == level).ifPresent(a -> sides.add(a.blockPosition()));
-        e.getDamager().filter(d -> d.level() == level).ifPresent(d -> sides.add(d.blockPosition()));
-        // Where the attack comes from: a turret block, a fake player, a mob someone controls.
+        damager.filter(d -> d.level() == level).ifPresent(d -> sides.add(d.blockPosition()));
+        // Where the attack comes from: a turret block, a fake player, a thrown potion, a mob someone controls.
         switch (e.getActor()) {
             case Actor.Machine m when m.level() == level -> sides.add(m.pos());
             case Actor.FakePlayer f when f.fake().level() == level -> sides.add(f.fake().blockPosition());
@@ -287,12 +320,9 @@ final class Protection implements Listener {
         }
         for (BlockPos side : sides) {
             Optional<Region> no = Rules.refusing(store.at(level, side), Flag.PVP, who);
-            if (no.isPresent()) {
-                e.setCancelled(true);
-                tell(e, hurt.blockPosition(), no.get());
-                return;
-            }
+            if (no.isPresent()) return no;
         }
+        return Optional.empty();
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
@@ -354,6 +384,11 @@ final class Protection implements Listener {
             holders.add(move.getSource().place());
             holders.add(move.getDestination().place());
         }
+        // A click names the slot clicked, which may be the player's own, yet moves items to and from the whole menu.
+        if (e instanceof InventoryClickEvent click) {
+            InventoryHolder menu = openMenus.get(click.getViewer().getUUID());
+            if (menu != null) holders.add(menu);
+        }
         List<List<Region>> places = new ArrayList<>();
         for (InventoryHolder holder : holders) places.addAll(regionsAt(holder));
         Optional<Region> no = worldOnItsOwn(e.getActor()) ? crossing(places) : using(places, e.getActor().actingFor());
@@ -362,6 +397,22 @@ final class Protection implements Listener {
         if (e.getActor() instanceof Actor.Player a && e.getHolder().place() instanceof InventoryHolder.Block b) {
             tell(e, b.pos(), no.get());
         }
+    }
+
+    /** Remembers what each player has open, so their clicks are checked against it. */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    private void opened(InventoryOpenEvent e) {
+        openMenus.put(e.getViewer().getUUID(), e.getHolder().place());
+    }
+
+    @EventHandler
+    private void closed(InventoryCloseEvent e) {
+        openMenus.remove(e.getViewer().getUUID());
+    }
+
+    @EventHandler
+    private void quit(PlayerQuitEvent e) {
+        openMenus.remove(e.getPlayer().getUUID());
     }
 
     /** Nobody behind it: nature, or a machine or mob nobody owns. */
