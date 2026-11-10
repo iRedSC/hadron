@@ -6,6 +6,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import dev.iredsc.hadron.api.actor.Actors;
+import dev.iredsc.hadron.api.bridge.Bridge;
 import dev.iredsc.hadron.api.data.PersistentData;
 import dev.iredsc.hadron.api.economy.Economy;
 import dev.iredsc.hadron.api.net.NetBackend;
@@ -109,5 +110,6 @@ class HostKeyTest {
                 "PersistentData.Port.installStore", "PersistentData.of");
         refused(() -> Areas.Port.install(null, null), "Areas.Port.install", "Areas.watch");
         refused(() -> Worlds.Port.install(null, null), "Worlds.Port.install", "Worlds");
+        refused(() -> Bridge.Port.install(null, null), "Bridge.Port.install", "Bridge.claim");
     }
 }

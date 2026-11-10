@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.bridge;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.entity.EntityDataChangeEvent;
 import dev.iredsc.hadron.checks.StaticState;
@@ -217,16 +218,17 @@ public final class Bridge {
         void post(Event event);
     }
 
-    /** For the loader port only. */
+    /** For the loader port only: installing the backend takes the {@link HostKey}. */
     public static final class Port {
         private Port() {}
 
         /**
          * Installs the port's backend, once: a second install would let other code decide which mod is claiming.
          *
-         * @throws IllegalStateException if one is installed already.
+         * @throws IllegalStateException without the key, or if one is installed already.
          */
-        public static synchronized void install(Backend installed) {
+        public static synchronized void install(HostKey key, Backend installed) {
+            HostKey.require(key, "Bridge.Port.install", "claim your mod with Bridge.claim from a bridge mod");
             Objects.requireNonNull(installed, "backend");
             if (backend != null) {
                 throw new IllegalStateException("Bridge's backend is installed already, by Hadron's loader port; "
