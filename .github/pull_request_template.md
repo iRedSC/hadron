@@ -10,7 +10,9 @@ last line. A bug fix also says which test failed before the fix. -->
 ## Risk
 
 <!-- Which paths in .github/council-paths.txt this touches, if any, and what breaks if it's wrong. Touching one
-needs a council review (say "council"), whose table goes at the end of this description. -->
+needs the final review (.claude/skills/final-review/SKILL.md): its one "Final review:" line, naming this PR's head
+commit, goes in this description, and that line is all the Council check reads. A sizable change whose effect is hard
+to measure gets the full council first (.claude/skills/council/SKILL.md); say whether it ran and why. -->
 
 ## How to undo
 

@@ -53,12 +53,21 @@ Failures
 FAIL HelloTests.secretsAreNeverSent  (HelloTests.java:41)
     bob should not have received "secret", but got the line "<alice> the secret is 42". If a listener should
     have cancelled or changed it, check that it is registered and matches this message.
+    Events its listeners heard:
+      tick 0  PlayerJoinEvent · Player alice · hadrontest:test2 0 64 0 · done
+      tick 0  PlayerJoinEvent · Player bob · hadrontest:test2 0 64 0 · done
+      tick 1  PlayerChatEvent · Player alice · hadrontest:test2 0 64 0 · allowed
+    Players when it failed:
+      alice: survival, in hadrontest:test2 at pos(0, 0, 0) (0.50, 64.00, 0.50), holding nothing, off hand nothing
+      bob: survival, in hadrontest:test2 at pos(0, 0, 0) (0.50, 64.00, 0.50), holding nothing, off hand nothing
 
 Summary
 SUMMARY examples-hello.jar (Hello): 1 passed, 1 failed
 1 passed, 1 failed in 3.1 s
 RESULT: FAILED
 ```
+
+**A failure says what led up to it**, captured before the test's world is cleaned up: the last 30 events its listeners heard, each at the test's tick when it fired and as `/hadron trace` shows it (the event, who caused it, the operation, where and to what, and how it ended: allowed, changed, or cancelled by which plugin), with how many earlier events were left out; and each player the test joined, with their game mode, world, position and what they held as it ended. Only events some listener (the plugin's or the test's) handles are recorded, so recording never makes Hadron build an event it otherwise wouldn't, and a passing test's report has none of it. A hung test gets the same, read while its server thread was stuck.
 
 `FAIL` is an assertion, an exception (with its stack), a test past its tick limit (`@HadronTest(timeout = 600)`, in ticks), a method the runner can't call (the message shows the right signature), or a cleanup that left something behind. `HUNG` is a test that never returned, such as a loop that never ticks: a watchdog writes the report with where the server thread was and ends the process. `BROKEN` is a suite none of whose tests could run, such as a plugin that didn't enable. The `SUMMARY` lines and the last `RESULT:` line keep their shape for tools.
 
@@ -94,7 +103,7 @@ RESULT: FAILED
 
 ## report.json
 
-Beside every `report.txt` is a `report.json` with the same results for tools; `hadronTest` and `hadronRerun` print where it is. Every key is always present, with `null` where it doesn't apply. `schema` changes only when a field changes meaning or goes away. (The comments below are notes, not part of the file.)
+Beside every `report.txt` is a `report.json` with the same results for tools; `hadronTest` and `hadronRerun` print where it is. Every key is always present, with `null` where it doesn't apply, down to each player's `online`-only fields. `schema` changes only when a field changes meaning or goes away, so a new key (like `context`) leaves it at 1: a tool should ignore keys it doesn't know. The file is always strict JSON: a number JSON can't hold (a NaN or infinite coordinate) is written as the string `"NaN"`, `"Infinity"` or `"-Infinity"`; every other number in it is a whole count. (The comments below are notes, not part of the file.)
 
 ```jsonc
 {
@@ -122,7 +131,27 @@ Beside every `report.txt` is a `report.json` with the same results for tools; `h
       "message": "expected failure",   // null for a pass
       "source": "TmpTests.java:20",    // the test's first line, for every test
       "failedAt": "TmpTests.java:21",  // the test's own line nearest the failure, or null
-      "stack": null                    // for an exception, or where a hung test's thread was; null for an assertion
+      "stack": null,                   // for an exception, or where a hung test's thread was; null for an assertion
+      "context": {                     // what led up to a FAIL or HUNG; null for a pass, or a failure outside the
+                                       // test's own run (it couldn't start, a bad signature, its cleanup)
+        "events": [{                   // the last 30 its listeners heard, oldest first; null in a benchmark suite
+          "tick": 2,                   // the test's own tick count when it fired, before any listener ran
+          "event": "BlockBreakEvent",
+          "cancelled": true,           // how it ended; null for an event that can't be cancelled
+          "line": "BlockBreakEvent · Player alice · op#7 · hadrontest:test4 1 64 0 · cancelled by Hello"
+        }],
+        "eventsOmitted": 0,            // earlier events heard but not kept
+        "players": [{                  // every player the test joined
+          "name": "alice",
+          "online": true,              // false once they left; then every key below is null
+          "world": "hadrontest:test4",
+          "pos": "pos(0, 0, 0)",       // the block they stood in, as t.pos names it; null outside the test's world
+          "x": 0.5, "y": 64.0, "z": 0.5,   // or "NaN", "Infinity", "-Infinity": JSON has no such numbers
+          "gameMode": "survival",
+          "mainHand": "1 minecraft:diamond_pickaxe",   // or "nothing"
+          "offHand": "nothing"
+        }]
+      }
     }]
   }]
 }
@@ -137,7 +166,7 @@ Beside every `report.txt` is a `report.json` with the same results for tools; `h
 - **Console commands run in the overworld**: use `server().createCommandSourceStack().withLevel(t.level())` to run one in the test's world.
 - **Weather, time and the random tick speed are shared with the overworld**, so a test that changes them puts them back.
 - **Not covered by Hadron's own tests yet:** fishing bites and catches (they need open water and a random wait), mobs throwing, picking up or equipping items, hopper minecarts, and a portal lit by fire (test worlds aren't the overworld or the nether).
-- The run is wired into `examples/hello` and `selftest` with `apply(from = ...)`; other projects get it from the Gradle plugin.
+- The run is wired into this repo's plugin projects with `apply(from = ...)`. A project outside the repo can't get it yet: the Gradle plugin that will bring it is still to build.
 
 ## What Hadron's own tests cover
 
@@ -181,7 +210,7 @@ void cancellingABreakKeepsTheBlock(TestContext t) { ... }
 
 There is no list of exceptions, and none should be added for something that simply lacks a test: write the test.
 
-**Nothing can look covered that isn't.** The check fails on a `@Covers` that is on a method that isn't a test (`@HadronTest`, or JUnit's `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory`, `@TestTemplate`) or is on a `@Disabled` one, or in a `@Disabled` class or a class around it; that names a type outside `api`'s public types; that names an abstract event (it lists the concrete ones to name instead); that names a type that isn't an event without a method; or that names a method the type and its API supertypes don't have (it lists the ones they do).
+**A `@Covers` must name a real target on a test that runs.** The check fails on a `@Covers` that is on a method that isn't a test (`@HadronTest`, or JUnit's `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory`, `@TestTemplate`) or is on a `@Disabled` one, or in a `@Disabled` class or a class around it; that names a type outside `api`'s public types; that names an abstract event (it lists the concrete ones to name instead); that names a type that isn't an event without a method; or that names a method the type and its API supertypes don't have (it lists the ones they do). It can't tell whether the test fires or calls what it names and checks the result, so a `@Covers` on a test that never touches its target still passes; reviewers catch that.
 
 **Economy providers** are covered through Hadron's own JSON provider: a test registering an `EconomyProvider` of its own would switch the store for the rest of the run, since once a plugin has provided accounts Hadron refuses to fall back to its file.
 
@@ -217,6 +246,8 @@ python3 scripts/regression_replay.py list           # entries and guards, nothin
 ## Benchmarks
 
 `bench/` is a plugin like `selftest` whose `@HadronTest`s time Hadron's hot paths instead of checking them, so they run on the same headless server with the same `TestContext`. `./gradlew :bench:chokepointBench` runs them, prints each case's median cost per call, and keeps the table in `bench/build/bench/chokepoint.txt`. A bench may read the clock: `bench` allows `@Nondeterministic` the way `selftest` does, and a timing printed for people is one of the uses it's meant for.
+
+Benches run without the recorder that gives a failure its events: `bench`'s test resources hold `META-INF/hadron-benchmarks`, which turns it off for every test in the suite, so a timing never includes its per-event cost. `RecorderOffTests` fails if that stops being true. A bench written outside `bench/` doesn't get this.
 
 Benches never run in `build` or `check`, because a timing says how busy the machine was, not whether Hadron is right. Each one still fails when the path it timed isn't the one it names (an event that should fire every call didn't, or one that shouldn't did), so a number never quietly comes from code that returned early.
 

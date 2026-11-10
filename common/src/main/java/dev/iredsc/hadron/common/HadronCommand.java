@@ -19,11 +19,13 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
+import org.jspecify.annotations.Nullable;
 
 /**
  * {@code /plugins} (and {@code /pl}) lists every plugin, colored by state; hover for why, click for details.
  * {@code /hadron reload [plugin]}, {@code /hadron enable|disable|info <plugin>} manage them. Reloading by hand is
- * rarely needed: a changed jar reloads by itself. {@code /hadron trace} shows events as they fire ({@link Trace}).
+ * rarely needed: a changed jar reloads by itself. {@code /hadron status [plugin]} says the same as plain text for
+ * scripts ({@link PluginStatus}). {@code /hadron trace} shows events as they fire ({@link Trace}).
  */
 final class HadronCommand {
     private static final SimpleCommandExceptionType NOT_RUNNING =
@@ -52,6 +54,11 @@ final class HadronCommand {
                         .then(named(hosts, (host, e) -> host.reload(e))))
                 .then(Commands.literal("enable").requires(manage).then(named(hosts, PluginHost::switchOn)))
                 .then(Commands.literal("disable").requires(manage).then(named(hosts, PluginHost::switchOff)))
+                .then(Commands.literal("status").requires(manage)
+                        .executes(ctx -> status(ctx, hosts, null))
+                        .then(Commands.argument("plugin", StringArgumentType.word())
+                                .suggests((ctx, b) -> SharedSuggestionProvider.suggest(names(hosts), b))
+                                .executes(ctx -> status(ctx, hosts, entry(ctx, hosts).name))))
                 .then(Commands.literal("info").requires(manage).then(Commands.argument("plugin", StringArgumentType.word())
                         .suggests((ctx, b) -> SharedSuggestionProvider.suggest(names(hosts), b))
                         .executes(ctx -> {
@@ -176,6 +183,23 @@ final class HadronCommand {
         if (host.entries().isEmpty()) line.append("none in plugins/");
         ctx.getSource().sendSystemMessage(line);
         return host.entries().size();
+    }
+
+    /**
+     * {@code /hadron status [plugin]}: one plain-text line per plugin (state, jar, hash, why it failed) and per refused
+     * jar, no color, so a script reading an RCON reply sees what {@code /plugins} shows with hover. Naming a plugin
+     * leaves out the other plugins, never the refused jars: those have no name to match.
+     */
+    private static int status(CommandContext<CommandSourceStack> ctx, Supplier<PluginHost> hosts, @Nullable String plugin)
+            throws CommandSyntaxException {
+        int lines = 0;
+        for (PluginStatus status : host(hosts).statuses()) {
+            if (plugin != null && status.plugin() != null && !status.plugin().equalsIgnoreCase(plugin)) continue;
+            ctx.getSource().sendSystemMessage(Component.literal(status.format()));
+            lines++;
+        }
+        if (lines == 0) ctx.getSource().sendSystemMessage(Component.literal("No plugins in plugins/"));
+        return lines;
     }
 
     private static MutableComponent name(PluginHost.Entry e) {

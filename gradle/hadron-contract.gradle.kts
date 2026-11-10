@@ -72,8 +72,8 @@ object ContractDocs {
                     "`hadronWatch` records a hash of Hadron's jars in `libs/` and of the build files that shape the " +
                     "server. Each `hadronRerun` compares, so a changed jar or build setting since the server started " +
                     "fails the rerun, naming what changed and saying to restart it.",
-                "- The run is wired into `examples/hello` and `selftest` with `apply(from = ...)`; other projects get " +
-                    "it from the Gradle plugin.\n" to "",
+                "- The run is wired into this repo's plugin projects with `apply(from = ...)`. A project outside the " +
+                    "repo can't get it yet: the Gradle plugin that will bring it is still to build.\n" to "",
                 "`coverageCheck` (part of `check`; `./gradlew :selftest:coverageCheck`) reads class files only, " +
                     "`api`'s and the compiled tests' (`selftest`, and `api`'s and `common`'s JUnit tests when there " +
                     "are any), so" to "`coverageCheck` (part of `check`) reads class files only, `api`'s and the " +

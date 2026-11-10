@@ -77,9 +77,11 @@ public final class ServerApiTests {
         server.broadcastMessage("&aserver news");
         Hadron.broadcastMessage("static news");
         t.tick();
-        t.assertChat(alice, "server news");
-        t.assertChat(bob, "static news");
-        t.assertNoChat(alice, "&a");
+        for (TestPlayer player : List.of(alice, bob)) {
+            t.assertChat(player, "server news");
+            t.assertChat(player, "static news");
+            t.assertNoChat(player, "&a");
+        }
         CommandSourceStack console = server.getConsoleSender();
         t.assertTrue(console.hasPermission(4), "the console sender has the highest permission level");
         t.assertTrue(server.dispatchCommand(console, "/tellraw alice \"from the console\""), "dispatching tellraw");
