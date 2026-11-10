@@ -73,6 +73,9 @@ public final class HostilePlugin extends JavaPlugin {
             asHost("clear the economy", () -> Economy.Lifecycle.install(null, null),
                     () -> Economy.Lifecycle.install(null, economy));
             asHost("replace the packet backend", () -> NetBackend.Port.install(null, null), () -> {});
+            // Not in api at all: Hadron's own insides, which a plugin's class loader must not link.
+            asHost("hook every plugin's disable", () -> dev.iredsc.hadron.common.PluginHost.onPluginDisable(p -> {}),
+                    () -> {});
         }
     }
 
@@ -82,8 +85,10 @@ public final class HostilePlugin extends JavaPlugin {
             call.run();
             log("host " + what + " allowed");
             putBack.run();
-        } catch (RuntimeException refused) {
-            log("host " + what + " refused: " + refused.getMessage());
+        } catch (RuntimeException | LinkageError refused) {
+            // A class a plugin can't link fails as NoClassDefFoundError, with the loader's reason as its cause.
+            Throwable why = refused.getCause() != null ? refused.getCause() : refused;
+            log("host " + what + " refused: " + why.getMessage());
         }
     }
 

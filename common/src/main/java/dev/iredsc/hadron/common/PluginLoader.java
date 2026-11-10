@@ -17,6 +17,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -24,6 +25,8 @@ import org.slf4j.LoggerFactory;
  * One loaded version of one plugin jar. Classes come from Minecraft, NeoForge and the mods first (so every plugin
  * shares one Minecraft), then the plugin's own jar, then the plugins it declares in depend and softdepend. A plugin
  * can't see a plugin it didn't declare, which is what lets one reload without stranding another on its old classes.
+ * Nor can it see Hadron's own insides ({@link #HOST_PACKAGES}): only its api, so no plugin calls the host's or the
+ * port's public statics (a mixin hook, {@code PluginHost.onPluginDisable}) or names their classes.
  *
  * <p>Reads a private copy of the jar, so replacing the file in {@code plugins/} mid-load can't corrupt classes this
  * version still has to read while it disables.
@@ -32,6 +35,13 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
     static {
         ClassLoader.registerAsParallelCapable();
     }
+
+    /**
+     * Hadron's packages that aren't its api: the host ({@code common}), the loader ports and the test harness. Their
+     * classes are public so Hadron's modules and mixins can reach each other, and for nothing else. A new port's
+     * package goes here.
+     */
+    static final Pattern HOST_PACKAGES = Pattern.compile("dev\\.iredsc\\.hadron\\.(common|neoforge|fabric|harness)\\..*");
 
     private final PluginDescription description;
     private final File original;
@@ -61,7 +71,8 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
         synchronized (getClassLoadingLock(name)) {
             Class<?> c = findLoadedClass(name);
-            if (c == null) {
+            boolean host = HOST_PACKAGES.matcher(name).matches();
+            if (c == null && !host) {
                 try {
                     c = getParent().loadClass(name);
                 } catch (ClassNotFoundException ignored) {
@@ -69,6 +80,11 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
                 }
             }
             if (c == null) c = findOwnOrDependency(name);
+            if (c == null && host) {
+                throw new ClassNotFoundException(name + " is inside Hadron's plugin host, which plugins can't use. "
+                        + description.getName() + " can use only Hadron's api (dev.iredsc.hadron.api): the server "
+                        + "through getServer(), its events, services, scheduler and the rest.");
+            }
             if (c == null) {
                 throw new ClassNotFoundException(name + " isn't in " + description.getName() + " or the plugins it "
                         + "lists under depend or softdepend");

@@ -22,13 +22,9 @@ dependencies {
     compileOnly(project(":api"))
     testCompileOnly(project(":api"))
     testCompileOnly(project(":test-api"))
-    // The hooks themselves, timed alone. Plugins' classes load under Hadron's, so the server finds them at runtime.
-    testCompileOnly(files(rootProject.file("neoforge/build/classes/java/main")))
     // @Nondeterministic, for reading the clock to time things; Hadron's code only.
     testCompileOnly(project(":build-checks"))
 }
-
-tasks.named("compileTestJava") { dependsOn(":neoforge:compileJava") }
 
 tasks.processResources {
     val props = mapOf("version" to project.version, "minecraft" to providers.gradleProperty("minecraft_version").get())
