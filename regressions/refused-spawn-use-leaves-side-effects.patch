@@ -1,0 +1,21 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java
+index 58aa128..538601b 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java
+@@ -44,7 +44,7 @@ public final class EntitySpawnRefunds {
+     public static InteractionResult using(Player player, Supplier<InteractionResult> use) {
+         InteractionResult[] result = {InteractionResult.PASS};
+         boolean refused = spend(player, () -> result[0] = use.get());
+-        return refused && result[0].consumesAction() ? InteractionResult.FAIL : result[0];
++        return result[0];
+     }
+ 
+     /** As {@link #using}, for letting go of an item being used: a bow's or a trident's shot. */
+@@ -80,7 +80,6 @@ public final class EntitySpawnRefunds {
+             int tried = EntitySpawns.attempts - attempts;
+             return tried > 0 && EntitySpawns.refused - refused == tried;
+         };
+-        if (onServerThread) return HeldEffects.spawning(work, everyRefused);
+         work.run();
+         return everyRefused.getAsBoolean();
+     }

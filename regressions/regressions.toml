@@ -547,3 +547,77 @@ paths = [
 guards = [
     { test = "ListenerReleaseTests.anUnregisteredListenerIsLetGo", tier = "in-game" },
 ]
+
+
+# ---- Found by the PR #35 side-effects watch ----
+
+
+[[regression]]
+id = "refused-place-leaves-side-effects"
+bug = "A refused placement, strip or fire lit with flint and steel still met placed_block or item_used_on_block, counted durability lost and vibrated, since NeoForge asks only after the item did the work."
+fix = "b1bf13b"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java",
+]
+guards = [
+    { test = "BreakPlaceTests.cancelledPlaceLeavesAirAndKeepsTheItem", tier = "in-game" },
+    { test = "BreakPlaceTests.cancelledDoorPlaceLeavesNeitherHalfAndKeepsTheDoor", tier = "in-game" },
+    { test = "BreakPlaceTests.cancelledStripKeepsTheLogAndTheAxesDurability", tier = "in-game" },
+    { test = "BreakPlaceTests.aPlantingCountsTowardItsAdvancementOnlyWhenAllowed", tier = "in-game" },
+    { test = "FireAndTntTests.cancelledIgniteLeavesNoFireAndTheFlintUnworn", tier = "in-game" },
+]
+note = "The patch drops only the hold around onPlaceItemIntoWorld and the cancel it reads; HeldEffects and the hooks that hold grants, stats and game events stay, shared with the other fixes of b1bf13b."
+
+[[regression]]
+id = "refused-block-use-leaves-side-effects"
+bug = "A lever whose flip was refused still vibrated and counted default_block_use and any_block_use, since the block's use went on past its refused setBlock."
+fix = "b1bf13b"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ServerPlayerGameModeClickMixin.java",
+]
+guards = [
+    { test = "BreakPlaceTests.cancelledLeverFlipLeavesItOff", tier = "in-game" },
+]
+note = "The patch undoes only the hold around useWithoutItem; the one around useItemOn stays, for refused-tnt-lighting-counts."
+
+[[regression]]
+id = "refused-tnt-lighting-counts"
+bug = "Refused TNT lighting still counted item_used_on_block and any_block_use, since the refusal answered CONSUME."
+fix = "b1bf13b"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/TntBlockMixin.java",
+]
+guards = [
+    { test = "FireAndTntTests.cancelledTntLightingLeavesTheTntUnprimedAndTheFlintUnworn", tier = "in-game" },
+]
+note = "The patch puts back CONSUME only; the click mixin's end for a failed useItemOn stays."
+
+[[regression]]
+id = "refused-spawn-use-leaves-side-effects"
+bug = "An item use whose every spawn was refused (snowball, boat, spawn egg, item frame, bow, cod bucket) was given back but still counted its stat, triggers and vibration."
+fix = "b1bf13b"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java",
+]
+guards = [
+    { test = "SpawnTests.aRefusedSnowballIsGivenBack", tier = "in-game" },
+    { test = "SpawnTests.aRefusedBoatIsGivenBack", tier = "in-game" },
+    { test = "SpawnTests.aRefusedSpawnEggIsNotSpent", tier = "in-game" },
+    { test = "SpawnTests.aRefusedItemFrameIsNotSpent", tier = "in-game" },
+    { test = "SpawnTests.aRefusedArrowFromABowKeepsTheArrowAndTheBow", tier = "in-game" },
+    { test = "BucketTests.refusedCodFromABucketPoursNoWaterAndKeepsTheBucket", tier = "in-game" },
+    { test = "BucketTests.refusedCodFromADispenserPoursNoWaterAndKeepsTheBucketInside", tier = "in-game" },
+]
+note = "The patch runs the use without a hold and keeps its result; the refund itself stays."
+
+[[regression]]
+id = "refused-frame-click-counts"
+bug = "A refused place into an item frame or turn of its item still counted player_interacted_with_entity, since the refusal answered CONSUME."
+fix = "bcdcb6e"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ItemFrameMixin.java",
+]
+guards = [
+    { test = "InteractionTests.aCancelledPlaceLeavesTheFrameEmptyAndTheItemHeld", tier = "in-game" },
+    { test = "InteractionTests.clickingAFullFrameIsARotateAndCancelledItStaysPut", tier = "in-game" },
+]
