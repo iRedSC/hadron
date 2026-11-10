@@ -419,13 +419,19 @@ final class TestAcceptance implements Acceptance, Listener {
                 Place lies = at(level, item.position());
                 if (lies instanceof Place.In) return lies;
             }
+            // Every item it is about lies elsewhere: known to be outside, whoever is behind it.
+            return OUT;
         }
         if (event instanceof ItemEvent i) {
             if (i.getLevel() != level) return OUT;
             // An item event naming the inventory it happens in (a craft, a smelt, a trade, an anvil) happens there.
             // An item used, eaten or equipped happens where the entity it is about stands.
             Optional<LivingEntity> about = itemUser(i);
-            if (about.isPresent() && at(level, about.get().position()) instanceof Place.In p) return p;
+            // Where the entity it is about stands, then whoever did it: outside both, it is known to be outside.
+            if (about.isPresent()) {
+                Place on = about.get().level() == level ? at(level, about.get().position()) : OUT;
+                return on instanceof Place.In ? on : actorAt(i.getActor());
+            }
             Optional<InventoryHolder> in = itemHolder(i);
             Place named = in.map(this::holder).orElse(OUT);
             if (named instanceof Place.In) return named;
@@ -496,7 +502,12 @@ final class TestAcceptance implements Acceptance, Listener {
             case EntityEvent e -> List.of(e.getEntity());
             case ItemPickupEvent p -> holderEntity(p.getDestination()).map(d -> List.<Entity>of(p.getItemEntity(), d))
                     .orElse(List.of(p.getItemEntity()));
-            case ItemEvent i -> List.copyOf(itemEntities(i));
+            case ItemEvent i -> {
+                List<Entity> all = new ArrayList<>(itemEntities(i));
+                itemUser(i).ifPresent(all::add);
+                itemHolder(i).flatMap(TestAcceptance::holderEntity).ifPresent(all::add);
+                yield all;
+            }
             case InventoryChangeEvent c -> c.getHolders().stream().flatMap(h -> holderEntity(h).stream()).toList();
             case InventoryEvent i -> holderEntity(i.getHolder()).map(List::of).orElse(List.of());
             default -> List.of();

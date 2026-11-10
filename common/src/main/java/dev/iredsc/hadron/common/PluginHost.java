@@ -1175,12 +1175,18 @@ public final class PluginHost implements PluginManager {
         requireServerThread();
         for (Entry e : entries.values()) {
             if (!(e.state instanceof State.Enabled)) continue;
-            ((State.Enabled) e.state).subscriptions.removeIf(s -> {
-                if (s.listener != listener) return false;
-                s.remove();
-                return true;
-            });
+            unregister(((State.Enabled) e.state).subscriptions, listener);
         }
+    }
+
+    /**
+     * Removes the listener's subscriptions, and forgets those nothing needs any more: one whose handler is still
+     * running on another thread stays listed, so disabling the plugin still waits for it before onDisable, and goes
+     * at the next unregister or the disable.
+     */
+    static void unregister(List<EventBus.Subscription> subscriptions, Listener listener) {
+        for (EventBus.Subscription s : subscriptions) if (s.listener == listener) s.remove();
+        subscriptions.removeIf(EventBus.Subscription::finished);
     }
 
     @Override

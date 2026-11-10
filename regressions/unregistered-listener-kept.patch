@@ -1,8 +1,6 @@
-diff --git a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-index daacdb2..dc05dfd 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-@@ -989,7 +989,6 @@ public final class PluginHost implements PluginManager {
+@@ -989,7 +989,6 @@
      }
  
      private static void undoAll(State.Running running, String name) {
@@ -10,7 +8,7 @@ index daacdb2..dc05dfd 100644
          while (!running.undo.isEmpty()) {
              try {
                  running.undo.pop().run();
-@@ -1165,9 +1164,15 @@ public final class PluginHost implements PluginManager {
+@@ -1165,9 +1164,15 @@
      @Override
      public void registerEvents(Listener listener, JavaPlugin plugin) {
          State.Enabled running = running(plugin, "register listeners");
@@ -29,18 +27,27 @@ index daacdb2..dc05dfd 100644
      }
  
      @Override
-@@ -1175,11 +1180,9 @@ public final class PluginHost implements PluginManager {
+@@ -1175,20 +1180,12 @@
          requireServerThread();
          for (Entry e : entries.values()) {
              if (!(e.state instanceof State.Enabled)) continue;
--            ((State.Enabled) e.state).subscriptions.removeIf(s -> {
--                if (s.listener != listener) return false;
--                s.remove();
--                return true;
--            });
+-            unregister(((State.Enabled) e.state).subscriptions, listener);
 +            for (EventBus.Subscription s : ((State.Enabled) e.state).subscriptions) {
 +                if (s.listener == listener) s.remove();
 +            }
          }
      }
  
+-    /**
+-     * Removes the listener's subscriptions, and forgets those nothing needs any more: one whose handler is still
+-     * running on another thread stays listed, so disabling the plugin still waits for it before onDisable, and goes
+-     * at the next unregister or the disable.
+-     */
+-    static void unregister(List<EventBus.Subscription> subscriptions, Listener listener) {
+-        for (EventBus.Subscription s : subscriptions) if (s.listener == listener) s.remove();
+-        subscriptions.removeIf(EventBus.Subscription::finished);
+-    }
+-
+     @Override
+     public void registerCommand(LiteralArgumentBuilder<CommandSourceStack> command, JavaPlugin plugin) {
+         State.Enabled running = running(plugin, "register commands");

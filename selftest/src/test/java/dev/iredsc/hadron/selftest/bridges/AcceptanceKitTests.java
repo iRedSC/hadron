@@ -1034,4 +1034,37 @@ public final class AcceptanceKitTests {
         String why = failure(t, () -> area.assertUnchanged("a pig changed by an event placed outside", Part.ENTITIES));
         t.assertTrue(why.contains("EntityDataChangeEvent") && why.contains("placed outside the area"), why);
     }
+
+    @HadronTest
+    void aCartWhoseItemChangeWasIgnoredOnItsWayThroughIsCaught(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos start = t.pos(0, 0, 4), in = t.pos(2, 0, 0);
+        MinecartChest cart = new MinecartChest(t.level(), start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+        cart.setItem(0, new ItemStack(Items.DIAMOND, 3));
+        t.level().addFreshEntity(cart);
+        t.tick();
+        Acceptance area = t.acceptance(around(t));
+        cart.teleportTo(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        t.assertTrue(Hadron.getPluginManager().callEvent(new ItemChangeEvent(t.level(),
+                new InventoryHolder.Entity(cart), new ItemStack(Items.DIAMOND, 3), new ItemStack(Items.DIAMOND, 2),
+                new Actor.Player(bob.player()))),
+                "bob's change to the cart's diamonds was refused");
+        cart.setItem(0, new ItemStack(Items.DIAMOND, 2));
+        cart.teleportTo(start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+        String why = failure(t, () -> area.assertUnchanged("a machine taking a diamond as the cart passes",
+                Part.ENTITIES));
+        t.assertTrue(why.contains("chest_minecart") && why.contains("diamond"), why);
+    }
+
+    @HadronTest
+    void aMergeWhollyOutsideWithNobodyBehindItIsLeftAlone(TestContext t) {
+        Acceptance area = t.acceptance(around(t));
+        BlockPos out = t.pos(-3, 0, 0);
+        ItemEntity a = new ItemEntity(t.level(), out.getX() + 0.5, out.getY(), out.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND));
+        ItemEntity b = new ItemEntity(t.level(), out.getX() + 0.5, out.getY(), out.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND));
+        t.assertFalse(Hadron.getPluginManager().callEvent(new ItemMergeEvent(t.level(), a, b, Actor.Unknown.INSTANCE)),
+                "a merge lying wholly outside the area isn't the area's");
+    }
 }

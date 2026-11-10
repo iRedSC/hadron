@@ -539,6 +539,7 @@ note = "5515df2 is a merge; the patch drops only CommonHooksPlaceMixin and its l
 [[regression]]
 id = "unregistered-listener-kept"
 bug = "An unregistered listener stayed referenced until its plugin disabled, keeping everything it held in memory."
+note = "The patch undoes PluginHost.unregister, which the fix grew so a handler still running stays listed until it finishes; EventBus.finished stays, unused."
 fix = "5692658"
 paths = [
     "common/src/main/java/dev/iredsc/hadron/common/PluginHost.java",
