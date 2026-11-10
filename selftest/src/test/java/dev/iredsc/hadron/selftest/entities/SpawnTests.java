@@ -24,6 +24,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.Snowball;
@@ -89,6 +90,32 @@ public final class SpawnTests {
         assertPlayer(t, events.get(0).getActor(), alice, "A spawn egg's pig");
         t.assertEquals(Optional.of(MobSpawnType.SPAWN_EGG), events.get(0).getSpawnReason(), "the spawn reason");
         t.assertHolding(alice, Items.PIG_SPAWN_EGG, 1);
+    }
+
+    @HadronTest
+    @Covers(ProjectileLaunchEvent.class)
+    void aRefusedSnowballIsGivenBackWhenItsListenerSpawnsSomethingElse(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ready(t);
+        alice.hold(new ItemStack(Items.SNOWBALL, 4));
+        BlockPos standAt = t.pos(3, 0, 0);
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntitySpawnEvent e) {
+                if (!(e.getEntity() instanceof Snowball)) return;
+                e.setCancelled(true);
+                // The listener's own spawn, allowed: it must not make alice's throw count as having spawned something.
+                ArmorStand stand = new ArmorStand(t.level(), standAt.getX() + 0.5, standAt.getY(), standAt.getZ() + 0.5);
+                t.level().addFreshEntity(stand);
+            }
+        });
+        SideEffects effects = t.watchSideEffects();
+        alice.useItem();
+        t.tick();
+        t.assertEquals(1, near(t, ArmorStand.class).size(), "the number of armor stands the listener spawned");
+        t.assertEquals(0, near(t, Snowball.class).size(), "the number of snowballs in flight");
+        t.assertHolding(alice, Items.SNOWBALL, 4);
+        effects.assertNone("a refused snowball whose listener spawned an armor stand");
     }
 
     @HadronTest

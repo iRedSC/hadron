@@ -23,16 +23,23 @@ import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.advancements.CriterionProgress;
 import net.minecraft.advancements.CriterionTrigger;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.core.Holder;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.stats.Stats;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.LeverBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.AttachFace;
 import net.minecraft.world.level.gameevent.GameEvent;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.Vec3;
 
 /** Breaking, placing and changing blocks, by players and the console: who did it, cancels, one event per effect. */
 public final class BreakPlaceTests {
@@ -167,6 +174,72 @@ public final class BreakPlaceTests {
         alice.placeBlock(crop);
         t.assertBlock(crop, Blocks.WHEAT);
         t.assertTrue(plantedWheat(t, alice), "an allowed planting should count toward husbandry/plant_seed");
+    }
+
+    @HadronTest
+    @Covers(BlockPlaceEvent.class)
+    void aPlaceAListenerMakesWhileRefusingAnotherKeepsItsSideEffects(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        BlockPos refused = t.pos(1, 0, 0);
+        BlockPos bobs = t.pos(-1, 0, 0);
+        t.setBlock(bobs.below(), Blocks.STONE);
+        alice.hold(new ItemStack(Items.STONE, 64));
+        bob.hold(new ItemStack(Items.STONE, 64));
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockPlaceEvent e) {
+                if (e.getActingPlayer().orElse(null) != alice.player()) return;
+                e.setCancelled(true);
+                // The listener's own action, allowed: placing a block for bob, as a plugin's handler might.
+                ServerPlayer b = bob.player();
+                b.gameMode.useItemOn(b, t.level(), b.getMainHandItem(), InteractionHand.MAIN_HAND, new BlockHitResult(
+                        Vec3.atCenterOf(bobs.below()).add(0, 0.5, 0), Direction.UP, bobs.below(), false));
+            }
+        });
+        SideEffects effects = t.watchSideEffects();
+        alice.placeBlock(refused);
+        t.assertBlock(refused, Blocks.AIR);
+        t.assertBlock(bobs, Blocks.STONE);
+        t.assertHolding(bob, Items.STONE, 63);
+        t.assertTrue(effects.seen(SideEffects.CriterionTriggered.class).stream().anyMatch(c -> c.player().name()
+                .equals("bob") && c.trigger() == CriteriaTriggers.PLACED_BLOCK), "bob's place should fire placed_block, "
+                + "but the side effects were " + effects.seen());
+        t.assertTrue(effects.seen(SideEffects.StatChanged.class).stream().anyMatch(c -> c.player().name()
+                .equals("bob") && c.stat().equals(Stats.ITEM_USED.get(Items.STONE))), "bob's place should count his "
+                + "used stone, but the side effects were " + effects.seen());
+        assertHeard(t, effects, GameEvent.BLOCK_PLACE, bobs, "bob's place");
+        List<SideEffects.Effect> alices = effects.seen().stream().filter(e -> switch (e) {
+            case SideEffects.CriterionTriggered c -> c.player().name().equals("alice");
+            case SideEffects.StatChanged c -> c.player().name().equals("alice");
+            case SideEffects.GameEventEmitted g -> g.source().filter(s -> s == alice.player()).isPresent();
+            default -> false;
+        }).toList();
+        t.assertEquals(List.of(), alices, "what alice's refused place left behind");
+    }
+
+    @HadronTest
+    @Covers(BlockChangeEvent.class)
+    void aRefusedLeverFlipLeavesNoTraceWhenItsListenerChangesAnotherBlock(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos at = t.pos(1, 0, 0);
+        BlockPos elsewhere = t.pos(-2, 0, 0);
+        t.setBlock(at, lever());
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockChangeEvent e) {
+                if (!e.getPos().equals(at)) return;
+                e.setCancelled(true);
+                // The listener's own change, allowed: it must not make the refused flip count as allowed.
+                t.level().setBlock(elsewhere, Blocks.STONE.defaultBlockState(), Block.UPDATE_ALL);
+            }
+        });
+        SideEffects effects = t.watchSideEffects();
+        alice.useBlock(at);
+        t.tick();
+        t.assertBlock(at, lever());
+        t.assertBlock(elsewhere, Blocks.STONE);
+        effects.assertNone("a refused lever flip whose listener placed stone elsewhere");
     }
 
     /** Whether vanilla's husbandry/plant_seed counted {@code player} planting wheat. */

@@ -21,7 +21,8 @@ import org.jspecify.annotations.Nullable;
  * <p>A criterion is still tested when its trigger fires, against the world and item as they are then; only its grant
  * waits. A statistic and a game event wait whole. Experience and hunger aren't held: no held action changes them
  * before it is decided. Holds open only on the server thread and nest: what an inner hold keeps waits on the outer
- * one, and what an inner hold drops is gone even if the outer one is kept.
+ * one, and what an inner hold drops is gone even if the outer one is kept. A hold covers only the action that opened
+ * it: while an event's handlers run, it is set aside ({@link HandlerScope}).
  */
 public final class HeldEffects {
     private HeldEffects() {}
@@ -31,7 +32,7 @@ public final class HeldEffects {
         final Thread thread = Thread.currentThread();
         final @Nullable Hold outer;
         final List<Runnable> held = new ArrayList<>();
-        /** Set by {@link #refuse()}: NeoForge's place event was cancelled. */
+        /** Set by {@link #decidingPlace}: NeoForge's place event was cancelled. */
         boolean placeRefused;
         /** Block changes Hadron's events decided while it was open, its kept inner holds' included. */
         int refusedChanges;
@@ -80,7 +81,7 @@ public final class HeldEffects {
 
     /**
      * NeoForge's {@code onPlaceItemIntoWorld}: the item's use, the place event and, if that was cancelled, putting the
-     * blocks back. What it caused is dropped if the event was cancelled ({@link #refuse}), and happens otherwise.
+     * blocks back. What it caused is dropped if the event was cancelled ({@link #decidingPlace}), and happens otherwise.
      */
     public static InteractionResult placing(boolean onServerThread, Supplier<InteractionResult> place) {
         if (!onServerThread) return place.get();
@@ -88,10 +89,29 @@ public final class HeldEffects {
         return run.result();
     }
 
-    /** The place event inside {@link #placing} was cancelled, so what the item did is undone. */
-    public static void refuse() {
+    /**
+     * NeoForge's place event inside {@link #placing}, dispatched as its own scope ({@link HandlerScope}): true when it
+     * was cancelled, which refuses the placement and drops what the item did.
+     */
+    public static boolean decidingPlace(BooleanSupplier placeEvent) {
+        boolean cancelled = HandlerScope.around(placeEvent);
         Hold hold = current();
-        if (hold != null) hold.placeRefused = true;
+        if (cancelled && hold != null) hold.placeRefused = true;
+        return cancelled;
+    }
+
+    /**
+     * Sets the open hold aside while handlers run ({@link HandlerScope}): what they do is theirs, so it passes through
+     * or waits in a hold of its own, and their block changes aren't counted. Returns what {@link #resume} puts back.
+     */
+    static @Nullable Object pause() {
+        Hold hold = current();
+        if (hold != null) open = null;
+        return hold;
+    }
+
+    static void resume(@Nullable Object paused) {
+        if (paused instanceof Hold hold) open = hold;
     }
 
     /**
