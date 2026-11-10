@@ -39,6 +39,8 @@ area.assertUnchanged("bob's miner, inventory changes refused", Acceptance.Part.I
 
 Protection denies every cancellable block, inventory, resource, item, explosion, entity or area-shaped world event (a tick accelerator, a portal) in the box unless the server or a trusted player is behind it and its kind isn't refused. Motion (moving, teleporting, velocity, knockback, targeting, air) is neither protected nor logged, so anyone walks through. The box is watched, so a change with nobody behind it fires as `Unknown`. What the kit compares and what it doesn't is in `Acceptance`'s Javadoc; not yet compared are a block entity's other data and the energy, fluids and other resources a machine holds, which wait for the design of running resource flows ([design](design.md#open-designs)). Build the box and join every player before calling `t.acceptance`.
 
+The kit places each event (which spots, entities and inventories it touches) with its own rules in the harness. Those rules are facts every protection plugin needs, so they belong on the events themselves, in `api`, where the kit and the regions plugin would read the same answer ([design](design.md), "Core states facts"). Until they move, a rule fixed in one must be fixed in the other. The kit also doesn't yet cover motion and PvP, so a refused entry or attack isn't checked by it.
+
 An earlier design also checked that every change in an allowed step was reported, by deciding which event explained each change. Five council rounds showed that needs a hand-written meaning for every event, wrong in one direction or the other each time (#27); refusing one kind at a time proves the same thing by construction.
 
 ## Core intercepts, bridges translate
