@@ -116,8 +116,10 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | `EntityRelationshipChangeEvent` | reputation or a lasting relationship changes (villager gossip, an NPC's marriage) | not shipped yet: see "Not shipped yet" |
 | `EntityUseEvent` | an actor right-clicks an entity | `interact` |
 | `EntityMountEvent`, `EntityDismountEvent` | riding, including vehicles and a player carrying another | `startRiding`, `stopRiding` |
-| `EntityLeashEvent`, `EntityUnleashEvent` | | not shipped yet: see "Not shipped yet" |
-| `EntityShearEvent` | | not shipped yet: see "Not shipped yet" |
+| `EntityLeashEvent` | an entity is put on a lead, or a held one tied to a fence; the new holder (a player or the knot) | `Entity.interact`, `LeadItem.bindPlayerMobs`, the knot's `interact`; bridges for mods' leads |
+| `EntityUnleashEvent` | an actor takes a lead off | `Entity.interact`; bridges for mods' own unleashing |
+| `EntityLeashBreakEvent` *(after)* | a lead comes off with nobody choosing it; reason (distance, holder gone, holder never found after loading or a portal, entity gone, mounted) | `Leashable.dropLeash`, judged from the state; boats and trader llamas just before they leave; `setRemoved` for a leashed entity destroyed; a saved holder given up on |
+| `EntityShearEvent` | a ready mob is sheared, by hand or by a dispenser; the shears | `IShearable` checks in `ShearsItem` and the dispenser's shears; bridges for auto-shearers |
 | `EntityTameEvent`, `EntityBreedEvent` | | `tame`, `spawnChildFromBreeding` |
 | `EntityTransformEvent` | an entity becomes another (zombie villager, a mod's conversion) | `convertTo` |
 | `EntityAirChangeEvent` | | `setAirSupply` |
@@ -126,7 +128,7 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | `ProjectileLaunchEvent` | anything fired or thrown; the actor is the shooter | `Projectile` spawn |
 | `ProjectileHitEvent` | a projectile, or a hitscan shot with no projectile, hits a block or entity; hit position, origin, weapon | `onHit`, bridges for hitscan |
 | `HangingPlaceEvent`, `HangingBreakEvent` | item frames, paintings | `HangingEntity` |
-| `ArmorStandManipulateEvent` | equipment taken or placed on a stand | not shipped yet: see "Not shipped yet" |
+| `ArmorStandManipulateEvent` | equipment taken or placed on a stand by a right-click; the slot, what goes on and what comes off | `ArmorStand.swapItem`; bridges for mods' stand editors |
 
 ### Items: `ItemEvent`
 
@@ -233,7 +235,6 @@ Economy plugins provide the `hadron:currency` holders, so a payment by any mod o
 Designed but not in `api`, because core can't yet fire them for every actor without breaking rule 7 or making a cancel unsafe. A plugin can't listen for them, so none of them can look like coverage.
 
 - Removal by expiry (a mob despawning, a timed summon, a temporary portal): will be an *(after)* event, so a cancel can't make it permanent. `EntityRemoveEvent` shipped without it, and core fires it only for `/kill` and buckets: refusing in Minecraft's one removal method could duplicate (a cancelled arrow pickup), so each cause needs its own hook.
-- `EntityLeashEvent`, `EntityUnleashEvent`, `EntityShearEvent`, `ArmorStandManipulateEvent`: need hooks inside interface methods or per-path logic.
 - `EntityAttributeChangeEvent`, `EntityRelationshipChangeEvent`, `FoodLevelChangeEvent`: the vanilla classes that change don't know their entity.
 - `BiomeChangeEvent`: biome writes are too hot and scattered for one hook.
 - `ResourceTransferEvent` from the port's energy and fluid capabilities: no single point sees both ends; bridges fire it meanwhile.

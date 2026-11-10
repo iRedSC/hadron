@@ -170,6 +170,14 @@ class BridgeTest {
         assertFalse(Bridge.isBridged("addon_absent"), "an absent addon stays free for a bridge installed later");
     }
 
+    @Covers(value = Bridge.class, method = "modsBridgedBy")
+    @Test
+    void aBridgesOwnIdLeadsToTheModsItBridges() {
+        claimAs("lookup_bridge", "lookup_mod", "lookup_addon");
+        assertEquals(List.of("lookup_mod", "lookup_addon"), Bridge.modsBridgedBy("lookup_bridge"));
+        assertEquals(List.of(), Bridge.modsBridgedBy("lookup_mod"), "a bridged mod isn't a bridge");
+    }
+
     @Covers(value = Bridge.class, method = "isCoveredByCore")
     @Test
     void coreCoversMinecraftTheLoaderAndHadron() {

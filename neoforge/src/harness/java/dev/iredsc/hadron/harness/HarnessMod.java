@@ -12,12 +12,9 @@ import net.neoforged.fml.common.Mod;
 @Mod(HarnessMod.MOD_ID)
 public final class HarnessMod {
     public static final String MOD_ID = "hadron_test";
-    /**
-     * The harness's claim on {@code hadron_test_target}, for self-tests to fire through. They can't compile against
-     * the harness, so they read it by reflection.
-     */
+    /** The harness's claim on {@code hadron_test_target}, which tests fire through as a bridge does. */
     @StaticState(reason = "claimed once in the harness mod's constructor; mods never unload")
-    public static volatile dev.iredsc.hadron.api.bridge.@org.jspecify.annotations.Nullable Bridge bridge;
+    static volatile dev.iredsc.hadron.api.bridge.@org.jspecify.annotations.Nullable Bridge bridge;
 
     public HarnessMod(IEventBus modBus) {
         TestRunner.register(modBus);

@@ -5,22 +5,31 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "AbstractHorseMixin",
+    "ArmorStandMixin",
     "BlockAttachedEntityMixin",
+    "BoatLeashMixin",
     "BucketableMixin",
     "DeathMessageMixin",
+    "EntityLeashMixin",
     "EntityMixin",
+    "EntityRemovedLeashMixin",
     "EntityTypeMixin",
     "EntityVelocityMixin",
     "FishingHookMixin",
     "HangingEntityItemMixin",
     "KillCommandMixin",
+    "LeashFenceKnotEntityMixin",
+    "LeashableMixin",
     "LivingEntityMixin",
     "MobMixin",
+    "PlayerInteractMixin",
     "ProjectileMixin",
     "ServerLevelMixin",
+    "ServerPlayerGameModeClickMixin",
     "ServerPlayerGameModeMixin",
     "ServerPlayerMixin",
-    "TamableAnimalMixin"
+    "TamableAnimalMixin",
+    "TraderLlamaLeashMixin"
   ],
   "injectors": {
     "defaultRequire": 1

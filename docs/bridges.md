@@ -8,30 +8,6 @@ A bridge makes one mod speak Hadron's events. No bridge exists yet; this is the 
 
 A bridge is done when it passes the acceptance test: run the mod's machines, weapons, tools, vehicles, storage and rituals inside a protected region, and a protection plugin denies what the region forbids while a logging plugin records the right player for each change, and an anti-dupe check finds every item and resource conserved. Neither plugin knows the mod exists. Cancelled actions must leave nothing behind: no consumed cost, no half-moved block entity, no fluid handed over while the block stays.
 
-### The acceptance kit
-
-A bridge runs the test as an in-game suite with its mod and itself in the test server (`hadronTest.mods`). `t.acceptance(box)` gives the protection plugin and the logger over one box, knowing no mod, and records the box to compare against:
-
-```java
-Acceptance area = t.acceptance(BoundingBox.fromCorners(t.pos(-3, 0, -3), t.pos(3, 4, 3)));
-// bob's digital miner, working in the box; nobody is trusted yet
-t.tick(200);
-area.assertUnchanged("bob's miner where he isn't trusted");
-
-area.trust(bob).mark();
-t.tick(200);
-area.assertEveryChangeSeen("bob's miner where he is trusted");
-area.assertActingFor(bob, "bob's miner where he is trusted");
-```
-
-- **`assertUnchanged`**, for a refused step: no block, block entity, block inventory (on any face), entity, container entity's slots or living entity's health in the box changed, no entity born elsewhere this step arrived, and no test player's inventory or health changed either. Each change is named with what explains it: a cancelled event whose cancel left it behind, an event that went through, or no event at all (an interception gap).
-- **`assertEveryChangeSeen`**, for an allowed step: every block and block inventory that changed was covered by an event that went through, and so was every entity that appeared, left or changed health. A block event covers its block's inventory only when the block itself changed. Dropped items, experience orbs and falling blocks are exempt, because their contents come from a change reported elsewhere. Explosions count for the blocks they list, and a test player standing in the box counts like any entity. A step where nothing changed fails, since it proves nothing.
-- **`assertActingFor`**: every event in the box acts for that player, except the server's and nature's, and at least one does. `Unknown` and ownerless actors are named as attribution gaps.
-
-Protection denies every cancellable block, inventory, resource, explosion, item or entity event in the box unless the server or a trusted player is behind it. An entity's own motion and attention (moving, teleporting, velocity, knockback, targeting, air) is neither protected nor logged. The box is watched, so a change with nobody behind it fires as `Unknown`. `AcceptanceKitTests` in the self-tests checks that each assertion fails, naming the right gap, when a change skips every chokepoint, a cancel is ignored, or nobody is behind an action.
-
-Not checked yet: whether items and resources are conserved in an allowed step (an anti-dupe ledger, which would also catch a dropped item made from nothing), a block entity's data besides its inventory, and the energy, fluids and other resources a machine holds. Both wait for the design of running resource flows ([design](design.md#open-designs)), which the Mekanism bridge will shape. Set up the box and join every player before calling `t.acceptance`: once the box is watched, the test's own writes have nobody behind them and are refused as `Unknown`, and a player who joins after a `mark` has nothing to be compared against, so the assertions refuse that step.
-
 ## Core intercepts, bridges translate
 
 Per-mod events don't scale: plugins would have to learn every mod, and a protection plugin would only protect against the mods its author had heard of. So the work splits:
@@ -146,7 +122,7 @@ Two plugin integrations come with them:
 1. ~~The actor stack and core's events at their chokepoints~~, with the chokepoint benchmark ([above](#the-chokepoint-cost)).
 2. ~~Areas of interest~~: done for block writes (`Areas.watch`, see "The chokepoint cost"). Entity moves in an area (`EntityMoveEvent`) come with the regions plugin.
 3. ~~Claiming a mod~~ ([above](#claiming-a-mod)) and `bridge-depend:`.
-4. ~~The acceptance test as a kit any bridge can run~~ ([above](#the-acceptance-kit)), without the conservation ledger, which comes with the Mekanism bridge.
+4. The acceptance test as a kit any bridge can run.
 5. The Mekanism bridge, then AE2 and Superb Warfare, then this document rewritten from what they taught.
 6. The coverage report and the official bridge list, once there is a bridge to list.
 7. The grouped list of proposed leaves ([promotion](#promotion-when-bridges-events-become-core)), once the pilots give it something to group.

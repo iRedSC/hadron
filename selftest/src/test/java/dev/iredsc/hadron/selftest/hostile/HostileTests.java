@@ -261,11 +261,23 @@ public final class HostileTests {
     @HadronTest(timeout = 1200)
     void aMissingBridgeSaysWhichToAdd(TestContext t) throws Exception {
         try (Hostile h = Hostile.open(t)) {
-            // hadron_test is installed, and nothing bridges it.
+            // The test server has no third-party mod without a bridge, so this names one that isn't installed; the
+            // message for an installed mod with no bridge is BridgeDependTest's.
+            h.hostile(JAR, Hostile.HOSTILE, HostilePlugin.class, "bridge-depend: [selftest_absent_mod]\n");
+            String line = h.awaitAnnounced(200, Hostile.HOSTILE + " didn't enable");
+            h.assertSays(line, "uses Hadron's bridge for the selftest_absent_mod mod",
+                    "add selftest_absent_mod and its Hadron bridge to mods/");
+            h.assertHealthy();
+        }
+    }
+
+    @HadronTest(timeout = 1200)
+    void aBridgeDependOnABridgesOwnIdNamesTheModItBridges(TestContext t) throws Exception {
+        try (Hostile h = Hostile.open(t)) {
+            // hadron_test is the harness, which bridges hadron_test_target.
             h.hostile(JAR, Hostile.HOSTILE, HostilePlugin.class, "bridge-depend: [hadron_test]\n");
             String line = h.awaitAnnounced(200, Hostile.HOSTILE + " didn't enable");
-            h.assertSays(line, "uses Hadron's bridge for hadron_test, which isn't installed",
-                    "add the Hadron bridge for hadron_test to mods/");
+            h.assertSays(line, "hadron_test is a bridge itself", "bridge-depend: [hadron_test_target]");
             h.assertHealthy();
         }
     }

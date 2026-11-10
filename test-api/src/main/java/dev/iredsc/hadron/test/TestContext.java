@@ -83,10 +83,11 @@ public interface TestContext {
     void registerEvents(Listener listener);
 
     /**
-     * Protects, logs and records the box in this test's world, both corners included, for the bridge acceptance test
-     * ({@link Acceptance}). It starts trusting nobody, recorded as it is now.
+     * A bridge's claim, held by the test harness on its own empty mod {@code hadron_test_target}, for firing events
+     * as a bridge does: {@code t.bridge().fire(new EntityDataChangeEvent(...))}, with data kinds in
+     * {@code hadron_test_target}'s namespace. Lets a plugin's tests check how it handles a bridge's events.
      */
-    Acceptance acceptance(net.minecraft.world.level.levelgen.structure.BoundingBox box);
+    dev.iredsc.hadron.api.bridge.Bridge bridge();
 
     /** Runs {@code ticks} server ticks: worlds, entities, scheduled tasks, plugins' timers. */
     void tick(int ticks);

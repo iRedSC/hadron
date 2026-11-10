@@ -56,8 +56,9 @@ public final class Bridge {
      * generators and tools are optional addons, each its own mod), for the bridge mod being constructed now. Call it
      * once, from your mod's constructor. {@link #mods()} says which were claimed.
      *
-     * @throws IllegalStateException when called outside your mod's constructor, before Hadron loads, a second time
-     *         from one bridge, or for a mod another bridge already claimed.
+     * @throws IllegalStateException when called once mods have loaded (anywhere but your mod's constructor or its
+     *         loading events), before Hadron loads, a second time from one bridge, or for a mod another bridge
+     *         already claimed.
      * @throws IllegalArgumentException when {@code modId} isn't installed, or any id isn't a mod id a bridge can claim.
      */
     public static Bridge claim(String modId, String... alsoIfInstalled) {
@@ -127,6 +128,17 @@ public final class Bridge {
             return claimant + " claims itself: claim the mod your bridge translates, such as mekanism";
         }
         return null;
+    }
+
+    /**
+     * The mods the bridge with this mod id claimed, or empty when it isn't a bridge: for telling a plugin that names
+     * a bridge's own id ({@code hadron_mekanism}) which id to name instead ({@code mekanism}).
+     */
+    public static List<String> modsBridgedBy(String bridgeModId) {
+        synchronized (CLAIMS) {
+            for (Bridge b : CLAIMS.values()) if (b.owner.equals(bridgeModId)) return b.mods;
+            return List.of();
+        }
     }
 
     /** Whether core covers this mod id itself (Minecraft, the loader, Hadron), so no bridge for it can exist. */

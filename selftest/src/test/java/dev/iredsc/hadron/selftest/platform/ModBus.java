@@ -13,11 +13,12 @@ import net.minecraft.world.level.Level;
  * mod adds to the server. Through reflection, since selftest compiles against vanilla Minecraft only; these are the
  * same public NeoForge methods a mod calls.
  */
-final class ModBus {
+public final class ModBus {
     private ModBus() {}
 
     /** Adds a mod's listener for a NeoForge event class (by name); closing removes it. */
-    static AutoCloseable listen(String eventClass, Consumer<Object> listener) throws ReflectiveOperationException {
+    public static AutoCloseable listen(String eventClass, Consumer<Object> listener)
+            throws ReflectiveOperationException {
         ClassLoader loader = ModBus.class.getClassLoader();
         Class<?> neoForge = Class.forName("net.neoforged.neoforge.common.NeoForge", true, loader);
         Class<?> busType = Class.forName("net.neoforged.bus.api.IEventBus", true, loader);

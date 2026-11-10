@@ -45,8 +45,8 @@ public final class BridgeClaimTests {
 
     @HadronTest
     @Covers(value = Bridge.class, method = "fire")
-    void aBridgeFiresDataKindsOnlyInItsOwnModsNamespace(TestContext t) throws ReflectiveOperationException {
-        Bridge bridge = (Bridge) Class.forName("dev.iredsc.hadron.harness.HarnessMod").getField("bridge").get(null);
+    void aBridgeFiresDataKindsOnlyInItsOwnModsNamespace(TestContext t) {
+        Bridge bridge = t.bridge();
         List<EntityDataChangeEvent> heard = new ArrayList<>();
         t.registerEvents(new Listener() {
             @EventHandler
@@ -75,5 +75,24 @@ public final class BridgeClaimTests {
                 ResourceLocation.fromNamespaceAndPath("hadron_test_target", "job"), new CompoundTag(), after, actor);
         t.assertTrue(bridge.fire(own) == own, "fire returns the event it fired");
         t.assertEquals(List.of(own), heard, "the events listeners heard");
+    }
+
+    @HadronTest
+    void callEventRefusesWhatOnlyABridgeMayFire(TestContext t) {
+        Pig pig = EntityType.PIG.create(t.level());
+        pig.moveTo(t.pos(2, 0, 0).getX() + 0.5, t.pos(2, 0, 0).getY(), t.pos(2, 0, 0).getZ() + 0.5);
+        t.level().addFreshEntity(pig);
+        CompoundTag after = new CompoundTag();
+        after.putInt("level", 2);
+        EntityDataChangeEvent event = new EntityDataChangeEvent(pig,
+                ResourceLocation.fromNamespaceAndPath("occultism", "familiar"), new CompoundTag(), after,
+                new Actor.EntityActor(pig, Attribution.none()));
+        String refused = "no refusal: it fired";
+        try {
+            t.plugin().getServer().getPluginManager().callEvent(event);
+        } catch (IllegalArgumentException e) {
+            refused = e.getMessage();
+        }
+        t.assertTrue(refused.contains("fire it with BRIDGE.fire(event)"), refused);
     }
 }

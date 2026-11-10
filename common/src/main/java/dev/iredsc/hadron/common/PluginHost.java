@@ -7,6 +7,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import java.util.function.Supplier;
 import dev.iredsc.hadron.api.bridge.Bridge;
+import dev.iredsc.hadron.api.event.entity.EntityDataChangeEvent;
 import dev.iredsc.hadron.api.Default;
 import dev.iredsc.hadron.api.Node;
 import dev.iredsc.hadron.api.Permissions;
@@ -816,6 +817,11 @@ public final class PluginHost implements PluginManager {
                 return "lists " + mod + " under bridge-depend, but core covers " + mod + " itself and no bridge for "
                         + "it exists: remove " + mod + " from bridge-depend";
             }
+            List<String> bridged = Bridge.modsBridgedBy(mod);
+            if (!bridged.isEmpty()) {
+                return "lists " + mod + " under bridge-depend, but " + mod + " is a bridge itself: list the mod it "
+                        + "bridges instead, bridge-depend: [" + bridged.get(0) + "]";
+            }
             String why = missingBridge(mod, platform.isModLoaded(mod), Bridge.isBridged(mod));
             if (why != null) return why;
         }
@@ -1194,6 +1200,11 @@ public final class PluginHost implements PluginManager {
 
     @Override
     public boolean callEvent(Event event) {
+        if (event instanceof EntityDataChangeEvent) {
+            throw new IllegalArgumentException("EntityDataChangeEvent is fired by a mod's bridge, through its claim, "
+                    + "which checks the kind is that mod's: fire it with BRIDGE.fire(event), where BRIDGE is what "
+                    + "Bridge.claim returned in your bridge's constructor");
+        }
         events.post(event);
         return event instanceof Cancellable c && c.isCancelled();
     }
