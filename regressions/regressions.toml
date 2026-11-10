@@ -546,3 +546,16 @@ guards = [
     { test = "HostileTests.aPluginCanNotReplaceOrClearWhatTheHostInstalled", tier = "in-game" },
 ]
 note = "Hand-made: keeps HostKey and every key parameter (the guards call them) and only empties HostKey.require, so a missing, null or forged key passes."
+
+[[regression]]
+id = "plugin-links-host-internals"
+bug = "A plugin's class loader resolved Hadron's common and port classes from the mod's loader, so a plugin could call their public statics (PluginHost.onPluginDisable, Hooks.host(), mixin hooks)."
+fix = "755f97a"
+paths = [
+    "common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java",
+]
+guards = [
+    { test = "PluginBoundaryTest.aPluginCanNotLinkHadronsInsidesAndIsToldToUseTheApi", tier = "fast" },
+    { test = "HostileTests.aPluginCanNotReplaceOrClearWhatTheHostInstalled", tier = "in-game" },
+]
+note = "Hand-made: keeps HOST_PACKAGES (the bench's comment names it) and only stops loadClass from using it, so the parent is asked for every class again."
