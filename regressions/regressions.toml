@@ -493,6 +493,7 @@ paths = [
 guards = [
     { test = "FireAndTntTests.cancelledTntLightingLeavesTheTntUnprimedAndTheFlintUnworn", tier = "in-game" },
 ]
+note = "Since refused-tnt-lighting-counts the refusal answers FAIL, on which the click mixin ends the click. The patch answers SKIP_DEFAULT_BLOCK_INTERACTION instead, which hands the click on to the flint and steel, as before the fix."
 
 [[regression]]
 id = "dispenser-tnt-leaves-both"
