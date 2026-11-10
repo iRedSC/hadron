@@ -758,3 +758,15 @@ guards = [
     { test = "EventBusTest.everyHandlerRunsInsideThePortsDispatchScopeAndItEndsEvenWhenOneThrows", tier = "fast" },
 ]
 note = "The patch takes the scope out of both dispatches (EventBus.post and NeoForge's place event in HeldEffects.decidingPlace); PluginHost.aroundDispatch, HandlerScope and the install in HadronMod stay, unused."
+
+[[regression]]
+id = "acceptance-vibration-any-world"
+bug = "The acceptance kit matched a vibration to its box by coordinates alone, so a test player's vibration at the same coordinates in another world failed assertUnchanged for an unchanged box."
+fix = "6d51e2b"
+paths = [
+    "neoforge/src/harness/java/dev/iredsc/hadron/harness/TestAcceptance.java",
+]
+guards = [
+    { test = "AcceptanceKitTests.aPlayersVibrationAtTheSameCoordinatesInAnotherWorldIsNoChange", tier = "in-game" },
+]
+note = "The patch drops only the world comparison; SideEffects.GameEventEmitted keeps its level, which the guard doesn't read."
