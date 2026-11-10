@@ -10,16 +10,24 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Function;
+import java.util.function.Supplier;
 import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.advancements.CriterionTrigger;
+import net.minecraft.core.BlockPos;
 import net.minecraft.core.Holder;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.sounds.SoundEvent;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stat;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.gameevent.GameEvent;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.StatAwardEvent;
@@ -29,8 +37,9 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * One {@link SideEffects} watch of one test. NeoForge's events report statistics, game events and experience; the
- * harness's mixins report advancement triggers ({@code SimpleCriterionTriggerMixin}) and food exhaustion
- * ({@code PlayerExhaustionMixin}). Every hook returns at once while no watch is running.
+ * harness's mixins report advancement triggers ({@code SimpleCriterionTriggerMixin}), food exhaustion
+ * ({@code PlayerExhaustionMixin}) and sounds, as the server sends them ({@code ServerLevelSoundMixin},
+ * {@code ServerPlayerNotifySoundMixin}). Every hook returns at once while no watch is running.
  */
 public final class TestSideEffects implements SideEffects {
     @StaticState(reason = "the running test's watches; TestWorld.close stops each at the test's end")
@@ -46,7 +55,8 @@ public final class TestSideEffects implements SideEffects {
     /** Frames of the bookkeeping between an action and the hook, skipped so {@code from} starts at the action. */
     private static final Set<String> BOOKKEEPING_METHODS = Set.of("awardStat", "resetStat", "gameEvent",
             "giveExperiencePoints", "giveExperienceLevels", "onEnchantmentPerformed", "causeFoodExhaustion",
-            "awardRecipes", "awardRecipesByKey");
+            "awardRecipes", "awardRecipesByKey", "playSound", "playSeededSound", "levelEvent", "globalLevelEvent",
+            "playNotifySound");
     private static final List<String> BOOKKEEPING_PACKAGES = List.of("dev.iredsc.hadron.harness.",
             "dev.iredsc.hadron.neoforge.HeldEffects",
             "net.minecraft.advancements.", "net.minecraft.server.PlayerAdvancements", "net.minecraft.stats.", "net.minecraft.world.level.gameevent.",
@@ -70,6 +80,31 @@ public final class TestSideEffects implements SideEffects {
         /** Motion: a wandering mob's, recorded only when a test player's own. */
         private static final Set<Holder<GameEvent>> MOTION = Set.of(GameEvent.STEP, GameEvent.SWIM, GameEvent.FLAP,
                 GameEvent.HIT_GROUND, GameEvent.SPLASH, GameEvent.ELYTRA_GLIDE);
+    }
+
+    /**
+     * Sounds: what a mob's idle life makes (its ambient sound, steps, swimming, landing, a shoulder parrot's call),
+     * named by the method that plays it, and the numbered events that play no sound, or that dripstone makes alone.
+     */
+    private static final class AmbientSounds {
+        private static final int STACK_DEPTH = 24;
+
+        private static final Set<String> IDLE_METHODS = Set.of("playAmbientSound", "playStepSound",
+                "playMuffledStepSound", "playCombinationStepSounds", "playAmethystStepSound", "playSwimSound",
+                "waterSwimSound", "doWaterSplashEffect", "playBlockFallSound", "playShoulderEntityAmbientSound");
+
+        /**
+         * Numbered events whose client effect plays no sound (LevelRenderer.levelEvent: particles only), and the drip
+         * of dripstone into a cauldron, which a random tick makes.
+         */
+        /**
+         * The sound of a hit that dealt no damage, which is what a refused hit is: vanilla plays it for every such hit,
+         * as Bukkit does for a cancelled one, so it tells the players near that nothing happened.
+         */
+        private static final SoundEvent NO_DAMAGE = SoundEvents.PLAYER_ATTACK_NODAMAGE;
+
+        private static final Set<Integer> SILENT_OR_AMBIENT_EVENTS = Set.of(1046, 1047, 1504, 2000, 2003, 2004, 2008,
+                2009, 2010, 2011, 2012, 2013, 3002, 3004, 3005, 3009, 3011, 3017);
     }
 
     private final TestWorld world;
@@ -159,6 +194,54 @@ public final class TestSideEffects implements SideEffects {
             recordUnlessDropped(player, p -> new CriterionTriggered(p, trigger, from()));
             fire.run();
         }
+    }
+
+    /**
+     * From {@code ServerLevelSoundMixin}, as the server sends a sound at a position, or on {@code following} if it
+     * moves with an entity, to everyone near but {@code except}.
+     */
+    public static void soundSent(ServerLevel level, @Nullable Player except, Holder<SoundEvent> sound,
+            SoundSource source, Vec3 pos, @Nullable Entity following) {
+        if (ACTIVE.isEmpty() || ambientDepth > 0 || sound.value() == AmbientSounds.NO_DAMAGE) return;
+        Heard heard = except == null ? Heard.ALL_NEAR : Heard.ALL_NEAR_BUT_PLAYER;
+        sent(level, except != null ? except : following, () -> new SoundPlayed(sound, source, level, pos,
+                Optional.ofNullable(following), heard, Optional.ofNullable(except), from()));
+    }
+
+    /** From {@code ServerLevelSoundMixin}, as the server sends one of vanilla's numbered events. */
+    public static void levelEventSent(ServerLevel level, @Nullable Player except, int type, BlockPos pos, int data,
+            boolean global) {
+        if (ACTIVE.isEmpty() || ambientDepth > 0 || AmbientSounds.SILENT_OR_AMBIENT_EVENTS.contains(type)) return;
+        Heard heard = global ? Heard.EVERYONE : except == null ? Heard.ALL_NEAR : Heard.ALL_NEAR_BUT_PLAYER;
+        sent(level, except, () -> new LevelEventPlayed(type, level, pos, data, heard, Optional.ofNullable(except),
+                from()));
+    }
+
+    /** From {@code ServerPlayerNotifySoundMixin}, as the server sends a sound to one player alone. */
+    public static void notifySoundSent(ServerPlayer to, SoundEvent sound, SoundSource source) {
+        if (ACTIVE.isEmpty() || ambientDepth > 0) return;
+        sent(to.serverLevel(), to, () -> new SoundPlayed(BuiltInRegistries.SOUND_EVENT.wrapAsHolder(sound), source,
+                to.serverLevel(), to.position(), Optional.empty(), Heard.PLAYER_ONLY, Optional.of(to), from()));
+    }
+
+    /**
+     * Records a sound for each watch it concerns: one from the watch's world, or made by or for one of its players
+     * anywhere. A mob's idle sound isn't one, unless a test player makes it.
+     */
+    private static void sent(ServerLevel level, @Nullable Entity who, Supplier<Effect> effect) {
+        @Nullable Effect read = null;
+        for (TestSideEffects watch : ACTIVE) {
+            boolean byPlayer = who != null && watch.world.testPlayer(who) != null;
+            if (!byPlayer && (level != watch.world.level() || idle())) continue;
+            if (read == null) read = effect.get();
+            watch.seen.add(read);
+        }
+    }
+
+    /** Whether the sound being sent comes from a mob's idle life ({@link AmbientSounds#IDLE_METHODS}). */
+    private static boolean idle() {
+        return StackWalker.getInstance().walk(frames -> frames.limit(AmbientSounds.STACK_DEPTH)
+                .anyMatch(f -> AmbientSounds.IDLE_METHODS.contains(f.getMethodName())));
     }
 
     /** From {@code PlayerExhaustionMixin}, as a player is made hungrier. */

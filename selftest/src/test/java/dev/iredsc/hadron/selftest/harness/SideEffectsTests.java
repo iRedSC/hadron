@@ -7,7 +7,10 @@ import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import net.minecraft.advancements.CriteriaTriggers;
+import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.sounds.SoundEvents;
+import net.minecraft.sounds.SoundSource;
 import net.minecraft.stats.Stats;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
@@ -15,6 +18,7 @@ import net.minecraft.world.entity.animal.Cow;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.LevelEvent;
 import net.minecraft.world.level.gameevent.GameEvent;
 
 /**
@@ -47,8 +51,42 @@ public final class SideEffectsTests {
         SideEffects effects = t.watchSideEffects();
         t.tick(45); // past the 20-tick location trigger twice, with every tick's stats and the cow's AI running
         cow.gameEvent(GameEvent.STEP); // a mob's own footsteps are motion, not an action's
+        cow.playAmbientSound(); // nor is its moo, which its tick plays now and then
+        // nor the sound of a hit that did nothing, which is what a refused hit is
+        t.level().playSound(null, t.pos(1, 0, 0), SoundEvents.PLAYER_ATTACK_NODAMAGE, SoundSource.PLAYERS, 1.0F, 1.0F);
+        t.level().levelEvent(LevelEvent.PARTICLES_SHOOT_SMOKE, t.pos(1, 0, 0), 0); // a silent numbered event
         effects.assertNone("45 idle ticks beside a cow, shears in hand");
         t.assertEquals(0, effects.seen().size(), "side effects seen");
+    }
+
+    @HadronTest
+    void aSoundIsNamedWithWhereAndWhoWasSentIt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        BlockPos at = t.pos(2, 0, 0);
+        t.level().playSound(null, at, SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1.0F, 1.0F);
+        t.level().playSound(alice.player(), at, SoundEvents.WOODEN_DOOR_OPEN, SoundSource.BLOCKS, 1.0F, 1.0F);
+        alice.player().playNotifySound(SoundEvents.CHEST_LOCKED, SoundSource.BLOCKS, 1.0F, 1.0F);
+        t.level().levelEvent(LevelEvent.SOUND_DISPENSER_DISPENSE, at, 0);
+        String where = at.getX() + " " + at.getY() + " " + at.getZ() + " in " + t.level().dimension().location();
+        assertNames(t, failure(effects, "planted sounds"), "left 4:",
+                "sound minecraft:block.lever.click (block) at " + where + ", sent to all near",
+                "sound minecraft:block.wooden_door.open (block) at " + where
+                        + ", sent to all near but alice, whose client plays it itself",
+                "sound minecraft:block.chest.locked (block) at ", "sent to alice only",
+                "level event 1000 SOUND_DISPENSER_DISPENSE at " + where + ", sent to all near",
+                "from SideEffectsTests.aSoundIsNamedWithWhereAndWhoWasSentIt(SideEffectsTests.java:");
+        SideEffects.SoundPlayed click = effects.seen(SideEffects.SoundPlayed.class).get(0);
+        t.assertEquals(SoundEvents.LEVER_CLICK, click.sound().value(), "the first sound recorded");
+        t.assertEquals(t.level(), click.level(), "the click's world");
+    }
+
+    @HadronTest
+    void aSoundNobodyIsNearIsStillRecorded(TestContext t) {
+        t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        t.level().playSound(null, t.pos(0, 0, 200), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1.0F, 1.0F);
+        assertNames(t, failure(effects, "a sound far from everyone"), "sound minecraft:block.lever.click");
     }
 
     @HadronTest

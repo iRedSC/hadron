@@ -7,6 +7,8 @@
     "NetworkRegistryAccessor",
     "PlayerExhaustionMixin",
     "ServerLevelEntitiesAccessor",
+    "ServerLevelSoundMixin",
+    "ServerPlayerNotifySoundMixin",
     "SimpleCriterionTriggerMixin"
   ],
   "injectors": {
