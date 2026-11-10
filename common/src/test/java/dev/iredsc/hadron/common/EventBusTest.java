@@ -505,6 +505,30 @@ class EventBusTest {
     }
 
     @Test
+    @Nondeterministic(reason = "waits on another thread's handler with latches; every margin is seconds")
+    void anUnregisteredListenerStillRunningIsKeptUntilItFinishes() throws Exception {
+        CountDownLatch inside = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        Listener slow = new Listener() {
+            @EventHandler
+            void slow(Ping p) throws InterruptedException {
+                inside.countDown();
+                release.await(10, TimeUnit.SECONDS);
+            }
+        };
+        List<EventBus.Subscription> listed = new ArrayList<>(subscribe(slow));
+        Thread poster = new Thread(() -> bus.post(new Ping()));
+        poster.start();
+        assertTrue(inside.await(10, TimeUnit.SECONDS));
+        PluginHost.unregister(listed, slow);
+        assertEquals(1, listed.size(), "a handler still running stays listed, so a disable still waits for it");
+        release.countDown();
+        poster.join();
+        PluginHost.unregister(listed, new Listener() {});
+        assertEquals(0, listed.size(), "once it finished, the next unregister lets it go");
+    }
+
+    @Test
     @Nondeterministic(reason = "Subscription.awaitIdle takes a System.nanoTime deadline, so testing it reads that clock; every margin is seconds")
     void awaitIdleReturnsAtOnceWhenNothingIsCalling() {
         EventBus.Subscription sub = subscribe(new Listener() {

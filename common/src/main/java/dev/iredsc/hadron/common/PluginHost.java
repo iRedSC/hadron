@@ -989,6 +989,7 @@ public final class PluginHost implements PluginManager {
     }
 
     private static void undoAll(State.Running running, String name) {
+        for (EventBus.Subscription s : running.subscriptions) s.remove();
         while (!running.undo.isEmpty()) {
             try {
                 running.undo.pop().run();
@@ -1164,15 +1165,9 @@ public final class PluginHost implements PluginManager {
     @Override
     public void registerEvents(Listener listener, JavaPlugin plugin) {
         State.Enabled running = running(plugin, "register listeners");
-        for (final EventBus.Subscription s : events.subscribe(listener, plugin.getName(), plugin.getLogger())) {
-            running.subscriptions.add(s);
-            running.undo.push(new Runnable() {
-                @Override
-                public void run() {
-                    s.remove();
-                }
-            });
-        }
+        // Kept only in the plugin's list, which unregistering and disabling empty: an undo entry per subscription
+        // would hold every listener the plugin ever unregistered, and what it holds, until the plugin disabled.
+        running.subscriptions.addAll(events.subscribe(listener, plugin.getName(), plugin.getLogger()));
     }
 
     @Override
@@ -1180,10 +1175,18 @@ public final class PluginHost implements PluginManager {
         requireServerThread();
         for (Entry e : entries.values()) {
             if (!(e.state instanceof State.Enabled)) continue;
-            for (EventBus.Subscription s : ((State.Enabled) e.state).subscriptions) {
-                if (s.listener == listener) s.remove();
-            }
+            unregister(((State.Enabled) e.state).subscriptions, listener);
         }
+    }
+
+    /**
+     * Removes the listener's subscriptions, and forgets those nothing needs any more: one whose handler is still
+     * running on another thread stays listed, so disabling the plugin still waits for it before onDisable, and goes
+     * at the next unregister or the disable.
+     */
+    static void unregister(List<EventBus.Subscription> subscriptions, Listener listener) {
+        for (EventBus.Subscription s : subscriptions) if (s.listener == listener) s.remove();
+        subscriptions.removeIf(EventBus.Subscription::finished);
     }
 
     @Override
