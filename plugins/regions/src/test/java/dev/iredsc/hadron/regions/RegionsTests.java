@@ -19,7 +19,6 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
-import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.animal.horse.Horse;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ClickType;
@@ -575,8 +574,8 @@ public final class RegionsTests {
         alice.command("rg flag poison-safe pvp deny");
         TestPlayer bob = t.player("bob");
         TestPlayer carol = t.player("carol");
-        EntityPotionEffectEvent poison = new EntityPotionEffectEvent(carol.player(), MobEffects.POISON, null,
-                new MobEffectInstance(MobEffects.POISON, 100), EntityPotionEffectEvent.Action.ADDED,
+        EntityPotionEffectEvent poison = new EntityPotionEffectEvent(carol.player(),
+                new EntityPotionEffectEvent.Change.Added(new MobEffectInstance(MobEffects.POISON, 100)),
                 new Actor.Player(bob.player()));
         t.plugin().getServer().getPluginManager().callEvent(poison);
         t.assertTrue(poison.isCancelled(), "bob's poison should not take hold on a player in a pvp deny region");
@@ -614,14 +613,19 @@ public final class RegionsTests {
     }
 
     @HadronTest
-    void aMenuRegionsNeverSawOpenClosesOnTheFirstClick(TestContext t) {
+    void aChestMenuRegionsNeverSawOpenStillCantBeTakenFrom(TestContext t) {
+        BlockPos chest = t.pos(3, 0, 0);
+        t.setBlock(chest, Blocks.CHEST);
+        ChestBlockEntity box = (ChestBlockEntity) t.level().getBlockEntity(chest);
+        box.setItem(0, new ItemStack(Items.DIAMOND, 8));
+        define(t, admin(t), "unseen-menu", t.pos(2, 0, -1), t.pos(4, 2, 1));
         TestPlayer bob = t.player("bob");
         // As if opened before Regions was listening, after a reload: no open event.
         ServerPlayer viewer = bob.player();
-        viewer.containerMenu = ChestMenu.threeRows(99, viewer.getInventory(), new SimpleContainer(27));
+        viewer.containerMenu = ChestMenu.threeRows(99, viewer.getInventory(), box);
         bob.clickSlot(0);
-        t.tick(2);
-        t.assertTrue(viewer.containerMenu == viewer.inventoryMenu, "the untracked menu should have closed");
+        t.tick();
+        t.assertEquals(8, box.getItem(0).getCount(), "the diamonds left in the chest");
     }
 
     @HadronTest

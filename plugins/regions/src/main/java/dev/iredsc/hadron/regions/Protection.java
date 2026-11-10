@@ -6,6 +6,7 @@ import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.event.Listener;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockDropItemEvent;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
@@ -17,21 +18,12 @@ import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryMoveItemEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
-import dev.iredsc.hadron.api.event.player.PlayerQuitEvent;
 import dev.iredsc.hadron.api.event.block.BlockIgniteEvent;
 import dev.iredsc.hadron.api.event.block.BlockBurnEvent;
-import net.minecraft.world.inventory.AbstractContainerMenu;
-import java.util.HashMap;
-import java.util.WeakHashMap;
 import net.minecraft.world.effect.MobEffectCategory;
-import java.util.Map;
 import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
-import dev.iredsc.hadron.api.event.inventory.InventoryCloseEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.entity.EntityPotionEffectEvent;
-import net.minecraft.world.level.block.state.properties.ChestType;
-import net.minecraft.world.level.block.state.BlockState;
-import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.entity.Mob;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
@@ -75,14 +67,6 @@ final class Protection implements Listener {
     private final RegionStore store;
     private final Feedback feedback;
     private final Bypass bypass;
-    /**
-     * What each open menu shows, for clicks in it. Keyed by the menu, so a menu opened before the last one's close
-     * arrives isn't forgotten; weak, so a menu whose close never came isn't kept.
-     */
-    private final Map<AbstractContainerMenu, InventoryHolder> openMenus = new WeakHashMap<>();
-    /** A horse's inventory, opened before its menu exists: the menu it builds is the next untracked one clicked. */
-    private final Map<UUID, InventoryHolder> menuless = new HashMap<>();
-
     Protection(JavaPlugin plugin, RegionStore store, Feedback feedback, Bypass bypass) {
         this.plugin = plugin;
         this.store = store;
@@ -377,66 +361,37 @@ final class Protection implements Listener {
     /**
      * Inventories in regions: a menu opened or clicked in, items moved in or out by a hopper, a pipe, a machine.
      * Someone behind it (a player, a machine's owner) needs {@code use} wherever each inventory stands, even after
-     * the menu is open. The world on its own (a hopper nobody owns) is held to {@link Rules#refusingCrossing} both
-     * ways, as a piston is. An inventory with no place in a world (linked storage, one nothing identified) stands
-     * outside every region. A player's own inventory is never a region's.
+     * the menu is open: a click is checked against what the menu is open on as well as the slot clicked. The world on
+     * its own (a hopper nobody owns) is held to {@link Rules#refusingCrossing} both ways, as a piston is. An inventory
+     * with no place in a world (linked storage, a plugin's own menu) stands outside every region. A player's own
+     * inventory is never a region's: it goes where they go.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void inventory(InventoryEvent e) {
         if (!(e instanceof Cancellable c) || trusted(e)) return;
         Set<InventoryHolder> holders = new LinkedHashSet<>();
-        holders.add(e.getHolder().place());
+        holders.add(e.getHolder());
         if (e instanceof InventoryChangeEvent change) {
-            for (InventoryChangeEvent.Change ch : change.getChanges()) holders.add(ch.holder().place());
+            for (InventoryChangeEvent.Change ch : change.getChanges()) holders.add(ch.holder());
         }
         if (e instanceof InventoryMoveItemEvent move) {
-            holders.add(move.getSource().place());
-            holders.add(move.getDestination().place());
+            holders.add(move.getSource());
+            holders.add(move.getDestination());
         }
         // A click names the slot clicked, which may be the player's own, yet moves items to and from the whole menu.
-        if (e instanceof InventoryClickEvent click && click.getMenu() != click.getViewer().inventoryMenu) {
-            InventoryHolder menu = openMenus.get(click.getMenu());
-            if (menu == null) {
-                menu = menuless.remove(click.getViewer().getUUID());
-                if (menu != null) openMenus.put(click.getMenu(), menu);
-            }
-            if (menu == null) {
-                // Opened before Regions was listening (a reload): close it, so opening it again asks.
-                c.setCancelled(true);
-                ServerPlayer viewer = click.getViewer();
-                plugin.getServer().getScheduler().runTask(plugin, viewer::closeContainer);
-                return;
-            }
-            holders.add(menu);
-        }
+        if (e instanceof InventoryClickEvent click) holders.add(click.getMenuHolder());
+        if (e instanceof InventoryOpenEvent open) holders.add(open.getMenuHolder());
         List<List<Region>> places = new ArrayList<>();
-        for (InventoryHolder holder : holders) places.addAll(regionsAt(holder));
+        for (InventoryHolder holder : holders) {
+            if (holder instanceof InventoryHolder.Entity en && en.entity() instanceof Player) continue;
+            for (Place place : Place.of(holder)) places.add(regionsAt(place, e));
+        }
         Optional<Region> no = worldOnItsOwn(e.getActor()) ? crossing(places) : using(places, e.getActor().actingFor());
         if (no.isEmpty()) return;
         c.setCancelled(true);
-        if (e.getActor() instanceof Actor.Player a && e.getHolder().place() instanceof InventoryHolder.Block b) {
+        if (e.getActor() instanceof Actor.Player && e.getHolder() instanceof InventoryHolder.Block b) {
             tell(e, b.pos(), no.get());
         }
-    }
-
-    /** Remembers what each player has open, so their clicks are checked against it. */
-    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
-    private void opened(InventoryOpenEvent e) {
-        if (e.getMenu().isPresent()) {
-            openMenus.put(e.getMenu().get(), e.getHolder().place());
-        } else {
-            menuless.put(e.getViewer().getUUID(), e.getHolder().place());
-        }
-    }
-
-    @EventHandler
-    private void closed(InventoryCloseEvent e) {
-        openMenus.remove(e.getMenu());
-    }
-
-    @EventHandler
-    private void quit(PlayerQuitEvent e) {
-        menuless.remove(e.getPlayer().getUUID());
     }
 
     /** Nobody behind it: nature, or a machine or mob nobody owns. */
@@ -464,24 +419,21 @@ final class Protection implements Listener {
     }
 
     /**
-     * The regions at each spot an inventory stands: both halves of a double chest, an entity's block; outside every
-     * region for one with no place in a world; nothing for a player's own.
+     * The regions at a place. One with no place in a world stands outside every region. One nobody can place is held to
+     * every region its bound reaches; with no bound at all, to those where the player behind it stands, since they reach
+     * it from there.
      */
-    private List<List<Region>> regionsAt(InventoryHolder holder) {
-        return switch (holder) {
-            case InventoryHolder.Block b -> {
-                List<List<Region>> spots = new ArrayList<>(2);
-                spots.add(store.at(b.level(), b.pos()));
-                BlockState state = b.level().getBlockState(b.pos());
-                if (state.getBlock() instanceof ChestBlock && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
-                    spots.add(store.at(b.level(), b.pos().relative(ChestBlock.getConnectedDirection(state))));
-                }
-                yield spots;
-            }
-            case InventoryHolder.Entity en when en.entity() instanceof Player -> List.of();
-            case InventoryHolder.Entity en when en.entity().level() instanceof ServerLevel level ->
-                    List.of(store.at(level, en.entity().blockPosition()));
-            default -> List.of(List.of());
+    private List<Region> regionsAt(Place place, ActionEvent e) {
+        return switch (place) {
+            case Place.Spot s -> store.overlapping(s.level(), s.box());
+            case Place.Level l -> store.in(l.level());
+            case Place.Nowhere n -> List.of();
+            case Place.Unknown u -> switch (u.bound()) {
+                case Place.Spot s -> store.overlapping(s.level(), s.box());
+                case Place.Level l -> store.in(l.level());
+                case Place.Anywhere a -> e.getActingPlayer()
+                        .map(p -> store.at(p.serverLevel(), p.blockPosition())).orElse(List.of());
+            };
         };
     }
 

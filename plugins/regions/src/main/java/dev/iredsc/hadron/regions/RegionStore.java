@@ -20,6 +20,7 @@ import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 /**
  * Every region, saved to {@code regions.yml} on each change, and watched ({@link Areas}) while its world is loaded so
@@ -82,6 +83,22 @@ final class RegionStore {
             out.add(r);
         }
         return out == null ? List.of() : out;
+    }
+
+    /** The regions sharing at least one block with {@code box} in this world, in no order. */
+    List<Region> overlapping(ServerLevel level, BoundingBox box) {
+        List<Region> world = byWorld.get(level.dimension().location());
+        if (world == null) return List.of();
+        List<Region> out = new ArrayList<>(2);
+        for (Region r : world) {
+            if (r.box().intersects(box)) out.add(r);
+        }
+        return out;
+    }
+
+    /** Every region in this world. */
+    List<Region> in(ServerLevel level) {
+        return byWorld.getOrDefault(level.dimension().location(), List.of());
     }
 
     /**
