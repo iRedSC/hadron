@@ -1,13 +1,13 @@
 diff --git a/api/src/main/java/dev/iredsc/hadron/api/event/entity/EntityDamageEvent.java b/api/src/main/java/dev/iredsc/hadron/api/event/entity/EntityDamageEvent.java
-index 56c614c..30aa836 100644
+index b2fbd2f..9564890 100644
 --- a/api/src/main/java/dev/iredsc/hadron/api/event/entity/EntityDamageEvent.java
 +++ b/api/src/main/java/dev/iredsc/hadron/api/event/entity/EntityDamageEvent.java
-@@ -30,7 +30,7 @@ public class EntityDamageEvent extends EntityEvent implements Cancellable {
+@@ -34,7 +34,7 @@ public class EntityDamageEvent extends EntityEvent implements Cancellable {
      public EntityDamageEvent(LivingEntity entity, DamageSource source, float damage, Actor actor) {
          super(entity, actor);
          this.source = Objects.requireNonNull(source, "source");
--        this.damage = checked(damage);
+-        this.damage = DamageAmounts.checked(damage);
 +        this.damage = damage;
      }
  
-     /** The one rule for an amount, from the constructor and {@link #setDamage} alike. */
+     @Override

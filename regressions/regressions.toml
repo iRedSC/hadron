@@ -658,3 +658,13 @@ paths = [
 guards = [
     { test = "ListenerReleaseTests.anUnregisteredListenerIsLetGo", tier = "in-game" },
 ]
+
+[[regression]]
+id = "vehicle-damage-deals-raw-amount"
+bug = "A NaN hit on a boat or minecart was reported to VehicleDamageEvent as 0 but reached Minecraft as NaN, leaving the vehicle's wear NaN and the vehicle unbreakable."
+fix = "8eb531b"
+paths = ["neoforge/src/main/java/dev/iredsc/hadron/neoforge/VehicleHooks.java"]
+guards = [
+    { test = "DamageAmountTests.aNaNOrNegativeHitOnABoatCanBeRefusedAndUnrefusedDealsWhatWasReported", tier = "in-game" },
+]
+note = "VehicleHooks.dealt hands back the raw amount; the event still fires and reports the sanitized one."
