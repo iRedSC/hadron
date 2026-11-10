@@ -92,10 +92,17 @@ def connect(port, password):
 
 def run(sock, command):
     """The command's whole reply. A long one arrives as several packets with no end marker, so an invalid request
-    follows the command: the server answers it only after the whole reply."""
+    follows the command: the server answers it only after the whole reply. It is sent only once the command's first
+    reply packet has arrived (the server always sends one): Minecraft's RCON reads one request per socket read and
+    hangs up on two frames read together, so the command would never run."""
     sock.sendall(packet(2, COMMAND, command))
-    sock.sendall(packet(3, UNKNOWN, ""))
     reply = []
+    while True:
+        request_id, _, body = read_packet(sock)
+        if request_id == 2:
+            reply.append(body)
+            break
+    sock.sendall(packet(3, UNKNOWN, ""))
     while True:
         request_id, _, body = read_packet(sock)
         if request_id == 3:

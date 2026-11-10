@@ -24,9 +24,12 @@ import java.net.SocketTimeoutException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.charset.StandardCharsets;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -85,40 +88,61 @@ public final class HadronDeploy {
         File plugins = new File(args.serverDir(), "plugins");
         try (Rcon connection = Rcon.open(rcon)) {
             // Refused before anything is copied: with no server to tell us, the copy would be unverified.
-            File target = new File(plugins, args.installAs());
-            Version version = install(args.jar(), target);
-            long start = System.nanoTime();
-            String last = "nothing about " + args.installAs();
-            while (true) {
-                List<Status> lines;
-                try {
-                    lines = Status.parseAll(connection.run("hadron status"));
-                } catch (Rcon.Unanswered e) {
-                    throw new Failure(rcon.unanswered(e.getMessage()));
-                }
-                Status mine = Status.of(lines, args.installAs(), version);
-                if (mine != null) {
-                    switch (Status.verdict(mine, plugin, args.installAs())) {
-                        case Verdict.Done done -> {
-                            return plugin + " enabled on the dev server (" + args.installAs() + ", sha256 "
-                                    + version.sha256().substring(0, 12) + ", "
-                                    + (System.nanoTime() - start) / 1_000_000 + " ms)";
-                        }
-                        case Verdict.Rejected rejected -> throw new Failure(rejected.message());
-                        case Verdict.Waiting waiting -> last = waiting.what();
-                    }
-                }
-                if (System.nanoTime() - start > args.timeoutMillis() * 1_000_000L) {
-                    throw new Failure("The dev server didn't load " + args.installAs() + " within "
-                            + args.timeoutMillis() / 1000 + " s (it reported " + last + "). It reloads a changed jar in "
-                            + "plugins/ by itself, so check that it runs from " + args.serverDir() + " and read its log: "
-                            + new File(args.serverDir(), "logs/latest.log"));
-                }
-                pause(args.pollMillis());
+            Files.createDirectories(plugins.toPath());
+            // One deploy at a time per server: a second one's jar would replace this one's while it waits, and the
+            // server would then report a build nobody is waiting for.
+            try (FileChannel channel = FileChannel.open(plugins.toPath().resolve(".deploy.lock"),
+                    StandardOpenOption.CREATE, StandardOpenOption.WRITE);
+                    FileLock ignored = lock(channel, plugins)) {
+                Version version = install(args.jar(), new File(plugins, args.installAs()));
+                return awaitLoaded(args, plugin, connection, rcon, version);
             }
         } catch (IOException e) {
             throw new Failure("Deploying " + args.installAs() + " failed: " + e + ". Check that " + plugins
                     + " exists and is writable.");
+        }
+    }
+
+    /** Takes the folder's deploy lock, saying so first when another deploy holds it: this one waits its turn. */
+    private static FileLock lock(FileChannel channel, File plugins) throws IOException {
+        FileLock lock = channel.tryLock();
+        if (lock != null) return lock;
+        System.out.println("Another deploy to " + plugins + " is running: waiting for it to finish.");
+        System.out.flush();
+        return channel.lock();
+    }
+
+    /** Asks the server until it reports exactly {@code version}: enabled, or why not; fails after the timeout. */
+    private static String awaitLoaded(Args args, String plugin, Rcon connection, Rcon.Settings rcon, Version version)
+            throws Failure, IOException {
+        long start = System.nanoTime();
+        String last = "nothing about " + args.installAs();
+        while (true) {
+            List<Status> lines;
+            try {
+                lines = Status.parseAll(connection.run("hadron status"));
+            } catch (Rcon.Unanswered e) {
+                throw new Failure(rcon.unanswered(e.getMessage()));
+            }
+            Status mine = Status.of(lines, args.installAs(), version);
+            if (mine != null) {
+                switch (Status.verdict(mine, plugin, args.installAs())) {
+                    case Verdict.Done done -> {
+                        return plugin + " enabled on the dev server (" + args.installAs() + ", sha256 "
+                                + version.sha256().substring(0, 12) + ", "
+                                + (System.nanoTime() - start) / 1_000_000 + " ms)";
+                    }
+                    case Verdict.Rejected rejected -> throw new Failure(rejected.message());
+                    case Verdict.Waiting waiting -> last = waiting.what();
+                }
+            }
+            if (System.nanoTime() - start > args.timeoutMillis() * 1_000_000L) {
+                throw new Failure("The dev server didn't load " + args.installAs() + " within "
+                        + args.timeoutMillis() / 1000 + " s (it reported " + last + "). It reloads a changed jar in "
+                        + "plugins/ by itself, so check that it runs from " + args.serverDir() + " and read its log: "
+                        + new File(args.serverDir(), "logs/latest.log"));
+            }
+            pause(args.pollMillis());
         }
     }
 
@@ -154,20 +178,35 @@ public final class HadronDeploy {
     record Version(long modified, String sha256) {}
 
     /**
-     * Writes the jar beside the target and renames it into place. The modification time is set past the old file's, so
-     * redeploying identical bytes is still a change the host acts on, and a status line left over from the previous
-     * deploy can never match this one.
+     * Writes the jar to a file of its own beside the target, reads its identity there, and renames it into place. The
+     * identity comes from that private copy, before the rename, so nothing that replaces the target afterwards can
+     * make this deploy report a different jar's status. The copy's name is unique, so deploys never share one. The
+     * modification time is set past the old file's, so redeploying identical bytes is still a change the host acts
+     * on, and a status line left over from the previous deploy can never match this one.
      */
     static Version install(File jar, File target) throws IOException {
+        return install(jar, target, () -> {});
+    }
+
+    /** As {@link #install(File, File)}, running {@code afterRename} once the jar is in place (for tests). */
+    static Version install(File jar, File target, Runnable afterRename) throws IOException {
         Path dir = target.toPath().toAbsolutePath().getParent();
         Files.createDirectories(dir);
         long previous = target.isFile() ? target.lastModified() : 0;
-        Path part = dir.resolve("." + target.getName() + ".part");
-        Files.copy(jar.toPath(), part, StandardCopyOption.REPLACE_EXISTING);
-        long modified = Math.max(System.currentTimeMillis(), previous + 1000);
-        if (!part.toFile().setLastModified(modified)) throw new IOException("can't set the modification time of " + part);
-        Files.move(part, target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
-        return new Version(target.lastModified(), sha256(Files.readAllBytes(target.toPath())));
+        Path part = Files.createTempFile(dir, "." + target.getName() + ".", ".part");
+        try {
+            Files.copy(jar.toPath(), part, StandardCopyOption.REPLACE_EXISTING);
+            long wanted = Math.max(System.currentTimeMillis(), previous + 1000);
+            if (!part.toFile().setLastModified(wanted)) {
+                throw new IOException("can't set the modification time of " + part);
+            }
+            Version version = new Version(part.toFile().lastModified(), sha256(Files.readAllBytes(part)));
+            Files.move(part, target.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING);
+            afterRename.run();
+            return version;
+        } finally {
+            Files.deleteIfExists(part); // only still there if something above failed
+        }
     }
 
     static String sha256(byte[] bytes) {
@@ -366,13 +405,19 @@ public final class HadronDeploy {
         /**
          * Runs one command and returns everything it printed. A long reply arrives as several packets with no end
          * marker, so a second, invalid request follows the command: the server answers it only after the whole reply.
+         * It is sent only once the command's first reply packet has arrived (the server always sends one): Minecraft's
+         * RCON reads one request per socket read and hangs up on two frames read together, so the command would never
+         * run.
          */
         String run(String command) throws IOException {
             int id = nextId++;
             int sentinel = nextId++;
             send(id, COMMAND, command);
-            send(sentinel, RESPONSE, "");
             StringBuilder reply = new StringBuilder();
+            Packet first = read();
+            while (first.id != id) first = read();
+            reply.append(first.body);
+            send(sentinel, RESPONSE, "");
             while (true) {
                 Packet p = read();
                 if (p.id == sentinel) return reply.toString();

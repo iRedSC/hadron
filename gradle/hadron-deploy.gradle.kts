@@ -49,12 +49,12 @@ abstract class HadronDeployTask : DefaultTask() {
         // Reading stderr on a thread keeps a full pipe from stalling the client.
         var errors = ""
         val reader = Thread { errors = err.readText() }.also { it.start() }
-        val said = out.readText().trim()
+        // Each line as it comes: "waiting for another deploy" must show while it waits, not after.
+        out.forEachLine { logger.lifecycle(it) }
         reader.join()
         if (process.waitFor() != 0) {
             throw GradleException(errors.trim().ifEmpty { "The deploy client exited without a reason (code ${process.exitValue()})." })
         }
-        logger.lifecycle(said)
     }
 }
 
