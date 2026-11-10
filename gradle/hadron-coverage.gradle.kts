@@ -204,7 +204,7 @@ object HadronCoverage {
     val EVENT_ROOT = "dev/iredsc/hadron/api/event/Event"
     val EVENT_PACKAGE = "dev/iredsc/hadron/api/event/"
     // Types only the loader port and the plugin host use; their Javadoc says plugins never do (docs/testing.md).
-    val PORT_TYPES = setOf("Port", "Lifecycle", "Backend", "NetBackend", "Memory", "PluginContext")
+    val PORT_TYPES = setOf("Port", "Lifecycle", "Backend", "NetBackend", "Memory", "PluginContext", "HostKey")
     val TEST_ANNOTATIONS = setOf(
             "Ldev/iredsc/hadron/test/HadronTest;", "Lorg/junit/jupiter/api/Test;", "Lorg/junit/jupiter/api/RepeatedTest;",
             "Lorg/junit/jupiter/params/ParameterizedTest;", "Lorg/junit/jupiter/api/TestFactory;",

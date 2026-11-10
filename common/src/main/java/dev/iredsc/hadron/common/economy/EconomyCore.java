@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common.economy;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
@@ -64,6 +65,8 @@ public final class EconomyCore implements Economy {
         });
     }
 
+    /** Installs and clears this economy as the running one; no plugin holds it. */
+    private final HostKey key;
     private final Host host;
     private final File folder;
     private final JsonEconomyProvider builtIn;
@@ -89,8 +92,8 @@ public final class EconomyCore implements Economy {
     }
 
     /**
-     * What the economy asks of the running server. The real one is {@link #EconomyCore(PluginHost, MinecraftServer,
-     * File)}'s; the fast tests stand in their own, so every decision here runs without a server.
+     * What the economy asks of the running server. The real one is {@link #EconomyCore(HostKey, PluginHost,
+     * MinecraftServer, File)}'s; the fast tests stand in their own, so every decision here runs without a server.
      */
     interface Host {
         /** Loaded or enabled, and not unloading. */
@@ -106,8 +109,8 @@ public final class EconomyCore implements Economy {
     }
 
     /** @param folder the server's {@code hadron/} folder, for {@code economy.yml} and {@code economy.json} */
-    public EconomyCore(PluginHost host, MinecraftServer minecraft, File folder) {
-        this(new Host() {
+    public EconomyCore(HostKey key, PluginHost host, MinecraftServer minecraft, File folder) {
+        this(key, new Host() {
             @Override
             public boolean isAlive(JavaPlugin plugin) {
                 return host.isAlive(plugin);
@@ -130,7 +133,8 @@ public final class EconomyCore implements Economy {
         }, folder, new JsonEconomyProvider(new File(folder, "economy.json").toPath()));
     }
 
-    EconomyCore(Host host, File folder, JsonEconomyProvider builtIn) {
+    EconomyCore(HostKey key, Host host, File folder, JsonEconomyProvider builtIn) {
+        this.key = key;
         this.host = host;
         this.folder = folder;
         this.builtIn = builtIn;
@@ -142,7 +146,7 @@ public final class EconomyCore implements Economy {
         readConfig();
         builtIn.load();
         current = this;
-        Economy.Lifecycle.install(this);
+        Economy.Lifecycle.install(key, this);
     }
 
     /** After every plugin has disabled: saves and stops. Safe to call twice. */
@@ -156,7 +160,7 @@ public final class EconomyCore implements Economy {
         }
         builtIn.close();
         if (current == this) current = null;
-        if (Economy.Lifecycle.running() == this) Economy.Lifecycle.install(null);
+        if (Economy.Lifecycle.running() == this) Economy.Lifecycle.install(key, null);
     }
 
     private void readConfig() {

@@ -10,7 +10,8 @@
 //   hadronChecks.determinism  source sets Determinism refuses wall-clock time, sleeps and unseeded randomness in
 //                             (default: test, where a plugin's tests live).
 //   hadronChecks.exemptions   true for Hadron's own code only: @StaticState and @Nondeterministic, each with a
-//                             reason, may exempt one field or method. A plugin's build refuses them.
+//                             reason, may exempt one field or method, and HostOnly lets it call what takes the
+//                             HostKey. A plugin's build refuses all three.
 // TooLong prints a warning for a file over 800 lines or a method over 120 and never fails.
 
 @Suppress("UNCHECKED_CAST")

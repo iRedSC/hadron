@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
@@ -55,9 +56,9 @@ import net.neoforged.neoforge.event.entity.player.PlayerXpEvent;
 final class EntityEvents {
     private EntityEvents() {}
 
-    static void register() {
+    static void register(HostKey key) {
         AttributionMemory.register(ModLoadingContext.get().getActiveContainer().getEventBus());
-        Actors.Port.installMemory(new AttributionMemory());
+        Actors.Port.installMemory(key, new AttributionMemory());
 
         var bus = NeoForge.EVENT_BUS;
         bus.addListener(EventPriority.LOWEST, EntityEvents::damage);

@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.actor;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import java.util.Arrays;
@@ -232,7 +233,10 @@ public final class Actors {
     public static final class Port {
         private Port() {}
 
-        public static void installMemory(Memory installed) {
+        /** Takes the {@link HostKey}. */
+        public static void installMemory(HostKey key, Memory installed) {
+            HostKey.require(key, "Actors.Port.installMemory", "read who is behind an action with Actors.current() "
+                    + "and Actors.remembered");
             memory = Objects.requireNonNull(installed, "memory");
         }
 

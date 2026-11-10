@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.world;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import java.util.List;
@@ -128,8 +129,9 @@ public final class Worlds {
     public static final class Port {
         private Port() {}
 
-        /** Null between servers. */
-        public static void install(@Nullable Backend installed) {
+        /** Null between servers. Takes the {@link HostKey}. */
+        public static void install(HostKey key, @Nullable Backend installed) {
+            HostKey.require(key, "Worlds.Port.install", "create, load and unload worlds with Worlds");
             backend = installed;
         }
     }

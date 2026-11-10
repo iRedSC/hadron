@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common.economy;
 
+import dev.iredsc.hadron.common.TestHost;
 import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
@@ -114,7 +115,8 @@ class EconomyCoreTest {
     private JavaPlugin gemsPlugin;
 
     private EconomyCore start() {
-        economy = new EconomyCore(host, dir.toFile(), new JsonEconomyProvider(dir.resolve("economy.json"), timer));
+        economy = new EconomyCore(TestHost.KEY, host, dir.toFile(),
+                new JsonEconomyProvider(dir.resolve("economy.json"), timer));
         economy.start();
         return economy;
     }
@@ -176,7 +178,7 @@ class EconomyCoreTest {
         fund(ANN, "4.20");
         economy.close();
         economy = null;
-        EconomyCore again = new EconomyCore(host, dir.toFile(),
+        EconomyCore again = new EconomyCore(TestHost.KEY, host, dir.toFile(),
                 new JsonEconomyProvider(dir.resolve("economy.json"), new ManualSaveTimer()));
         again.start();
         try {

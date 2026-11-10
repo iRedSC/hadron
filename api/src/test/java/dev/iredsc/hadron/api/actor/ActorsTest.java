@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.actor;
 
+import dev.iredsc.hadron.api.TestHost;
 import dev.iredsc.hadron.test.Covers;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -284,7 +285,7 @@ class ActorsTest {
     @Covers(value = Actors.Port.class, method = "installMemory")
     @Test
     void installingNullMemoryIsRefused() {
-        assertThrows(NullPointerException.class, () -> Actors.Port.installMemory(null));
+        assertThrows(NullPointerException.class, () -> Actors.Port.installMemory(TestHost.KEY, null));
     }
 
     // ---- operations ----

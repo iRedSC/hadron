@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.world.Area;
 import dev.iredsc.hadron.api.world.Areas;
@@ -20,11 +21,11 @@ import net.neoforged.neoforge.event.server.ServerStoppedEvent;
 final class AreasPort implements Areas.Backend {
     private AreasPort() {}
 
-    static void register() {
+    static void register(HostKey key) {
         // Before Hadron enables plugins on the same event, so onEnable can watch.
         NeoForge.EVENT_BUS.addListener(EventPriority.HIGH,
-                (ServerStartingEvent e) -> Areas.Port.install(new AreasPort()));
-        NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> Areas.Port.install(null));
+                (ServerStartingEvent e) -> Areas.Port.install(key, new AreasPort()));
+        NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> Areas.Port.install(key, null));
         PluginHost.onPluginDisable(plugin -> {
             PluginHost host = Hooks.host();
             if (host == null) return;

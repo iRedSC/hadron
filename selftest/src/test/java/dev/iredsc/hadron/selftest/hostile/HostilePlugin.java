@@ -1,5 +1,9 @@
 package dev.iredsc.hadron.selftest.hostile;
 
+import dev.iredsc.hadron.api.Hadron;
+import dev.iredsc.hadron.api.HostKey;
+import dev.iredsc.hadron.api.economy.Economy;
+import dev.iredsc.hadron.api.net.NetBackend;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.PluginCommand;
 import dev.iredsc.hadron.checks.Nondeterministic;
@@ -57,6 +61,23 @@ public final class HostilePlugin extends JavaPlugin {
             getServer().getScheduler().runTaskAsynchronously(this, this::runForever);
         }
         if (is("reload")) getServer().getScheduler().runTaskTimer(this, () -> log("tick " + version), 1, 1);
+        if (is("host")) {
+            // What a plugin built without Hadron's checks could call: each must be refused at runtime.
+            asHost("claim", () -> HostKey.claim());
+            asHost("clear the server", () -> Hadron.Lifecycle.install(null, null));
+            asHost("clear the economy", () -> Economy.Lifecycle.install(null, null));
+            asHost("replace the packet backend", () -> NetBackend.Port.install(null, null));
+        }
+    }
+
+    /** Logs {@code host <what> refused: <message>}, or {@code host <what> allowed} if Hadron let it through. */
+    private static void asHost(String what, Runnable call) {
+        try {
+            call.run();
+            log("host " + what + " allowed");
+        } catch (RuntimeException refused) {
+            log("host " + what + " refused: " + refused.getMessage());
+        }
     }
 
     /** The task that never returns until {@link #RELEASE}, as a plugin's runaway worker thread would. */
