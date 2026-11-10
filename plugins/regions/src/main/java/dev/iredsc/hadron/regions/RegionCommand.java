@@ -94,7 +94,7 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
             case "wand" -> {
                 ServerPlayer p = player(sender);
                 if (!p.getInventory().add(Wand.make())) p.drop(Wand.make(), false);
-                ok(sender, "Left-click a block for one corner, right-click for the other");
+                ok(sender, "Sneak and right-click a block for one corner, right-click for the other");
             }
             case "define" -> define(sender, args, false);
             case "redefine" -> define(sender, args, true);

@@ -20,6 +20,7 @@ import dev.iredsc.hadron.api.event.entity.HangingBreakEvent;
 import dev.iredsc.hadron.api.event.entity.ItemFrameChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
+import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -94,38 +95,84 @@ final class Protection implements Listener {
         e.blockList().removeIf(pos -> refusing(e, level, pos, Flag.BUILD).isPresent());
     }
 
-    /** Covers players walking and vehicles someone drives; a player riding is covered by the vehicle. */
+    /**
+     * Covers players walking and vehicles: the driver, or whatever moves it, and every player aboard. A rider gets no
+     * move of their own, so a member can't ferry an outsider in.
+     */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void move(EntityMoveEvent e) {
-        if (trusted(e)) return;
         ServerLevel level = e.getLevel();
-        Optional<Region> no = Rules.refusingEntry(store.at(level, e.getFromBlock()), store.at(level, e.getToBlock()),
-                e.getActor().actingFor());
+        List<Region> from = store.at(level, e.getFromBlock());
+        List<Region> to = store.at(level, e.getToBlock());
+        if (from.containsAll(to)) return;
+        Optional<Region> no = trusted(e) ? Optional.empty() : Rules.refusingEntry(from, to, e.getActor().actingFor());
+        for (ServerPlayer rider : riders(e.getEntity())) {
+            if (no.isPresent()) break;
+            if (!bypass.active(rider)) no = Rules.refusingEntry(from, to, Optional.of(rider.getUUID()));
+        }
         if (no.isEmpty()) return;
         e.setCancelled(true);
-        e.getActingPlayer().ifPresent(p -> feedback.refused(p, e.getToBlock(), no.get()));
+        Region refusing = no.get();
+        e.getActingPlayer().ifPresent(p -> feedback.refused(p, e.getToBlock(), refusing));
+        for (ServerPlayer rider : riders(e.getEntity())) feedback.refused(rider, e.getToBlock(), refusing);
+    }
+
+    /** Every player riding {@code vehicle}, however deep. */
+    private static List<ServerPlayer> riders(Entity vehicle) {
+        List<ServerPlayer> riders = new ArrayList<>();
+        for (Entity rider : vehicle.getIndirectPassengers()) {
+            if (rider instanceof ServerPlayer p) riders.add(p);
+        }
+        return riders;
     }
 
     /**
      * Teleports in (an ender pearl, chorus fruit, a portal, a plugin) are held to entry as walking in is: movement
-     * tracking starts over after a teleport, so {@link #move} never sees them.
+     * tracking starts over after a teleport, so {@link #move} never sees them. Every player going counts: the one
+     * teleporting and everyone riding along.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void teleport(EntityTeleportEvent e) {
-        Optional<UUID> who = traveller(e.getEntity());
-        if (who.isEmpty() || trusted(e)) return;
-        Optional<Region> no = Rules.refusingEntry(store.at(e.getFromLevel(), BlockPos.containing(e.getFrom())),
-                store.at(e.getToLevel(), BlockPos.containing(e.getTo())), who);
-        if (no.isEmpty()) return;
-        e.setCancelled(true);
-        e.getActingPlayer().ifPresent(p -> feedback.refused(p, BlockPos.containing(e.getTo()), no.get()));
+        if (e.getActor() instanceof Actor.Server) return;
+        Set<ServerPlayer> going = new LinkedHashSet<>();
+        if (e.getEntity() instanceof ServerPlayer p) going.add(p);
+        for (Entity rider : e.getPassengers()) {
+            if (rider instanceof ServerPlayer p) going.add(p);
+            going.addAll(riders(rider));
+        }
+        going.removeIf(bypass::active);
+        if (going.isEmpty()) return;
+        List<Region> from = store.at(e.getFromLevel(), BlockPos.containing(e.getFrom()));
+        for (BlockPos spot : arrival(e)) {
+            List<Region> to = store.at(e.getToLevel(), spot);
+            for (ServerPlayer p : going) {
+                Optional<Region> no = Rules.refusingEntry(from, to, Optional.of(p.getUUID()));
+                if (no.isEmpty()) continue;
+                e.setCancelled(true);
+                for (ServerPlayer told : going) feedback.refused(told, spot, no.get());
+                return;
+            }
+        }
     }
 
-    /** Who entry asks about: a player, or whoever drives the vehicle; empty for anything else. */
-    private static Optional<UUID> traveller(Entity entity) {
-        if (entity instanceof ServerPlayer p) return Optional.of(p.getUUID());
-        if (entity.getControllingPassenger() instanceof Player driver) return Optional.of(driver.getUUID());
-        return Optional.empty();
+    /**
+     * Where a teleport may end. Chorus fruit and endermen-style teleports within a world settle on the ground below
+     * the spot asked for, so every block they could fall through counts, down to the first that stops them.
+     */
+    private static List<BlockPos> arrival(EntityTeleportEvent e) {
+        BlockPos to = BlockPos.containing(e.getTo());
+        boolean settles = e.getToLevel() == e.getFromLevel() && (e.getCause() == TeleportCause.CHORUS_FRUIT
+                || e.getCause() == TeleportCause.RANDOM_TELEPORT);
+        if (!settles) return List.of(to);
+        ServerLevel level = e.getToLevel();
+        List<BlockPos> column = new ArrayList<>();
+        BlockPos at = to;
+        column.add(at);
+        while (at.getY() > level.getMinBuildHeight() && !level.getBlockState(at.below()).blocksMotion()) {
+            at = at.below();
+            column.add(at);
+        }
+        return column;
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)

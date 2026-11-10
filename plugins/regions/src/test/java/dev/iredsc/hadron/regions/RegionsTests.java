@@ -1,19 +1,25 @@
 package dev.iredsc.hadron.regions;
 
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
+import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
+import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.projectile.ThrownEnderpearl;
+import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 
 /** Regions as an operator makes them and as players and the world meet them. */
 public final class RegionsTests {
@@ -228,5 +234,70 @@ public final class RegionsTests {
         t.tick(2);
         t.assertTrue(frame.getItem().is(Items.DIAMOND), "the frame should keep its diamond, but holds " + frame.getItem());
         t.assertFalse(frame.isRemoved(), "the frame should still hang");
+    }
+
+    @HadronTest
+    void sneakingAndRightClickingPicksTheFirstCornerInSurvival(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        alice.setOp(true);
+        BlockPos a = t.pos(-2, 0, -2);
+        BlockPos b = t.pos(2, 2, 2);
+        t.setBlock(a, Blocks.STONE);
+        t.setBlock(b, Blocks.STONE);
+        alice.command("rg wand");
+        // A sneaking right-click on a block reaches the server as the stick used in the air, aimed at the block.
+        alice.player().lookAt(EntityAnchorArgument.Anchor.EYES, Vec3.atCenterOf(a));
+        alice.player().setShiftKeyDown(true);
+        alice.useBlock(a);
+        alice.useItem();
+        // The clicks are packets handled on the next tick; still sneaking then.
+        t.tick();
+        alice.player().setShiftKeyDown(false);
+        alice.useBlock(b);
+        alice.command("rg define sneak-corner");
+        t.assertChat(alice, "Defined sneak-corner");
+    }
+
+    @HadronTest
+    void aMemberCantFerryAnOutsiderIn(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "ferry-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        alice.command("rg flag ferry-vault entry deny");
+        TestPlayer carol = t.player("carol");
+        alice.command("rg addmember ferry-vault carol");
+        t.assertChat(alice, "carol is a member of ferry-vault");
+        TestPlayer bob = t.player("bob");
+        Boat boat = EntityType.BOAT.create(t.level());
+        BlockPos start = t.pos(0, 0, 0);
+        boat.moveTo(start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+        t.level().addFreshEntity(boat);
+        carol.interact(boat);
+        bob.interact(boat);
+        t.assertTrue(bob.player().getVehicle() == boat, "bob should be riding with carol");
+        t.tick(2);
+        boat.setPos(boat.getX() + 3, boat.getY(), boat.getZ());
+        t.tick(2);
+        t.assertTrue(boat.getBlockX() < t.pos(2, 0, 0).getX(),
+                "the boat carrying bob should not enter, but is at " + boat.blockPosition());
+    }
+
+    @HadronTest
+    void chorusFruitCantDropAnOutsiderIn(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "chorus-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        alice.command("rg flag chorus-vault entry deny");
+        TestPlayer bob = t.player("bob");
+        BlockPos above = t.pos(3, 6, 0);
+        Vec3 asked = new Vec3(above.getX() + 0.5, above.getY(), above.getZ() + 0.5);
+        // Chorus fruit settles on the ground below the spot it asks for, inside the vault.
+        EntityTeleportEvent chorus = new EntityTeleportEvent(bob.player(), t.level(), asked,
+                TeleportCause.CHORUS_FRUIT, new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(chorus);
+        t.assertTrue(chorus.isCancelled(), "chorus fruit landing in the vault should be refused");
+        // The control: a command's teleport lands exactly where asked, above the vault, and goes ahead.
+        EntityTeleportEvent exact = new EntityTeleportEvent(bob.player(), t.level(), asked,
+                TeleportCause.COMMAND, new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(exact);
+        t.assertFalse(exact.isCancelled(), "a teleport to just above the vault should go ahead");
     }
 }

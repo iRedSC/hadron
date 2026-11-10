@@ -6,6 +6,7 @@ import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
 import dev.iredsc.hadron.api.event.block.BlockUseEvent;
+import dev.iredsc.hadron.api.event.item.ItemUseEvent;
 import dev.iredsc.hadron.api.event.player.PlayerQuitEvent;
 import java.util.HashMap;
 import java.util.Map;
@@ -22,9 +23,13 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
 
 /**
- * The selection wand: left-click a block for the first corner, right-click for the second. Only the stick
+ * The selection wand: sneak and right-click a block for the first corner, right-click for the second. Left-click
+ * picks the first corner too, but only where a click breaks the block at once (creative): a survival player's click
+ * fires nothing until the block breaks. Only the stick
  * {@code /region wand} hands out is a wand, so no ordinary tool ever stops breaking blocks.
  */
 final class Wand implements Listener {
@@ -85,6 +90,20 @@ final class Wand implements Listener {
         // Vanilla tries the off hand after the main hand; one click picks one corner.
         if (e.getHand() != InteractionHand.MAIN_HAND) return;
         pick(a.player(), e.getPos(), false);
+    }
+
+    /**
+     * Sneaking with an item skips the block's own use, so a sneaking right-click on a block arrives as the stick
+     * used in the air: the block is the one the player looks at.
+     */
+    @EventHandler(priority = EventPriority.LOWEST)
+    private void sneakRight(ItemUseEvent e) {
+        if (!(e.getActor() instanceof Actor.Player a) || !is(e.getItem())) return;
+        e.setCancelled(true);
+        ServerPlayer player = a.player();
+        if (e.getHand() != InteractionHand.MAIN_HAND || !player.isShiftKeyDown()) return;
+        HitResult hit = player.pick(player.blockInteractionRange(), 1.0f, false);
+        if (hit.getType() == HitResult.Type.BLOCK) pick(player, ((BlockHitResult) hit).getBlockPos(), true);
     }
 
     @EventHandler
