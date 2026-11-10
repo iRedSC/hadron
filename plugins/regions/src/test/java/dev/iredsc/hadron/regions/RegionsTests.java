@@ -22,6 +22,7 @@ import net.minecraft.world.entity.EquipmentSlot;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
+import java.util.List;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -48,7 +49,10 @@ import net.minecraft.world.phys.Vec3;
 /** Regions as an operator makes them and as players and the world meet them. */
 public final class RegionsTests {
     /** An op in creative, who makes regions and is let through them. */
+    /** An operator, alice, with every region an earlier test left removed, so a test sees only its own. */
     private static TestPlayer admin(TestContext t) {
+        RegionStore store = ((RegionsPlugin) t.plugin()).regions();
+        for (String id : List.copyOf(store.all().stream().map(Region::id).toList())) store.remove(id);
         TestPlayer alice = t.player("alice");
         alice.setOp(true);
         alice.player().setGameMode(GameType.CREATIVE);
@@ -746,5 +750,33 @@ public final class RegionsTests {
                 ItemStack.EMPTY, stand.getItemBySlot(EquipmentSlot.HEAD), new Actor.Player(bob.player()));
         t.plugin().getServer().getPluginManager().callEvent(edit);
         t.assertTrue(edit.isCancelled(), "bob should not take the helmet off a stand inside");
+    }
+
+    @HadronTest
+    void aPublicParkElsewhereDoesntOpenAVaultToAnUnplacedInventory(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        standAt(alice, t.pos(-7, 0, 3));
+        define(t, alice, "park", t.pos(-8, 0, -1), t.pos(-6, 2, 1));
+        alice.command("rg priority park 1");
+        alice.command("rg flag park use allow");
+        TestPlayer bob = t.player("bob");
+        standAt(bob, t.pos(-7, 0, 0));
+        ChestMenu menu = ChestMenu.threeRows(99, bob.player().getInventory(), new SimpleContainer(27));
+        InventoryClickEvent click = new InventoryClickEvent(bob.player(), InventoryHolder.Unknown.INSTANCE, menu,
+                InventoryHolder.Unknown.INSTANCE, 0, 0, ClickType.PICKUP, new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(click);
+        t.assertTrue(click.isCancelled(), "an inventory nobody can place may be in the vault, which the park, "
+                + "though higher, doesn't cover");
+    }
+
+    @HadronTest
+    void nothingCarriesBetweenTwoInventoriesNobodyCanPlace(TestContext t) {
+        define(t, admin(t), "unknown-both", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        InventoryMoveItemEvent pipe = new InventoryMoveItemEvent(InventoryHolder.Unknown.INSTANCE, 0,
+                new ItemStack(Items.DIAMOND, 8), InventoryHolder.Unknown.INSTANCE, new ItemStack(Items.DIAMOND),
+                InventoryHolder.Unknown.INSTANCE, Actor.Nature.INSTANCE);
+        t.plugin().getServer().getPluginManager().callEvent(pipe);
+        t.assertTrue(pipe.isCancelled(), "either end may be in the region and the other outside it");
     }
 }

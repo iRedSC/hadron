@@ -58,6 +58,8 @@ import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.VehicleEntity;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import org.jspecify.annotations.Nullable;
 
 /**
  * Refuses what regions forbid, through Hadron's events, so it covers every mod whose bridge is installed and treats
@@ -426,13 +428,14 @@ final class Protection implements Listener {
 
     /**
      * Refuses {@code e} if a region at any of {@code places} forbids {@code flag} to whoever is behind it, or, with
-     * nobody behind it, forbids carrying it between them.
+     * nobody behind it, forbids carrying it between them. A place that may be in more than one spot is refused if any
+     * spot it may be in refuses.
      */
     private void refuse(ActionEvent e, Cancellable c, List<Place> places, Flag flag, Optional<BlockPos> shown) {
-        List<List<Region>> regions = new ArrayList<>(places.size());
-        for (Place place : places) regions.add(regionsAt(place));
-        Optional<Region> no = worldOnItsOwn(e.getActor()) ? crossing(regions)
-                : Rules.refusingAny(regions, flag, e.getActor().actingFor());
+        List<List<List<Region>>> possible = new ArrayList<>(places.size());
+        for (Place place : places) possible.add(mayBeIn(place));
+        Optional<Region> no = worldOnItsOwn(e.getActor()) ? crossing(possible)
+                : Rules.refusingAny(possible.stream().flatMap(List::stream).toList(), flag, e.getActor().actingFor());
         if (no.isEmpty()) return;
         c.setCancelled(true);
         shown.ifPresent(pos -> tell(e, pos, no.get()));
@@ -444,32 +447,61 @@ final class Protection implements Listener {
         return actor instanceof Actor.Nature || actor instanceof Actor.Machine || actor instanceof Actor.EntityActor;
     }
 
-    private static Optional<Region> crossing(List<List<Region>> places) {
-        for (List<Region> from : places) {
-            for (List<Region> to : places) {
-                Optional<Region> no = Rules.refusingCrossing(from, to);
-                if (no.isPresent()) return no;
+    /**
+     * The first region refusing a carry between two of the places, either way, for any spot each may be in. A block
+     * never crosses into itself; a place that may be in more than one spot may, since one unknown place can stand for
+     * several inventories (every inventory nothing identifies is the same {@code Unknown}).
+     */
+    private static Optional<Region> crossing(List<List<List<Region>>> places) {
+        for (int i = 0; i < places.size(); i++) {
+            for (int j = 0; j < places.size(); j++) {
+                if (i == j && places.get(i).size() == 1) continue;
+                for (List<Region> from : places.get(i)) {
+                    for (List<Region> to : places.get(j)) {
+                        Optional<Region> no = Rules.refusingCrossing(from, to);
+                        if (no.isPresent()) return no;
+                    }
+                }
             }
         }
         return Optional.empty();
     }
 
     /**
-     * The regions at a place. One with no place in a world stands outside every region. One nobody can place is held to
-     * every region its bound reaches, so a mod no bridge describes is refused, not let through, wherever it might be
-     * protected.
+     * The sets of regions a place may stand in, one per spot it may be. A block is in exactly the regions there. A
+     * place that covers or may be anywhere in an area (a chunk, a level, one nobody can place) may be outside every
+     * region, unless one region holds all of it, or in any one region the area reaches, alone: whichever higher
+     * priority region shares a spot with it never lets through what that region alone refuses, so checking each alone
+     * refuses all a real spot would, and fails closed where a spot is unknown. One with no place in a world is outside
+     * every region.
      */
-    private List<Region> regionsAt(Place place) {
+    private List<List<Region>> mayBeIn(Place place) {
         return switch (place) {
-            case Place.Spot s -> store.overlapping(s.level(), s.box());
-            case Place.Level l -> store.in(l.level());
-            case Place.Nowhere n -> List.of();
+            case Place.Spot s when s.isBlock() -> List.of(store.at(s.level(),
+                    new BlockPos(s.box().minX(), s.box().minY(), s.box().minZ())));
+            case Place.Spot s -> anywhereIn(store.overlapping(s.level(), s.box()), s.box());
+            case Place.Level l -> anywhereIn(store.in(l.level()), null);
+            case Place.Nowhere n -> List.of(List.of());
             case Place.Unknown u -> switch (u.bound()) {
-                case Place.Spot s -> store.overlapping(s.level(), s.box());
-                case Place.Level l -> store.in(l.level());
-                case Place.Anywhere a -> List.copyOf(store.all());
+                case Place.Spot s -> anywhereIn(store.overlapping(s.level(), s.box()), s.box());
+                case Place.Level l -> anywhereIn(store.in(l.level()), null);
+                case Place.Anywhere a -> anywhereIn(List.copyOf(store.all()), null);
             };
         };
+    }
+
+    /** Outside every region, unless one of {@code reached} holds all of {@code area}; or in any one of them. */
+    private static List<List<Region>> anywhereIn(List<Region> reached, @Nullable BoundingBox area) {
+        List<List<Region>> out = new ArrayList<>(reached.size() + 1);
+        boolean held = area != null && reached.stream().anyMatch(r -> contains(r.box(), area));
+        if (!held) out.add(List.of());
+        for (Region r : reached) out.add(List.of(r));
+        return out;
+    }
+
+    private static boolean contains(BoundingBox outer, BoundingBox inner) {
+        return outer.minX() <= inner.minX() && outer.minY() <= inner.minY() && outer.minZ() <= inner.minZ()
+                && outer.maxX() >= inner.maxX() && outer.maxY() >= inner.maxY() && outer.maxZ() >= inner.maxZ();
     }
 
     private static boolean placed(Entity entity) {

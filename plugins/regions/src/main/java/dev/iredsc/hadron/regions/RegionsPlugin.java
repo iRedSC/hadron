@@ -51,6 +51,12 @@ public final class RegionsPlugin extends JavaPlugin implements Listener {
         getLogger().info("Protecting {} region(s)", loaded.all().size());
     }
 
+    /** The regions, while enabled. */
+    RegionStore regions() {
+        if (store == null) throw new IllegalStateException("Regions isn't enabled, so it has no regions to give");
+        return store;
+    }
+
     @EventHandler
     private void worldLoaded(WorldLoadEvent e) {
         if (store != null) store.watch(e.getLevel());
