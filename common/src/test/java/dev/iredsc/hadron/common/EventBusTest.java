@@ -18,7 +18,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.slf4j.Logger;
 
 /** Who hears an event, in what order, and what a handler's failure costs. */
@@ -516,37 +518,51 @@ class EventBusTest {
         assertTrue(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(10), "an idle handler must not wait out the deadline");
     }
 
+    /**
+     * The wait is ordered by latches and the waiter's own thread state, never by a sleep or the clock: the waiter must
+     * be seen blocked inside awaitIdle while the handler is still held, and may return only after the handler ended.
+     */
     @Test
-    @Nondeterministic(reason = "Subscription.awaitIdle takes a System.nanoTime deadline, so testing it reads that clock; the release sleeps so the wait has begun before the call ends, and the test passes either way, only proving less")
+    @Timeout(60)
     void awaitIdleWaitsUntilACallInProgressEnds() throws Exception {
         CountDownLatch inside = new CountDownLatch(1);
         CountDownLatch release = new CountDownLatch(1);
+        AtomicBoolean handlerEnded = new AtomicBoolean();
         EventBus.Subscription sub = subscribe(new Listener() {
             @EventHandler
             void slow(Ping p) throws InterruptedException {
                 inside.countDown();
-                release.await(10, TimeUnit.SECONDS);
+                release.await(30, TimeUnit.SECONDS);
+                handlerEnded.set(true);
             }
         }).get(0);
         Thread poster = new Thread(() -> bus.post(new Ping()));
         poster.start();
-        assertTrue(inside.await(10, TimeUnit.SECONDS));
-        Thread releaser = new Thread(() -> {
-            try {
-                Thread.sleep(500);
-            } catch (InterruptedException ignored) {
-                // released early is fine
-            }
-            release.countDown();
+        assertTrue(inside.await(30, TimeUnit.SECONDS));
+
+        AtomicBoolean returned = new AtomicBoolean();
+        AtomicBoolean idle = new AtomicBoolean();
+        AtomicBoolean handlerEndedWhenItReturned = new AtomicBoolean();
+        // A deadline so far away that only the call ending can end the wait.
+        Thread waiter = new Thread(() -> {
+            idle.set(sub.awaitIdle(Long.MAX_VALUE / 2));
+            handlerEndedWhenItReturned.set(handlerEnded.get());
+            returned.set(true);
         });
-        releaser.start();
-        long start = System.nanoTime();
-        assertTrue(sub.awaitIdle(start + TimeUnit.SECONDS.toNanos(30)),
-                "still inside when the wait began, so it must wait for the call to end");
-        assertTrue(System.nanoTime() - start < TimeUnit.SECONDS.toNanos(10),
-                "the call ending must wake the wait, not the deadline");
+        waiter.setDaemon(true);
+        waiter.start();
+        // Wait until the waiter is parked in the wait or has already returned; either way it is settled.
+        while (waiter.getState() == Thread.State.NEW || waiter.getState() == Thread.State.RUNNABLE) Thread.onSpinWait();
+        assertFalse(returned.get(), "awaitIdle returned while the handler was still running; it must wait for the call "
+                + "to end");
+        assertEquals(Thread.State.TIMED_WAITING, waiter.getState(), "awaitIdle should be waiting on the handler");
+
+        release.countDown();
+        waiter.join(TimeUnit.SECONDS.toMillis(30));
+        assertTrue(returned.get(), "the handler ending must wake the wait; it was still waiting for its deadline");
+        assertTrue(idle.get(), "awaitIdle should report idle once the call ended");
+        assertTrue(handlerEndedWhenItReturned.get(), "awaitIdle returned before the handler had finished");
         poster.join();
-        releaser.join();
     }
 
     @Test
