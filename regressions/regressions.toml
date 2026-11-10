@@ -531,3 +531,18 @@ guards = [
     { test = "FireAndTntTests.cancelledIgniteLeavesNoFireAndTheFlintUnworn", tier = "in-game" },
 ]
 note = "5515df2 is a merge; the patch drops only CommonHooksPlaceMixin and its line in hadron.block.mixins.json."
+
+
+# ---- Found by the PR #27 acceptance kit's suite ----
+
+
+[[regression]]
+id = "unregistered-listener-kept"
+bug = "An unregistered listener stayed referenced until its plugin disabled, keeping everything it held in memory."
+fix = "5692658"
+paths = [
+    "common/src/main/java/dev/iredsc/hadron/common/PluginHost.java",
+]
+guards = [
+    { test = "ListenerReleaseTests.anUnregisteredListenerIsLetGo", tier = "in-game" },
+]
