@@ -1,17 +1,17 @@
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java
-index 6234afc..c243d91 100644
+index a8a8dcc..3d86d30 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java
-@@ -4,8 +4,6 @@ import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
- import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
- import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+@@ -7,8 +7,6 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
  import dev.iredsc.hadron.neoforge.HeldEffects;
+ import java.util.List;
+ import net.minecraft.core.Direction;
 -import net.minecraft.core.component.DataComponentMap;
 -import net.minecraft.core.component.PatchedDataComponentMap;
  import net.minecraft.server.level.ServerLevel;
  import net.minecraft.world.InteractionResult;
- import net.minecraft.world.item.context.UseOnContext;
-@@ -27,13 +25,6 @@ import org.spongepowered.asm.mixin.injection.At;
+ import net.minecraft.world.entity.Entity;
+@@ -33,13 +31,6 @@ import org.spongepowered.asm.mixin.injection.At;
   */
  @Mixin(value = CommonHooks.class, remap = false)
  abstract class CommonHooksPlaceMixin {

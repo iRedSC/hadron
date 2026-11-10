@@ -687,7 +687,7 @@ guards = [
     { test = "BreakPlaceTests.aPlantingCountsTowardItsAdvancementOnlyWhenAllowed", tier = "in-game" },
     { test = "FireAndTntTests.cancelledIgniteLeavesNoFireAndTheFlintUnworn", tier = "in-game" },
 ]
-note = "The patch drops only the hold around onPlaceItemIntoWorld and the cancel it reads; HeldEffects and the hooks that hold grants, stats and game events stay, shared with the other fixes of b1bf13b."
+note = "Hand-made: the patch drops only the hold around onPlaceItemIntoWorld (hadron$holdEffects). The place-event wrappers stay: they also scope the event's handlers (held-action-takes-in-handler-actions), and with no hold open they refuse nothing. HeldEffects and the hooks that hold grants, stats and game events stay, shared with the other fixes of b1bf13b."
 
 [[regression]]
 id = "refused-block-use-leaves-side-effects"
