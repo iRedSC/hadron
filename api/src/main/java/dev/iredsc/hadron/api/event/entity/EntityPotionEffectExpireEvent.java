@@ -18,7 +18,7 @@ public class EntityPotionEffectExpireEvent extends EntityEvent {
 
     public EntityPotionEffectExpireEvent(LivingEntity entity, MobEffectInstance effect, Actor actor) {
         super(entity, actor);
-        this.effect = new MobEffectInstance(Objects.requireNonNull(effect, "effect"));
+        this.effect = EffectCopies.copy(Objects.requireNonNull(effect, "effect"));
     }
 
     @Override
@@ -28,6 +28,6 @@ public class EntityPotionEffectExpireEvent extends EntityEvent {
 
     /** The effect that ran out. A new copy each call, so editing it changes nothing. */
     public MobEffectInstance getEffect() {
-        return new MobEffectInstance(effect);
+        return EffectCopies.copy(effect);
     }
 }

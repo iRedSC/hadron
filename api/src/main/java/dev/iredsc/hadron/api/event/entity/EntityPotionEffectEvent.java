@@ -41,13 +41,13 @@ public class EntityPotionEffectEvent extends EntityEvent implements Cancellable 
         /** {@link Action#ADDED}: the entity doesn't have {@code added}'s effect yet. */
         record Added(MobEffectInstance added) implements Change {
             public Added {
-                added = new MobEffectInstance(Objects.requireNonNull(added,
+                added = EffectCopies.copy(Objects.requireNonNull(added,
                         "added is null; pass the effect instance about to be applied"));
             }
 
             @Override
             public MobEffectInstance added() {
-                return new MobEffectInstance(added);
+                return EffectCopies.copy(added);
             }
 
             @Override
@@ -70,18 +70,18 @@ public class EntityPotionEffectEvent extends EntityEvent implements Cancellable 
                             + " and added is " + added + ": pass the entity's current instance of added's effect, "
                             + "entity.getEffect(added.getEffect()), as old, or fire Removed and Added for two effects");
                 }
-                old = new MobEffectInstance(old);
-                added = new MobEffectInstance(added);
+                old = EffectCopies.copy(old);
+                added = EffectCopies.copy(added);
             }
 
             @Override
             public MobEffectInstance old() {
-                return new MobEffectInstance(old);
+                return EffectCopies.copy(old);
             }
 
             @Override
             public MobEffectInstance added() {
-                return new MobEffectInstance(added);
+                return EffectCopies.copy(added);
             }
 
             @Override
@@ -93,13 +93,13 @@ public class EntityPotionEffectEvent extends EntityEvent implements Cancellable 
         /** {@link Action#REMOVED}: {@code old} is being taken away before it runs out. */
         record Removed(MobEffectInstance old) implements Change {
             public Removed {
-                old = new MobEffectInstance(Objects.requireNonNull(old, "old is null; pass the entity's instance being "
+                old = EffectCopies.copy(Objects.requireNonNull(old, "old is null; pass the entity's instance being "
                         + "removed, entity.getEffect(effect), and fire nothing when it has none"));
             }
 
             @Override
             public MobEffectInstance old() {
-                return new MobEffectInstance(old);
+                return EffectCopies.copy(old);
             }
 
             @Override

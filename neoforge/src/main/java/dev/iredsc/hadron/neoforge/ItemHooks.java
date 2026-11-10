@@ -305,7 +305,17 @@ public final class ItemHooks {
         if (damage <= 0 || !Hooks.listens(ItemDamageEvent.class)) return damage;
         Actor actor = entity != null ? actor(entity) : Actors.currentOr(Actor.Unknown.INSTANCE);
         ItemDamageEvent event = Hooks.post(new ItemDamageEvent(level, holder(entity), entity, stack, damage, actor));
-        return event.isCancelled() ? 0 : event.getDamage();
+        return event.isCancelled() ? 0 : applied(stack, event);
+    }
+
+    /**
+     * What vanilla adds to the damage value, so the item ends as {@link ItemDamageEvent#getAfter()} said: an amount
+     * that breaks the item becomes exactly what breaks it, since vanilla adds in an int and a huge one would wrap
+     * around to a repair.
+     */
+    static int applied(ItemStack stack, ItemDamageEvent event) {
+        if (!event.willBreak()) return event.getDamage();
+        return Math.max(1, stack.getMaxDamage() - stack.getDamageValue());
     }
 
     /** An item ran out of durability and is breaking (after). */

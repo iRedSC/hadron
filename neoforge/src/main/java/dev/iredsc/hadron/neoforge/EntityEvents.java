@@ -89,30 +89,28 @@ public final class EntityEvents {
 
     private static void damage(LivingIncomingDamageEvent event) {
         LivingEntity entity = event.getEntity();
+        if (!server(entity) || !Hooks.listens(EntityDamageEvent.class)) return;
         float amount = event.getAmount();
-        if (!server(entity) || !dealsDamage(amount) || !Hooks.listens(EntityDamageEvent.class)) return;
-        float reported = reportedDamage(amount);
-        EntityDamageEvent hadron = Hooks.post(new EntityDamageEvent(entity, event.getSource(), reported,
+        EntityDamageEvent hadron = Hooks.post(new EntityDamageEvent(entity, event.getSource(), reportedDamage(amount),
                 EntityActors.damage(event.getSource(), entity)));
         if (hadron.isCancelled()) {
             event.setCanceled(true);
-        } else if (hadron.getDamage() != reported) {
-            event.setAmount(hadron.getDamage());
+            return;
         }
+        // Whatever the event says now, unless it is exactly what Minecraft already has: compared with the raw amount,
+        // not the report, so a report that replaced NaN or infinity is applied even when no listener changed it.
+        if (Float.compare(hadron.getDamage(), amount) != 0) event.setAmount(hadron.getDamage());
     }
 
     /**
-     * Whether an incoming amount is one {@link EntityDamageEvent} reports: a negative or NaN amount (only a mod's
-     * mistake makes one) deals nothing a plugin could stop, and the event refuses it.
+     * The amount {@link EntityDamageEvent} reports for any incoming one, so every hit fires it: a negative or NaN
+     * amount (only a mod's mistake makes one) as 0, an infinite one as {@code Float.MAX_VALUE}.
      */
-    public static boolean dealsDamage(float amount) {
-        return amount >= 0;
-    }
-
-    /** The amount {@link EntityDamageEvent} reports: an infinite blow as {@code Float.MAX_VALUE}, which it accepts. */
     public static float reportedDamage(float amount) {
+        if (!(amount >= 0)) return 0;
         return Math.min(amount, Float.MAX_VALUE);
     }
+
 
     private static void heal(LivingHealEvent event) {
         LivingEntity entity = event.getEntity();

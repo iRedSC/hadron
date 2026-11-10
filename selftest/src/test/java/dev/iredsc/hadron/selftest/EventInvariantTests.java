@@ -1,6 +1,8 @@
 package dev.iredsc.hadron.selftest;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventHandler;
+import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityPotionEffectEvent;
 import dev.iredsc.hadron.api.event.entity.EntityUseEvent;
@@ -9,6 +11,7 @@ import dev.iredsc.hadron.api.event.item.ItemCraftEvent;
 import dev.iredsc.hadron.api.event.item.ItemDamageEvent;
 import dev.iredsc.hadron.api.event.player.PlayerFishEvent;
 import dev.iredsc.hadron.api.event.player.PlayerSwapHandItemsEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import java.util.List;
@@ -67,6 +70,26 @@ public final class EventInvariantTests {
         t.assertTrue(e.willBreak() && e.getAfter().isEmpty(), "a huge setDamage should break it too");
         e.setDamage(5);
         t.assertEquals(15, e.getAfter().getDamageValue(), "the damage value after 5 more");
+    }
+
+    @HadronTest
+    @Covers(ItemDamageEvent.class)
+    void hugeDurabilityDamageBreaksTheItemAsTheEventSaid(TestContext t) {
+        ServerPlayer alice = t.player("alice").player();
+        ItemStack pickaxe = new ItemStack(Items.IRON_PICKAXE);
+        pickaxe.setDamageValue(10);
+        boolean[] predicted = {false};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(ItemDamageEvent e) {
+                e.setDamage(Integer.MAX_VALUE);
+                predicted[0] = e.willBreak() && e.getAfter().isEmpty();
+            }
+        });
+        pickaxe.hurtAndBreak(1, t.level(), alice, item -> {});
+        t.assertTrue(predicted[0], "the event should say Integer.MAX_VALUE damage breaks the pickaxe");
+        t.assertTrue(pickaxe.isEmpty(), "the pickaxe should break as the event said, but is " + pickaxe
+                + " at damage " + pickaxe.getDamageValue());
     }
 
     @HadronTest

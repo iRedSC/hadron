@@ -45,8 +45,9 @@ abstract class ArmorStandMixin {
         // stand ignores hits anyway.
         if (!(self.level() instanceof ServerLevel) || self.isRemoved() || self.isMarker() || self.isInvisible()
                 || source.is(DamageTypeTags.BYPASSES_INVULNERABILITY) || self.isInvulnerableTo(source)
-                || !EntityEvents.dealsDamage(amount) || !Hooks.listens(EntityDamageEvent.class)) return;
-        // The amount is what was dealt; a stand breaks by hits counted, not health, so changing it does nothing.
+                || !Hooks.listens(EntityDamageEvent.class)) return;
+        // Every amount fires it, a negative or NaN one reported as 0, since vanilla breaks a stand on any hit. A
+        // stand breaks by hits counted, not health, so what a listener sets the amount to changes nothing.
         if (Hooks.post(new EntityDamageEvent(self, source, EntityEvents.reportedDamage(amount),
                 EntityActors.damage(source, self))).isCancelled()) {
             cir.setReturnValue(false);
