@@ -138,6 +138,8 @@ public final class ItemHooks {
         }
         boolean cancelled = Hooks.post(new EquipEvent(level, entity, slot, entity.getItemBySlot(slot), item,
                 actor(entity))).isCancelled();
+        // Counted as a try, as a spawn is: a dispense or a player's use whose every try was refused plays nothing.
+        EntitySpawns.tried(cancelled);
         if (cancelled) resync(entity);
         return cancelled;
     }
