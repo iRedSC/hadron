@@ -5,6 +5,8 @@ import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.event.inventory.InventoryMoveItemEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
@@ -22,6 +24,7 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
+import net.minecraft.world.level.block.entity.HopperBlockEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -417,5 +420,118 @@ public final class RegionsTests {
                 new Actor.Player(bob.player()));
         t.plugin().getServer().getPluginManager().callEvent(killed);
         t.assertTrue(killed.isCancelled(), "an outsider removing a stand in a region should be refused");
+    }
+
+    /** A double chest across a region's edge, made by a player so the halves join: x 1 outside, x 2 inside. */
+    private static BlockPos doubleChestAcrossTheEdge(TestContext t, TestPlayer alice) {
+        alice.hold(new ItemStack(Items.CHEST, 2));
+        alice.placeBlock(t.pos(1, 0, 0));
+        alice.hold(new ItemStack(Items.CHEST, 2));
+        alice.placeBlock(t.pos(2, 0, 0));
+        BlockPos inside = t.pos(2, 0, 0);
+        ((ChestBlockEntity) t.level().getBlockEntity(inside)).setItem(0, new ItemStack(Items.DIAMOND, 8));
+        // An empty hand, so the wand /region wand hands out lands in it.
+        alice.hold(ItemStack.EMPTY);
+        return inside;
+    }
+
+    @HadronTest
+    void anOutsiderCantOpenAProtectedDoubleChestFromOutside(TestContext t) {
+        TestPlayer alice = admin(t);
+        doubleChestAcrossTheEdge(t, alice);
+        define(t, alice, "double-chest", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        alice.command("rg flag double-chest use deny");
+        TestPlayer bob = t.player("bob");
+        bob.useBlock(t.pos(1, 0, 0));
+        t.tick();
+        t.assertTrue(bob.player().containerMenu == bob.player().inventoryMenu,
+                "bob should not have the double chest open, but has " + bob.player().containerMenu);
+    }
+
+    @HadronTest
+    void aRemovedMemberCantTakeFromAMenuTheyHadOpen(TestContext t) {
+        BlockPos chest = t.pos(3, 0, 0);
+        t.setBlock(chest, Blocks.CHEST);
+        ((ChestBlockEntity) t.level().getBlockEntity(chest)).setItem(0, new ItemStack(Items.DIAMOND, 8));
+        TestPlayer alice = admin(t);
+        define(t, alice, "open-menu", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer carol = t.player("carol");
+        alice.command("rg addmember open-menu carol");
+        t.assertChat(alice, "carol is a member of open-menu");
+        carol.useBlock(chest);
+        t.tick();
+        t.assertFalse(carol.player().containerMenu == carol.player().inventoryMenu, "carol should have the chest open");
+        alice.command("rg removeplayer open-menu carol");
+        carol.clickSlot(0);
+        t.tick();
+        t.assertEquals(8, ((ChestBlockEntity) t.level().getBlockEntity(chest)).getItem(0).getCount(),
+                "the diamonds left in the chest");
+    }
+
+    @HadronTest
+    void aHopperInsideStillWorks(TestContext t) {
+        BlockPos chest = t.pos(3, 1, 0);
+        t.setBlock(chest.below(), Blocks.HOPPER);
+        t.setBlock(chest, Blocks.CHEST);
+        ((ChestBlockEntity) t.level().getBlockEntity(chest)).setItem(0, new ItemStack(Items.DIAMOND, 8));
+        define(t, admin(t), "hopper-inside", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        t.tick(40);
+        t.assertTrue(((ChestBlockEntity) t.level().getBlockEntity(chest)).getItem(0).getCount() < 8,
+                "a hopper inside the region should still pull from a chest inside it");
+    }
+
+    @HadronTest
+    void itemsCantLeaveForAnInventoryNothingIdentified(TestContext t) {
+        BlockPos chest = t.pos(3, 0, 0);
+        t.setBlock(chest, Blocks.CHEST);
+        define(t, admin(t), "unknown-sink", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        InventoryHolder.Block source = new InventoryHolder.Block(t.level(), chest);
+        InventoryMoveItemEvent pipe = new InventoryMoveItemEvent(source, 0, new ItemStack(Items.DIAMOND, 8),
+                InventoryHolder.Unknown.INSTANCE, new ItemStack(Items.DIAMOND), InventoryHolder.Unknown.INSTANCE,
+                Actor.Nature.INSTANCE);
+        t.plugin().getServer().getPluginManager().callEvent(pipe);
+        t.assertTrue(pipe.isCancelled(), "items should not leave a region for an inventory with no place");
+    }
+
+    @HadronTest
+    void anOutsidersMachineCantMoveItemsInsideARegion(TestContext t) {
+        BlockPos a = t.pos(3, 0, 0);
+        BlockPos b = t.pos(3, 0, 1);
+        t.setBlock(a, Blocks.CHEST);
+        t.setBlock(b, Blocks.BARREL);
+        define(t, admin(t), "machine-moves", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer bob = t.player("bob");
+        InventoryHolder.Block from = new InventoryHolder.Block(t.level(), a);
+        InventoryMoveItemEvent move = new InventoryMoveItemEvent(from, 0, new ItemStack(Items.DIAMOND, 8),
+                new InventoryHolder.Block(t.level(), b), new ItemStack(Items.DIAMOND), from,
+                new Actor.Machine(t.level(), t.pos(0, 0, 0), Attribution.of(bob.uuid())));
+        t.plugin().getServer().getPluginManager().callEvent(move);
+        t.assertTrue(move.isCancelled(), "bob's machine should not move items between inventories in a region");
+    }
+
+    @HadronTest
+    void damageNobodyIsBehindCantReachASafeZone(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "unknown-safe", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        alice.command("rg flag unknown-safe pvp deny");
+        TestPlayer carol = t.player("carol");
+        EntityDamageEvent hit = new EntityDamageEvent(carol.player(), t.level().damageSources().generic(), 4f,
+                Actor.Unknown.INSTANCE);
+        t.plugin().getServer().getPluginManager().callEvent(hit);
+        t.assertTrue(hit.isCancelled(), "damage nobody is behind should not hurt a player in a pvp deny region");
+    }
+
+    @HadronTest
+    void anOutsiderCantBreakABoatInside(TestContext t) {
+        Boat boat = EntityType.BOAT.create(t.level());
+        BlockPos inside = t.pos(1, 0, 1);
+        boat.moveTo(inside.getX() + 0.5, inside.getY(), inside.getZ() + 0.5);
+        t.level().addFreshEntity(boat);
+        define(t, admin(t), "boat-break", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        TestPlayer bob = t.player("bob");
+        bob.player().setGameMode(GameType.CREATIVE);
+        bob.attack(boat);
+        t.tick();
+        t.assertFalse(boat.isRemoved(), "an outsider's hit should not break a boat in a region");
     }
 }

@@ -17,12 +17,19 @@ import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryMoveItemEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import net.minecraft.world.level.block.state.properties.ChestType;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.entity.Mob;
+import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDismountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityUseEvent;
 import dev.iredsc.hadron.api.event.entity.HangingBreakEvent;
 import dev.iredsc.hadron.api.event.entity.ItemFrameChangeEvent;
+import dev.iredsc.hadron.api.event.entity.VehicleDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
@@ -258,12 +265,13 @@ final class Protection implements Listener {
             return;
         }
         if (!(victim instanceof ServerPlayer hurt)) return;
-        // Whoever answers for it, online or not: a turret keeps its owner while they're away. A machine nobody owns
-        // is an outsider; a mob nobody controls isn't PvP at all.
+        // Whoever answers for it, online or not: a turret keeps its owner while they're away. Anything else made to
+        // hurt (a machine, an arrow, something unknown) is an outsider when nobody owns it; only the world (lava, a
+        // fall) and a mob acting on its own aren't PvP.
         Optional<UUID> who = e.getActor().actingFor();
         if (who.isPresent() && who.get().equals(hurt.getUUID())) return;
-        boolean machine = e.getActor() instanceof Actor.Machine || e.getActor() instanceof Actor.FakePlayer;
-        if (who.isEmpty() && !machine) return;
+        if (who.isEmpty() && (e.getActor() instanceof Actor.Nature
+                || e.getActor() instanceof Actor.EntityActor a && a.entity() instanceof Mob)) return;
         // Both sides count: nobody fights out of a safe zone or into one.
         ServerLevel level = e.getLevel();
         List<BlockPos> sides = new ArrayList<>(3);
@@ -299,6 +307,12 @@ final class Protection implements Listener {
         entityChange(e, e, e.getEntity(), Flag.BUILD);
     }
 
+    /** Hitting a boat or minecart wears it down and breaks it: building. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    private void vehicleHit(VehicleDamageEvent e) {
+        entityChange(e, e, e.getEntity(), Flag.BUILD);
+    }
+
     /** A frame's item going in, coming out or turning is building, whoever or whatever does it. */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void frame(ItemFrameChangeEvent e) {
@@ -322,27 +336,77 @@ final class Protection implements Listener {
     }
 
     /**
-     * Items carried across a region's edge (a hopper under a chest, a pipe) are the world on its own reaching in or
-     * out: held to {@link Rules#refusingCrossing} both ways, as a piston is.
+     * Inventories in regions: a menu opened or clicked in, items moved in or out by a hopper, a pipe, a machine.
+     * Someone behind it (a player, a machine's owner) needs {@code use} wherever each inventory stands, even after
+     * the menu is open. The world on its own (a hopper nobody owns) is held to {@link Rules#refusingCrossing} both
+     * ways, as a piston is. An inventory with no place in a world (linked storage, one nothing identified) stands
+     * outside every region. A player's own inventory is never a region's.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void items(InventoryMoveItemEvent e) {
-        if (trusted(e)) return;
-        Optional<List<Region>> source = regionsAt(e.getSource());
-        Optional<List<Region>> destination = regionsAt(e.getDestination());
-        if (source.isEmpty() || destination.isEmpty()) return;
-        Optional<Region> no = Rules.refusingCrossing(destination.get(), source.get())
-                .or(() -> Rules.refusingCrossing(source.get(), destination.get()));
-        if (no.isPresent()) e.setCancelled(true);
+    private void inventory(InventoryEvent e) {
+        if (!(e instanceof Cancellable c) || trusted(e)) return;
+        Set<InventoryHolder> holders = new LinkedHashSet<>();
+        holders.add(e.getHolder().place());
+        if (e instanceof InventoryChangeEvent change) {
+            for (InventoryChangeEvent.Change ch : change.getChanges()) holders.add(ch.holder().place());
+        }
+        if (e instanceof InventoryMoveItemEvent move) {
+            holders.add(move.getSource().place());
+            holders.add(move.getDestination().place());
+        }
+        List<List<Region>> places = new ArrayList<>();
+        for (InventoryHolder holder : holders) places.addAll(regionsAt(holder));
+        Optional<Region> no = worldOnItsOwn(e.getActor()) ? crossing(places) : using(places, e.getActor().actingFor());
+        if (no.isEmpty()) return;
+        c.setCancelled(true);
+        if (e.getActor() instanceof Actor.Player a && e.getHolder().place() instanceof InventoryHolder.Block b) {
+            tell(e, b.pos(), no.get());
+        }
     }
 
-    /** The regions an inventory stands in; empty when it has no place in a world (linked storage, unknown). */
-    private Optional<List<Region>> regionsAt(InventoryHolder holder) {
-        return switch (holder.place()) {
-            case InventoryHolder.Block b -> Optional.of(store.at(b.level(), b.pos()));
+    /** Nobody behind it: nature, or a machine or mob nobody owns. */
+    private static boolean worldOnItsOwn(Actor actor) {
+        if (actor.actingFor().isPresent()) return false;
+        return actor instanceof Actor.Nature || actor instanceof Actor.Machine || actor instanceof Actor.EntityActor;
+    }
+
+    private static Optional<Region> crossing(List<List<Region>> places) {
+        for (List<Region> from : places) {
+            for (List<Region> to : places) {
+                Optional<Region> no = Rules.refusingCrossing(from, to);
+                if (no.isPresent()) return no;
+            }
+        }
+        return Optional.empty();
+    }
+
+    private static Optional<Region> using(List<List<Region>> places, Optional<UUID> who) {
+        for (List<Region> here : places) {
+            Optional<Region> no = Rules.refusing(here, Flag.USE, who);
+            if (no.isPresent()) return no;
+        }
+        return Optional.empty();
+    }
+
+    /**
+     * The regions at each spot an inventory stands: both halves of a double chest, an entity's block; outside every
+     * region for one with no place in a world; nothing for a player's own.
+     */
+    private List<List<Region>> regionsAt(InventoryHolder holder) {
+        return switch (holder) {
+            case InventoryHolder.Block b -> {
+                List<List<Region>> spots = new ArrayList<>(2);
+                spots.add(store.at(b.level(), b.pos()));
+                BlockState state = b.level().getBlockState(b.pos());
+                if (state.getBlock() instanceof ChestBlock && state.getValue(ChestBlock.TYPE) != ChestType.SINGLE) {
+                    spots.add(store.at(b.level(), b.pos().relative(ChestBlock.getConnectedDirection(state))));
+                }
+                yield spots;
+            }
+            case InventoryHolder.Entity en when en.entity() instanceof Player -> List.of();
             case InventoryHolder.Entity en when en.entity().level() instanceof ServerLevel level ->
-                    Optional.of(store.at(level, en.entity().blockPosition()));
-            default -> Optional.empty();
+                    List.of(store.at(level, en.entity().blockPosition()));
+            default -> List.of(List.of());
         };
     }
 
