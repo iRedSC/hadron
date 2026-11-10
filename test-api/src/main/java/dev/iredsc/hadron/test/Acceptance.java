@@ -56,8 +56,10 @@ import net.minecraft.core.BlockPos;
  * ({@code Areas.watch}), so a change with nobody behind it fires as Unknown there.
  *
  * <p><b>What it compares</b>, by {@link Part}: block states and which block entity is where; every slot of every
- * inventory a block in the area exposes, through any face; every entity that was in the area at either end, wherever
- * it went (that it came or went, a dropped item's stack, a container entity's slots, a living entity's health); every
+ * inventory a block in the area exposes, through any face; every entity that was in the area at either end, was born or
+ * destroyed there, or that an event there named on its way through, wherever it went (that it came or went, a dropped
+ * item's stack, a container entity's slots, a living entity's health), one born since the mark compared with how it
+ * first joined a world; every
  * test player's inventory and health. Not compared: a block entity's other data (a machine's progress, settings or
  * filters), mobs' equipment and inventories that aren't containers, and energy, fluids and other resources a machine
  * holds, which wait for Hadron's design for running resource flows. An entity that waited outside in a chunk whose

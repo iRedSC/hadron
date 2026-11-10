@@ -20,6 +20,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Predicate;
@@ -45,10 +46,11 @@ final class AcceptanceDiff {
     /**
      * The area at one moment. {@code contents}: each block's slots by label ({@code slot 3} for its own inventory,
      * {@code north slot 3} or {@code unsided slot 3} for another handler it offers). {@code entities}: every entity in
-     * the test's world but players, so one that was in the area is followed wherever it goes. Players by name.
+     * every loaded world but players, so one that was in the area is followed wherever it goes. {@code gone}: each
+     * followed entity removed for good, as it was last, so one destroyed in the area is seen there. Players by name.
      */
     record Snapshot(Map<BlockPos, BlockState> blocks, Map<BlockPos, String> blockEntities,
-            Map<BlockPos, Map<String, ItemStack>> contents, Map<UUID, Thing> entities,
+            Map<BlockPos, Map<String, ItemStack>> contents, Map<UUID, Thing> entities, Map<UUID, Thing> gone,
             Map<String, UUID> playerIds, Map<String, List<ItemStack>> players, Map<String, Float> playerHealth) {}
 
     /** One difference, and which heard events concern the same place, entity or player, for the message. */
@@ -56,11 +58,11 @@ final class AcceptanceDiff {
 
     /** Each change in {@code parts}, with the events heard for it. Empty when nothing in them changed. */
     static List<String> changes(Snapshot before, Snapshot after, Set<Part> parts, List<Seen> seen,
-            List<Seen> elsewhere, Set<UUID> touched, Map<UUID, Thing> joinedOutside) {
+            List<Seen> elsewhere, Set<UUID> touched, Map<UUID, Optional<Thing>> arrived) {
         List<Change> found = new ArrayList<>();
         if (parts.contains(Part.BLOCKS)) blocks(before, after, found);
         if (parts.contains(Part.INVENTORIES)) inventories(before, after, found);
-        if (parts.contains(Part.ENTITIES)) entities(before, after, touched, joinedOutside, found);
+        if (parts.contains(Part.ENTITIES)) entities(before, after, touched, arrived, found);
         if (parts.contains(Part.PLAYERS)) players(before, after, found);
         List<String> out = new ArrayList<>();
         for (Change c : found) out.add(c.text() + ": " + heard(c, seen, elsewhere));
@@ -121,17 +123,27 @@ final class AcceptanceDiff {
         }
     }
 
-    private static void entities(Snapshot before, Snapshot after, Set<UUID> touched, Map<UUID, Thing> joinedOutside,
-            List<Change> out) {
+    private static void entities(Snapshot before, Snapshot after, Set<UUID> touched,
+            Map<UUID, Optional<Thing>> arrived, List<Change> out) {
         Set<UUID> ids = new LinkedHashSet<>(before.entities().keySet());
+        ids.addAll(arrived.keySet());
+        ids.addAll(touched);
         ids.addAll(after.entities().keySet());
+        ids.addAll(after.gone().keySet());
         for (UUID id : ids) {
             Thing is = after.entities().get(id);
-            // One that joined the world outside after the mark is compared with itself as it joined: coming in is
-            // motion, but what happened to it on the way isn't.
-            Thing was = before.entities().containsKey(id) ? before.entities().get(id) : joinedOutside.get(id);
-            // What was in the area at either end, or that an event there named on its way through.
-            if (!(was != null && was.inBox() || is != null && is.inBox() || touched.contains(id))) continue;
+            Thing last = is == null ? after.gone().get(id) : null;
+            // One born after the mark outside the area is compared with itself as it first joined: coming in is
+            // motion, but what happened to it on the way isn't. One born inside has nothing to be compared with.
+            Thing was = before.entities().containsKey(id) ? before.entities().get(id)
+                    : arrived.getOrDefault(id, Optional.empty()).orElse(null);
+            boolean bornInside = !before.entities().containsKey(id) && arrived.containsKey(id)
+                    && arrived.get(id).isEmpty();
+            // What was in the area at either end, was born or destroyed there, or that an event there named on its way.
+            if (!(was != null && was.inBox() || is != null && is.inBox() || last != null && last.inBox()
+                    || bornInside || touched.contains(id))) {
+                continue;
+            }
             // An item lying in the area is also what a pickup, a merge or a despawn is about.
             Predicate<Seen> concerns = s -> s.event() instanceof EntityEvent e && e.getEntity().getUUID().equals(id)
                     || s.event() instanceof ItemPickupEvent p && p.getItemEntity().getUUID().equals(id)
@@ -139,11 +151,19 @@ final class AcceptanceDiff {
                             || m.getTarget().getUUID().equals(id))
                     || s.event() instanceof ItemDespawnEvent d && d.getItemEntity().getUUID().equals(id);
             if (was == null && is != null) {
-                out.add(new Change("a " + is.type() + describe(is) + " appeared at " + at(is.pos()), concerns));
+                out.add(new Change("a " + is.type() + describe(is) + (is.inBox() || !bornInside ? " appeared at "
+                        : " appeared in the area, now at ") + at(is.pos()), concerns));
+                continue;
+            }
+            if (was == null && last != null) {
+                // Born and destroyed within the step: a drop made and swallowed is still something that happened.
+                out.add(new Change("a " + last.type() + describe(last) + " appeared and is gone, last at "
+                        + at(last.pos()), concerns));
                 continue;
             }
             if (was != null && is == null) {
-                out.add(new Change("the " + was.type() + describe(was) + " at " + at(was.pos()) + " is gone",
+                out.add(new Change("the " + was.type() + describe(was) + " at " + at(was.pos()) + " is gone"
+                        + (last != null && !last.pos().equals(was.pos()) ? ", last at " + at(last.pos()) : ""),
                         concerns));
                 continue;
             }

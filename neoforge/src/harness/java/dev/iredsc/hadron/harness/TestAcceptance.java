@@ -129,17 +129,22 @@ final class TestAcceptance implements Acceptance, Listener {
     /** Events about compared entities or players that were placed outside the area: for failure messages only. */
     private final List<Seen> elsewhere = new ArrayList<>();
     /**
-     * Entities that joined the world outside the box this step: one of them in the box at the end walked, rolled or
-     * flowed in, which is motion, not something appearing there.
+     * How each entity that wasn't anywhere at the mark first joined a world this step, never overwritten: as it stood,
+     * when it joined outside the box (one in the box at the end walked, rolled or flowed in, which is motion) or was
+     * loaded from disk, or empty when it was born inside (it appeared there). A later rejoin (a portal, a reload)
+     * keeps the first.
      */
-    private final Map<UUID, AcceptanceDiff.Thing> joinedOutside = new LinkedHashMap<>();
+    private final Map<UUID, Optional<AcceptanceDiff.Thing>> arrived = new LinkedHashMap<>();
     private final java.util.function.Consumer<EntityJoinLevelEvent> joins = this::joined;
 
     private void joined(EntityJoinLevelEvent event) {
-        if (event.getLevel() == level && !box.isInside(event.getEntity().blockPosition())
-                && !(event.getEntity() instanceof ServerPlayer)) {
-            joinedOutside.put(event.getEntity().getUUID(), thing(event.getEntity()));
-        }
+        Entity e = event.getEntity();
+        if (e instanceof ServerPlayer || before.entities().containsKey(e.getUUID())) return;
+        AcceptanceDiff.Thing now = thing(e);
+        // One loaded from disk inside the box was already there, not born there: it is compared with how it loaded.
+        arrived.putIfAbsent(e.getUUID(), now.inBox() && !event.loadedFromDisk() ? Optional.empty() : Optional.of(now));
+        // Followed from its birth, so where it ends is seen even if that is inside the box and nothing reported it.
+        followed.putIfAbsent(e.getUUID(), e);
     }
 
     /** Stops hearing the loader when the test ends. */
@@ -158,8 +163,8 @@ final class TestAcceptance implements Acceptance, Listener {
         }
     }
     /**
-     * Entities seen in the box at the last snapshot, by reference: one moved into a chunk whose entities aren't
-     * listed yet still counts until it is removed.
+     * Every entity seen at the last mark or born since, by reference: one moved into a chunk whose entities aren't
+     * listed yet still counts until it is removed, and one removed is seen where it went.
      */
     private final Map<UUID, Entity> followed = new LinkedHashMap<>();
     private AcceptanceDiff.Snapshot before;
@@ -172,9 +177,9 @@ final class TestAcceptance implements Acceptance, Listener {
         this.box = new BoundingBox(box.minX(), box.minY(), box.minZ(), box.maxX(), box.maxY(), box.maxZ());
         Areas.watch(t.plugin(), level, box);
         t.registerEvents(this);
-        NeoForge.EVENT_BUS.addListener(EntityJoinLevelEvent.class, joins);
         this.before = snapshot();
         follow(before);
+        NeoForge.EVENT_BUS.addListener(EntityJoinLevelEvent.class, joins);
     }
 
     @Override
@@ -222,7 +227,7 @@ final class TestAcceptance implements Acceptance, Listener {
         touched.clear();
         elsewhere.clear();
         denied.clear();
-        joinedOutside.clear();
+        arrived.clear();
     }
 
     @Override
@@ -260,8 +265,7 @@ final class TestAcceptance implements Acceptance, Listener {
         AcceptanceDiff.Snapshot after = snapshot();
         requireSamePlayers(step, after);
         Set<Part> which = parts.length == 0 ? EnumSet.allOf(Part.class) : EnumSet.copyOf(List.of(parts));
-        List<String> problems = AcceptanceDiff.changes(before, after, which, seen, elsewhere, touched,
-                joinedOutside);
+        List<String> problems = AcceptanceDiff.changes(before, after, which, seen, elsewhere, touched, arrived);
         if (!problems.isEmpty()) {
             throw new AssertionError(step + " should have changed nothing in " + which + ", but " + problems.size()
                     + " thing(s) changed:\n  " + String.join("\n  ", problems));
@@ -500,6 +504,8 @@ final class TestAcceptance implements Acceptance, Listener {
         return switch (event) {
             case EntityMountEvent e -> List.of(e.getEntity(), e.getMount());
             case EntityLeashEvent e -> List.of(e.getEntity(), e.getHolder());
+            case ProjectileHitEvent e -> e.getHitEntity().map(hit -> List.of(e.getEntity(), hit))
+                    .orElse(List.of(e.getEntity()));
             case EntityEvent e -> List.of(e.getEntity());
             case ItemPickupEvent p -> holderEntity(p.getDestination()).map(d -> List.<Entity>of(p.getItemEntity(), d))
                     .orElse(List.of(p.getItemEntity()));
@@ -652,13 +658,20 @@ final class TestAcceptance implements Acceptance, Listener {
                 e.blockPosition(), e.level() == level && box.isInside(e.blockPosition()));
     }
 
-    /** From a mark on, every entity in the box then is followed, however many times the step is asserted. */
+    /**
+     * From a mark on, every entity anywhere then is followed, however many times the step is asserted: one that walks
+     * in and is destroyed there is seen going, by where it was last.
+     */
     private void follow(AcceptanceDiff.Snapshot at) {
         followed.clear();
         for (AcceptanceDiff.Thing thing : at.entities().values()) {
-            if (!thing.inBox()) continue;
-            Entity e = level.getEntity(thing.id());
-            if (e != null) followed.put(thing.id(), e);
+            for (ServerLevel l : level.getServer().getAllLevels()) {
+                Entity e = l.getEntity(thing.id());
+                if (e != null) {
+                    followed.put(thing.id(), e);
+                    break;
+                }
+            }
         }
     }
 
@@ -678,6 +691,7 @@ final class TestAcceptance implements Acceptance, Listener {
             if (!stacks.isEmpty()) contents.put(pos, stacks);
         }
         Map<UUID, AcceptanceDiff.Thing> entities = new LinkedHashMap<>();
+        Map<UUID, AcceptanceDiff.Thing> gone = new LinkedHashMap<>();
         Map<UUID, Entity> present = new LinkedHashMap<>();
         // Every loaded world's, the test's first: a mob that comes from another world was already somewhere.
         for (Entity e : level.getAllEntities()) present.put(e.getUUID(), e);
@@ -715,6 +729,8 @@ final class TestAcceptance implements Acceptance, Listener {
             if (why == Entity.RemovalReason.UNLOADED_TO_CHUNK || why == Entity.RemovalReason.UNLOADED_WITH_PLAYER
                     || why == Entity.RemovalReason.CHANGED_DIMENSION && held) {
                 present.putIfAbsent(f.getKey(), e);
+            } else if (!(e instanceof ServerPlayer)) {
+                gone.put(f.getKey(), thing(e));
             }
         }
         for (Entity e : present.values()) {
@@ -732,7 +748,8 @@ final class TestAcceptance implements Acceptance, Listener {
             health.put(tp.name(), tp.player().getHealth());
             ids.put(tp.name(), tp.uuid());
         }
-        return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, ids, players, health);
+        return new AcceptanceDiff.Snapshot(blocks, blockEntities, contents, entities, gone, ids, players,
+                health);
     }
 
     /**

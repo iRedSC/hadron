@@ -75,6 +75,7 @@ import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.portal.DimensionTransition;
 import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -1121,6 +1122,128 @@ public final class AcceptanceKitTests {
             pig.changeDimension(new DimensionTransition(t.level(), new Vec3(in.getX() + 0.5, in.getY(),
                     in.getZ() + 0.5), Vec3.ZERO, 0, 0, DimensionTransition.DO_NOTHING));
             area.assertUnchanged("a pig coming through a portal into the area", Part.ENTITIES);
+        } finally {
+            nether.setChunkForced(0, 0, false);
+        }
+    }
+
+    @HadronTest
+    void aMobWalkingInAndDestroyedThereIsGone(TestContext t) {
+        Pig pig = pig(t, t.pos(0, 0, 4));
+        Acceptance area = t.acceptance(around(t));
+        BlockPos in = t.pos(2, 0, 0);
+        pig.teleportTo(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        pig.discard();
+        String why = failure(t, () -> area.assertUnchanged("a pig destroyed after walking in", Part.ENTITIES));
+        t.assertTrue(why.contains("minecraft:pig") && why.contains("is gone, last at"), why);
+    }
+
+    @HadronTest
+    void aCartBornOutsideAndDestroyedInsideIsGone(TestContext t) {
+        Acceptance area = t.acceptance(around(t));
+        BlockPos start = t.pos(0, 0, 4), in = t.pos(2, 0, 0);
+        MinecartChest cart = new MinecartChest(t.level(), start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+        try (Actors.Scope s = Actors.push(new Actor.Server("a cart placed outside"))) {
+            t.level().addFreshEntity(cart);
+        }
+        cart.teleportTo(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        cart.discard();
+        String why = failure(t, () -> area.assertUnchanged("a cart destroyed in the area", Part.ENTITIES));
+        t.assertTrue(why.contains("chest_minecart") && why.contains("is gone"), why);
+    }
+
+    @HadronTest
+    void anItemBornInTheAreaAndSwallowedIsCaught(TestContext t) {
+        Acceptance area = t.acceptance(around(t));
+        BlockPos in = t.pos(2, 0, 0);
+        ItemEntity drop = new ItemEntity(t.level(), in.getX() + 0.5, in.getY(), in.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND));
+        try (Actors.Scope s = Actors.push(new Actor.Server("a drop"))) {
+            t.level().addFreshEntity(drop);
+        }
+        drop.discard();
+        String why = failure(t, () -> area.assertUnchanged("a drop made and swallowed", Part.ENTITIES));
+        t.assertTrue(why.contains("diamond") && why.contains("appeared and is gone"), why);
+    }
+
+    @HadronTest
+    void anItemBornInTheAreaThatLeavesIsCaught(TestContext t) {
+        Acceptance area = t.acceptance(around(t));
+        BlockPos in = t.pos(2, 0, 0), out = t.pos(-3, 0, 0);
+        ItemEntity drop = new ItemEntity(t.level(), in.getX() + 0.5, in.getY(), in.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND));
+        try (Actors.Scope s = Actors.push(new Actor.Server("a drop"))) {
+            t.level().addFreshEntity(drop);
+        }
+        drop.setPos(out.getX() + 0.5, out.getY(), out.getZ() + 0.5);
+        String why = failure(t, () -> area.assertUnchanged("a drop made here, thrown out", Part.ENTITIES));
+        t.assertTrue(why.contains("diamond") && why.contains("appeared in the area"), why);
+    }
+
+    @HadronTest
+    void aMobShotOnItsWayThroughIsChecked(TestContext t) {
+        Pig pig = pig(t, t.pos(0, 0, 4));
+        Acceptance area = t.acceptance(around(t));
+        BlockPos in = t.pos(2, 0, 0), out = t.pos(0, 0, 4);
+        pig.teleportTo(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        Entity arrow = EntityType.ARROW.create(t.level());
+        t.assertTrue(arrow != null, "an arrow");
+        arrow.moveTo(out.getX() + 0.5, out.getY() + 1, out.getZ() + 0.5);
+        Hadron.getPluginManager().callEvent(new ProjectileHitEvent(arrow, new EntityHitResult(pig),
+                new Actor.Server("a dispenser")));
+        pig.setHealth(pig.getHealth() - 4);
+        pig.teleportTo(out.getX() + 0.5, out.getY(), out.getZ() + 0.5);
+        String why = failure(t, () -> area.assertUnchanged("a pig shot passing through", Part.ENTITIES));
+        t.assertTrue(why.contains("minecraft:pig") && why.contains("health"), why);
+    }
+
+    @HadronTest
+    void aCartThatRejoinsOutsideKeepsHowItWasBorn(TestContext t) {
+        ServerLevel nether = t.server().getLevel(Level.NETHER);
+        t.assertTrue(nether != null, "the test server has a Nether");
+        nether.setChunkForced(0, 0, true);
+        try {
+            nether.getChunk(0, 0);
+            Acceptance area = t.acceptance(around(t));
+            BlockPos start = t.pos(0, 0, 4), in = t.pos(2, 0, 0);
+            MinecartChest cart = new MinecartChest(t.level(), start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+            cart.setItem(0, new ItemStack(Items.DIAMOND, 3));
+            t.level().addFreshEntity(cart);
+            cart.setItem(0, ItemStack.EMPTY);
+            Entity away = cart.changeDimension(new DimensionTransition(nether, new Vec3(0.5, 100, 0.5), Vec3.ZERO,
+                    0, 0, DimensionTransition.DO_NOTHING));
+            t.assertTrue(away != null, "the cart went to the Nether");
+            t.awaitAsync("the Nether to list the cart", () -> nether.getEntity(away.getUUID()) != null, 400);
+            Entity back = away.changeDimension(new DimensionTransition(t.level(), Vec3.atBottomCenterOf(start),
+                    Vec3.ZERO, 0, 0, DimensionTransition.DO_NOTHING));
+            t.assertTrue(back != null, "the cart came back");
+            back.teleportTo(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+            String why = failure(t, () -> area.assertUnchanged("a cart emptied, then round a portal", Part.ENTITIES));
+            t.assertTrue(why.contains("chest_minecart") && why.contains("diamond"), why);
+        } finally {
+            nether.setChunkForced(0, 0, false);
+        }
+    }
+
+    @HadronTest
+    void aCartBornInAnotherWorldIsComparedWithHowItWasBorn(TestContext t) {
+        ServerLevel nether = t.server().getLevel(Level.NETHER);
+        t.assertTrue(nether != null, "the test server has a Nether");
+        nether.setChunkForced(0, 0, true);
+        try {
+            nether.getChunk(0, 0);
+            Acceptance area = t.acceptance(around(t));
+            MinecartChest cart = new MinecartChest(nether, 0.5, 100, 0.5);
+            cart.setItem(0, new ItemStack(Items.DIAMOND, 3));
+            t.assertTrue(nether.addFreshEntity(cart), "the cart is in the Nether");
+            t.awaitAsync("the Nether to list the cart", () -> nether.getEntity(cart.getUUID()) != null, 400);
+            cart.setItem(0, ItemStack.EMPTY);
+            BlockPos in = t.pos(2, 0, 0);
+            cart.changeDimension(new DimensionTransition(t.level(), Vec3.atBottomCenterOf(in), Vec3.ZERO, 0, 0,
+                    DimensionTransition.DO_NOTHING));
+            String why = failure(t, () -> area.assertUnchanged("a cart emptied, then through a portal",
+                    Part.ENTITIES));
+            t.assertTrue(why.contains("chest_minecart") && why.contains("diamond"), why);
         } finally {
             nether.setChunkForced(0, 0, false);
         }
