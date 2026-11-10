@@ -4,6 +4,9 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
+import dev.iredsc.hadron.api.event.item.ItemDespawnEvent;
+import dev.iredsc.hadron.api.event.item.ItemMergeEvent;
+import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.test.Acceptance.Part;
 import dev.iredsc.hadron.test.Acceptance.Seen;
 import java.util.ArrayList;
@@ -112,7 +115,12 @@ final class AcceptanceDiff {
             Thing was = before.entities().get(id), is = after.entities().get(id);
             // Only what was in the area at either end; once there, it is followed wherever it goes.
             if (!(was != null && was.inBox() || is != null && is.inBox())) continue;
-            Predicate<Seen> concerns = s -> s.event() instanceof EntityEvent e && e.getEntity().getUUID().equals(id);
+            // An item lying in the area is also what a pickup, a merge or a despawn is about.
+            Predicate<Seen> concerns = s -> s.event() instanceof EntityEvent e && e.getEntity().getUUID().equals(id)
+                    || s.event() instanceof ItemPickupEvent p && p.getItemEntity().getUUID().equals(id)
+                    || s.event() instanceof ItemMergeEvent m && (m.getItemEntity().getUUID().equals(id)
+                            || m.getTarget().getUUID().equals(id))
+                    || s.event() instanceof ItemDespawnEvent d && d.getItemEntity().getUUID().equals(id);
             if (was == null && is != null) {
                 out.add(new Change("a " + is.type() + describe(is) + " appeared at " + at(is.pos()), concerns));
                 continue;

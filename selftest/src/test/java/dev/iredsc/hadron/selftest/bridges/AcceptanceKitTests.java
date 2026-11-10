@@ -6,12 +6,14 @@ import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
+import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
 import dev.iredsc.hadron.api.event.item.ItemDropEvent;
+import dev.iredsc.hadron.api.event.item.ItemMergeEvent;
 import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.api.event.item.ItemUseEvent;
 import dev.iredsc.hadron.api.event.resource.Resource;
@@ -47,6 +49,7 @@ import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -321,20 +324,6 @@ public final class AcceptanceKitTests {
     }
 
     @HadronTest
-    void refuseTakesOnlyEventClasses(TestContext t) {
-        Acceptance area = t.acceptance(around(t));
-        String why = "no refusal";
-        try {
-            area.refuse(String.class);
-        } catch (IllegalArgumentException e) {
-            why = e.getMessage();
-        }
-        t.assertTrue(why.contains("java.lang.String isn't a Hadron event"), why);
-    }
-
-    // ---- Attribution -----------------------------------------------------------------------------------------------
-
-    @HadronTest
     void aTrustedPlayersOwnWorkActsForThem(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos stone = t.pos(2, 0, 0);
@@ -553,5 +542,54 @@ public final class AcceptanceKitTests {
         BlockPos pos = t.pos(2, 0, 0);
         t.level().getChunkAt(pos).setBlockState(pos, Blocks.GOLD_BLOCK.defaultBlockState(), false);
         failure(t, () -> area.assertUnchanged("a write in the area first given"));
+    }
+
+    @HadronTest
+    void itemsMergingInTheAreaAreRefused(TestContext t) {
+        BlockPos in = t.pos(2, 0, 0);
+        Acceptance area = t.acceptance(around(t));
+        ItemEntity a = new ItemEntity(t.level(), in.getX() + 0.5, in.getY(), in.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND));
+        ItemEntity b = new ItemEntity(t.level(), in.getX() + 0.5, in.getY(), in.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND));
+        boolean cancelled = Hadron.getPluginManager().callEvent(new ItemMergeEvent(t.level(), a, b,
+                Actor.Nature.INSTANCE));
+        t.assertTrue(cancelled, "a merge lying in the area, which nature is behind, was refused: " + area.events());
+    }
+
+    @HadronTest
+    void aShotFromOutsideIntoTheAreaIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos target = t.pos(2, 0, 0);
+        t.setBlock(target, Blocks.STONE);
+        Acceptance area = t.acceptance(around(t));
+        // A hitscan gun names its shooter as the entity; bob stands outside the area.
+        boolean cancelled = Hadron.getPluginManager().callEvent(new ProjectileHitEvent(bob.player(),
+                new BlockHitResult(Vec3.atCenterOf(target), Direction.UP, target, false),
+                new Actor.Player(bob.player())));
+        t.assertTrue(cancelled, "bob's shot landing in the area was refused: " + area.events());
+    }
+
+    @HadronTest
+    void aStepWhereNothingWasRefusedProvesNothing(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos stone = t.pos(2, 0, 0);
+        t.setBlock(stone, Blocks.STONE);
+        bob.hold(new ItemStack(Items.IRON_PICKAXE));
+        Acceptance area = t.acceptance(around(t));
+        t.tick(2);
+        String why = failure(t, () -> area.assertRefused("bob's machine, never started"));
+        t.assertTrue(why.contains("nothing was refused since the last mark"), why);
+        bob.breakBlock(stone);
+        t.tick(2);
+        area.assertRefused("bob breaking stone where he isn't trusted");
+    }
+
+    @HadronTest
+    void attributionRefusesAStepAPlayerJoinedLate(TestContext t) {
+        Acceptance area = t.acceptance(around(t));
+        TestPlayer alice = t.player("alice");
+        String why = failure(t, () -> area.assertActingFor(alice, "alice, who joined after the mark"));
+        t.assertTrue(why.contains("Join every player before calling mark()"), why);
     }
 }

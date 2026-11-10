@@ -11,6 +11,7 @@ import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
+import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
 import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTargetEvent;
@@ -22,6 +23,8 @@ import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
 import dev.iredsc.hadron.api.event.item.ItemCraftEvent;
+import dev.iredsc.hadron.api.event.item.ItemDespawnEvent;
+import dev.iredsc.hadron.api.event.item.ItemMergeEvent;
 import dev.iredsc.hadron.api.event.item.ItemDropEvent;
 import dev.iredsc.hadron.api.event.item.ItemSmeltEvent;
 import dev.iredsc.hadron.api.event.item.PrepareAnvilEvent;
@@ -95,7 +98,7 @@ final class TestAcceptance implements Acceptance, Listener {
     private final ServerLevel level;
     private final BoundingBox box;
     private final Set<UUID> trusted = new HashSet<>();
-    private final Set<Class<?>> refused = new HashSet<>();
+    private final Set<Class<? extends Event>> refused = new HashSet<>();
     private final List<Seen> seen = new ArrayList<>();
     /** Events that couldn't be placed, with why: each fails assertActingFor. */
     private final List<String> unplaced = new ArrayList<>();
@@ -131,14 +134,8 @@ final class TestAcceptance implements Acceptance, Listener {
     }
 
     @Override
-    public Acceptance refuse(Class<?>... kinds) {
-        for (Class<?> kind : kinds) {
-            if (!Event.class.isAssignableFrom(kind)) {
-                throw new IllegalArgumentException(kind.getName() + " isn't a Hadron event: refuse takes event classes "
-                        + "such as BlockEvent.class or InventoryEvent.class");
-            }
-        }
-        refused.addAll(List.of(kinds));
+    public Acceptance refuse(Class<? extends Event> kind) {
+        refused.add(Objects.requireNonNull(kind, "kind"));
         return this;
     }
 
@@ -161,14 +158,28 @@ final class TestAcceptance implements Acceptance, Listener {
         return List.copyOf(seen);
     }
 
-    @Override
-    public void assertUnchanged(String step, Part... parts) {
-        AcceptanceDiff.Snapshot after = snapshot();
+    /** Refuses a step whose players changed since the mark: one who joined has nothing to be compared against. */
+    private void requireSamePlayers(String step, AcceptanceDiff.Snapshot after) {
         if (!after.players().keySet().equals(before.players().keySet())) {
             throw new AssertionError(step + ": the test's players changed since the last mark (" + before.players()
                     .keySet() + " then, " + after.players().keySet() + " now), so their inventories and health have "
                     + "nothing to be compared against. Join every player before calling mark().");
         }
+    }
+
+    @Override
+    public void assertRefused(String step) {
+        if (seen.stream().noneMatch(Seen::cancelled)) {
+            throw new AssertionError(step + ": nothing was refused since the last mark, so this step proves nothing "
+                    + "about interception. Is the machine running (power, fuel, range, an owner, enough ticks)? Heard: "
+                    + (seen.isEmpty() ? "no events" : seen));
+        }
+    }
+
+    @Override
+    public void assertUnchanged(String step, Part... parts) {
+        AcceptanceDiff.Snapshot after = snapshot();
+        requireSamePlayers(step, after);
         Set<Part> which = parts.length == 0 ? EnumSet.allOf(Part.class) : EnumSet.copyOf(List.of(parts));
         List<String> problems = AcceptanceDiff.changes(before, after, which, seen);
         if (!problems.isEmpty()) {
@@ -179,6 +190,7 @@ final class TestAcceptance implements Acceptance, Listener {
 
     @Override
     public void assertActingFor(TestPlayer player, String step) {
+        requireSamePlayers(step, snapshot());
         List<String> problems = new ArrayList<>(unplaced);
         for (Seen s : seen) {
             if (AcceptanceDiff.nobodys(s.actor())) continue;
@@ -235,7 +247,7 @@ final class TestAcceptance implements Acceptance, Listener {
         if (actor instanceof Actor.Server) return true;
         Optional<UUID> who = actor.actingFor();
         if (who.isEmpty() || !trusted.contains(who.get())) return false;
-        for (Class<?> kind : refused) if (kind.isInstance(event)) return false;
+        for (Class<? extends Event> kind : refused) if (kind.isInstance(event)) return false;
         return true;
     }
 
@@ -247,6 +259,13 @@ final class TestAcceptance implements Acceptance, Listener {
             if (box.isInside(b.getPos())) return new Place.In(Optional.of(b.getPos()));
             for (BlockChange change : b.getBlocks()) if (box.isInside(change.getPos())) return in(change.getPos());
             return OUT;
+        }
+        if (event instanceof ProjectileHitEvent hit && hit.getLevel() == level) {
+            // Where it lands, as well as the shooter's place: a hitscan shot names its shooter as the entity.
+            Place lands = at(level, hit.getHitPosition());
+            if (lands instanceof Place.In) return lands;
+            Optional<BlockPos> block = hit.getHitBlock();
+            if (block.isPresent() && box.isInside(block.get())) return in(block.get());
         }
         if (event instanceof EntityEvent e) return at(e.getLevel(), e.getPosition());
         if (event instanceof ExplosionEvent x) {
@@ -267,6 +286,12 @@ final class TestAcceptance implements Acceptance, Listener {
             if (drop.getLevel() != level) return OUT;
             Place lands = at(level, drop.getPosition());
             if (lands instanceof Place.In) return lands;
+        }
+        if (event instanceof ItemEvent i && itemEntity(i).isPresent()) {
+            // A merge or a despawn happens where its item lies, whoever is behind it (nature, usually).
+            if (i.getLevel() != level) return OUT;
+            Place lies = at(level, itemEntity(i).get().position());
+            if (lies instanceof Place.In) return lies;
         }
         if (event instanceof ItemEvent i) {
             if (i.getLevel() != level) return OUT;
@@ -326,6 +351,15 @@ final class TestAcceptance implements Acceptance, Listener {
             }
         }
         return OUT;
+    }
+
+    /** The item entity an item event is about, if it is about one lying in the world. */
+    static Optional<ItemEntity> itemEntity(ItemEvent event) {
+        return switch (event) {
+            case ItemMergeEvent e -> Optional.of(e.getItemEntity());
+            case ItemDespawnEvent e -> Optional.of(e.getItemEntity());
+            default -> Optional.empty();
+        };
     }
 
     private static Optional<InventoryHolder> itemHolder(ItemEvent event) {

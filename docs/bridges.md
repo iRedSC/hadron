@@ -17,17 +17,22 @@ A bridge runs the test as an in-game suite with its mod and itself in the test s
 ```java
 Acceptance area = t.acceptance(BoundingBox.fromCorners(t.pos(-3, 0, -3), t.pos(3, 4, 3)));
 t.tick(200);                                       // bob's miner, bob not trusted
+area.assertRefused("bob's miner where he isn't trusted");
 area.assertUnchanged("bob's miner where he isn't trusted");
 
 area.trust(bob).refuse(BlockEvent.class).mark();   // it runs, but every dig is refused,
 t.tick(200);                                       // so nothing may change, not even its buffer
+area.assertRefused("bob's miner, block changes refused");
 area.assertUnchanged("bob's miner, block changes refused");
 area.assertActingFor(bob, "bob's miner");
 
 area.refuseNothing().refuse(InventoryEvent.class).mark();  // it digs; its inventory changes are refused
 t.tick(200);
+area.assertRefused("bob's miner, inventory changes refused");
 area.assertUnchanged("bob's miner, inventory changes refused", Acceptance.Part.INVENTORIES);
 ```
+
+`assertRefused` makes sure something was tried: a refused step where the machine sat idle (no power, out of range) proves nothing. What a refused-kind step can't catch yet is a drop thrown away when its insert is refused: that is conservation, which waits for the design of running resource flows.
 
 - **`assertUnchanged(step, parts...)`**: nothing in the parts named (`BLOCKS`, `INVENTORIES`, `ENTITIES`, `PLAYERS`; all, when none) changed. Compare every part when a refused kind stops the machine's work, so a cost kept or a drop duped from a refused action fails too; name parts only when the step lets other kinds through on purpose. Each change is listed with the events heard for that place or entity, so it reads as a cancel the bridge ignored or, with nothing heard, an interception gap.
 - **`assertActingFor(player, step)`**: every event in the box acts for that player, except the server's and nature's, and at least one does. `Unknown` and ownerless actors are named as attribution gaps, and an event the kit can't place at all (an inventory event with an unknown holder, an item event nobody is behind) fails it too: protection denies those, failing closed.
