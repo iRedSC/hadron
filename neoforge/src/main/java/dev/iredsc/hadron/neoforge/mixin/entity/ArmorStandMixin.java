@@ -2,6 +2,7 @@ package dev.iredsc.hadron.neoforge.mixin.entity;
 
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.neoforge.EntityActors;
+import dev.iredsc.hadron.neoforge.EntityEvents;
 import dev.iredsc.hadron.neoforge.EntityHandling;
 import dev.iredsc.hadron.neoforge.Hooks;
 import net.minecraft.server.level.ServerLevel;
@@ -45,8 +46,10 @@ abstract class ArmorStandMixin {
         if (!(self.level() instanceof ServerLevel) || self.isRemoved() || self.isMarker() || self.isInvisible()
                 || source.is(DamageTypeTags.BYPASSES_INVULNERABILITY) || self.isInvulnerableTo(source)
                 || !Hooks.listens(EntityDamageEvent.class)) return;
-        // The amount is what was dealt; a stand breaks by hits counted, not health, so changing it does nothing.
-        if (Hooks.post(new EntityDamageEvent(self, source, amount, EntityActors.damage(source, self))).isCancelled()) {
+        // Every amount fires it, a negative or NaN one reported as 0, since vanilla breaks a stand on any hit. A
+        // stand breaks by hits counted, not health, so what a listener sets the amount to changes nothing.
+        if (Hooks.post(new EntityDamageEvent(self, source, EntityEvents.reportedDamage(amount),
+                EntityActors.damage(source, self))).isCancelled()) {
             cir.setReturnValue(false);
         }
     }

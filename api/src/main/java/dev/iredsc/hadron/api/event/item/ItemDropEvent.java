@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
@@ -39,7 +40,7 @@ public class ItemDropEvent extends ItemEvent implements Cancellable {
      * @param item what drops; the live stack when the drop is a player's, so a listener may change the count
      */
     public ItemDropEvent(ServerLevel level, Vec3 position, ItemStack item, Actor actor) {
-        super(level, item, actor);
+        super(level, EventStack.live(item, "item"), actor);
         this.position = Objects.requireNonNull(position, "position");
     }
 

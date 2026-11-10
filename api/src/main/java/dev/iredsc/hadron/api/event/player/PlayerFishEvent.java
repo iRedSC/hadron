@@ -64,16 +64,26 @@ public class PlayerFishEvent extends EntityEvent implements Cancellable {
 
     /**
      * @param caught the hooked entity on {@link State#CAUGHT_ENTITY}, otherwise null
-     * @param items the live catch on {@link State#CAUGHT_FISH}; ignored otherwise
-     * @param exp the experience the catch gives on {@link State#CAUGHT_FISH}; ignored otherwise
+     * @param items the live catch on {@link State#CAUGHT_FISH}, otherwise null
+     * @param exp the experience the catch gives on {@link State#CAUGHT_FISH}, otherwise 0
      */
     public PlayerFishEvent(ServerPlayer player, FishingHook hook, State state, @Nullable Entity caught, @Nullable List<ItemStack> items,
             int exp, Actor actor) {
         super(hook, actor);
         this.player = Objects.requireNonNull(player, "player");
         this.state = Objects.requireNonNull(state, "state");
-        this.caught = state == State.CAUGHT_ENTITY ? Objects.requireNonNull(caught, "caught") : null;
-        this.items = state == State.CAUGHT_FISH ? Objects.requireNonNull(items, "items") : List.of();
+        if ((state == State.CAUGHT_ENTITY) != (caught != null)) {
+            throw new IllegalArgumentException(state == State.CAUGHT_ENTITY
+                    ? "CAUGHT_ENTITY needs the hooked entity: pass it as caught"
+                    : "Only CAUGHT_ENTITY has a hooked entity, but this is " + state + ": pass null as caught");
+        }
+        if (state != State.CAUGHT_FISH && (items != null || exp != 0)) {
+            throw new IllegalArgumentException("Only CAUGHT_FISH has a catch and its experience, but this is " + state
+                    + ": pass null as items and 0 as exp");
+        }
+        this.caught = caught;
+        this.items = state == State.CAUGHT_FISH
+                ? Objects.requireNonNull(items, "CAUGHT_FISH needs the catch: pass the live list as items") : List.of();
         this.exp = state == State.CAUGHT_FISH ? Math.max(0, exp) : 0;
     }
 

@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
@@ -19,7 +20,8 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  *
  * <p>Core fires it for players and fake players on every use, and for mobs that start using an item over time
  * (skeletons drawing bows, wandering traders drinking). Witches drink with their own code and are not seen. Using an
- * item on a block or an entity is the block's or entity's use event, not this.
+ * item on a block or an entity is the block's or entity's use event, not this. {@link #getItem()} is a copy, so
+ * editing it changes nothing; cancel to stop the use.
  */
 @FiredBy(core = FULL)
 public class ItemUseEvent extends ItemEvent implements Cancellable {
@@ -28,7 +30,7 @@ public class ItemUseEvent extends ItemEvent implements Cancellable {
     private boolean cancelled;
 
     public ItemUseEvent(ServerLevel level, LivingEntity user, InteractionHand hand, ItemStack item, Actor actor) {
-        super(level, item, actor);
+        super(level, EventStack.copyOf(item, "item"), actor);
         this.user = Objects.requireNonNull(user, "user");
         this.hand = Objects.requireNonNull(hand, "hand");
     }

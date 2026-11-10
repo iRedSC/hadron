@@ -16,6 +16,10 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  * one hit does. Bukkit's {@code VehicleDamageEvent}. Cancel it and the hit does nothing: no wobble, no damage, nothing
  * breaks or drops, and a TNT minecart hit by a burning arrow doesn't explode. Living mounts (horses, pigs) are
  * {@link EntityDamageEvent}.
+ *
+ * <p>Every hit fires it, whatever its amount. An amount Minecraft was handed that isn't a finite number of at least 0
+ * (only a mod's mistake makes one) is reported as one, and that is what the hit then deals: a negative or NaN amount
+ * as 0, an infinite one as {@code Float.MAX_VALUE}.
  */
 @FiredBy(core = FULL)
 public class VehicleDamageEvent extends EntityEvent implements Cancellable {
@@ -23,10 +27,14 @@ public class VehicleDamageEvent extends EntityEvent implements Cancellable {
     private final float damage;
     private boolean cancelled;
 
+    /**
+     * @param damage how hard it was hit: finite and at least 0. Report an infinite hit as {@code Float.MAX_VALUE} and a
+     *     negative or NaN one as 0, and apply what was reported.
+     */
     public VehicleDamageEvent(VehicleEntity vehicle, DamageSource source, float damage, Actor actor) {
         super(vehicle, actor);
         this.source = Objects.requireNonNull(source, "source");
-        this.damage = damage;
+        this.damage = DamageAmounts.checked(damage);
     }
 
     @Override

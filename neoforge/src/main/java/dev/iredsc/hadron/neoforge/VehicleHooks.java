@@ -15,8 +15,16 @@ public final class VehicleHooks {
     public static boolean refuseHit(VehicleEntity vehicle, DamageSource source, float amount) {
         if (!(vehicle.level() instanceof ServerLevel) || vehicle.isRemoved() || vehicle.isInvulnerableTo(source)
                 || !Hooks.listens(VehicleDamageEvent.class)) return false;
-        return Hooks.post(new VehicleDamageEvent(vehicle, source, amount, EntityActors.damage(source, vehicle)))
-                .isCancelled();
+        return Hooks.post(new VehicleDamageEvent(vehicle, source, EntityEvents.reportedDamage(amount),
+                EntityActors.damage(source, vehicle))).isCancelled();
+    }
+
+    /**
+     * The amount a hit on a boat or minecart deals: what {@link VehicleDamageEvent} reports, when anyone listens, so a
+     * NaN hit can't leave the vehicle's wear NaN (unbreakable) while the event said 0.
+     */
+    public static float dealt(float amount) {
+        return Hooks.listens(VehicleDamageEvent.class) ? EntityEvents.reportedDamage(amount) : amount;
     }
 
     /** True if a plugin refused the removal a hit is about to cause (an end crystal shattering). */

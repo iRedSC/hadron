@@ -1,0 +1,13 @@
+diff --git a/api/src/main/java/dev/iredsc/hadron/api/event/item/ItemDamageEvent.java b/api/src/main/java/dev/iredsc/hadron/api/event/item/ItemDamageEvent.java
+index 20610e6..6b91e50 100644
+--- a/api/src/main/java/dev/iredsc/hadron/api/event/item/ItemDamageEvent.java
++++ b/api/src/main/java/dev/iredsc/hadron/api/event/item/ItemDamageEvent.java
+@@ -44,7 +44,7 @@ public class ItemDamageEvent extends ItemChangeEvent {
+ 
+     /** Whether {@code damage} more uses {@code item} up. In longs, so a huge amount can't wrap around to a repair. */
+     private static boolean breaks(ItemStack item, int damage) {
+-        return (long) item.getDamageValue() + damage >= item.getMaxDamage();
++        return item.getDamageValue() + damage >= item.getMaxDamage();
+     }
+ 
+     private static ItemStack damaged(ItemStack item, int damage) {

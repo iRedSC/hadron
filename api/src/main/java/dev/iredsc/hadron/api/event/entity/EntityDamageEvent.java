@@ -16,6 +16,10 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  * A living entity is about to be hurt. The actor is who hurt it: the attacker, the arrow (which remembers its
  * shooter), the machine or the mob; {@link Actor.Nature} for falls, drowning, lava and the like. Cancel it and no
  * damage, knockback or weapon wear happens. {@link #setDamage} changes the amount before armour and other reductions.
+ *
+ * <p>Every hit fires it, whatever its amount, so protection can refuse any of them. An amount Minecraft was handed
+ * that isn't a finite number of at least 0 (only a mod's mistake makes one) is reported as one, and that is what the
+ * hit then deals: a negative or NaN amount as 0, an infinite one as {@code Float.MAX_VALUE}.
  */
 @FiredBy(core = FULL)
 public class EntityDamageEvent extends EntityEvent implements Cancellable {
@@ -23,10 +27,14 @@ public class EntityDamageEvent extends EntityEvent implements Cancellable {
     private float damage;
     private boolean cancelled;
 
+    /**
+     * @param damage the amount before armour and other reductions: finite and at least 0. Report an infinite blow
+     *     as {@code Float.MAX_VALUE} and a negative or NaN one as 0, and apply what was reported.
+     */
     public EntityDamageEvent(LivingEntity entity, DamageSource source, float damage, Actor actor) {
         super(entity, actor);
         this.source = Objects.requireNonNull(source, "source");
-        this.damage = damage;
+        this.damage = DamageAmounts.checked(damage);
     }
 
     @Override
@@ -44,10 +52,10 @@ public class EntityDamageEvent extends EntityEvent implements Cancellable {
         return Optional.ofNullable(source.getEntity());
     }
 
-    /** The weapon or tool it was dealt with, if one was. */
+    /** The weapon or tool it was dealt with, if one was. A new copy each call, so editing it changes nothing. */
     public Optional<ItemStack> getWeapon() {
         ItemStack weapon = source.getWeaponItem();
-        return weapon == null || weapon.isEmpty() ? Optional.empty() : Optional.of(weapon);
+        return weapon == null || weapon.isEmpty() ? Optional.empty() : Optional.of(weapon.copy());
     }
 
     /** The damage before armour, enchantments and effects reduce it. */
@@ -55,12 +63,9 @@ public class EntityDamageEvent extends EntityEvent implements Cancellable {
         return damage;
     }
 
+    /** Deal this much instead: finite and at least 0. */
     public void setDamage(float damage) {
-        if (!(damage >= 0) || Float.isInfinite(damage)) {
-            throw new IllegalArgumentException("Damage must be a finite number of at least 0, got " + damage
-                    + "; to stop the damage use setCancelled(true)");
-        }
-        this.damage = damage;
+        this.damage = DamageAmounts.checked(damage);
     }
 
     @Override

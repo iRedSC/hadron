@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.world.entity.decoration.ItemFrame;
@@ -27,13 +28,13 @@ public class ItemFrameChangeEvent extends EntityEvent implements Cancellable {
     }
 
     private final ItemFrameChangeAction action;
-    private final ItemStack itemStack;
+    private final EventStack.Copy itemStack;
     private boolean cancelled;
 
     public ItemFrameChangeEvent(ItemFrame frame, ItemFrameChangeAction action, ItemStack itemStack, Actor actor) {
         super(frame, actor);
         this.action = Objects.requireNonNull(action, "action");
-        this.itemStack = Objects.requireNonNull(itemStack, "itemStack; the item placed, removed or turned");
+        this.itemStack = EventStack.copyOf(itemStack, "itemStack (the item placed, removed or turned)");
     }
 
     @Override
@@ -47,7 +48,7 @@ public class ItemFrameChangeEvent extends EntityEvent implements Cancellable {
 
     /** The item going in, coming out, or turning: one item, a copy, so changing it changes nothing. */
     public ItemStack getItemStack() {
-        return itemStack.copy();
+        return itemStack.get();
     }
 
     @Override

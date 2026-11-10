@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.item;
 
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -23,23 +24,23 @@ public class PrepareAnvilEvent extends ItemEvent implements Cancellable {
     private final ServerPlayer viewer;
     private final InventoryHolder holder;
     private final AnvilMenu menu;
-    private final ItemStack left;
-    private final ItemStack right;
+    private final EventStack.Copy left;
+    private final EventStack.Copy right;
     private final @Nullable String renameText;
-    private ItemStack result;
+    private EventStack.Copy result;
     private int repairCost;
     private boolean cancelled;
 
     public PrepareAnvilEvent(ServerLevel level, ServerPlayer viewer, InventoryHolder holder, AnvilMenu menu,
             ItemStack left, ItemStack right, @Nullable String renameText, ItemStack result, int repairCost, Actor actor) {
-        super(level, left.copy(), actor);
+        super(level, EventStack.copyOf(left, "left"), actor);
         this.viewer = Objects.requireNonNull(viewer, "viewer");
         this.holder = Objects.requireNonNull(holder, "holder");
         this.menu = Objects.requireNonNull(menu, "menu");
-        this.left = left.copy();
-        this.right = right.copy();
+        this.left = EventStack.copyOf(left, "left");
+        this.right = EventStack.copyOf(right, "right");
         this.renameText = renameText;
-        this.result = result.copy();
+        this.result = EventStack.copyOf(result, "result");
         this.repairCost = repairCost;
     }
 
@@ -59,12 +60,12 @@ public class PrepareAnvilEvent extends ItemEvent implements Cancellable {
 
     /** The item being worked on. A copy. */
     public ItemStack getLeft() {
-        return left;
+        return left.get();
     }
 
     /** The material, book or second item. A copy. */
     public ItemStack getRight() {
-        return right;
+        return right.get();
     }
 
     /** The name typed, or null if none. */
@@ -74,12 +75,12 @@ public class PrepareAnvilEvent extends ItemEvent implements Cancellable {
 
     /** What the anvil offers. A copy; use {@link #setResult} to change it. */
     public ItemStack getResult() {
-        return result.copy();
+        return result.get();
     }
 
     /** Offer this instead; {@code ItemStack.EMPTY} offers nothing. */
     public void setResult(ItemStack result) {
-        this.result = Objects.requireNonNull(result, "result; use ItemStack.EMPTY to offer nothing").copy();
+        this.result = EventStack.copyOf(result, "result");
     }
 
     /** Experience levels taking the result costs. */

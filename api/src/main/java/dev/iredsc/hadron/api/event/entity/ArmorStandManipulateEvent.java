@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.entity;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import java.util.Optional;
@@ -27,8 +28,8 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
 public class ArmorStandManipulateEvent extends EntityEvent implements Cancellable {
     private final EquipmentSlot slot;
     private final InteractionHand hand;
-    private final ItemStack playerItem;
-    private final ItemStack standItem;
+    private final EventStack.Copy playerItem;
+    private final EventStack.Copy standItem;
     private boolean cancelled;
 
     public ArmorStandManipulateEvent(ArmorStand stand, EquipmentSlot slot, InteractionHand hand, ItemStack playerItem,
@@ -36,9 +37,8 @@ public class ArmorStandManipulateEvent extends EntityEvent implements Cancellabl
         super(stand, actor);
         this.slot = Objects.requireNonNull(slot, "slot");
         this.hand = Objects.requireNonNull(hand, "hand");
-        this.playerItem = Objects.requireNonNull(playerItem, "playerItem; use ItemStack.EMPTY for an empty hand")
-                .copy();
-        this.standItem = Objects.requireNonNull(standItem, "standItem; use ItemStack.EMPTY for an empty slot").copy();
+        this.playerItem = EventStack.copyOf(playerItem, "playerItem (the player's hand)");
+        this.standItem = EventStack.copyOf(standItem, "standItem (the stand's slot)");
     }
 
     @Override
@@ -57,12 +57,12 @@ public class ArmorStandManipulateEvent extends EntityEvent implements Cancellabl
 
     /** What the player holds and will put on the stand; empty when they only take. A copy. */
     public ItemStack getPlayerItem() {
-        return playerItem.copy();
+        return playerItem.get();
     }
 
     /** What the stand has in the slot and the player will take; empty when they only put. A copy. */
     public ItemStack getArmorStandItem() {
-        return standItem.copy();
+        return standItem.get();
     }
 
     /**

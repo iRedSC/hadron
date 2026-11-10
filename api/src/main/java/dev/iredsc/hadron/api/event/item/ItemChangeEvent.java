@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -28,8 +29,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.PARTIAL;
                 + "reagent), once per action")
 public class ItemChangeEvent extends ItemEvent implements Cancellable {
     private final InventoryHolder holder;
-    private final ItemStack before;
-    private ItemStack after;
+    private EventStack.Copy after;
     private boolean cancelled;
 
     /**
@@ -38,11 +38,10 @@ public class ItemChangeEvent extends ItemEvent implements Cancellable {
      * @param after the stack as it will be (copied)
      */
     public ItemChangeEvent(ServerLevel level, InventoryHolder holder, ItemStack before, ItemStack after, Actor actor) {
-        super(level, Objects.requireNonNull(before, "before; use ItemStack.EMPTY").copy(), actor);
+        super(level, EventStack.copyOf(before, "before"), actor);
         this.holder = Objects.requireNonNull(holder,
                 "holder; use InventoryHolder.Unknown.INSTANCE when nothing is known");
-        this.before = getItem();
-        this.after = Objects.requireNonNull(after, "after; use ItemStack.EMPTY").copy();
+        this.after = EventStack.copyOf(after, "after");
     }
 
     /** What holds the stack. */
@@ -50,19 +49,19 @@ public class ItemChangeEvent extends ItemEvent implements Cancellable {
         return holder;
     }
 
-    /** The stack before the change. A copy; same as {@link #getItem()}. */
+    /** The stack before the change; same as {@link #getItem()}. A new copy each call, so editing it changes nothing. */
     public ItemStack getBefore() {
-        return before;
+        return getItem();
     }
 
-    /** The stack after the change. A copy; editing it changes nothing. */
+    /** The stack after the change. A new copy each call, so editing it changes nothing. */
     public ItemStack getAfter() {
-        return after;
+        return after.get();
     }
 
     /** For subclasses whose result a listener can edit, such as the damage amount. */
     protected void setAfter(ItemStack after) {
-        this.after = Objects.requireNonNull(after, "after").copy();
+        this.after = EventStack.copyOf(after, "after");
     }
 
     @Override

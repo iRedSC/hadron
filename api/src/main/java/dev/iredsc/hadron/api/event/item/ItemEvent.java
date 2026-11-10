@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
+import dev.iredsc.hadron.api.event.EventStack;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.server.level.ServerLevel;
@@ -14,12 +15,16 @@ import net.minecraft.world.item.ItemStack;
  */
 public abstract class ItemEvent extends ActionEvent {
     private final ServerLevel level;
-    private final ItemStack item;
+    private final EventStack item;
 
-    protected ItemEvent(ServerLevel level, ItemStack item, Actor actor) {
+    /**
+     * @param item {@link EventStack#copyOf} for an event that hands out copies, {@link EventStack#live} for one whose
+     *     Javadoc says {@link #getItem()} is the live stack
+     */
+    protected ItemEvent(ServerLevel level, EventStack item, Actor actor) {
         super(actor);
         this.level = Objects.requireNonNull(level, "level");
-        this.item = Objects.requireNonNull(item, "item; use ItemStack.EMPTY");
+        this.item = Objects.requireNonNull(item, "item; use EventStack.copyOf(stack, name) or EventStack.live");
     }
 
     /** Where it happens. */
@@ -28,11 +33,12 @@ public abstract class ItemEvent extends ActionEvent {
     }
 
     /**
-     * The stack this is about. Each event says whether it is the live stack or a copy; change it only where the
-     * event says so, and cancel to stop the action instead.
+     * The stack this is about. Each event says whether it is the live stack or a copy: a copy is new on every call, so
+     * editing it changes nothing. Change the live stack only where the event says so, and cancel to stop the action
+     * instead.
      */
     public ItemStack getItem() {
-        return item;
+        return item.get();
     }
 
     /**
