@@ -8,16 +8,18 @@ import org.jspecify.annotations.Nullable;
  * What a failed or hung test's report says led up to it: the last events its listeners heard, and each of its players
  * as it ended. Captured before the test's world is cleaned up, and only for a test that didn't pass.
  *
- * @param events  the last events, oldest first, at most {@link RecentEvents#KEPT}
+ * @param events  the last events, oldest first, at most {@link RecentEvents#KEPT}; null when the test ran without the
+ *                recorder (a benchmark suite's tests do, so their timings stay those of a real server)
  * @param omitted how many earlier events were heard but not kept
  * @param players every player the test joined, in the order they joined
  */
-record FailureContext(List<Heard> events, int omitted, List<PlayerState> players) {
+record FailureContext(@Nullable List<Heard> events, int omitted, List<PlayerState> players) {
     FailureContext {
-        events = List.copyOf(events);
+        events = events == null ? null : List.copyOf(events);
         players = List.copyOf(players);
-        if (omitted < 0 || (omitted > 0 && events.isEmpty())) {
-            throw new IllegalArgumentException(omitted + " events omitted with " + events.size() + " kept: only the "
+        int kept = events == null ? 0 : events.size();
+        if (omitted < 0 || (omitted > 0 && kept == 0)) {
+            throw new IllegalArgumentException(omitted + " events omitted with " + kept + " kept: only the "
                     + "earliest are ever omitted, so some are always kept");
         }
     }
@@ -57,7 +59,11 @@ record FailureContext(List<Heard> events, int omitted, List<PlayerState> players
     /** The lines under a failure in report.txt, each indented by {@code indent}. */
     void render(StringBuilder out, String indent, boolean hung) {
         out.append(indent);
-        if (events.isEmpty()) {
+        List<Heard> events = this.events;
+        if (events == null) {
+            out.append("Events its listeners heard: not recorded, as in every benchmark suite\n");
+            events = List.of();
+        } else if (events.isEmpty()) {
             out.append("Events its listeners heard: none\n");
         } else if (omitted > 0) {
             out.append("Events its listeners heard, the last ").append(events.size()).append(" (").append(omitted)

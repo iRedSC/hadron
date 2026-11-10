@@ -1,12 +1,17 @@
 package dev.iredsc.hadron.harness;
 
 import org.jspecify.annotations.Nullable;
-import com.google.gson.GsonBuilder;
+import com.google.gson.Gson;
 import com.google.gson.JsonArray;
+import com.google.gson.JsonElement;
 import com.google.gson.JsonNull;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
+import com.google.gson.stream.JsonWriter;
 import java.io.File;
 import java.io.IOException;
+import java.io.StringWriter;
+import java.io.UncheckedIOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.time.Instant;
@@ -190,7 +195,7 @@ final class TestReport {
             JsonObject suite = new JsonObject();
             suite.addProperty("suite", s.jar);
             suite.addProperty("plugin", s.plugin);
-            suite.add("broken", s.broken == null ? JsonNull.INSTANCE : new com.google.gson.JsonPrimitive(s.broken));
+            suite.add("broken", s.broken == null ? JsonNull.INSTANCE : new JsonPrimitive(s.broken));
             JsonArray filter = new JsonArray();
             for (String f : s.filter) filter.add(f);
             suite.add("filter", filter);
@@ -224,21 +229,48 @@ final class TestReport {
         for (String p : problems) problemArray.add(p);
         root.add("problems", problemArray);
         root.add("suites", suiteArray);
-        return new GsonBuilder().serializeNulls().setPrettyPrinting().disableHtmlEscaping().create().toJson(root) + "\n";
+        // Written strictly: Gson's toJson would write a NaN that slipped past number() as a bare NaN, which strict
+        // JSON readers refuse, losing the whole report. A strict writer refuses it here instead, loudly.
+        StringWriter text = new StringWriter();
+        try {
+            JsonWriter writer = new JsonWriter(text);
+            writer.setLenient(false);
+            writer.setIndent("  ");
+            writer.setSerializeNulls(true);
+            writer.setHtmlSafe(false);
+            new Gson().getAdapter(JsonElement.class).write(writer, root);
+            writer.flush();
+        } catch (IOException e) {
+            throw new UncheckedIOException(e);
+        }
+        return text + "\n";
+    }
+
+    /**
+     * A double as JSON has room for it: NaN and the infinities aren't JSON numbers, so they're written as the strings
+     * {@code "NaN"}, {@code "Infinity"} and {@code "-Infinity"}. Every double in the report goes through here.
+     */
+    private static JsonPrimitive number(double d) {
+        return Double.isFinite(d) ? new JsonPrimitive(d) : new JsonPrimitive(Double.toString(d));
     }
 
     private static JsonObject json(FailureContext context) {
         JsonObject out = new JsonObject();
-        JsonArray events = new JsonArray();
-        for (FailureContext.Heard e : context.events()) {
-            JsonObject o = new JsonObject();
-            o.addProperty("tick", e.tick());
-            o.addProperty("event", e.event());
-            o.addProperty("cancelled", e.cancelled());
-            o.addProperty("line", e.line());
-            events.add(o);
+        List<FailureContext.Heard> heard = context.events();
+        if (heard == null) {
+            out.add("events", JsonNull.INSTANCE);
+        } else {
+            JsonArray events = new JsonArray();
+            for (FailureContext.Heard e : heard) {
+                JsonObject o = new JsonObject();
+                o.addProperty("tick", e.tick());
+                o.addProperty("event", e.event());
+                o.addProperty("cancelled", e.cancelled());
+                o.addProperty("line", e.line());
+                events.add(o);
+            }
+            out.add("events", events);
         }
-        out.add("events", events);
         out.addProperty("eventsOmitted", context.omitted());
         JsonArray players = new JsonArray();
         for (FailureContext.PlayerState p : context.players()) {
@@ -248,9 +280,9 @@ final class TestReport {
             o.addProperty("online", on != null);
             o.addProperty("world", on == null ? null : on.world());
             o.addProperty("pos", on == null ? null : on.pos());
-            o.addProperty("x", on == null ? null : on.x());
-            o.addProperty("y", on == null ? null : on.y());
-            o.addProperty("z", on == null ? null : on.z());
+            o.add("x", on == null ? JsonNull.INSTANCE : number(on.x()));
+            o.add("y", on == null ? JsonNull.INSTANCE : number(on.y()));
+            o.add("z", on == null ? JsonNull.INSTANCE : number(on.z()));
             o.addProperty("gameMode", on == null ? null : on.gameMode());
             o.addProperty("mainHand", on == null ? null : on.mainHand());
             o.addProperty("offHand", on == null ? null : on.offHand());
@@ -309,7 +341,8 @@ final class TestReport {
             if (parent != null) parent.mkdirs();
             Files.writeString(file.toPath(), render(), StandardCharsets.UTF_8);
             Files.writeString(jsonFile(file).toPath(), json(), StandardCharsets.UTF_8);
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
+            // The text report is written first, so it survives a JSON one that couldn't be.
             System.err.println("Hadron couldn't write the test report to " + file + ": " + e);
         }
     }

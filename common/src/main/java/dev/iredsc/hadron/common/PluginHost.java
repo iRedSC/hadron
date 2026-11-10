@@ -259,13 +259,22 @@ public final class PluginHost implements PluginManager {
         void close();
     }
 
+    /** Where {@link #recordEvents} hands each event. */
+    public interface EventSink {
+        /**
+         * Called once every handler has run. {@code firedAt} is what the recording's clock read when the event fired,
+         * before any handler, so a handler that waits doesn't move it. May be called from any thread.
+         */
+        void heard(Event event, int firedAt, String line);
+    }
+
     /**
      * For the test runner: hands {@code sink} every event some plugin handled, after they all had, with the line
-     * {@code /hadron trace} would show for it, until the recording is closed. It costs only the events that are built
-     * anyway: an event nobody listens to stays unbuilt. The sink may be called from any thread that fires an event.
+     * {@code /hadron trace} would show for it and {@code clock}'s reading when it fired, until the recording is
+     * closed. It costs only the events that are built anyway: an event nobody listens to stays unbuilt.
      */
-    public EventRecording recordEvents(java.util.function.BiConsumer<Event, String> sink) {
-        TraceRecorder recorder = new TraceRecorder(trace, events, sink);
+    public EventRecording recordEvents(java.util.function.IntSupplier clock, EventSink sink) {
+        TraceRecorder recorder = new TraceRecorder(trace, events, clock, sink);
         events.observe(recorder);
         return recorder;
     }

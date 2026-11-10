@@ -29,11 +29,15 @@ public final class FailureRecorder {
         this.world = world;
     }
 
-    /** From the test's first line; on the server thread. */
+    /** Whether {@link #start} began recording, so a report can tell "none heard" from "not recorded". */
+    private boolean started;
+
+    /** From the test's first line; on the server thread. Not called for a benchmark suite's tests. */
     void start() {
         PluginHost host = Hooks.host();
         if (host == null || recording != null) return;
-        recording = host.recordEvents(this::heard);
+        recording = host.recordEvents(world::ticksSpent, this::heard);
+        started = true;
     }
 
     /** Before cleanup, so the test's own disconnects and world removal aren't recorded. */
@@ -43,9 +47,10 @@ public final class FailureRecorder {
         if (r != null) r.close();
     }
 
-    private void heard(Event event, String line) {
+    /** {@code firedAt} is the test's tick as the event fired, not as its last handler returned. */
+    private void heard(Event event, int firedAt, String line) {
         Boolean cancelled = event instanceof Cancellable c ? c.isCancelled() : null;
-        events.add(world.ticksSpent(), event.getEventName(), cancelled, line);
+        events.add(firedAt, event.getEventName(), cancelled, line);
     }
 
     /**
@@ -64,7 +69,8 @@ public final class FailureRecorder {
             }
             players.add(new FailureContext.PlayerState(p.name(), online));
         }
-        return new FailureContext(tail.events(), tail.omitted(), players);
+        return started ? new FailureContext(tail.events(), tail.omitted(), players)
+                : new FailureContext(null, 0, players);
     }
 
     private FailureContext.@Nullable Online online(TestPlayer p) {

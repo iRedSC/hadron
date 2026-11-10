@@ -51,6 +51,11 @@ import org.yaml.snakeyaml.Yaml;
 final class TestRunner {
     static final String REPORT_PROPERTY = "hadron.test.report";
     static final String INDEX = "META-INF/hadron-tests.txt";
+    /**
+     * In a suite jar: its tests are benchmarks, so they run without the failure recorder, whose snapshot and line per
+     * event would land in their timings. bench/ carries it in its test resources, so every bench there gets it.
+     */
+    static final String BENCHMARKS = "META-INF/hadron-benchmarks";
     /** Beside a staged suite jar in plugins/: the {@link TestFilter} patterns its run is limited to. */
     static final String FILTER_SUFFIX = ".tests";
     static final Logger LOG = LoggerFactory.getLogger("Hadron tests");
@@ -175,7 +180,9 @@ final class TestRunner {
     void runSuite(TestReport report, File file, TestFilter filter) throws IOException {
         String pluginName;
         List<String> classNames;
+        boolean record;
         try (JarFile jar = new JarFile(file)) {
+            record = jar.getEntry(BENCHMARKS) == null;
             var yml = jar.getEntry("plugin.yml");
             if (yml == null) {
                 report.broken(report.suite(file.getName(), "?"), "it has test classes but no plugin.yml, so no plugin "
@@ -236,7 +243,7 @@ final class TestRunner {
         }
         chosen.sort(Comparator.comparing(Case::id));
         for (Case c : chosen) {
-            report.add(suite, runCase(report, suite, plugin, c));
+            report.add(suite, runCase(report, suite, plugin, c, record));
             if (!server.isRunning()) {
                 report.problem("The server stopped during " + c.id() + ", so the tests after it didn't run. A "
                         + "test or plugin ran /stop or called halt.");
@@ -258,7 +265,7 @@ final class TestRunner {
         }
     }
 
-    private TestReport.Result runCase(TestReport report, TestReport.Suite suite, JavaPlugin plugin, Case c) {
+    private TestReport.Result runCase(TestReport report, TestReport.Suite suite, JavaPlugin plugin, Case c, boolean record) {
         String id = c.id();
         String source = TestSource.of(c.type(), c.method());
         String misuse = misuse(c);
@@ -274,7 +281,7 @@ final class TestRunner {
         }
         watchdog.watch(report, suite, c.type().getName(), c.method().getName(), id, source, c.test().timeout(),
                 world.failures);
-        world.failures.start();
+        if (record) world.failures.start();
         TestReport.Result result;
         try {
             Object instance = null;

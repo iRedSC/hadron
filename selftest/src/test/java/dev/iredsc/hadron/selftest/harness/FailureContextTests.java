@@ -106,6 +106,58 @@ public final class FailureContextTests {
                 "The text report should say how many earlier events it left out:\n" + report.get("text"));
     }
 
+    @HadronTest
+    void anEventsTickIsWhenItFiredNotWhenItsHandlersReturned(TestContext t) {
+        boolean[] waited = {false};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(Ping p) {
+                // A handler that runs the server on before returning, as one waiting on a result would.
+                if (!waited[0]) {
+                    waited[0] = true;
+                    t.tick(2);
+                }
+            }
+        });
+        Hadron.getPluginManager().callEvent(new Ping());
+        t.assertEquals(2, t.ticksSpent(), "ticks the handler ran");
+
+        JsonArray events = onlyTest(plantedReport(t, "planted failure")).getAsJsonObject("context")
+                .getAsJsonArray("events");
+        t.assertEquals(1, events.size(), "events heard: " + events);
+        t.assertEquals(0, events.get(0).getAsJsonObject().get("tick").getAsInt(),
+                "The event fired at tick 0, before its handler ran two ticks: " + events);
+    }
+
+    @HadronTest
+    void aReportStaysValidJsonWhenAPlayersPositionIsntANumber(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        net.minecraft.world.phys.Vec3 was = alice.player().position();
+        Map<String, String> report;
+        alice.player().setPosRaw(Double.NaN, Double.POSITIVE_INFINITY, Double.NEGATIVE_INFINITY);
+        try {
+            report = plantedReport(t, "planted failure");
+        } finally {
+            alice.player().setPosRaw(was.x, was.y, was.z);
+        }
+        JsonElement root;
+        try (com.google.gson.stream.JsonReader reader = new com.google.gson.stream.JsonReader(
+                new java.io.StringReader(report.get("json")))) {
+            reader.setLenient(false);
+            root = new com.google.gson.Gson().getAdapter(JsonElement.class).read(reader);
+            t.assertEquals(com.google.gson.stream.JsonToken.END_DOCUMENT, reader.peek(), "what follows the report");
+        } catch (java.io.IOException e) {
+            throw new AssertionError("report.json isn't valid JSON, so a strict reader loses the whole report: " + e
+                    + "\n" + report.get("json"), e);
+        }
+        JsonObject p = root.getAsJsonObject().getAsJsonArray("suites").get(0).getAsJsonObject()
+                .getAsJsonArray("tests").get(0).getAsJsonObject().getAsJsonObject("context")
+                .getAsJsonArray("players").get(0).getAsJsonObject();
+        t.assertEquals("NaN", p.get("x").getAsString(), "a NaN coordinate in report.json");
+        t.assertEquals("Infinity", p.get("y").getAsString(), "an infinite coordinate in report.json");
+        t.assertEquals("-Infinity", p.get("z").getAsString(), "a negative infinite coordinate in report.json");
+    }
+
     private static JsonObject onlyTest(Map<String, String> report) {
         JsonObject root = JsonParser.parseString(report.get("json")).getAsJsonObject();
         return root.getAsJsonArray("suites").get(0).getAsJsonObject().getAsJsonArray("tests").get(0).getAsJsonObject();
