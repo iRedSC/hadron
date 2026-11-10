@@ -51,6 +51,59 @@ Protection uses the controller where there is one, otherwise the responsible pla
 
 An identifiable mob is always an `EntityActor`, even when it spawned naturally. `Nature` is reserved for processes with no entity, so a logger never loses which creature griefed.
 
+## Access
+
+Rule 3 says a parent carries enough to act on. **Access is that payload in one shape, on every action:** `ActionEvent.getAccess()` lists what the action touches, where, as it really happens, so a protection plugin needs one listener and a lookup in its own data, and no knowledge of Minecraft or any mod ([design](design.md), "Core states facts"). The actor already says who; access says what and where.
+
+```java
+@EventHandler
+void on(ActionEvent e) {
+    if (!(e instanceof Cancellable c) || trusted(e.getActor())) return;
+    for (Access a : e.getAccess()) {
+        if (regions.refuses(a, e.getActor())) { c.setCancelled(true); return; }
+    }
+}
+```
+
+`Access` is a record: a `Kind`, the level, the box it reaches (one block for most), the entity it is about if any, and where it comes from, if anywhere.
+
+| Kind | Means | From |
+|---|---|---|
+| `BUILD` | a block, or an object that stands in for one (a frame and its item, a stand, a boat, a crystal), changes or goes | the source, for a change that crosses: the fluid's source, the spreading block, the fire burning it, the piston |
+| `USE` | a block or entity is interacted with without changing it: a door, a lever, a villager's trades | |
+| `CONTAINER` | an inventory's contents are seen or change; one access per block it stands on, so a double chest is two | the other inventory, for items moving between two |
+| `ENTER` | an entity arrives in a block: walking, riding, landing, being set down; one per entity carried, players included | the block it left |
+| `ATTACK` | a living entity is harmed, by a hit, a harmful effect or being set alight | every place the attack comes from: the attacker, the projectile, the machine |
+
+**Derived, never set.** Each event family builds its access from its own payload in its constructor (a `BlockEvent` from `getBlocks()`, an `InventoryEvent` from its holders, an `EntityMoveEvent` from its destination and the entity's riders), so access can't disagree with the getters. A bridge firing a parent gets access for free, which is what rule 3 asked of it. A cancellable action can't be constructed with no access: the constructor throws, naming the event and the payload it lacks. Whole-level events (weather, time) are the exception, and are marked so in their class.
+
+**True, not requested.** Where an action ends somewhere other than where it started out to, core works out the real place before firing: a chorus fruit or random teleport settles on the ground before its event, so `getTo()` and its `ENTER` are where it lands; a dismount picks the spot it sets the rider down before asking. Cancelling still stops the whole action.
+
+**Attribution reaches every tick.** A harmful effect and fire remember who caused them, as projectiles already do, so poison and burning damage act for the player who threw the potion or swung the sword.
+
+### Closing the known gaps
+
+`MissingFactTests` holds each fact the regions plugin had to guess, as a `@KnownGap`. Each closes as follows; the design is done when all are green, the acceptance kit's placement rules are replaced by `getAccess()`, and the regions plugin's protection is the listener above.
+
+| Gap | Closed by |
+|---|---|
+| A teleport states where it settles | settling worked out before firing; `ENTER` at the landing |
+| A rider is named when their vehicle carries them | an `ENTER` per indirect passenger on a vehicle's move and teleport |
+| A dismount states where the rider is set down | `EntityDismountEvent` gains the destination, worked out first; `ENTER` there |
+| A shift-click names the inventory items move into | an `InventoryClickEvent`'s access is every inventory its menu moves items between |
+| Opening a double chest names both halves | a `CONTAINER` access per block an inventory stands on |
+| Poison and burning act for whoever caused them | the causal actor stored on the effect and on the fire |
+| Starting to mine fires an event | a new `BlockStartBreakEvent` (Paper's `BlockDamageEvent`, a name Hadron uses for lasting damage), with `USE` access: refusing it stops the dig, not a change |
+
+### Order of work
+
+Each step lands on its own, with the gaps it closes going green:
+
+1. `Access` on `ActionEvent`, derived for every family from the payload it has today. No gap closes; the acceptance kit asserts each event's access agrees with its own placement, which shows where the two differ.
+2. The facts: landing, riders, dismount destination, menu inventories, chest halves, attribution on effects and fire, `BlockStartBreakEvent`. Each closes its gap.
+3. The acceptance kit places by `getAccess()` and its own rules go.
+4. The regions plugin's protection becomes the one listener; what it keeps is policy (which flag a kind reads, what crosses a region's edge).
+
 ## Catalog
 
 **Core** means fired at a vanilla chokepoint, so mods that go through vanilla are covered with no bridge. **Bridge** means only a bridge can fire it. Where core's coverage stops and what bridges fire is in [bridge-hooks.md](bridge-hooks.md), generated from the code. All are cancellable unless marked *(after)*.
