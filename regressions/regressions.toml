@@ -742,3 +742,19 @@ guards = [
     { test = "InteractionTests.aCancelledPlaceLeavesTheFrameEmptyAndTheItemHeld", tier = "in-game" },
     { test = "InteractionTests.clickingAFullFrameIsARotateAndCancelledItStaysPut", tier = "in-game" },
 ]
+
+[[regression]]
+id = "held-action-takes-in-handler-actions"
+bug = "A hold took in what an event's handlers did: a handler's allowed place for Bob lost its stat, advancements and vibration with Alice's refused one, a handler's own block change made a refused lever flip count as allowed, and a handler's own spawn kept a refused snowball from being given back."
+fix = "d97643d"
+paths = [
+    "common/src/main/java/dev/iredsc/hadron/common/EventBus.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/HeldEffects.java",
+]
+guards = [
+    { test = "BreakPlaceTests.aPlaceAListenerMakesWhileRefusingAnotherKeepsItsSideEffects", tier = "in-game" },
+    { test = "BreakPlaceTests.aRefusedLeverFlipLeavesNoTraceWhenItsListenerChangesAnotherBlock", tier = "in-game" },
+    { test = "SpawnTests.aRefusedSnowballIsGivenBackWhenItsListenerSpawnsSomethingElse", tier = "in-game" },
+    { test = "EventBusTest.everyHandlerRunsInsideThePortsDispatchScopeAndItEndsEvenWhenOneThrows", tier = "fast" },
+]
+note = "The patch takes the scope out of both dispatches (EventBus.post and NeoForge's place event in HeldEffects.decidingPlace); PluginHost.aroundDispatch, HandlerScope and the install in HadronMod stay, unused."

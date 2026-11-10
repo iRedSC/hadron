@@ -1,0 +1,40 @@
+diff --git a/common/src/main/java/dev/iredsc/hadron/common/EventBus.java b/common/src/main/java/dev/iredsc/hadron/common/EventBus.java
+index da61d0c..c1dfab3 100644
+--- a/common/src/main/java/dev/iredsc/hadron/common/EventBus.java
++++ b/common/src/main/java/dev/iredsc/hadron/common/EventBus.java
+@@ -254,18 +254,11 @@ final class EventBus {
+     /** Runs every handler that hears the event. */
+     void post(Event event) {
+         Baked b = handlers(event.getClass());
+-        if (!b.any()) return;
+-        PluginHost.DispatchScope around = scope;
+-        @Nullable Object entered = around.enter();
+-        try {
+-            if (b.observers.length == 0) {
+-                for (Subscription s : b.handlers) s.call(event);
+-                return;
+-            }
+-            observed(event, b);
+-        } finally {
+-            around.exit(entered);
++        if (b.observers.length == 0) {
++            for (Subscription s : b.handlers) s.call(event);
++            return;
+         }
++        observed(event, b);
+     }
+ 
+     /** What runs around every dispatch, installed by the port ({@link PluginHost#aroundDispatch}). */
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/HeldEffects.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/HeldEffects.java
+index 2e4a925..275dc9b 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/HeldEffects.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/HeldEffects.java
+@@ -94,7 +94,7 @@ public final class HeldEffects {
+      * was cancelled, which refuses the placement and drops what the item did.
+      */
+     public static boolean decidingPlace(BooleanSupplier placeEvent) {
+-        boolean cancelled = HandlerScope.around(placeEvent);
++        boolean cancelled = placeEvent.getAsBoolean();
+         Hold hold = current();
+         if (cancelled && hold != null) hold.placeRefused = true;
+         return cancelled;
