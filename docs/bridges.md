@@ -1,6 +1,6 @@
 # Bridges
 
-A bridge makes one mod speak Hadron's events. Nothing here is built yet; this is the target the core and the first bridges are built toward.
+A bridge makes one mod speak Hadron's events. No bridge exists yet; this is the target the core and the first bridges are built toward. What is built: a bridge's claim on its mods and the firing that goes through it ([Claiming a mod](#claiming-a-mod)), and `bridge-depend:` for plugins.
 
 ## The goal
 
@@ -73,7 +73,17 @@ A bridge has two parts:
 
 [bridge-hooks.md](bridge-hooks.md) lists exactly what a bridge must hook: the events only bridges fire, and where core's coverage of an event stops.
 
-Each bridge owns exactly one mod id, so two bridges never compete to translate the same mod; a second bridge for a mod id fails to load, naming the first.
+### Claiming a mod
+
+Each mod id has at most one bridge, so two bridges never compete to translate the same mod. A bridge may claim several, since one mod often ships as several mod ids (Mekanism's generators and tools are optional addons, each its own mod). It claims them once, from its mod's constructor, and keeps the handle. The first id must be installed; the rest are claimed when they are:
+
+```java
+BRIDGE = Bridge.claim("mekanism", "mekanismgenerators", "mekanismtools", "mekanismadditions");
+```
+
+The loader reports which mod is constructing, so the claim names the real bridge, and a plugin can't claim one once the server runs. A second claim for a mod id fails the load, naming both bridges. Every event a bridge fires goes through the handle (`BRIDGE.listens`, `BRIDGE.fire`), which refuses an `EntityDataChangeEvent` whose kind isn't in one of the claimed mods' namespaces. Attribution needs no handle: `Actors` and `Operation` are the same for bridges and core.
+
+A plugin that needs a bridge lists it with `bridge-depend: [mekanism]`, and doesn't load without it, saying which bridge to add.
 
 ## Promotion: when bridges' events become core
 
@@ -92,7 +102,7 @@ Promote when all of these hold:
 
 Events under different Hadron parents aren't promoted together, since one listener couldn't handle them alike.
 
-Not built yet: refusing a data kind whose namespace isn't the firing bridge's mod id, which needs a bridge's identity at firing; and the build refusing a bridge API event that extends nothing of Hadron's, which lands with the first bridge API. A promotion changes `api`, so it gets `@FiredBy(core = NONE, ...)`, an acceptance-kit check and `@Covers` like any bridge event.
+A data kind outside the firing bridge's claimed mods is refused at firing. Not built yet: the build refusing a bridge API event that extends nothing of Hadron's, which lands with the first bridge API. A promotion changes `api`, so it gets `@FiredBy(core = NONE, ...)`, an acceptance-kit check and `@Covers` like any bridge event.
 
 ## Pilots
 
@@ -109,9 +119,10 @@ Two plugin integrations come with them:
 
 ## What's next
 
-1. The actor stack and core's events at their chokepoints. The chokepoint benchmark is done ([above](#the-chokepoint-cost)).
+1. ~~The actor stack and core's events at their chokepoints~~, with the chokepoint benchmark ([above](#the-chokepoint-cost)).
 2. ~~Areas of interest~~: done for block writes (`Areas.watch`, see "The chokepoint cost"). Entity moves in an area (`EntityMoveEvent`) come with the regions plugin.
-3. The coverage report and the official bridge list.
+3. ~~Claiming a mod~~ ([above](#claiming-a-mod)) and `bridge-depend:`.
 4. The acceptance test as a kit any bridge can run.
-5. The three pilot bridges, then this document rewritten from what they taught.
-6. The grouped list of proposed leaves ([promotion](#promotion-when-bridges-events-become-core)), once the pilots give it something to group.
+5. The Mekanism bridge, then AE2 and Superb Warfare, then this document rewritten from what they taught.
+6. The coverage report and the official bridge list, once there is a bridge to list.
+7. The grouped list of proposed leaves ([promotion](#promotion-when-bridges-events-become-core)), once the pilots give it something to group.

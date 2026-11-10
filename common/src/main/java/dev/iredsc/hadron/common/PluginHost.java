@@ -6,6 +6,8 @@ import org.jspecify.annotations.Nullable;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.builder.LiteralArgumentBuilder;
 import java.util.function.Supplier;
+import dev.iredsc.hadron.api.bridge.Bridge;
+import dev.iredsc.hadron.api.event.entity.EntityDataChangeEvent;
 import dev.iredsc.hadron.api.Default;
 import dev.iredsc.hadron.api.Node;
 import dev.iredsc.hadron.api.Permissions;
@@ -810,6 +812,19 @@ public final class PluginHost implements PluginManager {
                         + "remove this plugin";
             }
         }
+        for (String mod : e.description.getBridgeDepend()) {
+            if (Bridge.isCoveredByCore(mod)) {
+                return "lists " + mod + " under bridge-depend, but core covers " + mod + " itself and no bridge for "
+                        + "it exists: remove " + mod + " from bridge-depend";
+            }
+            List<String> bridged = Bridge.modsBridgedBy(mod);
+            if (!bridged.isEmpty()) {
+                return "lists " + mod + " under bridge-depend, but " + mod + " is a bridge itself: list the mod it "
+                        + "bridges instead, bridge-depend: [" + bridged.get(0) + "]";
+            }
+            String why = missingBridge(mod, platform.isModLoaded(mod), Bridge.isBridged(mod));
+            if (why != null) return why;
+        }
         for (String need : e.description.getDepend()) {
             Entry n = entries.get(need);
             if (n == null) {
@@ -819,6 +834,17 @@ public final class PluginHost implements PluginManager {
             if (!(n.state instanceof State.Running)) return "needs " + n.name + ", which " + describeState(n.state);
         }
         return null;
+    }
+
+    /** Why a bridge-depend on {@code mod} can't be met, or null when its bridge is loaded. */
+    static @Nullable String missingBridge(String mod, boolean modLoaded, boolean bridgeLoaded) {
+        if (bridgeLoaded) return null;
+        if (!modLoaded) {
+            return "uses Hadron's bridge for the " + mod + " mod, but " + mod + " isn't installed: add " + mod
+                    + " and its Hadron bridge to mods/, or remove this plugin";
+        }
+        return "uses Hadron's bridge for " + mod + ", which isn't installed: add the Hadron bridge for " + mod
+                + " to mods/, or remove this plugin";
     }
 
     /**
@@ -1174,6 +1200,11 @@ public final class PluginHost implements PluginManager {
 
     @Override
     public boolean callEvent(Event event) {
+        if (event instanceof EntityDataChangeEvent) {
+            throw new IllegalArgumentException("EntityDataChangeEvent is fired by a mod's bridge, through its claim, "
+                    + "which checks the kind is that mod's: fire it with BRIDGE.fire(event), where BRIDGE is what "
+                    + "Bridge.claim returned in your bridge's constructor");
+        }
         events.post(event);
         return event instanceof Cancellable c && c.isCancelled();
     }

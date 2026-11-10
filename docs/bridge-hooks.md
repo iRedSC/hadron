@@ -21,7 +21,7 @@ Every bridge does these, whatever its mod does. Without them, core still fires i
 ## The rule for firing
 
 - **If the mod's change reaches a vanilla chokepoint (`Level.setBlock`, `hurt`, `addFreshEntity`, a hopper transfer), don't fire anything: push the actor and core fires the event.** Firing it too reports one effect twice.
-- **If the mod skips vanilla, fire the core event yourself**, before the change, and honour a cancel by not making it.
+- **If the mod skips vanilla, fire the core event yourself** through your claim (`BRIDGE.fire`, [bridges](bridges.md#claiming-a-mod)), before the change, and honour a cancel by not making it.
 - **Fire for committed changes only**, never for a simulated transfer or a capacity probe.
 - **Cancelled means fully undone**: nothing spent, nothing half-moved. If the mod spends a cost before acting, fire before the cost.
 - **Fire before the first change on either side.** Mods often fill the destination before draining the source, place the moved block before removing the old one, or clear a slot before spawning its item. A cancel at the last step then duplicates or loses things. Call `Operation.begin(actor)` before the first change, so the action's opening event can be refused while nothing has happened; and if a core event inside the operation is cancelled after one side already changed, undo that side.
