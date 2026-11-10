@@ -25,8 +25,9 @@ import org.slf4j.LoggerFactory;
  * One loaded version of one plugin jar. Classes come from Minecraft, NeoForge and the mods first (so every plugin
  * shares one Minecraft), then the plugin's own jar, then the plugins it declares in depend and softdepend. A plugin
  * can't see a plugin it didn't declare, which is what lets one reload without stranding another on its old classes.
- * Nor can it see Hadron's own insides ({@link #HOST_PACKAGES}): only its api, so no plugin calls the host's or the
- * port's public statics (a mixin hook, {@code PluginHost.onPluginDisable}) or names their classes.
+ * Nor can it see Hadron's own insides ({@link #HOST_PACKAGES}): only its api, so no plugin links the host's or the
+ * port's public statics (a mixin hook, {@code PluginHost.onPluginDisable}) by mistake. Reflection through another
+ * loader gets past this, and is out of scope: plugins are trusted code (docs/design.md, "Mistakes, not malice").
  *
  * <p>Reads a private copy of the jar, so replacing the file in {@code plugins/} mid-load can't corrupt classes this
  * version still has to read while it disables.

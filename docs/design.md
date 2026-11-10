@@ -43,7 +43,7 @@ The modules make this a compile error rather than a rule:
 - **`api`** is what plugins compile against. It is built on vanilla Minecraft only (NeoForm, no NeoForge), so nothing in it can name a loader class, and a plugin built against it can't either: a NeoForge import doesn't compile.
 - **`common`** is the plugin host: class loading, reload and undo, scheduler, services, Brigadier commands, Hadron's event bus. Also vanilla only. What only a loader knows comes through `Platform`.
 - **`neoforge`** is the port: `Platform`, the translation from NeoForge's events to Hadron's, and the mod class. A Fabric port rewrites only this.
-- **At runtime as well**, a plugin's class loader links only `api` of Hadron's classes. `common`'s, the port's and the test harness's are public only so Hadron's modules and mixins reach each other; a plugin jar that names one (an old build, or one made without Hadron's build) fails with what to use instead (`PluginLoader.HOST_PACKAGES`). What the host installs in `api` takes the `HostKey`, which no plugin holds.
+- **At runtime as well**, a plugin's class loader links only `api` of Hadron's classes. `common`'s, the port's and the test harness's are public only so Hadron's modules and mixins reach each other; a plugin jar that names one (an old build, or one made without Hadron's build) fails with what to use instead (`PluginLoader.HOST_PACKAGES`). What the host installs in `api` takes the `HostKey`, which no plugin is handed ([Mistakes, not malice](#mistakes-not-malice)).
 
 Hadron owns its events (`dev.iredsc.hadron.api.event`), named after Bukkit's: `Listener`, `@EventHandler(priority, ignoreCancelled)`, `Cancellable`, `PlayerJoinEvent`, `BlockBreakEvent`. They carry Minecraft's own types, and every action carries an actor saying who is behind it. They are the vocabulary plugins and bridges share, so the whole set is designed up front in [events.md](events.md): an event added late is one every existing plugin was blind to. Each port fires them from its loader's events where it has them, and from mixins where it doesn't; an event ships only once every port fires it.
 
@@ -99,6 +99,10 @@ The agent is working in the user's folder, not this repo. So everything it needs
 7. **Delivering.** The build ends by printing the jar's path and the one step for the user: put it in the server's `plugins/` folder, with Hadron installed.
 
 Every error a plugin hits at runtime (a failed load, an exception in a listener) is written to say what went wrong and where, since an agent fixes what the message tells it.
+
+## Mistakes, not malice
+
+**Plugins are trusted code, as in Bukkit**, where a plugin runs with the server's full rights and nothing sandboxes it. Hadron's boundaries exist so a plugin can't do the wrong thing by mistake or by guessing at an API, and each one refuses with the fix: the `HostKey` that replacing or clearing what the host installed takes, the class loader that links nothing of Hadron's outside `api`, the build's `HostOnly`, static-state and wall-clock checks, and a plugin build that can't loosen those checks. Getting past them on purpose, by reflection on a private field or through another class loader, is out of scope: no boundary inside one JVM can stop code that sets out to get around it, and an owner who installs a plugin trusts it as they would a mod.
 
 ## Bundled plugins
 
