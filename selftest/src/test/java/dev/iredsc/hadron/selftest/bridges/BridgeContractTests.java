@@ -9,7 +9,7 @@ import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockChangeEvent;
-import dev.iredsc.hadron.api.event.block.BlockDamageEvent;
+import dev.iredsc.hadron.api.event.block.BlockCrackEvent;
 import dev.iredsc.hadron.api.event.block.BlockDataChangeEvent;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
@@ -272,22 +272,22 @@ public final class BridgeContractTests {
     }
 
     @HadronTest
-    @Covers(BlockDamageEvent.class)
+    @Covers(BlockCrackEvent.class)
     void lastingBlockDamageCanBeRefused(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos pos = t.pos(1, 0, 0);
         t.setBlock(pos, Blocks.STONE);
         float[] damage = {0.0f};
         boolean[] cancel = {false};
-        List<BlockDamageEvent> seen = record(t, BlockDamageEvent.class, cancel);
-        fire(t, machine(t, alice), a -> new BlockDamageEvent(t.level(), pos, t.getBlock(pos), 0.0f, 0.4f, a),
+        List<BlockCrackEvent> seen = record(t, BlockCrackEvent.class, cancel);
+        fire(t, machine(t, alice), a -> new BlockCrackEvent(t.level(), pos, t.getBlock(pos), 0.0f, 0.4f, a),
                 () -> damage[0] = 0.4f);
-        BlockDamageEvent e = only(t, seen, "BlockDamageEvent");
+        BlockCrackEvent e = only(t, seen, "BlockCrackEvent");
         t.assertEquals(0.0f, e.getOldDamage(), "the damage before");
         t.assertEquals(0.4f, e.getNewDamage(), "the damage after");
         t.assertEquals(pos, e.getPos(), "where the block is");
         cancel[0] = true;
-        fire(t, machine(t, alice), a -> new BlockDamageEvent(t.level(), pos, t.getBlock(pos), 0.4f, 0.8f, a),
+        fire(t, machine(t, alice), a -> new BlockCrackEvent(t.level(), pos, t.getBlock(pos), 0.4f, 0.8f, a),
                 () -> damage[0] = 0.8f);
         t.assertEquals(0.4f, damage[0], "a refused hit leaves the damage where it was");
     }

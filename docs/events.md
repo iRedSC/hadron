@@ -109,7 +109,7 @@ An effect and an entity's fire keep the actor that caused them and where it was 
 | ~~A shift-click names the inventory items move into~~ | the click's places (closed) |
 | ~~Opening a double chest names both halves~~ | the inventory's places (closed) |
 | Poison and burning act for whoever caused them | attribution on effects and fire |
-| Starting to mine fires an event | an event for it (Bukkit's `BlockDamageEvent`) |
+| ~~Starting to mine fires an event~~ | Bukkit's `BlockDamageEvent` (closed); lasting damage became `BlockCrackEvent` |
 
 1. ~~`Placed`, `Place` and `getPlaces()` for every family, with the self-tests above; the acceptance kit places events by `getPlaces()` and its own placement rules go.~~ Done.
 2. Each fact, one or a few per PR, each closing its gap and the checklist items for the events it touches, by a test.
@@ -142,7 +142,8 @@ An effect and an entity's fire keep the actor that caused them and where it was 
 | `BlockDropItemEvent` | a broken block's drops are about to appear; the item entities and experience are editable, and a cancel drops nothing | `Block.dropResources` (NeoForge's `BlockDropsEvent`), so player mining, `destroyBlock` and blocks losing their support |
 | `BlockUseEvent` | an actor right-clicks or activates a block, including remotely through a linked terminal | `useItemOn`, `useWithoutItem` |
 | `BlockRedstoneEvent` | an actor changes the signal a block emits without changing its state | bridge (Integrated Dynamics, LaserIO) |
-| `BlockDamageEvent` | a block takes lasting partial damage short of breaking | bridge (Create Big Cannons) |
+| `BlockDamageEvent` | an actor starts mining a block, before it is hit; the tool and the face (Bukkit's meaning). Not in creative, where a hit breaks at once | `ServerPlayerGameMode.handleBlockBreakAction`; bridges for drills that mine over time |
+| `BlockCrackEvent` | a block takes lasting partial damage short of breaking | bridge (Create Big Cannons) |
 | `SignChangeEvent` | sign text set | `SignBlockEntity` |
 | `BucketEmptyEvent`, `BucketFillEvent` | fluid placed or taken from the world by an item | `BucketItem` |
 
