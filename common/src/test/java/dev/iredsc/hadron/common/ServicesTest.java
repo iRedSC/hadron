@@ -278,4 +278,19 @@ class ServicesTest {
                         + "unregistration first");
         assertFalse(services.isProvidedFor(Greeter.class));
     }
+
+    /** The generic constructors stop a mismatch at compile time; a raw class sneaks one past, and is refused. */
+    @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    void aServiceEventRefusesAProviderThatIsntTheService() {
+        Class raw = Greeter.class;
+        IllegalArgumentException registered = assertThrows(IllegalArgumentException.class,
+                () -> new ServiceRegisterEvent(raw, new OtherImpl(), alpha));
+        assertTrue(registered.getMessage().contains("doesn't implement " + Greeter.class.getName()),
+                registered.getMessage());
+        assertThrows(IllegalArgumentException.class, () -> new ServiceUnregisterEvent(raw, new OtherImpl(), alpha));
+
+        ServiceRegisterEvent ok = new ServiceRegisterEvent(Greeter.class, new Named("hi"), alpha);
+        assertSame(Greeter.class, ok.getService());
+    }
 }

@@ -1402,6 +1402,34 @@ public final class PluginHost implements PluginManager {
     }
 
     /**
+     * What the port does around each dispatch of an event to plugins' handlers, whether the port or a plugin fired it.
+     * What a handler does is its own action, not part of the action the event is about: the port uses this to keep
+     * the handler's own effects and block changes out of the action's verdict.
+     */
+    public interface DispatchScope {
+        /** Does nothing. */
+        DispatchScope NONE = new DispatchScope() {
+            @Override
+            public @Nullable Object enter() {
+                return null;
+            }
+
+            @Override
+            public void exit(@Nullable Object entered) {}
+        };
+
+        /** Before the first handler runs; what it returns comes back to {@link #exit} after the last. */
+        @Nullable Object enter();
+
+        void exit(@Nullable Object entered);
+    }
+
+    /** Installs the port's {@link DispatchScope}; once, when the mod loads. */
+    public static void aroundDispatch(DispatchScope scope) {
+        EventBus.install(scope);
+    }
+
+    /**
      * Hadron's own modules (the economy, worlds, packets, persistent data) undo what a plugin registered with them
      * here: each hook runs once for every plugin that disables or fails to enable, after the plugin's own undo.
      * Registered once per JVM, so a hook outlives server restarts in singleplayer.

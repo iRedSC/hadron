@@ -22,14 +22,14 @@ index 79e3737..0000000
 -    }
 -}
 diff --git a/neoforge/src/main/resources/hadron.entity.mixins.json b/neoforge/src/main/resources/hadron.entity.mixins.json
-index f0cdf23..b171100 100644
+index 7109308..bc1021f 100644
 --- a/neoforge/src/main/resources/hadron.entity.mixins.json
 +++ b/neoforge/src/main/resources/hadron.entity.mixins.json
-@@ -9,7 +9,6 @@
-     "DeathMessageMixin",
+@@ -15,7 +15,6 @@
      "EntityMixin",
+     "EntityRemovedLeashMixin",
      "EntityTypeMixin",
 -    "EntityVelocityMixin",
      "FishingHookMixin",
      "HangingEntityItemMixin",
-     "LivingEntityMixin",
+     "ItemFrameMixin",

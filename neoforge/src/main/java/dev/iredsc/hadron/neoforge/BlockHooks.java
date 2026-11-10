@@ -557,7 +557,9 @@ public final class BlockHooks {
         if (kind == null || !Hooks.listens(type(kind))) return false;
         BlockChangeEvent event = Hooks.post(build(kind, server, BlockChange.of(server, pos, before, after), source,
                 who));
-        return event.isCancelled();
+        boolean cancelled = event.isCancelled();
+        HeldEffects.changeDecided(cancelled);
+        return cancelled;
     }
 
     /**

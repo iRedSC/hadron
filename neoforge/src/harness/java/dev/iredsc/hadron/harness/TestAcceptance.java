@@ -46,6 +46,7 @@ import dev.iredsc.hadron.api.world.Areas;
 import dev.iredsc.hadron.harness.mixin.ServerLevelEntitiesAccessor;
 import dev.iredsc.hadron.neoforge.InventoryHolders;
 import dev.iredsc.hadron.test.Acceptance;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -167,8 +168,12 @@ final class TestAcceptance implements Acceptance, Listener {
     private final Map<UUID, Entity> followed = new LinkedHashMap<>();
     private AcceptanceDiff.Snapshot before;
 
-    TestAcceptance(TestContext t, BoundingBox box) {
+    /** Game events, so a refused step that still made a sculk sensor hear something fails. */
+    private final TestSideEffects heard;
+
+    TestAcceptance(TestContext t, BoundingBox box, TestSideEffects heard) {
         this.t = t;
+        this.heard = heard;
         this.level = t.level();
         // A copy: a BoundingBox can be moved, and the watched, placed and compared area must stay one area.
         Objects.requireNonNull(box, "box");
@@ -220,6 +225,7 @@ final class TestAcceptance implements Acceptance, Listener {
 
     @Override
     public void mark() {
+        heard.mark();
         before = snapshot();
         follow(before);
         seen.clear();
@@ -265,7 +271,18 @@ final class TestAcceptance implements Acceptance, Listener {
         AcceptanceDiff.Snapshot after = snapshot();
         requireSamePlayers(step, after);
         Set<Part> which = parts.length == 0 ? EnumSet.allOf(Part.class) : EnumSet.copyOf(List.of(parts));
-        List<String> problems = AcceptanceDiff.changes(before, after, which, seen, elsewhere, touched, arrived);
+        List<String> problems = new ArrayList<>(AcceptanceDiff.changes(before, after, which, seen, elsewhere, touched,
+                arrived));
+        if (which.contains(Part.BLOCKS)) {
+            // A vibration in the box is what a sculk sensor there would turn into a redstone signal. Walking through
+            // is allowed, so motion doesn't count, and a test player's events in another world are elsewhere.
+            for (SideEffects.GameEventEmitted e : heard.seen(SideEffects.GameEventEmitted.class)) {
+                if (!TestSideEffects.isMotion(e.event()) && e.level() == level
+                        && box.isInside(BlockPos.containing(e.pos()))) {
+                    problems.add("a sculk sensor in the box would hear it: " + e);
+                }
+            }
+        }
         if (!problems.isEmpty()) {
             throw new AssertionError(step + " should have changed nothing in " + which + ", but " + problems.size()
                     + " thing(s) changed:\n  " + String.join("\n  ", problems));

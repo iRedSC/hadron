@@ -20,7 +20,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Every way a frame's item changes in play. Each hook sits just before vanilla acts, past its own checks (a fixed
- * frame, a full map, an empty hand), so the event fires only for a change that is about to happen.
+ * frame, a full map, an empty hand), so the event fires only for a change that is about to happen. A refused click
+ * fails, so it leaves no trace: no advancement counts it, and the held item isn't tried next.
  */
 @Mixin(ItemFrame.class)
 abstract class ItemFrameMixin {
@@ -35,9 +36,10 @@ abstract class ItemFrameMixin {
     @Inject(method = "interact", cancellable = true, at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/entity/decoration/ItemFrame;setItem(Lnet/minecraft/world/item/ItemStack;)V"))
     private void hadron$place(Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
-        // CONSUME, as vanilla answers a use it handled: PASS would offer the other hand a second try.
+        // FAIL, as for a refused lead: no advancement counts the click, and PlayerInteractMixin ends it there. PASS
+        // would offer the other hand a second try; CONSUME would count it as done.
         if (!hadron$changes(ItemFrameChangeAction.PLACE, player.getItemInHand(hand).copyWithCount(1),
-                EntityActors.of(player))) cir.setReturnValue(InteractionResult.CONSUME);
+                EntityActors.of(player))) cir.setReturnValue(InteractionResult.FAIL);
     }
 
     // Before the click sound, which comes first in vanilla, so a refused turn is silent.
@@ -46,7 +48,7 @@ abstract class ItemFrameMixin {
     private void hadron$rotate(Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
         ItemFrame self = (ItemFrame) (Object) this;
         if (!hadron$changes(ItemFrameChangeAction.ROTATE, self.getItem().copyWithCount(1), EntityActors.of(player))) {
-            cir.setReturnValue(InteractionResult.CONSUME);
+            cir.setReturnValue(InteractionResult.FAIL);
         }
     }
 

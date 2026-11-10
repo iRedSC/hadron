@@ -1,0 +1,25 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java
+index 471beb7..284702e 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntityEvents.java
+@@ -91,6 +91,7 @@ public final class EntityEvents {
+         LivingEntity entity = event.getEntity();
+         if (!server(entity) || !Hooks.listens(EntityDamageEvent.class)) return;
+         float amount = event.getAmount();
++        if (!(amount >= 0)) return;
+         EntityDamageEvent hadron = Hooks.post(new EntityDamageEvent(entity, event.getSource(), reportedDamage(amount),
+                 EntityActors.damage(event.getSource(), entity)));
+         if (hadron.isCancelled()) {
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ArmorStandMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ArmorStandMixin.java
+index 557806c..73787e1 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ArmorStandMixin.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ArmorStandMixin.java
+@@ -45,7 +45,7 @@ abstract class ArmorStandMixin {
+         // stand ignores hits anyway.
+         if (!(self.level() instanceof ServerLevel) || self.isRemoved() || self.isMarker() || self.isInvisible()
+                 || source.is(DamageTypeTags.BYPASSES_INVULNERABILITY) || self.isInvulnerableTo(source)
+-                || !Hooks.listens(EntityDamageEvent.class)) return;
++                || !(amount >= 0) || !Hooks.listens(EntityDamageEvent.class)) return;
+         // Every amount fires it, a negative or NaN one reported as 0, since vanilla breaks a stand on any hit. A
+         // stand breaks by hits counted, not health, so what a listener sets the amount to changes nothing.
+         if (Hooks.post(new EntityDamageEvent(self, source, EntityEvents.reportedDamage(amount),

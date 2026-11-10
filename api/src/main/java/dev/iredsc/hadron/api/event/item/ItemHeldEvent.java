@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
@@ -21,7 +22,8 @@ public class ItemHeldEvent extends ItemEvent implements Cancellable {
     private boolean cancelled;
 
     public ItemHeldEvent(ServerPlayer player, int previousSlot, int newSlot, Actor actor) {
-        super(Objects.requireNonNull(player, "player").serverLevel(), player.getInventory().getItem(newSlot), actor);
+        super(Objects.requireNonNull(player, "player").serverLevel(),
+                EventStack.live(player.getInventory().getItem(newSlot), "the new slot's item"), actor);
         this.user = player;
         this.previousSlot = previousSlot;
         this.newSlot = newSlot;

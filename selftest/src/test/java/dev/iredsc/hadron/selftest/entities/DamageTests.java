@@ -18,6 +18,7 @@ import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
 import dev.iredsc.hadron.api.event.entity.VehicleDamageEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -77,10 +78,12 @@ public final class DamageTests {
             }
         });
         t.tick(10);
+        SideEffects effects = t.watchSideEffects();
         alice.attack(pig);
         t.assertEquals(pig.getMaxHealth(), pig.getHealth(), "the pig's health");
         t.assertEquals(0.0, horizontalSpeed(pig), "the pig's horizontal speed (knockback)");
         t.assertEquals(0, alice.player().getMainHandItem().getDamageValue(), "the sword's damage");
+        effects.assertNone("a refused hit");
     }
 
     /**
@@ -415,10 +418,12 @@ public final class DamageTests {
                 if (e.getEntity() == stand) e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.attack(stand);
         alice.attack(stand);
         t.assertFalse(stand.isRemoved(), "a cancelled hit should leave the armor stand standing");
         t.assertTrue(near(t, ItemEntity.class).isEmpty(), "a cancelled hit should drop nothing");
+        effects.assertNone("refused hits on an armor stand");
     }
 
     @HadronTest

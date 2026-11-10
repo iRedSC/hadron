@@ -64,6 +64,45 @@ class EventBusTest {
         return bus.subscribe(listener, "Test", errors.logger);
     }
 
+    // ---- the port's dispatch scope ----
+
+    @Test
+    void everyHandlerRunsInsideThePortsDispatchScopeAndItEndsEvenWhenOneThrows() {
+        List<String> log = new ArrayList<>();
+        PluginHost.DispatchScope scope = new PluginHost.DispatchScope() {
+            @Override
+            public Object enter() {
+                log.add("enter");
+                return "token";
+            }
+
+            @Override
+            public void exit(Object entered) {
+                log.add("exit " + entered);
+            }
+        };
+        subscribe(new Listener() {
+            @EventHandler(priority = EventPriority.LOW)
+            void first(Ping p) {
+                log.add("first");
+                throw new IllegalStateException("a plugin's bug");
+            }
+
+            @EventHandler
+            void second(Ping p) {
+                log.add("second");
+            }
+        });
+        PluginHost.aroundDispatch(scope);
+        try {
+            bus.post(new Ping());
+            bus.post(new Event() {}); // nobody hears it: no scope to open
+        } finally {
+            PluginHost.aroundDispatch(PluginHost.DispatchScope.NONE);
+        }
+        assertEquals(List.of("enter", "first", "second", "exit token"), log);
+    }
+
     // ---- order ----
 
     @Test

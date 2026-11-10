@@ -18,6 +18,7 @@ import dev.iredsc.hadron.api.event.item.ItemRepairEvent;
 import dev.iredsc.hadron.api.event.item.ItemUseEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -57,6 +58,7 @@ public final class ItemUseTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useItem();
         t.tick(2);
         ItemUseEvent e = one(t, heard, "ItemUseEvent");
@@ -65,6 +67,7 @@ public final class ItemUseTests {
         t.assertHolding(alice, Items.SNOWBALL, 16);
         t.assertEquals(0, t.level().getEntitiesOfClass(Snowball.class, new AABB(t.pos(0, 0, 0)).inflate(30)).size(),
                 "snowballs thrown after a refused use");
+        effects.assertNone("a refused use");
     }
 
     @HadronTest
@@ -213,6 +216,7 @@ public final class ItemUseTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useItem();
         t.tick();
         EquipEvent e = one(t, heard, "EquipEvent");
@@ -221,6 +225,7 @@ public final class ItemUseTests {
         t.assertHolding(alice, Items.IRON_CHESTPLATE, 1);
         t.assertTrue(alice.player().getItemBySlot(EquipmentSlot.CHEST).isEmpty(), "alice should wear nothing, but "
                 + "wears " + describe(alice.player().getItemBySlot(EquipmentSlot.CHEST)));
+        effects.assertNone("a refused equip");
     }
 
     @HadronTest

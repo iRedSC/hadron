@@ -1,0 +1,14 @@
+diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestAcceptance.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestAcceptance.java
+index 2966a74..dd53664 100644
+--- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestAcceptance.java
++++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestAcceptance.java
+@@ -277,8 +277,7 @@ final class TestAcceptance implements Acceptance, Listener {
+             // A vibration in the box is what a sculk sensor there would turn into a redstone signal. Walking through
+             // is allowed, so motion doesn't count, and a test player's events in another world are elsewhere.
+             for (SideEffects.GameEventEmitted e : heard.seen(SideEffects.GameEventEmitted.class)) {
+-                if (!TestSideEffects.isMotion(e.event()) && e.level() == level
+-                        && box.isInside(BlockPos.containing(e.pos()))) {
++                if (!TestSideEffects.isMotion(e.event()) && box.isInside(BlockPos.containing(e.pos()))) {
+                     problems.add("a sculk sensor in the box would hear it: " + e);
+                 }
+             }

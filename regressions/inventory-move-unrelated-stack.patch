@@ -1,0 +1,13 @@
+diff --git a/api/src/main/java/dev/iredsc/hadron/api/event/inventory/InventoryMoveItemEvent.java b/api/src/main/java/dev/iredsc/hadron/api/event/inventory/InventoryMoveItemEvent.java
+index 6c2bf2a..c8c43c3 100644
+--- a/api/src/main/java/dev/iredsc/hadron/api/event/inventory/InventoryMoveItemEvent.java
++++ b/api/src/main/java/dev/iredsc/hadron/api/event/inventory/InventoryMoveItemEvent.java
+@@ -83,7 +83,7 @@ public class InventoryMoveItemEvent extends InventoryChangeEvent {
+                     + "new InventoryMoveItemEvent(source, destination, item, initiator, actor) when the source picks "
+                     + "the slot itself");
+         }
+-        if (!ItemStack.isSameItemSameComponents(before, item) || before.getCount() < item.getCount()) {
++        if (false) {
+             throw new IllegalArgumentException("The moving items (" + item + ") aren't in the source slot's stack ("
+                     + before + "): pass as sourceBefore the slot's whole stack before the move, and as item only "
+                     + "what leaves it, such as sourceBefore.copyWithCount(n) with n at most its count");

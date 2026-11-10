@@ -8,6 +8,7 @@ import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.player.PlayerChatEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -36,12 +37,14 @@ public final class EventTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.breakBlock(stone);
         t.tick(2);
         t.assertBlock(stone, Blocks.STONE);
         t.assertEquals(0, alice.player().getMainHandItem().getDamageValue(), "the pickaxe's damage");
         t.assertEquals(0, t.level().getEntitiesOfClass(ItemEntity.class, new AABB(stone).inflate(2)).size(),
                 "the number of items dropped");
+        effects.assertNone("a refused break");
     }
 
     @HadronTest

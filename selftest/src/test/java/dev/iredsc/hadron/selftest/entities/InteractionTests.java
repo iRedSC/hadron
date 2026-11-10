@@ -20,6 +20,7 @@ import dev.iredsc.hadron.api.event.entity.ItemFrameChangeEvent;
 import dev.iredsc.hadron.api.event.entity.ItemFrameChangeEvent.ItemFrameChangeAction;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -82,10 +83,12 @@ public final class InteractionTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.interact(cow);
         t.assertEquals(1, asked[0], "the number of EntityUseEvents for one click");
         t.assertHolding(alice, Items.BUCKET, 1);
         t.assertInventory(alice, Items.MILK_BUCKET, 0);
+        effects.assertNone("a refused milking");
     }
 
     @HadronTest
@@ -123,12 +126,14 @@ public final class InteractionTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.interact(boat);
         t.tick();
         t.assertEquals(1, asked[0], "the number of EntityMountEvents for one click");
         t.assertFalse(alice.player().isPassenger(), "alice should not be riding, but rides "
                 + alice.player().getVehicle());
         t.assertTrue(boat.getPassengers().isEmpty(), "the boat should have no passengers");
+        effects.assertNone("a refused mount");
     }
 
     /** What a client sends while riding with the sneak key down; the harness has no sneak action. */
@@ -175,10 +180,12 @@ public final class InteractionTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         holdSneakWhileRiding(alice);
         t.tick(5);
         t.assertTrue(asked[0] > 0, "sneaking should have asked to dismount");
         t.assertEquals(boat, alice.player().getVehicle(), "alice's vehicle");
+        effects.assertNone("a refused dismount");
     }
 
     /** Feeds bones until a tame is asked about, or the bones run out; returns how many were asked. */
@@ -319,6 +326,7 @@ public final class InteractionTests {
             }
         });
         ready(t);
+        SideEffects effects = t.watchSideEffects();
         var at = alice.player().position();
         ExperienceOrb orb = new ExperienceOrb(t.level(), at.x, at.y + 0.5, at.z, 7);
         t.level().addFreshEntity(orb);
@@ -326,6 +334,7 @@ public final class InteractionTests {
         t.tick(5);
         t.assertEquals(0, alice.player().totalExperience, "alice's total experience");
         t.assertFalse(orb.isRemoved(), "the orb should still be in the world");
+        effects.assertNone("a refused orb pickup");
     }
 
     private static ItemFrame hangFrame(TestContext t) {
@@ -368,10 +377,12 @@ public final class InteractionTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.attack(frame);
         t.tick();
         t.assertFalse(frame.isRemoved(), "the item frame should still hang");
         t.assertEquals(0, near(t, ItemEntity.class).size(), "the number of items dropped");
+        effects.assertNone("a refused frame break");
     }
 
     private static List<ItemFrameChangeEvent> frameChanges(TestContext t, ItemFrame frame, boolean cancel) {
@@ -412,10 +423,12 @@ public final class InteractionTests {
         ItemFrame frame = hangFrame(t);
         alice.hold(new ItemStack(Items.DIAMOND, 3));
         List<ItemFrameChangeEvent> events = frameChanges(t, frame, true);
+        SideEffects effects = t.watchSideEffects();
         alice.interact(frame);
         t.assertEquals(1, events.size(), "the number of ItemFrameChangeEvents; the off hand shouldn't ask again");
         t.assertTrue(frame.getItem().isEmpty(), "the frame should stay empty, but holds " + frame.getItem());
         t.assertHolding(alice, Items.DIAMOND, 3);
+        effects.assertNone("a refused frame place");
     }
 
     @HadronTest
@@ -425,11 +438,13 @@ public final class InteractionTests {
         ItemFrame frame = hangFrame(t);
         frame.setItem(new ItemStack(Items.DIAMOND));
         List<ItemFrameChangeEvent> events = frameChanges(t, frame, true);
+        SideEffects effects = t.watchSideEffects();
         alice.interact(frame);
         t.assertEquals(1, events.size(), "the number of ItemFrameChangeEvents");
         t.assertEquals(ItemFrameChangeAction.ROTATE, events.get(0).getAction(), "the action");
         t.assertTrue(events.get(0).getItemStack().is(Items.DIAMOND), "the item turned should be the diamond");
         t.assertEquals(0, frame.getRotation(), "the frame's rotation");
+        effects.assertNone("a refused frame rotation");
     }
 
     @HadronTest
@@ -454,10 +469,12 @@ public final class InteractionTests {
         ItemFrame frame = hangFrame(t);
         frame.setItem(new ItemStack(Items.DIAMOND));
         frameChanges(t, frame, true);
+        SideEffects effects = t.watchSideEffects();
         alice.attack(frame);
         t.tick();
         t.assertTrue(frame.getItem().is(Items.DIAMOND), "the frame should keep the diamond, but holds " + frame.getItem());
         t.assertFalse(frame.isRemoved(), "the item frame should still hang");
         t.assertEquals(0, near(t, ItemEntity.class).size(), "the number of items dropped");
+        effects.assertNone("a refused frame removal");
     }
 }

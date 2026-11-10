@@ -1,5 +1,5 @@
 diff --git a/common/src/main/java/dev/iredsc/hadron/common/Services.java b/common/src/main/java/dev/iredsc/hadron/common/Services.java
-index 2fe35b2..4248f1d 100644
+index 8f1a94e..668b5b4 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/Services.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/Services.java
 @@ -1,13 +1,11 @@
@@ -113,8 +113,8 @@ index 2fe35b2..4248f1d 100644
                  Registration r = it.next();
                  if (r.provider == provider || r.plugin == plugin) {
                      it.remove();
--                    outbox.add(new ServiceUnregisterEvent(entry.getKey(), r.provider, r.plugin));
-+                    removed.add(new ServiceUnregisterEvent(entry.getKey(), r.provider, r.plugin));
+-                    outbox.add(unregistered(entry.getKey(), r.provider, r.plugin));
++                    removed.add(unregistered(entry.getKey(), r.provider, r.plugin));
                  }
              }
              if (list.isEmpty()) lists.remove();
@@ -122,4 +122,4 @@ index 2fe35b2..4248f1d 100644
 +        return removed;
      }
  
-     @Override
+     /** The service's own type, checked again here: {@link #add} only lets in providers that implement it. */

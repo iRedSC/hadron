@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.item;
 
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Optional;
 import net.minecraft.server.level.ServerLevel;
@@ -22,7 +23,7 @@ public class ItemBreakEvent extends ItemEvent {
     private final @Nullable LivingEntity entity;
 
     public ItemBreakEvent(ServerLevel level, @Nullable LivingEntity entity, ItemStack item, Actor actor) {
-        super(level, item.copy(), actor);
+        super(level, EventStack.copyOf(item, "item"), actor);
         this.entity = entity;
     }
 

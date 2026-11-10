@@ -1,6 +1,5 @@
 package dev.iredsc.hadron.api.event.entity;
 
-import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -30,19 +29,97 @@ public class EntityPotionEffectEvent extends EntityEvent implements Cancellable 
         REMOVED
     }
 
-    private final Holder<MobEffect> effect;
-    private final @Nullable MobEffectInstance oldEffect;
-    private final @Nullable MobEffectInstance newEffect;
-    private final Action action;
+    /**
+     * What happens to the effect, with exactly the instances that action has. Sealed: a {@code switch} over
+     * {@link #getChange()} must handle every kind. Instances are copied in and on every read, so editing one changes
+     * nothing.
+     */
+    public sealed interface Change {
+        /** The effect this is about, such as {@code MobEffects.REGENERATION}. */
+        Holder<MobEffect> effect();
+
+        /** {@link Action#ADDED}: the entity doesn't have {@code added}'s effect yet. */
+        record Added(MobEffectInstance added) implements Change {
+            public Added {
+                added = EffectCopies.copy(Objects.requireNonNull(added,
+                        "added is null; pass the effect instance about to be applied"));
+            }
+
+            @Override
+            public MobEffectInstance added() {
+                return EffectCopies.copy(added);
+            }
+
+            @Override
+            public Holder<MobEffect> effect() {
+                return added.getEffect();
+            }
+        }
+
+        /**
+         * {@link Action#CHANGED}: the entity has {@code old}, and {@code added}, of the same effect, may replace or
+         * extend it.
+         */
+        record Changed(MobEffectInstance old, MobEffectInstance added) implements Change {
+            public Changed {
+                Objects.requireNonNull(old, "old is null; for an effect the entity doesn't have yet, use "
+                        + "new Added(added)");
+                Objects.requireNonNull(added, "added is null; for an effect being taken away, use new Removed(old)");
+                if (!old.is(added.getEffect())) {
+                    throw new IllegalArgumentException("A change keeps the same effect, but old is " + old
+                            + " and added is " + added + ": pass the entity's current instance of added's effect, "
+                            + "entity.getEffect(added.getEffect()), as old, or fire Removed and Added for two effects");
+                }
+                old = EffectCopies.copy(old);
+                added = EffectCopies.copy(added);
+            }
+
+            @Override
+            public MobEffectInstance old() {
+                return EffectCopies.copy(old);
+            }
+
+            @Override
+            public MobEffectInstance added() {
+                return EffectCopies.copy(added);
+            }
+
+            @Override
+            public Holder<MobEffect> effect() {
+                return added.getEffect();
+            }
+        }
+
+        /** {@link Action#REMOVED}: {@code old} is being taken away before it runs out. */
+        record Removed(MobEffectInstance old) implements Change {
+            public Removed {
+                old = EffectCopies.copy(Objects.requireNonNull(old, "old is null; pass the entity's instance being "
+                        + "removed, entity.getEffect(effect), and fire nothing when it has none"));
+            }
+
+            @Override
+            public MobEffectInstance old() {
+                return EffectCopies.copy(old);
+            }
+
+            @Override
+            public Holder<MobEffect> effect() {
+                return old.getEffect();
+            }
+        }
+    }
+
+    private final Change change;
     private boolean cancelled;
 
-    public EntityPotionEffectEvent(LivingEntity entity, Holder<MobEffect> effect, @Nullable MobEffectInstance oldEffect,
-            @Nullable MobEffectInstance newEffect, Action action, Actor actor) {
+    /**
+     * @param change {@code new Change.Added(added)}, {@code new Change.Changed(old, added)} or
+     *     {@code new Change.Removed(old)}
+     */
+    public EntityPotionEffectEvent(LivingEntity entity, Change change, Actor actor) {
         super(entity, actor);
-        this.effect = Objects.requireNonNull(effect, "effect");
-        this.oldEffect = oldEffect;
-        this.newEffect = newEffect;
-        this.action = Objects.requireNonNull(action, "action");
+        this.change = Objects.requireNonNull(change, "change; pass new EntityPotionEffectEvent.Change.Added(added), "
+                + ".Changed(old, added) or .Removed(old)");
     }
 
     @Override
@@ -52,21 +129,44 @@ public class EntityPotionEffectEvent extends EntityEvent implements Cancellable 
 
     /** Which effect, such as {@code MobEffects.REGENERATION}. */
     public Holder<MobEffect> getEffect() {
-        return effect;
+        return change.effect();
     }
 
-    /** The effect the entity had; empty when it is being added. */
+    /** What happens to it, with the instances involved; switch on it to handle each action. */
+    public Change getChange() {
+        return change;
+    }
+
+    /**
+     * The effect the entity had: present for {@link Action#CHANGED} and {@link Action#REMOVED}, empty for
+     * {@link Action#ADDED}. A new copy each call, so editing it changes nothing.
+     */
     public Optional<MobEffectInstance> getOldEffect() {
-        return Optional.ofNullable(oldEffect);
+        return switch (change) {
+            case Change.Added a -> Optional.empty();
+            case Change.Changed c -> Optional.of(c.old());
+            case Change.Removed r -> Optional.of(r.old());
+        };
     }
 
-    /** The effect being applied; empty when it is being removed. */
+    /**
+     * The effect being applied: present for {@link Action#ADDED} and {@link Action#CHANGED}, empty for
+     * {@link Action#REMOVED}. A new copy each call, so editing it changes nothing.
+     */
     public Optional<MobEffectInstance> getNewEffect() {
-        return Optional.ofNullable(newEffect);
+        return switch (change) {
+            case Change.Added a -> Optional.of(a.added());
+            case Change.Changed c -> Optional.of(c.added());
+            case Change.Removed r -> Optional.empty();
+        };
     }
 
     public Action getAction() {
-        return action;
+        return switch (change) {
+            case Change.Added a -> Action.ADDED;
+            case Change.Changed c -> Action.CHANGED;
+            case Change.Removed r -> Action.REMOVED;
+        };
     }
 
     @Override

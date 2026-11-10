@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.common;
 
 import dev.iredsc.hadron.checks.Nondeterministic;
+import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
@@ -253,11 +254,26 @@ final class EventBus {
     /** Runs every handler that hears the event. */
     void post(Event event) {
         Baked b = handlers(event.getClass());
-        if (b.observers.length == 0) {
-            for (Subscription s : b.handlers) s.call(event);
-            return;
+        if (!b.any()) return;
+        PluginHost.DispatchScope around = scope;
+        @Nullable Object entered = around.enter();
+        try {
+            if (b.observers.length == 0) {
+                for (Subscription s : b.handlers) s.call(event);
+                return;
+            }
+            observed(event, b);
+        } finally {
+            around.exit(entered);
         }
-        observed(event, b);
+    }
+
+    /** What runs around every dispatch, installed by the port ({@link PluginHost#aroundDispatch}). */
+    @StaticState(reason = "the port installs it once when the mod loads; it keeps no state of its own between dispatches")
+    private static volatile PluginHost.DispatchScope scope = PluginHost.DispatchScope.NONE;
+
+    static void install(PluginHost.DispatchScope installed) {
+        scope = java.util.Objects.requireNonNull(installed, "scope");
     }
 
     /** {@link #post} while an observer hears this class: the same handler calls, watched. */

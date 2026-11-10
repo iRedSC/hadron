@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.item;
 
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
@@ -38,7 +39,7 @@ public class EquipEvent extends ItemEvent implements Cancellable {
     private final LivingEntity entity;
     private final @Nullable EquipmentSlot slot;
     private final String slotName;
-    private final ItemStack replaced;
+    private final EventStack.Copy replaced;
     private boolean cancelled;
 
     /** A vanilla slot. */
@@ -55,11 +56,11 @@ public class EquipEvent extends ItemEvent implements Cancellable {
 
     private EquipEvent(ServerLevel level, LivingEntity entity, @Nullable EquipmentSlot slot, String slotName,
             ItemStack replaced, ItemStack item, Actor actor) {
-        super(level, item.copy(), actor);
+        super(level, EventStack.copyOf(item, "item"), actor);
         this.entity = Objects.requireNonNull(entity, "entity");
         this.slot = slot;
         this.slotName = slotName;
-        this.replaced = replaced.copy();
+        this.replaced = EventStack.copyOf(replaced, "replaced");
     }
 
     /** Who will wear or hold it. */
@@ -79,7 +80,7 @@ public class EquipEvent extends ItemEvent implements Cancellable {
 
     /** What is in the slot now, which the item would replace; empty if nothing. A copy. */
     public ItemStack getReplaced() {
-        return replaced;
+        return replaced.get();
     }
 
     @Override

@@ -1,24 +1,30 @@
 package dev.iredsc.hadron.api.event.server;
 
-import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
 import java.util.Objects;
-import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Entity;
 
 import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
 
 /**
  * Server data about a block, an entity (and what it holds) or an account is about to be sent to a player who didn't
  * open it: a Jade or WTHIT tooltip, a map radar, a sigil that reads another player's mana network. Each reveal is about
- * exactly one of the three, so a guard that checks only blocks and entities lets accounts through. Remove keys from
- * {@link #getData()} to hide those fields, or cancel to send nothing.
+ * exactly one {@link Target}, sealed so a guard's {@code switch} must handle all three, accounts included:
+ *
+ * <pre>{@code
+ * switch (event.getTarget()) {
+ *     case DataRevealEvent.Target.Block b -> ...    // b.level(), b.pos()
+ *     case DataRevealEvent.Target.Entity e -> ...   // e.entity()
+ *     case DataRevealEvent.Target.Account a -> ...  // a.account(), which may be an offline player's
+ * }
+ * }</pre>
+ *
+ * Remove keys from {@link #getData()} to hide those fields, or cancel to send nothing.
  *
  * <p><b>Bridge event.</b> Vanilla sends no such data, so Hadron core never fires this; the bridge for an info mod
  * fires it before sending, with the data as the tag it is about to send, and sends what's left (or nothing).
@@ -28,42 +34,53 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
                 + "WTHIT, map radar, a sigil reading another player's network)",
         fillIn = "the data, with removable fields")
 public class DataRevealEvent extends ServerEvent implements Cancellable {
+    /** What the data is about. Sealed: a {@code switch} over it must handle every kind. */
+    public sealed interface Target {
+        /** A block, and its block entity if it has one. */
+        record Block(ServerLevel level, BlockPos pos) implements Target {
+            public Block {
+                Objects.requireNonNull(level, "level");
+                pos = Objects.requireNonNull(pos, "pos").immutable();
+            }
+        }
+
+        /** An entity, and what it holds. */
+        record Entity(net.minecraft.world.entity.Entity entity) implements Target {
+            public Entity {
+                Objects.requireNonNull(entity, "entity");
+            }
+
+            /** The entity's level. */
+            public ServerLevel level() {
+                return (ServerLevel) entity.level();
+            }
+        }
+
+        /**
+         * An account, such as another player's mana network, which may belong to someone offline. Whether it's the
+         * viewer's own: {@code account.equals(ResourceHolder.Account.player(event.getViewer().getUUID()))}.
+         */
+        record Account(ResourceHolder.Account account) implements Target {
+            public Account {
+                Objects.requireNonNull(account, "account; use ResourceHolder.Account.player(uuid) for a player's");
+            }
+        }
+    }
+
     private final ServerPlayer viewer;
-    private final @Nullable ServerLevel level;
-    private final @Nullable BlockPos pos;
-    private final @Nullable Entity entity;
-    private final ResourceHolder.@Nullable Account account;
+    private final Target target;
     private final CompoundTag data;
     private boolean cancelled;
 
-    /** About a block, and its block entity if it has one. */
-    public DataRevealEvent(ServerPlayer viewer, ServerLevel level, BlockPos pos, CompoundTag data) {
+    /**
+     * @param target what the data is about: {@code new Target.Block(level, pos)}, {@code new Target.Entity(entity)}
+     *     or {@code new Target.Account(account)}
+     * @param data the tag about to be sent; pass an empty one when only the target is revealed
+     */
+    public DataRevealEvent(ServerPlayer viewer, Target target, CompoundTag data) {
         this.viewer = Objects.requireNonNull(viewer, "viewer");
-        this.level = Objects.requireNonNull(level, "level");
-        this.pos = Objects.requireNonNull(pos, "pos").immutable();
-        this.entity = null;
-        this.account = null;
-        this.data = Objects.requireNonNull(data, "data; pass an empty CompoundTag when only the target is revealed");
-    }
-
-    /** About an entity. */
-    public DataRevealEvent(ServerPlayer viewer, Entity entity, CompoundTag data) {
-        this.viewer = Objects.requireNonNull(viewer, "viewer");
-        this.entity = Objects.requireNonNull(entity, "entity");
-        this.level = (ServerLevel) entity.level();
-        this.pos = null;
-        this.account = null;
-        this.data = Objects.requireNonNull(data, "data; pass an empty CompoundTag when only the target is revealed");
-    }
-
-    /** About an account, such as another player's mana network, which may belong to someone offline. */
-    public DataRevealEvent(ServerPlayer viewer, ResourceHolder.Account account, CompoundTag data) {
-        this.viewer = Objects.requireNonNull(viewer, "viewer");
-        this.account = Objects.requireNonNull(account, "account; use ResourceHolder.Account.player(uuid) for a "
-                + "player's");
-        this.level = null;
-        this.pos = null;
-        this.entity = null;
+        this.target = Objects.requireNonNull(target, "target; pass new DataRevealEvent.Target.Block(level, pos), "
+                + ".Entity(entity) or .Account(account)");
         this.data = Objects.requireNonNull(data, "data; pass an empty CompoundTag when only the target is revealed");
     }
 
@@ -72,27 +89,9 @@ public class DataRevealEvent extends ServerEvent implements Cancellable {
         return viewer;
     }
 
-    /** The level of the block or entity; empty when it's about an account, which has no place. */
-    public Optional<ServerLevel> getLevel() {
-        return Optional.ofNullable(level);
-    }
-
-    /** The block, when it's about a block. */
-    public Optional<BlockPos> getBlockPos() {
-        return Optional.ofNullable(pos);
-    }
-
-    /** The entity, when it's about an entity. */
-    public Optional<Entity> getEntity() {
-        return Optional.ofNullable(entity);
-    }
-
-    /**
-     * The account, when it's about an account. Whether it's the viewer's own:
-     * {@code account.equals(ResourceHolder.Account.player(event.getViewer().getUUID()))}.
-     */
-    public Optional<ResourceHolder.Account> getAccount() {
-        return Optional.ofNullable(account);
+    /** What the data is about: a block, an entity or an account. */
+    public Target getTarget() {
+        return target;
     }
 
     /** What will be sent. Editable: remove a key to hide that field. */

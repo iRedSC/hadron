@@ -1,0 +1,17 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java
+index a8a8dcc..0276239 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/CommonHooksPlaceMixin.java
+@@ -40,12 +40,6 @@ abstract class CommonHooksPlaceMixin {
+         return live instanceof PatchedDataComponentMap patched ? patched.copy() : live;
+     }
+ 
+-    @WrapMethod(method = "onPlaceItemIntoWorld")
+-    private static InteractionResult hadron$holdEffects(UseOnContext context, Operation<InteractionResult> original) {
+-        boolean server = context.getLevel() instanceof ServerLevel level && level.getServer().isSameThread();
+-        return HeldEffects.placing(server, () -> original.call(context));
+-    }
+-
+     /** The place event, NeoForge's or several at once: its handlers act in their own scope, and a cancel refuses. */
+     @WrapOperation(method = "onPlaceItemIntoWorld", at = @At(value = "INVOKE",
+             target = "Lnet/neoforged/neoforge/event/EventHooks;onBlockPlace(Lnet/minecraft/world/entity/Entity;Lnet/neoforged/neoforge/common/util/BlockSnapshot;Lnet/minecraft/core/Direction;)Z"))

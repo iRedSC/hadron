@@ -1,0 +1,14 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ServerPlayerGameModeClickMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ServerPlayerGameModeClickMixin.java
+index 6e608d9..013663d 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ServerPlayerGameModeClickMixin.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ServerPlayerGameModeClickMixin.java
+@@ -38,8 +38,7 @@ abstract class ServerPlayerGameModeClickMixin {
+             target = "Lnet/minecraft/world/level/block/state/BlockState;useWithoutItem(Lnet/minecraft/world/level/Level;Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/phys/BlockHitResult;)Lnet/minecraft/world/InteractionResult;"))
+     private InteractionResult hadron$use(BlockState state, Level level, Player player, BlockHitResult hit,
+             Operation<InteractionResult> original, @Share("failed") LocalBooleanRef failed) {
+-        InteractionResult result = HeldEffects.usingBlock(level instanceof ServerLevel server
+-                && server.getServer().isSameThread(), () -> original.call(state, level, player, hit));
++        InteractionResult result = original.call(state, level, player, hit);
+         failed.set(result == InteractionResult.FAIL);
+         return result;
+     }

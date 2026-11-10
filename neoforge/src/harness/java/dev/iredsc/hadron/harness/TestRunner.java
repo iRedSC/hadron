@@ -6,6 +6,7 @@ import dev.iredsc.hadron.api.Hadron;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.neoforge.Hooks;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.KnownGap;
 import dev.iredsc.hadron.test.TestContext;
 import java.io.File;
 import java.io.IOException;
@@ -78,18 +79,20 @@ final class TestRunner {
 
     /**
      * From {@link HarnessMod}'s constructor; does nothing unless the server was started in test or watch mode. In either, it also
-     * registers {@link TestMod}'s channel, so a normal server never has it.
+     * registers {@link TestMod}'s channel and {@link TestSideEffects}' listeners, so a normal server has neither.
      */
     static void register(IEventBus modBus) {
         String watch = System.getProperty(TestWatch.WATCH_PROPERTY);
         if (watch != null && !watch.isBlank()) {
             TestMod.register(modBus);
+            TestSideEffects.register();
             TestWatch.register(new File(watch).getAbsoluteFile());
             return;
         }
         String report = System.getProperty(REPORT_PROPERTY);
         if (report == null || report.isBlank()) return;
         TestMod.register(modBus);
+        TestSideEffects.register();
         File file = new File(report).getAbsoluteFile();
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> {
             MinecraftServer server = e.getServer();
@@ -316,8 +319,29 @@ final class TestRunner {
             String unhealthy = unhealthy(world);
             if (unhealthy != null) result = again(result, "The test passed but left the server unhealthy: " + unhealthy);
         }
+        result = gap(c, result);
         LOG.info("{} {}", result.status(), id);
         return result;
+    }
+
+    /**
+     * A {@link KnownGap} test's outcome: its own assertion failing is the gap, reported and not a failure; passing
+     * means the gap is closed, which fails until the annotation goes. Anything else (a throw, a hang, a cleanup that
+     * failed) stays a failure.
+     */
+    private static TestReport.Result gap(Case c, TestReport.Result r) {
+        KnownGap gap = c.method().getAnnotation(KnownGap.class);
+        if (gap == null) return r;
+        if (r.status() == TestReport.Status.PASS) {
+            return new TestReport.Result(r.id(), r.className(), r.method(), TestReport.Status.FAIL, r.source(), null,
+                    "It passes now, so the gap it marks is closed (" + gap.value() + "). Remove @KnownGap from it.",
+                    null, r.ticks(), r.millis());
+        }
+        boolean assertion = r.status() == TestReport.Status.FAIL && r.detail() == null && r.context() != null;
+        if (!assertion) return r;
+        return new TestReport.Result(r.id(), r.className(), r.method(), TestReport.Status.GAP, r.source(),
+                r.location(), gap.value() + ". It fails as expected: " + r.message(), null, r.ticks(), r.millis(),
+                r.context());
     }
 
     private static TestReport.Result result(Case c, @Nullable String source, TestReport.Status status, @Nullable String location,
@@ -350,6 +374,11 @@ final class TestRunner {
         if (m.getReturnType() != void.class) {
             return shown + " has @HadronTest but returns " + m.getReturnType().getSimpleName()
                     + "; tests return nothing: " + example;
+        }
+        KnownGap gap = m.getAnnotation(KnownGap.class);
+        if (gap != null && gap.value().isBlank()) {
+            return shown + " has @KnownGap with nothing in it; say what Hadron doesn't do yet: "
+                    + "@KnownGap(\"EntityTeleportEvent states where a teleport asked to go, not where it settles\")";
         }
         if (c.test().timeout() < 1) {
             return shown + " has @HadronTest(timeout = " + c.test().timeout() + "); the limit is in ticks and must be "

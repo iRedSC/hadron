@@ -121,11 +121,16 @@ final class Services implements ServicesManager {
                 Registration r = it.next();
                 if (r.provider == provider || r.plugin == plugin) {
                     it.remove();
-                    outbox.add(new ServiceUnregisterEvent(entry.getKey(), r.provider, r.plugin));
+                    outbox.add(unregistered(entry.getKey(), r.provider, r.plugin));
                 }
             }
             if (list.isEmpty()) lists.remove();
         }
+    }
+
+    /** The service's own type, checked again here: {@link #add} only lets in providers that implement it. */
+    private static <T> ServiceUnregisterEvent unregistered(Class<T> service, Object provider, JavaPlugin plugin) {
+        return new ServiceUnregisterEvent(service, service.cast(provider), plugin);
     }
 
     @Override

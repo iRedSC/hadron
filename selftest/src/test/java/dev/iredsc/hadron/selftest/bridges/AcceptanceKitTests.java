@@ -76,6 +76,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.ChestType;
+import net.minecraft.world.level.gameevent.GameEvent;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.server.level.ServerLevel;
@@ -193,6 +194,39 @@ public final class AcceptanceKitTests {
         pig.teleportTo(t.pos(-5, 0, 0).getX() + 0.5, t.pos(-5, 0, 0).getY(), t.pos(-5, 0, 0).getZ() + 0.5);
         String why = failure(t, () -> area.assertUnchanged("a pig hurt, then walking off", Part.ENTITIES));
         t.assertTrue(why.contains("health"), why);
+    }
+
+    @HadronTest
+    void aVibrationInARefusedStepIsNamedAndMarkForgetsIt(TestContext t) {
+        BlockPos pos = t.pos(2, 0, 0);
+        Acceptance area = t.acceptance(around(t));
+        // A machine whose change was refused, still emitting the vibration of having made it.
+        t.level().gameEvent(null, GameEvent.BLOCK_ACTIVATE, pos);
+        String why = failure(t, () -> area.assertUnchanged("a refused machine that still vibrates"));
+        t.assertTrue(why.contains("sculk sensor") && why.contains("minecraft:block_activate at " + pos.getX() + " "
+                + pos.getY() + " " + pos.getZ()) && why.contains("AcceptanceKitTests"), why);
+        area.mark();
+        area.assertUnchanged("the step after the mark");
+    }
+
+    @HadronTest
+    void aVibrationOutsideTheAreaOrWithBlocksNotComparedIsNoChange(TestContext t) {
+        Acceptance area = t.acceptance(around(t));
+        t.level().gameEvent(null, GameEvent.BLOCK_ACTIVATE, t.pos(-4, 0, 0));
+        area.assertUnchanged("a vibration outside the area");
+        t.level().gameEvent(null, GameEvent.BLOCK_ACTIVATE, t.pos(2, 0, 0));
+        area.assertUnchanged("a vibration in the area, comparing only inventories", Part.INVENTORIES);
+    }
+
+    @HadronTest
+    void aPlayersVibrationAtTheSameCoordinatesInAnotherWorldIsNoChange(TestContext t) {
+        // A test player's events are watched in every world, so the box must be matched by world, not only position.
+        TestPlayer alice = t.player("alice");
+        BlockPos pos = t.pos(2, 0, 0);
+        alice.player().teleportTo(t.server().overworld(), pos.getX(), pos.getY(), pos.getZ(), 0.0F, 0.0F);
+        Acceptance area = t.acceptance(around(t));
+        t.server().overworld().gameEvent(alice.player(), GameEvent.BLOCK_ACTIVATE, pos);
+        area.assertUnchanged("a vibration at the box's coordinates in another world");
     }
 
     @HadronTest

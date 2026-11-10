@@ -1,0 +1,13 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/TntBlockMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/TntBlockMixin.java
+index b29118b..5a3181c 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/TntBlockMixin.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/block/TntBlockMixin.java
+@@ -34,7 +34,7 @@ public abstract class TntBlockMixin {
+             BlockHooks.forgetIgnition();
+             // FAIL, which ServerPlayerGameModeClickMixin ends the click on: no advancement counts it, and the flint
+             // and steel doesn't get to light a fire on top of the TNT instead.
+-            return ItemInteractionResult.FAIL;
++            return ItemInteractionResult.CONSUME;
+         }
+         return original.call(stack, state, level, pos, player, hand, hit);
+     }

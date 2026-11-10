@@ -13,6 +13,7 @@ import dev.iredsc.hadron.api.event.entity.HangingPlaceEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileLaunchEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -23,6 +24,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.world.entity.MobSpawnType;
 import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.decoration.ItemFrame;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.Snowball;
@@ -91,6 +93,32 @@ public final class SpawnTests {
     }
 
     @HadronTest
+    @Covers(ProjectileLaunchEvent.class)
+    void aRefusedSnowballIsGivenBackWhenItsListenerSpawnsSomethingElse(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ready(t);
+        alice.hold(new ItemStack(Items.SNOWBALL, 4));
+        BlockPos standAt = t.pos(3, 0, 0);
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntitySpawnEvent e) {
+                if (!(e.getEntity() instanceof Snowball)) return;
+                e.setCancelled(true);
+                // The listener's own spawn, allowed: it must not make alice's throw count as having spawned something.
+                ArmorStand stand = new ArmorStand(t.level(), standAt.getX() + 0.5, standAt.getY(), standAt.getZ() + 0.5);
+                t.level().addFreshEntity(stand);
+            }
+        });
+        SideEffects effects = t.watchSideEffects();
+        alice.useItem();
+        t.tick();
+        t.assertEquals(1, near(t, ArmorStand.class).size(), "the number of armor stands the listener spawned");
+        t.assertEquals(0, near(t, Snowball.class).size(), "the number of snowballs in flight");
+        t.assertHolding(alice, Items.SNOWBALL, 4);
+        effects.assertNone("a refused snowball whose listener spawned an armor stand");
+    }
+
+    @HadronTest
     @Covers(EntitySpawnEvent.class)
     void aRefusedSpawnEggIsNotSpent(TestContext t) {
         TestPlayer alice = t.player("alice");
@@ -106,11 +134,13 @@ public final class SpawnTests {
                 }
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useBlock(t.pos(1, -1, 0));
         t.tick();
         t.assertEquals(1, asked[0], "the number of EntitySpawnEvents for the egg's pig");
         t.assertEquals(0, near(t, Pig.class).size(), "the number of pigs after a refused egg");
         t.assertHolding(alice, Items.PIG_SPAWN_EGG, 2);
+        effects.assertNone("a refused spawn egg");
     }
 
     @HadronTest
@@ -149,11 +179,13 @@ public final class SpawnTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useItem();
         t.tick();
         t.assertEquals(1, asked[0], "the number of ProjectileLaunchEvents");
         t.assertEquals(0, near(t, Snowball.class).size(), "the number of snowballs in flight");
         t.assertHolding(alice, Items.SNOWBALL, 4);
+        effects.assertNone("a refused snowball");
     }
 
     @HadronTest
@@ -176,6 +208,7 @@ public final class SpawnTests {
         alice.useItem(); // starts drawing
         t.tick(25);
         // The harness has no release action; this is the packet a client sends on letting go of the button.
+        SideEffects effects = t.watchSideEffects();
         alice.player().connection.handlePlayerAction(new ServerboundPlayerActionPacket(
                 ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM, BlockPos.ZERO, Direction.DOWN));
         t.tick();
@@ -184,6 +217,7 @@ public final class SpawnTests {
         t.assertEquals(0, near(t, AbstractArrow.class).size(), "the number of arrows in flight");
         t.assertInventory(alice, Items.ARROW, 5);
         t.assertEquals(0, alice.player().getMainHandItem().getDamageValue(), "the bow's damage");
+        effects.assertNone("a refused arrow");
     }
 
     @HadronTest
@@ -203,11 +237,13 @@ public final class SpawnTests {
                 }
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useItem();
         t.tick();
         t.assertEquals(1, asked[0], "the number of EntitySpawnEvents for the boat");
         t.assertEquals(0, near(t, Boat.class).size(), "the number of boats in the world");
         t.assertHolding(alice, Items.OAK_BOAT, 1);
+        effects.assertNone("a refused boat");
     }
 
     @HadronTest
@@ -251,10 +287,12 @@ public final class SpawnTests {
                 e.setCancelled(true);
             }
         });
+        SideEffects effects = t.watchSideEffects();
         alice.useBlock(wall, Direction.WEST);
         t.tick();
         t.assertEquals(1, asked[0], "the number of HangingPlaceEvents");
         t.assertEquals(0, near(t, ItemFrame.class).size(), "the number of item frames");
         t.assertHolding(alice, Items.ITEM_FRAME, 2);
+        effects.assertNone("a refused item frame");
     }
 }

@@ -12,6 +12,7 @@ import dev.iredsc.hadron.api.event.entity.EntityDeathEvent;
 import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
@@ -71,6 +72,7 @@ public final class RemovalTests {
             }
         });
         alice.clearReceived();
+        SideEffects effects = t.watchSideEffects();
         alice.interact(cod);
         t.assertEquals(1, asked[0], "the number of EntityCaptureEvents for one click");
         t.assertFalse(cod.isRemoved(), "the cod should still be in the world");
@@ -79,6 +81,7 @@ public final class RemovalTests {
         // A real client scoops the cod before the server answers; it must be shown the cod again.
         t.assertTrue(alice.received(ClientboundAddEntityPacket.class).stream().anyMatch(p -> p.getId() == cod.getId()),
                 "the server should send the cod to alice again, since her client already removed it");
+        effects.assertNone("a refused capture");
     }
 
     @HadronTest

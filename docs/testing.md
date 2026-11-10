@@ -35,6 +35,8 @@ public final class ShopTests {
 - **Observing** is reading the world and the recorded packets: block states, inventories, balances, persistent data, the chat lines a player received, whether a player was sent an entity at all (so vanish is testable), what the tab list holds.
 - **Time** is explicit: `t.tick(n)` runs server ticks; `t.await(condition, ticks)` waits up to a limit. Work on another thread (an async task, a chunk loading, a network thread) needs wall time that ticks alone outrun: `t.awaitAsync("the task to finish", condition, ticks)` also gives other threads up to 10 ms between ticks and returns once the condition holds, still bounded by ticks. A test that sleeps or reads the clock itself fails the build.
 - **Assertions say the fix:** a failure names what was expected, what was there, and where.
+- **A gap Hadron hasn't closed yet is a test too:** write the test as it should pass, and mark it `@KnownGap("what Hadron doesn't do yet")`. Its assertion failing is reported as `GAP` with that sentence, under "Known gaps", and doesn't fail the run; a `GAPS <jar>: N known gaps` line follows the suite's summary. Once it passes, the run fails and says to remove the annotation, so a closed gap can't stay marked open. A known gap that throws, hangs or can't run is still a failure.
+- **A refused action leaves no side effect:** beyond the blocks, items and entities a test checks directly, `t.watchSideEffects()`, started right before the action, records every statistic counted, advancement trigger fired, game event emitted (what sculk sensors hear), and experience or hunger change. `assertNone("a refused leash")` fails naming each, for whom, where, and the line that caused it; `seen()` reads them for a positive check. What every tick makes (play time, the `tick` and `location` triggers, a mob's footsteps) isn't recorded.
 
 ## What a run reports
 
@@ -107,25 +109,25 @@ Beside every `report.txt` is a `report.json` with the same results for tools; `h
 ```jsonc
 {
   "schema": 1,
-  "result": "FAILED",                  // PASSED only if every suite ran and every test passed
+  "result": "FAILED",                  // PASSED only if every suite ran and every test passed or is a known gap
   "mode": "watch",                     // "cold" for hadronTest, "watch" for a warm server's rerun
   "run": 5,                            // the rerun's number on that server; 1 for a cold run
   "startedAt": "2026-11-07T02:44:03Z",
   "wallMillis": 3992,
-  "summary": { "total": 2, "passed": 1, "failed": 1, "hung": 0, "broken": 0, "suites": 1 },
+  "summary": { "total": 2, "passed": 1, "failed": 1, "hung": 0, "broken": 0, "gaps": 0, "suites": 1 },
   "problems": [],                      // failures of the run itself, outside any test
   "suites": [{
     "suite": "examples-hello.jar", "plugin": "Hello",
     "broken": null,                    // why none of its tests could run, or null
     "filter": ["TmpTests"],            // the --tests patterns; empty for every test
     "available": 8,                    // tests in the suite before the filter
-    "summary": { "total": 2, "passed": 1, "failed": 1, "hung": 0, "broken": 0 },
+    "summary": { "total": 2, "passed": 1, "failed": 1, "hung": 0, "broken": 0, "gaps": 0 },
     "tests": [{
       "suite": "examples-hello.jar",
       "id": "TmpTests.fails",          // as the text report names it
       "class": "dev.iredsc.hadron.examples.hello.TmpTests",
       "method": "fails",               // null when the class itself couldn't load
-      "status": "FAIL",                // PASS, FAIL or HUNG
+      "status": "FAIL",                // PASS, FAIL, HUNG or GAP (a @KnownGap test failing as expected)
       "ticks": 3, "wallMillis": 41,
       "message": "expected failure",   // null for a pass
       "source": "TmpTests.java:20",    // the test's first line, for every test

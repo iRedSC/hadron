@@ -12,6 +12,7 @@ import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.world.WorldCreator;
 import dev.iredsc.hadron.api.world.WorldGenerator;
 import dev.iredsc.hadron.api.world.Worlds;
+import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestModPacket;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -35,6 +36,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.storage.LevelResource;
@@ -66,6 +68,7 @@ final class TestWorld implements TestContext {
     private final ServerLevel level;
     private final Map<String, TestClient> players = new LinkedHashMap<>();
     private final List<Listener> listeners = new ArrayList<>();
+    private final List<TestSideEffects> sideEffects = new ArrayList<>();
     private final List<TestAcceptance> acceptances = new ArrayList<>();
     private int spent;
     private boolean ticking;
@@ -256,9 +259,29 @@ final class TestWorld implements TestContext {
     }
 
     @Override
+    public SideEffects watchSideEffects() {
+        requireIdle("watch side effects");
+        // What the setup changed in a player's inventory (hold, give) reaches their menu at the next tick, firing
+        // inventory_changed there; send it now, so the action's watch doesn't count the setup's change.
+        for (TestClient c : players.values()) {
+            ServerPlayer p = server.getPlayerList().getPlayer(c.uuid());
+            if (p == null) continue;
+            p.inventoryMenu.broadcastChanges();
+            if (p.containerMenu != p.inventoryMenu) p.containerMenu.broadcastChanges();
+        }
+        settle();
+        TestSideEffects watch = TestSideEffects.start(this);
+        sideEffects.add(watch);
+        return watch;
+    }
+
+    @Override
     public dev.iredsc.hadron.test.Acceptance acceptance(net.minecraft.world.level.levelgen.structure.BoundingBox box) {
         requireIdle("start an acceptance area");
-        TestAcceptance area = new TestAcceptance(this, box);
+        // Its own watch, for vibrations in the box; stopped with the test's other watches.
+        TestSideEffects watch = TestSideEffects.start(this);
+        sideEffects.add(watch);
+        TestAcceptance area = new TestAcceptance(this, box, watch);
         acceptances.add(area);
         return area;
     }
@@ -419,6 +442,8 @@ final class TestWorld implements TestContext {
      */
     void close() {
         List<String> problems = new ArrayList<>();
+        for (TestSideEffects watch : sideEffects) watch.stop();
+        sideEffects.clear();
         for (TestAcceptance area : acceptances) area.close();
         acceptances.clear();
         for (Listener l : listeners) {
@@ -500,6 +525,13 @@ final class TestWorld implements TestContext {
                 }
             }
         }
+    }
+
+    /** The test player this entity is, or null for any other entity. */
+    @Nullable TestPlayer testPlayer(Entity entity) {
+        if (!(entity instanceof ServerPlayer)) return null;
+        for (TestClient c : players.values()) if (c.uuid().equals(entity.getUUID())) return c;
+        return null;
     }
 
     /**

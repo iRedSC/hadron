@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -28,7 +29,7 @@ public class TradeEvent extends ItemEvent implements Cancellable {
     private boolean cancelled;
 
     public TradeEvent(ServerLevel level, InventoryHolder trader, Merchant merchant, MerchantOffer offer, Actor actor) {
-        super(level, Objects.requireNonNull(offer, "offer").getResult().copy(), actor);
+        super(level, EventStack.copyOf(Objects.requireNonNull(offer, "offer").getResult(), "offer's result"), actor);
         this.trader = Objects.requireNonNull(trader, "trader");
         this.merchant = Objects.requireNonNull(merchant, "merchant");
         this.offer = offer;

@@ -39,6 +39,7 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **After event**: an expiry or revocation, marked *(after)*. It can be observed but not cancelled.
 - **Simulation**: a mod testing an action before doing it. Never fires an event.
 - **Per-player copy**: one player's own contents of an inventory at a block or entity (a Lootr chest), held by `InventoryHolder.PerPlayer`, so two players' copies are never one inventory. ([events](events.md#containers-inventoryevent))
+- **Event stack**: how an event holds an `ItemStack` it hands to listeners (`EventStack`): a copy, new on every read so no listener's edit reaches the next listener or the code that fired the event, or the live stack, only where the event's Javadoc says so. ([events](events.md#rules))
 - **Data kind**: the id on `EntityDataChangeEvent` saying whose data changed, in the mod's namespace, such as `minecolonies:job`.
 
 ## Gaps and coverage
@@ -62,6 +63,8 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **In-game tier**: `@HadronTest`s in a headless server with real players over an in-memory connection, for anything that acts. `hadronTest`. Runs before a release.
 - **Suite**: one plugin's in-game tests. Suites share a server, but only the running suite's plugin is enabled.
 - **Self-tests**: Hadron's own in-game suite, in `selftest/`.
+- **Side effect**: what an action did to players and listeners beyond blocks and items: a statistic, an advancement trigger, a game event, experience or hunger. `t.watchSideEffects()` records them; a refused action must leave none. ([testing](testing.md#what-a-test-looks-like))
+- **Hold**: where core keeps an action's side effects while its refusal is still to come (a placement NeoForge asks about only after it happened, a block use whose change was refused, an item use whose spawns were refused): kept and replayed in order if it stands, dropped if refused. It covers only that action: what an event's handlers do while it is dispatched is theirs and passes through. `HeldEffects` in the port.
 - **Warm server**: a test server kept running by `hadronWatch`, so `hadronRerun` reruns a suite without a boot.
 - **`@Covers`**: what a test declares it proves. `coverageCheck` fails the build if any shipped event or public API method has none.
 - **`@FiredBy`**: on every event, who fires it: core on every path (`FULL`), core for vanilla's paths and bridges for their mods' (`PARTIAL`), or only bridges (`NONE`). `bridgeHooksCheck` holds it to what core constructs and generates [bridge-hooks.md](bridge-hooks.md)'s tables from it.

@@ -2,10 +2,9 @@ package dev.iredsc.hadron.api.event.item;
 
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
-import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -35,9 +34,9 @@ public class PrepareItemCraftEvent extends ItemEvent {
     private final InventoryHolder holder;
     private final @Nullable AbstractContainerMenu menu;
     private final @Nullable ServerPlayer viewer;
-    private final List<ItemStack> matrix;
+    private final List<EventStack.Copy> matrix;
     private final @Nullable RecipeHolder<?> recipe;
-    private ItemStack result;
+    private EventStack.Copy result;
 
     /**
      * @param menu the menu showing the grid, or null for a crafter crafting on its own
@@ -47,15 +46,13 @@ public class PrepareItemCraftEvent extends ItemEvent {
      */
     public PrepareItemCraftEvent(ServerLevel level, InventoryHolder holder, @Nullable AbstractContainerMenu menu,
             @Nullable ServerPlayer viewer, List<ItemStack> matrix, @Nullable RecipeHolder<?> recipe, ItemStack result, Actor actor) {
-        super(level, Objects.requireNonNull(result, "result; use ItemStack.EMPTY").copy(), actor);
+        super(level, EventStack.copyOf(result, "result"), actor);
         this.holder = Objects.requireNonNull(holder, "holder");
         this.menu = menu;
         this.viewer = viewer;
-        List<ItemStack> copies = new ArrayList<>(matrix.size());
-        for (ItemStack stack : matrix) copies.add(stack.copy());
-        this.matrix = Collections.unmodifiableList(copies);
+        this.matrix = EventStack.copiesOf(matrix, "matrix");
         this.recipe = recipe;
-        this.result = result.copy();
+        this.result = EventStack.copyOf(result, "result");
     }
 
     /** What holds the grid: the player, the crafting table block, the crafter block. */
@@ -75,7 +72,7 @@ public class PrepareItemCraftEvent extends ItemEvent {
 
     /** Copies of the grid's slots, left to right, top to bottom, empty slots included. Bukkit's matrix. */
     public List<ItemStack> getMatrix() {
-        return matrix;
+        return EventStack.getAll(matrix);
     }
 
     /** The recipe the ingredients match; empty when none does. */
@@ -85,11 +82,11 @@ public class PrepareItemCraftEvent extends ItemEvent {
 
     /** What the grid offers. A copy; use {@link #setResult} to change it. */
     public ItemStack getResult() {
-        return result.copy();
+        return result.get();
     }
 
     /** Offer this instead; {@code ItemStack.EMPTY} offers nothing, so the ingredients can't be crafted. */
     public void setResult(ItemStack result) {
-        this.result = Objects.requireNonNull(result, "result; use ItemStack.EMPTY to offer nothing").copy();
+        this.result = EventStack.copyOf(result, "result");
     }
 }

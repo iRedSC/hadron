@@ -1,0 +1,22 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ItemFrameMixin.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ItemFrameMixin.java
+index c248266..14c641c 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ItemFrameMixin.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/entity/ItemFrameMixin.java
+@@ -39,7 +39,7 @@ abstract class ItemFrameMixin {
+         // FAIL, as for a refused lead: no advancement counts the click, and PlayerInteractMixin ends it there. PASS
+         // would offer the other hand a second try; CONSUME would count it as done.
+         if (!hadron$changes(ItemFrameChangeAction.PLACE, player.getItemInHand(hand).copyWithCount(1),
+-                EntityActors.of(player))) cir.setReturnValue(InteractionResult.FAIL);
++                EntityActors.of(player))) cir.setReturnValue(InteractionResult.CONSUME);
+     }
+ 
+     // Before the click sound, which comes first in vanilla, so a refused turn is silent.
+@@ -48,7 +48,7 @@ abstract class ItemFrameMixin {
+     private void hadron$rotate(Player player, InteractionHand hand, CallbackInfoReturnable<InteractionResult> cir) {
+         ItemFrame self = (ItemFrame) (Object) this;
+         if (!hadron$changes(ItemFrameChangeAction.ROTATE, self.getItem().copyWithCount(1), EntityActors.of(player))) {
+-            cir.setReturnValue(InteractionResult.FAIL);
++            cir.setReturnValue(InteractionResult.CONSUME);
+         }
+     }
+ 

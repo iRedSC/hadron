@@ -5,7 +5,9 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "NetworkRegistryAccessor",
-    "ServerLevelEntitiesAccessor"
+    "PlayerExhaustionMixin",
+    "ServerLevelEntitiesAccessor",
+    "SimpleCriterionTriggerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

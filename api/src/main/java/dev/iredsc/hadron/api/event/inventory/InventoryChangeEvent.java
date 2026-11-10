@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.event.inventory;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -53,8 +54,11 @@ public class InventoryChangeEvent extends InventoryEvent implements Cancellable 
         return changes.get(0);
     }
 
-    /** One slot's change. Stacks are copies; editing them changes nothing. */
-    public record Change(InventoryHolder holder, int slot, ItemStack before, ItemStack after) {
+    /**
+     * One slot's change. Every read of {@link #before()} or {@link #after()} is a new copy, so editing one changes
+     * nothing.
+     */
+    public static final class Change {
         /**
          * The slot when the inventory picks it itself (a hopper inserting wherever there's room). Then
          * {@code before} and {@code after} describe only the items that leave or arrive: {@code EMPTY} to the stack
@@ -62,10 +66,31 @@ public class InventoryChangeEvent extends InventoryEvent implements Cancellable 
          */
         public static final int ANY_SLOT = -1;
 
-        public Change {
-            Objects.requireNonNull(holder, "holder; use InventoryHolder.Unknown.INSTANCE when nothing is known");
-            before = Objects.requireNonNull(before, "before; use ItemStack.EMPTY").copy();
-            after = Objects.requireNonNull(after, "after; use ItemStack.EMPTY").copy();
+        private final InventoryHolder holder;
+        private final int slot;
+        private final EventStack.Copy before;
+        private final EventStack.Copy after;
+
+        /**
+         * @param slot the slot's index, or {@link #ANY_SLOT} (then prefer {@link #arriving} or {@link #leaving})
+         */
+        public Change(InventoryHolder holder, int slot, ItemStack before, ItemStack after) {
+            this.holder = Objects.requireNonNull(holder,
+                    "holder; use InventoryHolder.Unknown.INSTANCE when nothing is known");
+            if (slot < ANY_SLOT) {
+                throw new IllegalArgumentException("Slot " + slot + " isn't a slot: pass the slot's index (0 or more), "
+                        + "or Change.ANY_SLOT when the inventory picks it (Change.arriving or Change.leaving)");
+            }
+            Objects.requireNonNull(before, "before; use ItemStack.EMPTY");
+            Objects.requireNonNull(after, "after; use ItemStack.EMPTY");
+            if (slot == ANY_SLOT && before.isEmpty() == after.isEmpty()) {
+                throw new IllegalArgumentException("A change at ANY_SLOT says only what arrives or what leaves, so "
+                        + "exactly one of before and after is ItemStack.EMPTY (got " + before + " to " + after + "): "
+                        + "use Change.arriving(holder, items) or Change.leaving(holder, items), or name the slot");
+            }
+            this.slot = slot;
+            this.before = EventStack.copyOf(before, "before");
+            this.after = EventStack.copyOf(after, "after");
         }
 
         /** Items arriving somewhere the inventory chooses. */
@@ -76,6 +101,31 @@ public class InventoryChangeEvent extends InventoryEvent implements Cancellable 
         /** Items leaving from wherever the inventory takes them. */
         public static Change leaving(InventoryHolder holder, ItemStack items) {
             return new Change(holder, ANY_SLOT, items, ItemStack.EMPTY);
+        }
+
+        /** Whose inventory. */
+        public InventoryHolder holder() {
+            return holder;
+        }
+
+        /** The slot's index, or {@link #ANY_SLOT}. */
+        public int slot() {
+            return slot;
+        }
+
+        /** The slot's stack before, or what leaves at {@link #ANY_SLOT}. A new copy each call. */
+        public ItemStack before() {
+            return before.get();
+        }
+
+        /** The slot's stack after, or what arrives at {@link #ANY_SLOT}. A new copy each call. */
+        public ItemStack after() {
+            return after.get();
+        }
+
+        @Override
+        public String toString() {
+            return "Change[holder=" + holder + ", slot=" + slot + ", before=" + before + ", after=" + after + "]";
         }
     }
 
