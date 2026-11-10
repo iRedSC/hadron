@@ -136,7 +136,7 @@ Beside every `report.txt` is a `report.json` with the same results for tools; `h
 - **Console commands run in the overworld**: use `server().createCommandSourceStack().withLevel(t.level())` to run one in the test's world.
 - **Weather, time and the random tick speed are shared with the overworld**, so a test that changes them puts them back.
 - **Not covered by Hadron's own tests yet:** fishing bites and catches (they need open water and a random wait), mobs throwing, picking up or equipping items, hopper minecarts, and a portal lit by fire (test worlds aren't the overworld or the nether).
-- The run is wired into `examples/hello` and `selftest` with `apply(from = ...)`; other projects get it from the Gradle plugin.
+- The run is wired into this repo's plugin projects with `apply(from = ...)`. A project outside the repo can't get it yet: the Gradle plugin that will bring it is still to build.
 
 ## What Hadron's own tests cover
 
@@ -180,7 +180,7 @@ void cancellingABreakKeepsTheBlock(TestContext t) { ... }
 
 There is no list of exceptions, and none should be added for something that simply lacks a test: write the test.
 
-**Nothing can look covered that isn't.** The check fails on a `@Covers` that is on a method that isn't a test (`@HadronTest`, or JUnit's `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory`, `@TestTemplate`) or is on a `@Disabled` one, or in a `@Disabled` class or a class around it; that names a type outside `api`'s public types; that names an abstract event (it lists the concrete ones to name instead); that names a type that isn't an event without a method; or that names a method the type and its API supertypes don't have (it lists the ones they do).
+**A `@Covers` must name a real target on a test that runs.** The check fails on a `@Covers` that is on a method that isn't a test (`@HadronTest`, or JUnit's `@Test`, `@ParameterizedTest`, `@RepeatedTest`, `@TestFactory`, `@TestTemplate`) or is on a `@Disabled` one, or in a `@Disabled` class or a class around it; that names a type outside `api`'s public types; that names an abstract event (it lists the concrete ones to name instead); that names a type that isn't an event without a method; or that names a method the type and its API supertypes don't have (it lists the ones they do). It can't tell whether the test fires or calls what it names and checks the result, so a `@Covers` on a test that never touches its target still passes; reviewers catch that.
 
 **Economy providers** are covered through Hadron's own JSON provider: a test registering an `EconomyProvider` of its own would switch the store for the rest of the run, since once a plugin has provided accounts Hadron refuses to fall back to its file.
 

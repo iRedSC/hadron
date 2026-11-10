@@ -1,6 +1,6 @@
-# Changes here are hard to undo, so a PR touching them needs a passing council review to merge
-# (.github/council.toml, .github/workflows/council.yml). Everything else merges on green CI. One glob per line; **
-# spans folders.
+# Changes here are hard to undo, so a PR touching them needs a passing final review to merge
+# (.claude/skills/final-review, checked by .github/scripts/council_gate.py). Everything else merges on green CI. One
+# glob per line; ** spans folders.
 # Add a path when a mistake there would lose players' data, slow every server, or let a change skip these checks.
 
 # The checks themselves: a PR could otherwise switch off what reviews it. Build files can drop coverageCheck, the

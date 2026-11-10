@@ -1,5 +1,5 @@
 # A release must pass both tiers: the fast build, then every in-game suite, each in its own headless server.
-# Runs on a version tag (v0.2.0) or by hand from the Actions tab. Suites run one after another, never in parallel.
+# Runs on a version tag (v0.2.0) or by hand from the Actions tab.
 name: Release check
 
 on:
@@ -14,6 +14,8 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 60
+    outputs:
+      suites: ${{ steps.suites.outputs.suites }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
@@ -26,17 +28,58 @@ jobs:
       # build runs check, and with it releaseJarCheck: the mod jar server owners get must hold no test code. Named
       # here too, so the release can't lose it if check's wiring changes.
       - run: ./gradlew build :neoforge:releaseJarCheck
-      - run: ./gradlew :examples:hello:hadronTest
-      - run: ./gradlew :selftest:hadronTest
-      - name: Keep reports and server logs
+      # Every project with a hadronTest task is a suite, so a new plugin is tested without editing this file. bench's
+      # hadronTest runs benchmarks, which never gate anything.
+      - id: suites
+        run: |
+          ./gradlew -q tasks --all > tasks.txt
+          suites=$(sed -n 's/^\([A-Za-z0-9_.:-]*\):hadronTest - .*/\1/p' tasks.txt | grep -vx bench \
+            | jq -Rnc '[inputs | {task: ":\(.):hadronTest", name: gsub(":"; "-")}]')
+          echo "$suites"
+          if [ "$(jq length <<< "$suites")" -eq 0 ]; then
+            echo "Found no hadronTest task in 'gradlew tasks --all'; check how gradle/hadron-test.gradle.kts names it."
+            exit 1
+          fi
+          echo "suites=$suites" >> "$GITHUB_OUTPUT"
+      - name: Keep test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-reports
+          path: '**/build/reports/tests/'
+          if-no-files-found: ignore
+
+  # One machine per suite, so each boots its own server and its report and logs are an artifact of their own.
+  suites:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: ${{ fromJSON(needs.verify.outputs.suites) }}
+    name: hadronTest (${{ matrix.suite.name }})
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-java@77dd5b2ce225ea11469928ac317850245a74ae78 # v6.2.0
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@8da46b539cd8fe6ab27ca75128919a18d757604c # v6.4.1
+        with:
+          cache-read-only: true
+      - run: ./gradlew "$TASK"
+        env:
+          TASK: ${{ matrix.suite.task }}
+      - name: Keep the suite's report and server logs
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: hadron-test
+          name: hadron-test-${{ matrix.suite.name }}
           path: |
             neoforge/build/hadron-test/report.*
+            neoforge/build/hadron-test/failures/
             neoforge/build/hadron-test/run/logs/
-            **/build/reports/tests/
           if-no-files-found: ignore
 
   # Every fixed bug stays fixed: each fix in regressions/regressions.toml is undone in a throwaway worktree and its
