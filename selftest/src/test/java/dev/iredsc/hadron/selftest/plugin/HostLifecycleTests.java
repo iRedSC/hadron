@@ -237,6 +237,82 @@ public final class HostLifecycleTests {
         }
     }
 
+    /**
+     * A jar is read once per load attempt, and everything about the attempt (what the plugin needs, which class is its
+     * main, the identity its status line reports) comes from that one read. A plugin that waits for a dependency and
+     * whose jar is replaced while that dependency's onLoad runs fails with the OLD jar's reason and the OLD jar's
+     * identity, never the old reason under the replacement's: a deploy of the replacement must not be told it failed
+     * for the old jar's mistake. The replacement is then loaded by the next poll.
+     */
+    @HadronTest(timeout = 1500)
+    void aJarReplacedWhileADependencyLoadsIsReportedAsTheVersionThatWasRead(TestContext t) throws Exception {
+        TestPlayer admin = t.player("admin");
+        admin.setOp(true);
+        PluginManager plugins = t.plugin().getServer().getPluginManager();
+        File folder = t.plugin().getServer().getPluginsFolder();
+        File jar = new File(folder, "selftest-hostprobe.jar");
+        File replacement = new File(folder, "selftest-hostprobe.jar.part");
+        File root = new File(folder, "selftest-swap-root.jar");
+        try {
+            writeZip(jar, "plugin.yml", "name: " + NAME + "\nversion: \"1\"\nminecraft: " + t.server().getServerVersion()
+                    + "\nmain: selftest.MissingOldMain\ndepend: [SelfTestSwapRoot]\n");
+            t.await("the old jar to fail for want of its dependency", () -> statusLines(t, admin).stream()
+                    .anyMatch(l -> l.startsWith("plugin=" + NAME + "\tstate=failed")), 300);
+            String oldSha = sha256(jar);
+            long oldModified = jar.lastModified();
+
+            writeJar(replacement, t.server().getServerVersion());
+            t.assertTrue(replacement.setLastModified(oldModified + 60_000), "give the replacement its own file version");
+            String fixedSha = sha256(replacement);
+            long fixedModified = replacement.lastModified();
+            System.getProperties().put(LoadSwapPlugin.ON_LOAD, (Runnable) () -> {
+                try {
+                    Files.move(replacement.toPath(), jar.toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE,
+                            java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+                } catch (IOException e) {
+                    throw new IllegalStateException(e);
+                }
+            });
+            // The dependency appears; the dependent is reloaded with it, and the dependency's onLoad swaps the jar.
+            try (OutputStream out = Files.newOutputStream(root.toPath()); ZipOutputStream zip = new ZipOutputStream(out)) {
+                zip.putNextEntry(new ZipEntry("plugin.yml"));
+                zip.write(("name: SelfTestSwapRoot\nversion: \"1\"\nminecraft: " + t.server().getServerVersion() + "\nmain: "
+                        + LoadSwapPlugin.class.getName() + "\n").getBytes(StandardCharsets.UTF_8));
+                String classFile = LoadSwapPlugin.class.getName().replace('.', '/') + ".class";
+                zip.putNextEntry(new ZipEntry(classFile));
+                try (InputStream in = LoadSwapPlugin.class.getClassLoader().getResourceAsStream(classFile)) {
+                    if (in == null) throw new IOException("the test jar has no " + classFile);
+                    in.transferTo(zip);
+                }
+            }
+            t.await("the dependency to load and swap the dependent's jar", () -> plugins.isPluginEnabled("SelfTestSwapRoot"), 300);
+
+            String outcome = statusLines(t, admin).stream().filter(l -> l.startsWith("plugin=" + NAME + "\t"))
+                    .findFirst().orElse("");
+            if (outcome.contains("\tstate=failed\t")) {
+                t.assertTrue(outcome.contains("\tmodified=" + oldModified + "\tsha256=" + oldSha + "\t"),
+                        "a failure from reading the old jar is about the old jar (modified " + oldModified + ", sha256 "
+                                + oldSha + "), but the line was: " + outcome);
+                t.assertTrue(outcome.contains("selftest.MissingOldMain"), "and says what was wrong with it: " + outcome);
+            } else {
+                t.assertTrue(outcome.contains("\tmodified=" + fixedModified + "\tsha256=" + fixedSha + "\t"),
+                        "an outcome that isn't the old failure is the replacement's: " + outcome);
+            }
+            t.await("the next poll to load the replacement", () -> statusLines(t, admin).stream().anyMatch(l ->
+                    l.startsWith("plugin=" + NAME + "\tstate=enabled\t") && l.contains("\tmodified=" + fixedModified
+                            + "\tsha256=" + fixedSha)), 300);
+        } finally {
+            System.getProperties().remove(LoadSwapPlugin.ON_LOAD);
+            jar.delete();
+            root.delete();
+            replacement.delete();
+            t.tick(60);
+            clearProperties();
+            deleteTree(new File(folder, NAME));
+            deleteTree(new File(folder, "SelfTestSwapRoot"));
+        }
+    }
+
     private static void writeZip(File file, String entry, String text) throws IOException {
         try (OutputStream out = Files.newOutputStream(file.toPath()); ZipOutputStream zip = new ZipOutputStream(out)) {
             zip.putNextEntry(new ZipEntry(entry));
