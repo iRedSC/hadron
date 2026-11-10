@@ -6,6 +6,7 @@ import dev.iredsc.hadron.api.economy.Economy;
 import dev.iredsc.hadron.api.net.NetBackend;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.PluginCommand;
+import dev.iredsc.hadron.api.plugin.Server;
 import dev.iredsc.hadron.checks.Nondeterministic;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -63,18 +64,24 @@ public final class HostilePlugin extends JavaPlugin {
         if (is("reload")) getServer().getScheduler().runTaskTimer(this, () -> log("tick " + version), 1, 1);
         if (is("host")) {
             // What a plugin built without Hadron's checks could call: each must be refused at runtime.
-            asHost("claim", () -> HostKey.claim());
-            asHost("clear the server", () -> Hadron.Lifecycle.install(null, null));
-            asHost("clear the economy", () -> Economy.Lifecycle.install(null, null));
-            asHost("replace the packet backend", () -> NetBackend.Port.install(null, null));
+            // Where Hadron wrongly lets one through, the plugin puts things back, so the test fails instead of the run.
+            Server server = Hadron.Lifecycle.running();
+            Economy economy = Economy.Lifecycle.running();
+            asHost("claim", () -> HostKey.claim(), () -> {});
+            asHost("clear the server", () -> Hadron.Lifecycle.install(null, null),
+                    () -> Hadron.Lifecycle.install(null, server));
+            asHost("clear the economy", () -> Economy.Lifecycle.install(null, null),
+                    () -> Economy.Lifecycle.install(null, economy));
+            asHost("replace the packet backend", () -> NetBackend.Port.install(null, null), () -> {});
         }
     }
 
     /** Logs {@code host <what> refused: <message>}, or {@code host <what> allowed} if Hadron let it through. */
-    private static void asHost(String what, Runnable call) {
+    private static void asHost(String what, Runnable call, Runnable putBack) {
         try {
             call.run();
             log("host " + what + " allowed");
+            putBack.run();
         } catch (RuntimeException refused) {
             log("host " + what + " refused: " + refused.getMessage());
         }
