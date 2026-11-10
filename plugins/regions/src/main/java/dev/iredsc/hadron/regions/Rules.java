@@ -37,6 +37,16 @@ final class Rules {
         return Optional.empty();
     }
 
+    /** The first region refusing {@code who} {@code flag} at any of {@code places}, each place being the regions there. */
+    static Optional<Region> refusingAny(Collection<? extends Collection<Region>> places, Flag flag,
+            Optional<UUID> who) {
+        for (Collection<Region> here : places) {
+            Optional<Region> no = refusing(here, flag, who);
+            if (no.isPresent()) return no;
+        }
+        return Optional.empty();
+    }
+
     /**
      * Whether the world on its own may carry a change from {@code source} into {@code target}: water flowing, a piston
      * pushing, grass spreading. It may within the regions it starts in, and into any region that lets outsiders build;

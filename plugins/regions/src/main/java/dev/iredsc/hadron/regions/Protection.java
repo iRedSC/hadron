@@ -14,7 +14,10 @@ import dev.iredsc.hadron.api.event.block.BlockFromToEvent;
 import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.block.BlockSpreadEvent;
 import dev.iredsc.hadron.api.event.block.BlockUseEvent;
+import dev.iredsc.hadron.api.event.entity.ArmorStandManipulateEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
+import dev.iredsc.hadron.api.event.resource.ResourceEvent;
+import dev.iredsc.hadron.api.event.resource.ResourceHolder;
 import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryMoveItemEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -325,6 +328,12 @@ final class Protection implements Listener {
                 : Flag.USE);
     }
 
+    /** Taking, giving or swapping an armor stand's equipment, from a click or a mod's editing screen: building. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    private void armorStand(ArmorStandManipulateEvent e) {
+        entityChange(e, e, e.getEntity(), Flag.BUILD);
+    }
+
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void hangingBreak(HangingBreakEvent e) {
         entityChange(e, e, e.getEntity(), Flag.BUILD);
@@ -360,38 +369,73 @@ final class Protection implements Listener {
 
     /**
      * Inventories in regions: a menu opened or clicked in, items moved in or out by a hopper, a pipe, a machine.
-     * Someone behind it (a player, a machine's owner) needs {@code use} wherever each inventory stands, even after
-     * the menu is open: a click is checked against what the menu is open on as well as the slot clicked. The world on
-     * its own (a hopper nobody owns) is held to {@link Rules#refusingCrossing} both ways, as a piston is. An inventory
-     * with no place in a world (linked storage, a plugin's own menu) stands outside every region. A player's own
-     * inventory is never a region's: it goes where they go.
+     * Someone behind it (a player, a machine's owner) needs {@code use} wherever each inventory it reaches stands,
+     * even after the menu is open: a click is checked against every inventory behind the menu, since a shift-click can
+     * move items into any of them. The world on its own (a hopper nobody owns) is held to
+     * {@link Rules#refusingCrossing} both ways, as a piston is. An inventory with no place in a world (linked storage,
+     * a plugin's own menu) stands outside every region. A player's own inventory is never a region's: it goes where
+     * they go.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void inventory(InventoryEvent e) {
         if (!(e instanceof Cancellable c) || trusted(e)) return;
         Set<InventoryHolder> holders = new LinkedHashSet<>();
         holders.add(e.getHolder());
-        if (e instanceof InventoryChangeEvent change) {
-            for (InventoryChangeEvent.Change ch : change.getChanges()) holders.add(ch.holder());
+        if (e instanceof InventoryChangeEvent change) holders.addAll(change.getHolders());
+        if (e instanceof InventoryClickEvent click) {
+            holders.add(click.getMenuHolder());
+            holders.addAll(click.getSlotHolders());
         }
-        if (e instanceof InventoryMoveItemEvent move) {
-            holders.add(move.getSource());
-            holders.add(move.getDestination());
+        if (e instanceof InventoryOpenEvent open) {
+            holders.add(open.getMenuHolder());
+            holders.addAll(open.getSlotHolders());
         }
-        // A click names the slot clicked, which may be the player's own, yet moves items to and from the whole menu.
-        if (e instanceof InventoryClickEvent click) holders.add(click.getMenuHolder());
-        if (e instanceof InventoryOpenEvent open) holders.add(open.getMenuHolder());
-        List<List<Region>> places = new ArrayList<>();
+        List<Place> places = new ArrayList<>();
         for (InventoryHolder holder : holders) {
-            if (holder instanceof InventoryHolder.Entity en && en.entity() instanceof Player) continue;
-            for (Place place : Place.of(holder)) places.add(regionsAt(place, e));
+            if (!playersOwn(holder)) places.addAll(Place.of(holder));
         }
-        Optional<Region> no = worldOnItsOwn(e.getActor()) ? crossing(places) : using(places, e.getActor().actingFor());
+        refuse(e, c, places, Flag.USE,
+                e.getHolder() instanceof InventoryHolder.Block b ? Optional.of(b.pos()) : Optional.empty());
+    }
+
+    /**
+     * Energy, fluids and other resources a mod moves, makes or spends: draining a protected battery, a pipe filling a
+     * tank. Held to {@code use}, as inventories are, wherever each holder stands; a player's own (their items, their
+     * experience) is never a region's.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    private void resource(ResourceEvent e) {
+        if (trusted(e)) return;
+        List<Place> places = new ArrayList<>();
+        List<ResourceHolder> holders = e.getHolders();
+        if (holders.isEmpty()) places.addAll(e.getPlaces());
+        for (ResourceHolder holder : holders) {
+            boolean own = switch (holder) {
+                case ResourceHolder.Entity en -> en.entity() instanceof Player;
+                case ResourceHolder.Item i -> playersOwn(i.heldIn());
+                default -> false;
+            };
+            if (!own) places.addAll(Place.of(holder));
+        }
+        refuse(e, e, places, Flag.USE, Optional.empty());
+    }
+
+    private static boolean playersOwn(InventoryHolder holder) {
+        return holder instanceof InventoryHolder.Entity en && en.entity() instanceof Player;
+    }
+
+    /**
+     * Refuses {@code e} if a region at any of {@code places} forbids {@code flag} to whoever is behind it, or, with
+     * nobody behind it, forbids carrying it between them.
+     */
+    private void refuse(ActionEvent e, Cancellable c, List<Place> places, Flag flag, Optional<BlockPos> shown) {
+        List<List<Region>> regions = new ArrayList<>(places.size());
+        for (Place place : places) regions.add(regionsAt(place));
+        Optional<Region> no = worldOnItsOwn(e.getActor()) ? crossing(regions)
+                : Rules.refusingAny(regions, flag, e.getActor().actingFor());
         if (no.isEmpty()) return;
         c.setCancelled(true);
-        if (e.getActor() instanceof Actor.Player && e.getHolder() instanceof InventoryHolder.Block b) {
-            tell(e, b.pos(), no.get());
-        }
+        shown.ifPresent(pos -> tell(e, pos, no.get()));
     }
 
     /** Nobody behind it: nature, or a machine or mob nobody owns. */
@@ -410,20 +454,12 @@ final class Protection implements Listener {
         return Optional.empty();
     }
 
-    private static Optional<Region> using(List<List<Region>> places, Optional<UUID> who) {
-        for (List<Region> here : places) {
-            Optional<Region> no = Rules.refusing(here, Flag.USE, who);
-            if (no.isPresent()) return no;
-        }
-        return Optional.empty();
-    }
-
     /**
      * The regions at a place. One with no place in a world stands outside every region. One nobody can place is held to
-     * every region its bound reaches; with no bound at all, to those where the player behind it stands, since they reach
-     * it from there.
+     * every region its bound reaches, so a mod no bridge describes is refused, not let through, wherever it might be
+     * protected.
      */
-    private List<Region> regionsAt(Place place, ActionEvent e) {
+    private List<Region> regionsAt(Place place) {
         return switch (place) {
             case Place.Spot s -> store.overlapping(s.level(), s.box());
             case Place.Level l -> store.in(l.level());
@@ -431,8 +467,7 @@ final class Protection implements Listener {
             case Place.Unknown u -> switch (u.bound()) {
                 case Place.Spot s -> store.overlapping(s.level(), s.box());
                 case Place.Level l -> store.in(l.level());
-                case Place.Anywhere a -> e.getActingPlayer()
-                        .map(p -> store.at(p.serverLevel(), p.blockPosition())).orElse(List.of());
+                case Place.Anywhere a -> List.copyOf(store.all());
             };
         };
     }
