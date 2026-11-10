@@ -927,3 +927,16 @@ guards = [
     { test = "SideEffectsTests.aBroadcastsPacketAHandlerReplacesIsStillOneSound", tier = "in-game" },
     { test = "SideEffectsTests.aBroadcastsPacketAHandlerChangesTheSourceOfIsStillOneSound", tier = "in-game" },
 ]
+
+[[regression]]
+id = "refused-equip-dispenser-clicks"
+bug = "A dispenser whose armour every EquipEvent listener refused kept it but still played the dispense click."
+fix = "299c2f5"
+paths = [
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawns.java",
+    "neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java",
+]
+guards = [
+    { test = "ItemUseTests.refusedDispenserEquipLeavesTheHelmetInTheDispenser", tier = "in-game" },
+]
