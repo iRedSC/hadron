@@ -1,5 +1,5 @@
 diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
-index f702156..c374160 100644
+index 6d7a36f..7c3a2d9 100644
 --- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
 +++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/TestSideEffects.java
 @@ -15,12 +15,8 @@ import net.minecraft.advancements.CriteriaTriggers;
@@ -28,16 +28,17 @@ index f702156..c374160 100644
   */
  public final class TestSideEffects implements SideEffects {
      @StaticState(reason = "the running test's watches; TestWorld.close stops each at the test's end")
-@@ -57,21 +52,13 @@ public final class TestSideEffects implements SideEffects {
-     @StaticState(reason = "a depth counter of trigger calls on the server thread, back to 0 as each call returns")
-     private static int ambientDepth;
+@@ -65,22 +60,13 @@ public final class TestSideEffects implements SideEffects {
+         return AMBIENT_DEPTH.get()[0] > 0;
+     }
  
 -    /**
--     * How deep the server thread is inside a world's sound broadcast, which is recorded once as a whole: the packets it
--     * then sends each player near aren't recorded again.
+-     * The packet of the world broadcast this thread is running, which was recorded once as a whole: its copies, sent
+-     * to each player near, aren't recorded again. Only those: another packet sent meanwhile (a packet handler sending
+-     * someone a portal's whoosh) is recorded, and so is every packet another thread sends.
 -     */
--    @StaticState(reason = "a depth counter of broadcasts on the server thread, back to 0 as each one returns")
--    private static int broadcasting;
+-    @StaticState(reason = "each thread's innermost running broadcast, put back to the outer one as each returns")
+-    private static final ThreadLocal<@Nullable Packet<?>> BROADCAST = new ThreadLocal<>();
 -
      /** Frames of the bookkeeping between an action and the hook, skipped so {@code from} starts at the action. */
      private static final Set<String> BOOKKEEPING_METHODS = Set.of("awardStat", "resetStat", "gameEvent",
@@ -52,18 +53,47 @@ index f702156..c374160 100644
              "net.minecraft.advancements.", "net.minecraft.server.PlayerAdvancements", "net.minecraft.stats.", "net.minecraft.world.level.gameevent.",
              "net.neoforged.bus.", "net.neoforged.neoforge.event.EventHooks", "net.neoforged.neoforge.common.CommonHooks",
              "java.", "jdk.");
-@@ -230,52 +217,11 @@ public final class TestSideEffects implements SideEffects {
+@@ -240,81 +226,11 @@ public final class TestSideEffects implements SideEffects {
                  from()));
      }
  
--    /** From {@code ServerLevelSoundMixin}: runs a broadcast it has just recorded, so its packets aren't recorded too. */
--    public static void broadcasting(Runnable broadcast) {
--        broadcasting++;
+-    /**
+-     * From {@code ServerLevelSoundMixin}: runs the broadcast of {@code packet}, which it has just recorded, so the
+-     * copies it sends each player near aren't recorded too.
+-     */
+-    public static void broadcasting(Packet<?> packet, Runnable broadcast) {
+-        @Nullable Packet<?> outer = BROADCAST.get();
+-        BROADCAST.set(packet);
 -        try {
 -            broadcast.run();
 -        } finally {
--            broadcasting--;
+-            if (outer == null) BROADCAST.remove();
+-            else BROADCAST.set(outer);
 -        }
+-    }
+-
+-    /**
+-     * Whether {@code sent} is a copy of the broadcast running on this thread: that very packet, or one with the same
+-     * sound, place and source, as a handler that rebuilt it would send.
+-     */
+-    private static boolean ofBroadcast(Packet<?> sent) {
+-        @Nullable Packet<?> b = BROADCAST.get();
+-        if (b == null) return false;
+-        if (sent == b) return true;
+-        return switch (sent) {
+-            case ClientboundSoundPacket p when b instanceof ClientboundSoundPacket q -> sameSound(p.getSound(),
+-                    q.getSound()) && p.getSource() == q.getSource() && p.getX() == q.getX() && p.getY() == q.getY()
+-                    && p.getZ() == q.getZ();
+-            case ClientboundSoundEntityPacket p when b instanceof ClientboundSoundEntityPacket q -> sameSound(
+-                    p.getSound(), q.getSound()) && p.getSource() == q.getSource() && p.getId() == q.getId();
+-            case ClientboundLevelEventPacket p when b instanceof ClientboundLevelEventPacket q -> p.getType()
+-                    == q.getType() && p.getPos().equals(q.getPos()) && p.getData() == q.getData();
+-            default -> false;
+-        };
+-    }
+-
+-    private static boolean sameSound(Holder<SoundEvent> a, Holder<SoundEvent> b) {
+-        return a.value().getLocation().equals(b.value().getLocation());
 -    }
 -
 -    /**
@@ -74,13 +104,13 @@ index f702156..c374160 100644
 -    public static void packetSent(ServerPlayer to, Packet<?> packet) {
 +    /** From {@code ServerPlayerNotifySoundMixin}, as the server sends a sound to one player alone. */
 +    public static void notifySoundSent(ServerPlayer to, SoundEvent sound, SoundSource source) {
-         if (ACTIVE.isEmpty() || ambientDepth > 0) return;
+         if (ACTIVE.isEmpty() || inAmbientTrigger()) return;
 -        boolean serverThread = to.server.isSameThread();
--        if (broadcasting > 0 && serverThread) return;
 -        if (packet instanceof ClientboundBundlePacket bundle) {
 -            for (Packet<?> part : bundle.subPackets()) packetSent(to, part);
 -            return;
 -        }
+-        if (ofBroadcast(packet)) return;
 -        ServerLevel level = to.serverLevel();
 -        Optional<Player> only = Optional.of(to);
 -        switch (packet) {
@@ -109,7 +139,7 @@ index f702156..c374160 100644
      }
  
      /**
-@@ -332,16 +278,6 @@ public final class TestSideEffects implements SideEffects {
+@@ -371,16 +287,6 @@ public final class TestSideEffects implements SideEffects {
          if (!HeldEffects.hold(commit)) commit.run();
      }
  
@@ -126,7 +156,7 @@ index f702156..c374160 100644
      /** The code that caused the effect: the first frames outside the bookkeeping that reports it. */
      private static List<StackTraceElement> from() {
          return StackWalker.getInstance().walk(frames -> frames.map(StackWalker.StackFrame::toStackTraceElement)
-@@ -353,7 +289,7 @@ public final class TestSideEffects implements SideEffects {
+@@ -392,7 +298,7 @@ public final class TestSideEffects implements SideEffects {
          String method = frame.getMethodName();
          // Core's hold on what may yet be refused (HeldEffects and the mixins that hand it over) is bookkeeping too, and
          // so is a trampoline MixinExtras generates, which has no line of its own.
@@ -167,7 +197,7 @@ index 19e9c88..0000000
 -    }
 -}
 diff --git a/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerLevelSoundMixin.java b/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerLevelSoundMixin.java
-index 0ef4d23..b4acb83 100644
+index fe24043..b4acb83 100644
 --- a/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerLevelSoundMixin.java
 +++ b/neoforge/src/harness/java/dev/iredsc/hadron/harness/mixin/ServerLevelSoundMixin.java
 @@ -23,10 +23,8 @@ import org.spongepowered.asm.mixin.Mixin;
@@ -176,8 +206,8 @@ index 0ef4d23..b4acb83 100644
  /**
 - * Every sound and numbered event a world sends, for {@code SideEffects}: read at the broadcast itself, once whoever
 - * it reaches (nobody near, or everyone but the player whose client plays it), so a sound NeoForge's event cancelled
-- * or a hold dropped is never seen, and one a hold kept is seen once, when it plays. The packets the broadcast then
-- * sends aren't recorded again ({@code PlayerConnectionSoundMixin}).
+- * or a hold dropped is never seen, and one a hold kept is seen once, when it plays. The copies of its packet the
+- * broadcast then sends aren't recorded again ({@code PlayerConnectionSoundMixin}); anything else sent meanwhile is.
 + * Every sound and numbered event a world sends, for {@code SideEffects}: read at the broadcast itself, so a sound
 + * NeoForge's event cancelled or a hold dropped is never seen, and one a hold kept is seen once, when it plays.
   */
@@ -187,7 +217,7 @@ index 0ef4d23..b4acb83 100644
              TestSideEffects.soundSent((ServerLevel) (Object) this, except, sound.getSound(), sound.getSource(),
                      new Vec3(x, y, z), null);
          }
--        TestSideEffects.broadcasting(() -> original.call(players, except, x, y, z, range, dimension, packet));
+-        TestSideEffects.broadcasting(packet, () -> original.call(players, except, x, y, z, range, dimension, packet));
 +        original.call(players, except, x, y, z, range, dimension, packet);
      }
  
@@ -196,7 +226,7 @@ index 0ef4d23..b4acb83 100644
              TestSideEffects.soundSent((ServerLevel) (Object) this, except, sound.getSound(), sound.getSource(),
                      new Vec3(x, y, z), entity);
          }
--        TestSideEffects.broadcasting(() -> original.call(players, except, x, y, z, range, dimension, packet));
+-        TestSideEffects.broadcasting(packet, () -> original.call(players, except, x, y, z, range, dimension, packet));
 +        original.call(players, except, x, y, z, range, dimension, packet);
      }
  
@@ -205,7 +235,7 @@ index 0ef4d23..b4acb83 100644
              TestSideEffects.levelEventSent((ServerLevel) (Object) this, except, event.getType(), event.getPos(),
                      event.getData(), false);
          }
--        TestSideEffects.broadcasting(() -> original.call(players, except, x, y, z, range, dimension, packet));
+-        TestSideEffects.broadcasting(packet, () -> original.call(players, except, x, y, z, range, dimension, packet));
 +        original.call(players, except, x, y, z, range, dimension, packet);
      }
  
@@ -214,7 +244,7 @@ index 0ef4d23..b4acb83 100644
              TestSideEffects.levelEventSent((ServerLevel) (Object) this, null, event.getType(), event.getPos(),
                      event.getData(), true);
          }
--        TestSideEffects.broadcasting(() -> original.call(players, packet));
+-        TestSideEffects.broadcasting(packet, () -> original.call(players, packet));
 +        original.call(players, packet);
      }
  }
