@@ -387,6 +387,9 @@ final class TestAcceptance implements Acceptance, Listener {
         if (event instanceof EntityEvent e) {
             // Either of a pair: a rider boarding a vehicle in the area, a lead tied to a knot in it.
             for (Entity named : named(event)) {
+                // A player named beside the subject (a breeder, a viewer) took part from where they stand; the event
+                // happens where the entities it is about are. A player that is the subject is placed below.
+                if (named instanceof ServerPlayer) continue;
                 if (named.level() == level && at(level, named.position()) instanceof Place.In p) return p;
             }
             return at(e.getLevel(), e.getPosition());
@@ -525,7 +528,10 @@ final class TestAcceptance implements Acceptance, Listener {
         return List.copyOf(out);
     }
 
-    /** Each event class's public no-argument getters, outside {@link Object} and the actor. */
+    /** Who an action is for, not who took part in it: an owner far from their machine is no participant. */
+    private static final Set<String> ATTRIBUTION = Set.of("getActor", "getActingPlayer", "getOperation");
+
+    /** Each event class's public no-argument getters, outside {@link Object} and attribution. */
     @dev.iredsc.hadron.checks.StaticState(reason = "a cache of each event class's getters, which never change; "
             + "it goes with the classes")
     private static final ClassValue<List<java.lang.reflect.Method>> GETTERS = new ClassValue<>() {
@@ -535,7 +541,7 @@ final class TestAcceptance implements Acceptance, Listener {
             for (java.lang.reflect.Method m : type.getMethods()) {
                 if (m.getParameterCount() != 0 || m.getDeclaringClass() == Object.class
                         || java.lang.reflect.Modifier.isStatic(m.getModifiers()) || !m.getName().startsWith("get")
-                        || m.getName().equals("getActor")) {
+                        || ATTRIBUTION.contains(m.getName())) {
                     continue;
                 }
                 // A public getter on an event class that isn't public (a bridge's nested one) is read all the same.
@@ -796,7 +802,9 @@ final class TestAcceptance implements Acceptance, Listener {
 
     /** Whether a handler is the vanilla wrapper over this chest, or over the double chest it is half of. */
     private static boolean overChest(IItemHandler handler, ChestBlockEntity chest) {
-        return handler instanceof net.neoforged.neoforge.items.wrapper.InvWrapper w
+        // Exactly vanilla's wrapper: a subclass may add storage of its own.
+        return handler.getClass() == net.neoforged.neoforge.items.wrapper.InvWrapper.class
+                && handler instanceof net.neoforged.neoforge.items.wrapper.InvWrapper w
                 && (w.getInv() == chest || w.getInv() instanceof CompoundContainer both && both.contains(chest));
     }
 

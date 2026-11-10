@@ -13,6 +13,7 @@ import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityBreedEvent;
+import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDataChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
@@ -1401,5 +1402,18 @@ public final class AcceptanceKitTests {
         victim.teleportTo(out.getX() + 0.5, out.getY(), out.getZ() + 0.5);
         String why = failure(t, () -> area.assertUnchanged("a hidden event's victim hurt", Part.ENTITIES));
         t.assertTrue(why.contains("minecraft:pig") && why.contains("health"), why);
+    }
+
+    @HadronTest
+    void aMachineOutsideIsntPlacedWhereItsOwnerStands(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        bob.moveTo(t.pos(2, 0, 0));
+        Pig pig = pig(t, t.pos(6, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        Actor machine = new Actor.Machine(t.level(), t.pos(6, 0, 0), Attribution.of(bob.uuid()));
+        t.assertFalse(Hadron.getPluginManager().callEvent(new EntityDamageEvent(pig,
+                t.level().damageSources().generic(), 1, machine)), "bob's machine hurting a pig outside isn't the "
+                + "area's, though bob stands in it: " + area.events());
+        t.assertTrue(area.events().isEmpty(), "nothing heard in the area: " + area.events());
     }
 }
