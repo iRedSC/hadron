@@ -35,6 +35,7 @@ public final class ShopTests {
 - **Observing** is reading the world and the recorded packets: block states, inventories, balances, persistent data, the chat lines a player received, whether a player was sent an entity at all (so vanish is testable), what the tab list holds.
 - **Time** is explicit: `t.tick(n)` runs server ticks; `t.await(condition, ticks)` waits up to a limit. Work on another thread (an async task, a chunk loading, a network thread) needs wall time that ticks alone outrun: `t.awaitAsync("the task to finish", condition, ticks)` also gives other threads up to 10 ms between ticks and returns once the condition holds, still bounded by ticks. A test that sleeps or reads the clock itself fails the build.
 - **Assertions say the fix:** a failure names what was expected, what was there, and where.
+- **A refused action leaves no side effect:** beyond the blocks, items and entities a test checks directly, `t.watchSideEffects()`, started right before the action, records every statistic counted, advancement trigger fired, game event emitted (what sculk sensors hear), and experience or hunger change. `assertNone("a refused leash")` fails naming each, for whom, where, and the line that caused it; `seen()` reads them for a positive check. What every tick makes (play time, the `tick` and `location` triggers, a mob's footsteps) isn't recorded.
 
 ## What a run reports
 

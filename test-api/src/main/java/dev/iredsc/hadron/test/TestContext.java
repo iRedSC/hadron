@@ -82,6 +82,15 @@ public interface TestContext {
      */
     void registerEvents(Listener listener);
 
+    /**
+     * Starts recording what actions do to players and listeners beyond blocks and items (statistics, advancement
+     * triggers, game events, experience, hunger) until the test ends, so a refused action can be checked to have left
+     * none: {@code var effects = t.watchSideEffects(); alice.interact(cow); effects.assertNone("a refused leash");}.
+     * Start it after the setup, right before the action: it sends players what the setup changed in their inventories
+     * first, as the next tick would, so that isn't counted. See {@link SideEffects}.
+     */
+    SideEffects watchSideEffects();
+
     /** Runs {@code ticks} server ticks: worlds, entities, scheduled tasks, plugins' timers. */
     void tick(int ticks);
 

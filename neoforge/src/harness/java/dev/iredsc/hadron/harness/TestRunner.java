@@ -73,18 +73,20 @@ final class TestRunner {
 
     /**
      * From {@link HarnessMod}'s constructor; does nothing unless the server was started in test or watch mode. In either, it also
-     * registers {@link TestMod}'s channel, so a normal server never has it.
+     * registers {@link TestMod}'s channel and {@link TestSideEffects}' listeners, so a normal server has neither.
      */
     static void register(IEventBus modBus) {
         String watch = System.getProperty(TestWatch.WATCH_PROPERTY);
         if (watch != null && !watch.isBlank()) {
             TestMod.register(modBus);
+            TestSideEffects.register();
             TestWatch.register(new File(watch).getAbsoluteFile());
             return;
         }
         String report = System.getProperty(REPORT_PROPERTY);
         if (report == null || report.isBlank()) return;
         TestMod.register(modBus);
+        TestSideEffects.register();
         File file = new File(report).getAbsoluteFile();
         NeoForge.EVENT_BUS.addListener((ServerStartedEvent e) -> {
             MinecraftServer server = e.getServer();

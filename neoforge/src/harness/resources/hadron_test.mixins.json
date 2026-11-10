@@ -4,7 +4,9 @@
   "package": "dev.iredsc.hadron.harness.mixin",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
-    "NetworkRegistryAccessor"
+    "NetworkRegistryAccessor",
+    "PlayerExhaustionMixin",
+    "SimpleCriterionTriggerMixin"
   ],
   "injectors": {
     "defaultRequire": 1

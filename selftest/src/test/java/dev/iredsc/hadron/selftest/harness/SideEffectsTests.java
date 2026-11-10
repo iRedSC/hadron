@@ -1,0 +1,140 @@
+package dev.iredsc.hadron.selftest.harness;
+
+import static dev.iredsc.hadron.selftest.entities.Fixtures.spawnWithAi;
+
+import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.test.SideEffects;
+import dev.iredsc.hadron.test.TestContext;
+import dev.iredsc.hadron.test.TestPlayer;
+import net.minecraft.advancements.CriteriaTriggers;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.stats.Stats;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.animal.Cow;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.gameevent.GameEvent;
+
+/**
+ * {@link TestContext#watchSideEffects}: each kind of side effect, planted by the test itself, fails
+ * {@link SideEffects#assertNone} naming what fired, for whom, where and from which line; what every tick makes passes.
+ */
+public final class SideEffectsTests {
+    /** The failure of {@code assertNone}, which a planted effect must cause. */
+    private static String failure(SideEffects effects, String step) {
+        try {
+            effects.assertNone(step);
+        } catch (AssertionError e) {
+            return e.getMessage();
+        }
+        throw new AssertionError("assertNone(\"" + step + "\") passed, but the test planted a side effect before it");
+    }
+
+    private static void assertNames(TestContext t, String message, String... parts) {
+        for (String part : parts) {
+            t.assertTrue(message.contains(part), "the failure should name \"" + part + "\", but read:\n" + message);
+        }
+    }
+
+    @HadronTest
+    void aWatchNothingHappenedToPasses(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Cow cow = spawnWithAi(t, EntityType.COW, t.pos(3, 0, 3));
+        t.tick();
+        alice.hold(new ItemStack(Items.SHEARS)); // setup the next tick would sync, firing inventory_changed
+        SideEffects effects = t.watchSideEffects();
+        t.tick(45); // past the 20-tick location trigger twice, with every tick's stats and the cow's AI running
+        cow.gameEvent(GameEvent.STEP); // a mob's own footsteps are motion, not an action's
+        effects.assertNone("45 idle ticks beside a cow, shears in hand");
+        t.assertEquals(0, effects.seen().size(), "side effects seen");
+    }
+
+    @HadronTest
+    void whatAnAmbientTriggerCausesIsAmbientToo(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        ResourceLocation boat = ResourceLocation.withDefaultNamespace("oak_boat");
+        t.assertFalse(alice.player().getRecipeBook().contains(boat), "a fresh player shouldn't know the oak boat yet");
+        SideEffects effects = t.watchSideEffects();
+        // What standing in water fires every tick; it completes the boat recipes' advancements, unlocking them.
+        CriteriaTriggers.ENTER_BLOCK.trigger(alice.player(), Blocks.WATER.defaultBlockState());
+        t.assertTrue(alice.player().getRecipeBook().contains(boat), "entering water should unlock the oak boat");
+        effects.assertNone("an enter_block trigger and the recipes it unlocked");
+    }
+
+    @HadronTest
+    void aStatIsNamedWithItsPlayerAndLine(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        alice.player().awardStat(Stats.ITEM_USED.get(Items.LEAD));
+        assertNames(t, failure(effects, "a planted stat"), "a planted stat should leave no side effect",
+                "alice's stat minecraft:used minecraft:lead went 0 -> 1",
+                "from SideEffectsTests.aStatIsNamedWithItsPlayerAndLine(SideEffectsTests.java:");
+        SideEffects.StatChanged stat = effects.seen(SideEffects.StatChanged.class).get(0);
+        t.assertEquals(Stats.ITEM_USED.get(Items.LEAD), stat.stat(), "the stat recorded");
+        t.assertEquals(alice, stat.player(), "whose stat");
+    }
+
+    @HadronTest
+    void aCriterionTriggerIsNamedEvenWithNoAdvancementListening(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        CriteriaTriggers.CONSUME_ITEM.trigger(alice.player(), new ItemStack(Items.APPLE));
+        assertNames(t, failure(effects, "a planted trigger"), "trigger minecraft:consume_item fired for alice",
+                "from SideEffectsTests.aCriterionTriggerIsNamedEvenWithNoAdvancementListening(SideEffectsTests.java:");
+        t.assertEquals(CriteriaTriggers.CONSUME_ITEM,
+                effects.seen(SideEffects.CriterionTriggered.class).get(0).trigger(), "the trigger recorded");
+    }
+
+    @HadronTest
+    void aGameEventIsNamedWithWhereAndWho(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        t.level().gameEvent(GameEvent.SHEAR, t.pos(2, 0, 0), GameEvent.Context.of(alice.player()));
+        t.level().gameEvent(GameEvent.BLOCK_CHANGE, t.pos(-1, 1, 0), GameEvent.Context.of((Entity) null));
+        alice.player().gameEvent(GameEvent.STEP); // a test player's own motion counts: the test moved them
+        String at = t.pos(2, 0, 0).getX() + " " + t.pos(2, 0, 0).getY() + " " + t.pos(2, 0, 0).getZ();
+        String nobody = t.pos(-1, 1, 0).getX() + " " + t.pos(-1, 1, 0).getY() + " " + t.pos(-1, 1, 0).getZ();
+        assertNames(t, failure(effects, "planted game events"), "left 3:",
+                "game event minecraft:shear at " + at + " by alice",
+                "game event minecraft:block_change at " + nobody + ", by nobody",
+                "game event minecraft:step at ",
+                "from SideEffectsTests.aGameEventIsNamedWithWhereAndWho(SideEffectsTests.java:");
+    }
+
+    @HadronTest
+    void experienceAndHungerAreNamed(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        alice.player().giveExperiencePoints(7);
+        alice.player().giveExperienceLevels(-1);
+        alice.player().causeFoodExhaustion(0.5F);
+        assertNames(t, failure(effects, "planted experience and hunger"),
+                "alice's experience changed by 7 points", "alice's experience level changed by -1",
+                "alice was exhausted by 0.5",
+                "from SideEffectsTests.experienceAndHungerAreNamed(SideEffectsTests.java:");
+    }
+
+    @HadronTest
+    void markForgetsWhatCameBefore(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        alice.player().awardStat(Stats.JUMP);
+        effects.mark();
+        effects.assertNone("nothing after the mark");
+        alice.player().awardStat(Stats.JUMP);
+        assertNames(t, failure(effects, "a stat after the mark"), "left 1:",
+                "alice's stat minecraft:custom minecraft:jump went 1 -> 2");
+    }
+
+    @HadronTest
+    void eachWatchStartsWhenItIsMade(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        SideEffects first = t.watchSideEffects();
+        alice.player().awardStat(Stats.JUMP);
+        SideEffects second = t.watchSideEffects();
+        second.assertNone("nothing since the second watch");
+        t.assertEquals(1, first.seen().size(), "side effects the first watch saw");
+    }
+}
