@@ -5,6 +5,7 @@ import dev.iredsc.hadron.api.event.ActionEvent;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
+import dev.iredsc.hadron.api.event.entity.EntityCaptureEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTargetEvent;
 import dev.iredsc.hadron.api.event.entity.EntityVelocityEvent;
@@ -380,13 +381,26 @@ final class Protection implements Listener {
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void spawn(EntitySpawnEvent e) {
         Entity spawned = e.getEntity();
-        if (placed(spawned)) entityChange(e, e, spawned, Flag.BUILD);
+        // Every place it names: an item frame's wall as well as the frame, so one can't hang inward across an edge.
+        if (placed(spawned)) refuse(e, e, List.copyOf(e.getPlaces()), Flag.BUILD, Optional.of(spawned.blockPosition()));
     }
 
-    /** Removing a placed object outright (/kill on a stand, a mod's remover) is building, as breaking it is. */
+    /**
+     * Removing a placed object outright (/kill on a stand, a mod's remover) is building, as breaking it is. Capturing
+     * anything into a block (a mob jar) builds there too; carried off by a player, it goes where they go.
+     */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void remove(EntityRemoveEvent e) {
-        if (placed(e.getEntity())) entityChange(e, e, e.getEntity(), Flag.BUILD);
+        List<Place> places = new ArrayList<>();
+        if (placed(e.getEntity())) places.add(Place.of(e.getEntity()));
+        if (e instanceof EntityCaptureEvent capture) {
+            switch (capture.getStorage()) {
+                case EntityCaptureEvent.Storage.Block b -> places.add(Place.Spot.at(b.level(), b.pos()));
+                case EntityCaptureEvent.Storage.Carried c -> places.add(placeOf(c.carrier()));
+                case EntityCaptureEvent.Storage.Item i -> { }
+            }
+        }
+        if (!places.isEmpty()) refuse(e, e, places, Flag.BUILD, Optional.of(e.getEntity().blockPosition()));
     }
 
     /**

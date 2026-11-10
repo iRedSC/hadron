@@ -28,6 +28,8 @@ import dev.iredsc.hadron.test.SideEffects;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.level.block.DispenserBlock;
 import net.minecraft.world.level.block.entity.DispenserBlockEntity;
+import dev.iredsc.hadron.api.event.entity.EntityCaptureEvent;
+import net.minecraft.world.entity.animal.Cow;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -237,5 +239,42 @@ public final class PlacedRegionsTests {
                 + stand.getItemBySlot(EquipmentSlot.HEAD));
         t.assertEquals(1, box.getItem(0).getCount(), "the pumpkin left in the dispenser");
         effects.assertNone("a refused dispenser");
+    }
+
+    @HadronTest
+    void anOutsiderCantHangAFrameOnAWallInsideFromOutside(TestContext t) {
+        BlockPos wall = t.pos(2, 0, 0);
+        t.setBlock(wall, Blocks.STONE);
+        TestPlayer alice = admin(t);
+        define(t, alice, "frame-wall", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        alice.command("rg flag frame-wall use allow");
+        TestPlayer bob = t.player("bob");
+        standAt(bob, t.pos(-1, 0, 0));
+        bob.hold(new ItemStack(Items.ITEM_FRAME));
+        SideEffects effects = t.watchSideEffects();
+        bob.useBlock(wall, Direction.WEST);
+        t.tick(2);
+        t.assertTrue(t.level().getEntitiesOfClass(ItemFrame.class, new AABB(wall).inflate(2)).isEmpty(),
+                "no frame should hang on the region's wall");
+        t.assertEquals(1, bob.player().getMainHandItem().getCount(), "bob's frame, still in his hand");
+        effects.assertNone("a refused frame");
+    }
+
+    @HadronTest
+    void anOutsiderCantCaptureAMobIntoABlockInside(TestContext t) {
+        Cow cow = EntityType.COW.create(t.level());
+        BlockPos field = t.pos(-4, 0, 0);
+        cow.moveTo(field.getX() + 0.5, field.getY(), field.getZ() + 0.5);
+        t.level().addFreshEntity(cow);
+        define(t, admin(t), "mob-jar", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer bob = t.player("bob");
+        EntityCaptureEvent jar = new EntityCaptureEvent(cow,
+                new EntityCaptureEvent.Storage.Block(t.level(), t.pos(3, 0, 0)), new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(jar);
+        t.assertTrue(jar.isCancelled(), "bob should not put a cow into a jar inside");
+        EntityCaptureEvent carried = new EntityCaptureEvent(cow, new EntityCaptureEvent.Storage.Carried(bob.player()),
+                new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(carried);
+        t.assertFalse(carried.isCancelled(), "carrying a cow from the field is no region's business");
     }
 }
