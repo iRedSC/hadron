@@ -102,7 +102,8 @@ public sealed interface Place {
      *
      * <p>Whose it is decides it, not where: a protection plugin can't find it in a region. An ender chest's
      * {@link #owner()} is its player; any other linked network's owner only its mod's bridge knows, so deny it unless
-     * that bridge says otherwise. A protection helper will make this decision once, for plugins that want it.
+     * that bridge says otherwise. A {@link #PLUGIN_CONTAINER} is a plugin's own: the plugin that made it decides who
+     * may use it, so let it through. A protection helper will make this decision once, for plugins that want it.
      *
      * @param kind what it is, namespaced: {@code minecraft:ender_chest}, {@link #ACCOUNT}, {@link #PLAYER}, a mod's
      *     network id
@@ -112,6 +113,13 @@ public sealed interface Place {
     record Nowhere(ResourceLocation kind, String id, Optional<UUID> owner) implements Place {
         /** An account, such as {@link ResourceHolder.Account}: money, skill points, a mana network. */
         public static final ResourceLocation ACCOUNT = ResourceLocation.fromNamespaceAndPath("hadron", "account");
+
+        /**
+         * A plugin's own container ({@code InventoryHolder.Plugin} with no {@code at}): a shop, a kit menu. Its
+         * {@link #id()} is the container's id, {@code plugin:name}.
+         */
+        public static final ResourceLocation PLUGIN_CONTAINER =
+                ResourceLocation.fromNamespaceAndPath("hadron", "plugin_container");
 
         /** A player themselves, before they have a place: logging in. */
         public static final ResourceLocation PLAYER = ResourceLocation.fromNamespaceAndPath("hadron", "player");
@@ -134,6 +142,12 @@ public sealed interface Place {
          */
         public static Nowhere account(ResourceHolder.Account account) {
             return new Nowhere(ACCOUNT, Objects.requireNonNull(account, "account").id(), Optional.empty());
+        }
+
+        /** A plugin's own container, which shows no other inventory. Nobody owns it for certain: its plugin does. */
+        public static Nowhere pluginContainer(InventoryHolder.Plugin container) {
+            Objects.requireNonNull(container, "container");
+            return new Nowhere(PLUGIN_CONTAINER, container.id().toString(), Optional.empty());
         }
 
         /** Linked storage: an ender chest's owner is the player whose UUID is its frequency. */
@@ -188,8 +202,9 @@ public sealed interface Place {
     /**
      * Where an inventory is: a block's {@link Spot}, and both halves' for a connected double chest, which share one
      * inventory; where an entity stands for an entity's; where its holder is for an item's ({@link
-     * InventoryHolder.Item#outer()}) or a per-player copy's ({@link InventoryHolder.PerPlayer#at()}); {@link Nowhere}
-     * for linked storage; and {@link Unknown} for one nothing identified.
+     * InventoryHolder.Item#outer()}), a per-player copy's ({@link InventoryHolder.PerPlayer#at()}) or a plugin's view
+     * of another inventory ({@link InventoryHolder.Plugin#at()}); {@link Nowhere} for linked storage and a plugin's
+     * own container; and {@link Unknown} for one nothing identified.
      */
     static Places of(InventoryHolder holder) {
         return switch (Objects.requireNonNull(holder, "holder")) {
@@ -198,6 +213,7 @@ public sealed interface Place {
             case InventoryHolder.Item i -> of(i.outer());
             case InventoryHolder.PerPlayer p -> of(p.at());
             case InventoryHolder.Linked l -> Places.of(Nowhere.linked(l));
+            case InventoryHolder.Plugin p -> p.at().map(Place::of).orElseGet(() -> Places.of(Nowhere.pluginContainer(p)));
             case InventoryHolder.Unknown u -> Places.of(Unknown.anywhere(Unknown.Reason.UNIDENTIFIED_INVENTORY));
         };
     }

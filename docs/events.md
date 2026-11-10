@@ -220,7 +220,7 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 
 ### Containers: `InventoryEvent`
 
-An inventory is identified by what holds it (a block, an entity, a player, an item inside another item, a frequency in linked storage, or one player's own copy of a block's or entity's inventory, such as a Lootr chest, which only that mod's bridge can name), not by where a player is standing.
+An inventory is identified by what holds it (a block, an entity, a player, an item inside another item, a frequency in linked storage, one player's own copy of a block's or entity's inventory, such as a Lootr chest, which only that mod's bridge can name, or a plugin's own container), not by where a player is standing. An open or a click also says which of the menu's slots are the viewer's own inventory, including a mod's menu that shows it through the loader's item handlers.
 
 | Event | What | Core chokepoint |
 |---|---|---|

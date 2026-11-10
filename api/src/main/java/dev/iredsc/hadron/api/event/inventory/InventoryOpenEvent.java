@@ -6,10 +6,12 @@ import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.Slot;
 
 import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
@@ -59,6 +61,23 @@ public class InventoryOpenEvent extends InventoryEvent implements Cancellable {
      */
     public InventoryHolder getMenuHolder() {
         return menuHolder;
+    }
+
+    /**
+     * The menu's slots that are the viewer's own inventory (main, hotbar, armour, offhand), in menu order. {@link
+     * #getHolderSlots()} is the rest. Empty for horse inventories, whose menu is built only after this event.
+     */
+    public List<Slot> getViewerSlots() {
+        return menu == null ? List.of() : MenuSlots.viewerSlots(menu, viewer);
+    }
+
+    /**
+     * The menu's slots that aren't the viewer's: the chest's, the machine's, the shop's, in menu order. Fill these to
+     * fill the inventory without touching the player's pockets. Includes slots nobody may put into (a furnace's
+     * result); {@link Slot#mayPlace} says which accept an item. Empty for horse inventories.
+     */
+    public List<Slot> getHolderSlots() {
+        return menu == null ? List.of() : MenuSlots.holderSlots(menu, viewer);
     }
 
     @Override

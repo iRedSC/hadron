@@ -52,6 +52,7 @@ public final class HadronMod {
         NetPort.register(key);
         WorldsPort.register(key);
         AreasPort.register(key);
+        PlayerSlots.register(key);
     }
 
     private static void aboutToStart(HostKey key, ServerAboutToStartEvent event) {

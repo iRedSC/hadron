@@ -5,6 +5,7 @@ import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 import net.minecraft.server.level.ServerPlayer;
@@ -101,6 +102,22 @@ public class InventoryClickEvent extends InventoryEvent implements Cancellable {
     /** The item on the player's cursor. A live stack: read it, don't change it. */
     public ItemStack getCursor() {
         return menu.getCarried();
+    }
+
+
+    /** The menu's slots that are the viewer's own inventory (main, hotbar, armour, offhand), in menu order. */
+    public List<Slot> getViewerSlots() {
+        return MenuSlots.viewerSlots(menu, viewer);
+    }
+
+    /** The menu's slots that aren't the viewer's: the chest's, the machine's, the shop's, in menu order. */
+    public List<Slot> getHolderSlots() {
+        return MenuSlots.holderSlots(menu, viewer);
+    }
+
+    /** Whether the clicked slot is the viewer's own inventory; false for a click outside any slot. */
+    public boolean isViewerSlot() {
+        return getSlot().map(slot -> MenuSlots.isViewers(slot, viewer)).orElse(false);
     }
 
     @Override

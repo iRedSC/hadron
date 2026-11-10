@@ -17,6 +17,7 @@ import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.server.PluginDisableEvent;
 import dev.iredsc.hadron.api.event.server.PluginEnableEvent;
 import dev.iredsc.hadron.api.event.Listener;
+import dev.iredsc.hadron.api.inventory.PluginContainer;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.PluginCommand;
 import dev.iredsc.hadron.api.plugin.PluginDescription;
@@ -58,6 +59,8 @@ import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.chat.Style;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.Slot;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.LoaderOptions;
@@ -1093,12 +1096,14 @@ public final class PluginHost implements PluginManager {
     }
 
     /**
-     * Closes every menu the plugin's code opened, before onDisable, so the menu's own close handling
-     * (handing back items, say) runs as usual and nobody keeps clicking the old version's code after a reload.
+     * Closes every menu the plugin's code opened or that shows one of its {@link PluginContainer}s, before onDisable,
+     * so the menu's own close handling (handing back items, say) runs as usual, the plugin saves what was in its
+     * containers last, and nobody keeps clicking the old version's code, or into a container nothing will save, after
+     * a reload.
      */
     private void closeMenus(PluginLoader loader) {
         for (ServerPlayer p : List.copyOf(minecraft.getPlayerList().getPlayers())) {
-            if (p.containerMenu != p.inventoryMenu && p.containerMenu.getClass().getClassLoader() == loader) {
+            if (p.containerMenu != p.inventoryMenu && isPlugins(p.containerMenu, loader)) {
                 try {
                     p.closeContainer();
                 } catch (RuntimeException ex) {
@@ -1107,6 +1112,16 @@ public final class PluginHost implements PluginManager {
                 }
             }
         }
+    }
+
+    /** Whether the plugin's code made the menu, or the menu shows one of the plugin's containers. */
+    private static boolean isPlugins(AbstractContainerMenu menu, PluginLoader loader) {
+        if (menu.getClass().getClassLoader() == loader) return true;
+        JavaPlugin plugin = loader.plugin();
+        for (Slot slot : menu.slots) {
+            if (slot.container instanceof PluginContainer c && c.getPlugin() == plugin) return true;
+        }
+        return false;
     }
 
     /** Only for "Enabled X in N ms": people read it, nothing decides on it. */

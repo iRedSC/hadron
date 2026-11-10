@@ -484,6 +484,7 @@ final class TestAcceptance implements Acceptance, Listener {
             case InventoryHolder.Entity e -> Optional.of(e.entity());
             case InventoryHolder.Item i -> holderEntity(i.outer());
             case InventoryHolder.PerPlayer p -> holderEntity(p.at());
+            case InventoryHolder.Plugin p -> p.at().flatMap(TestAcceptance::holderEntity);
             default -> Optional.empty();
         };
     }
