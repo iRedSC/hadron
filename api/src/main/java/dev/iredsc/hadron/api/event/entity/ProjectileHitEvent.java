@@ -82,15 +82,16 @@ public class ProjectileHitEvent extends EntityEvent implements Cancellable {
     }
 
     /**
-     * Where the projectile (or a hitscan shot's shooter) is, then where it hits: the point, the block and the entity
-     * hit, each when there is one.
+     * Where the projectile is, when there is one, then where it hits: the point, the block and the entity hit, each
+     * when there is one. A hitscan shot's entity is its shooter, the actor, so where the shooter stands is not a place
+     * of the shot: only where it hits is.
      */
     @Override
     public Places getPlaces() {
         List<Place> hit = new ArrayList<>();
-        hit.add(Place.Spot.at(getLevel(), getHitPosition()));
         getHitBlock().ifPresent(block -> hit.add(Place.Spot.at(getLevel(), block)));
         getHitEntity().ifPresent(entity -> hit.add(Place.of(entity)));
-        return super.getPlaces().and(hit);
+        Place point = Place.Spot.at(getLevel(), getHitPosition());
+        return getProjectile().isPresent() ? super.getPlaces().and(point).and(hit) : Places.of(point, hit);
     }
 }

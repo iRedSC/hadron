@@ -52,6 +52,7 @@ import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.CompoundContainer;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
@@ -510,7 +511,8 @@ public final class AcceptanceKitTests {
         CraftingMenu menu = new CraftingMenu(1, bob.player().getInventory(),
                 ContainerLevelAccess.create(t.level(), table));
         boolean cancelled = Hadron.getPluginManager().callEvent(new InventoryClickEvent(bob.player(),
-                new InventoryHolder.Entity(bob.player()), menu, 20, 0, ClickType.QUICK_MOVE,
+                new InventoryHolder.Entity(bob.player()), menu, new InventoryHolder.Block(t.level(), table), 20, 0,
+                ClickType.QUICK_MOVE,
                 new Actor.Player(bob.player())));
         t.assertTrue(cancelled, "the click into a menu open on the area was refused: " + area.events());
     }
@@ -619,7 +621,8 @@ public final class AcceptanceKitTests {
                 (ChestBlockEntity) t.level().getBlockEntity(right));
         ChestMenu menu = ChestMenu.sixRows(1, bob.player().getInventory(), both);
         boolean cancelled = Hadron.getPluginManager().callEvent(new InventoryClickEvent(bob.player(),
-                new InventoryHolder.Entity(bob.player()), menu, 60, 0, ClickType.QUICK_MOVE,
+                new InventoryHolder.Entity(bob.player()), menu, new InventoryHolder.Block(t.level(), left), 60, 0,
+                ClickType.QUICK_MOVE,
                 new Actor.Player(bob.player())));
         t.assertTrue(cancelled, "a shift-click into the area's double chest was refused: " + area.events());
     }
@@ -689,6 +692,20 @@ public final class AcceptanceKitTests {
     }
 
     @HadronTest
+    void aShotFromInsideOutOfTheAreaIsLeftAlone(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos in = t.pos(2, 0, 0), target = t.pos(-4, 0, 0);
+        t.setBlock(target, Blocks.STONE);
+        bob.teleport(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        Acceptance area = t.acceptance(around(t));
+        // A hitscan gun names its shooter as the entity; where the shooter stands is not where the shot lands.
+        boolean cancelled = Hadron.getPluginManager().callEvent(new ProjectileHitEvent(bob.player(),
+                new BlockHitResult(Vec3.atCenterOf(target), Direction.UP, target, false),
+                new Actor.Player(bob.player())));
+        t.assertFalse(cancelled, "bob's shot from the area landing outside it isn't the area's: " + area.events());
+    }
+
+    @HadronTest
     void aStepWhereNothingWasRefusedProvesNothing(TestContext t) {
         TestPlayer bob = t.player("bob");
         BlockPos stone = t.pos(2, 0, 0);
@@ -724,9 +741,28 @@ public final class AcceptanceKitTests {
                 (ChestBlockEntity) t.level().getBlockEntity(inside));
         ChestMenu menu = ChestMenu.sixRows(1, bob.player().getInventory(), both);
         boolean cancelled = Hadron.getPluginManager().callEvent(new InventoryClickEvent(bob.player(),
-                new InventoryHolder.Entity(bob.player()), menu, 60, 0, ClickType.QUICK_MOVE,
+                new InventoryHolder.Entity(bob.player()), menu, new InventoryHolder.Block(t.level(), outside), 60, 0,
+                ClickType.QUICK_MOVE,
                 new Actor.Player(bob.player())));
         t.assertTrue(cancelled, "a shift-click into a double chest half in the area was refused: " + area.events());
+    }
+
+    @HadronTest
+    void aDoubleContainerWithAnUnidentifiedHalfFailsClosedThoughItsChestIsOutside(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos chest = t.pos(-4, 0, 0);
+        t.setBlock(chest, Blocks.CHEST);
+        Acceptance area = t.acceptance(around(t));
+        // A mod pairs a chest outside the area with storage nothing identifies: that half could be in the area.
+        CompoundContainer both = new CompoundContainer((ChestBlockEntity) t.level().getBlockEntity(chest),
+                new SimpleContainer(27));
+        ChestMenu menu = ChestMenu.sixRows(1, bob.player().getInventory(), both);
+        boolean cancelled = Hadron.getPluginManager().callEvent(new InventoryClickEvent(bob.player(),
+                new InventoryHolder.Entity(bob.player()), menu, new InventoryHolder.Block(t.level(), chest), 60, 0,
+                ClickType.QUICK_MOVE, new Actor.Player(bob.player())));
+        t.assertTrue(cancelled, "a shift-click into storage that may be in the area was refused: " + area.events());
+        String why = failure(t, () -> area.assertActingFor(bob, "bob shift-clicking into a half nobody can place"));
+        t.assertTrue(why.contains("its holder is unknown"), why);
     }
 
     @HadronTest
@@ -831,7 +867,8 @@ public final class AcceptanceKitTests {
                 (ChestBlockEntity) t.level().getBlockEntity(inside));
         ChestMenu menu = ChestMenu.sixRows(1, bob.player().getInventory(), both);
         t.assertTrue(Hadron.getPluginManager().callEvent(new InventoryOpenEvent(bob.player(),
-                new InventoryHolder.Block(t.level(), outside), menu, new Actor.Player(bob.player()))),
+                new InventoryHolder.Block(t.level(), outside), menu, new InventoryHolder.Block(t.level(), outside),
+                new Actor.Player(bob.player()))),
                 "opening a double chest reaching into the area was refused: " + area.events());
     }
 

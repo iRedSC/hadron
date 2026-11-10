@@ -61,12 +61,15 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.CompoundContainer;
+import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Cow;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.entity.projectile.Arrow;
 import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -76,8 +79,10 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
 import net.minecraft.world.level.block.entity.AbstractFurnaceBlockEntity;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.ChestType;
+import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -363,6 +368,43 @@ public final class PlaceTests {
                 Place.of(alice.player()));
         t.assertEquals(expected, Set.copyOf(places.get(0)), "a shift-click's places: both halves the dirt can go into, "
                 + "and alice's own inventory it leaves");
+    }
+
+    @HadronTest
+    @Covers(InventoryClickEvent.class)
+    void aDoubleContainerNamesItsChestAndAnUnknownForTheHalfNothingIdentifies(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos chest = t.pos(2, 0, 0);
+        t.setBlock(chest, Blocks.CHEST);
+        CompoundContainer both = new CompoundContainer((ChestBlockEntity) t.level().getBlockEntity(chest),
+                new SimpleContainer(27));
+        ChestMenu menu = ChestMenu.sixRows(1, alice.player().getInventory(), both);
+        InventoryClickEvent e = new InventoryClickEvent(alice.player(), new InventoryHolder.Entity(alice.player()),
+                menu, new InventoryHolder.Block(t.level(), chest), 60, 0, ClickType.QUICK_MOVE,
+                new Actor.Player(alice.player()));
+        t.assertEquals(Set.of(Place.Spot.at(t.level(), chest), Place.of(alice.player()),
+                Place.Unknown.anywhere(Place.Unknown.Reason.UNIDENTIFIED_INVENTORY)), Set.copyOf(e.getPlaces()),
+                "the chest, alice's inventory, and an Unknown for the half nothing identifies, never the chest's place");
+    }
+
+    @HadronTest
+    @Covers(ProjectileHitEvent.class)
+    void aHitscanShotIsWhereItHitsNeverWhereItsShooterStands(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos stands = t.pos(-4, 0, 0), target = t.pos(4, 0, 0);
+        bob.teleport(stands.getX() + 0.5, stands.getY(), stands.getZ() + 0.5);
+        Vec3 point = Vec3.atCenterOf(target);
+        ProjectileHitEvent shot = new ProjectileHitEvent(bob.player(),
+                new BlockHitResult(point, Direction.UP, target, false), new Actor.Player(bob.player()));
+        // The point is inside the block hit, so both are the block's spot.
+        t.assertEquals(Set.of(Place.Spot.at(t.level(), target)), Set.copyOf(shot.getPlaces()),
+                "a hitscan shot: where it hits, not bob's spot");
+        Arrow arrow = new Arrow(EntityType.ARROW, t.level());
+        arrow.moveTo(stands.getX() + 0.5, stands.getY(), stands.getZ() + 0.5);
+        ProjectileHitEvent hit = new ProjectileHitEvent(arrow,
+                new BlockHitResult(point, Direction.UP, target, false), new Actor.Player(bob.player()));
+        t.assertTrue(List.copyOf(hit.getPlaces()).contains(Place.of(arrow)), "a projectile's own place: "
+                + hit.getPlaces());
     }
 
     @HadronTest
