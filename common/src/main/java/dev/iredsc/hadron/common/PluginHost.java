@@ -133,6 +133,8 @@ public final class PluginHost implements PluginManager {
         final String name;
         File jar;
         @Nullable Stamp stamp;
+        /** SHA-256 of the bytes the state came from (the copy that was loaded); null until a load copies them. */
+        @Nullable String sha256;
         PluginDescription description;
         State state = new State.Stopped();
 
@@ -152,6 +154,9 @@ public final class PluginHost implements PluginManager {
             return out;
         }
     }
+
+    /** A refused jar's reason and the hash of the bytes it was refused at. */
+    private record Refusal(Stamp stamp, String sha256, String why) {}
 
     /** A jar's modification time and size; equal stamps mean an unchanged file. */
     static final class Stamp {
@@ -194,6 +199,8 @@ public final class PluginHost implements PluginManager {
     private final Map<File, Stamp> settling = new HashMap<File, Stamp>();
     /** Jars that can't be used as they are (duplicate name, unreadable), by the stamp they were refused at. */
     private final Map<File, Stamp> refused = new HashMap<File, Stamp>();
+    /** Why each refused jar was, and its hash, for {@code /hadron status}; the same keys as {@link #refused}. */
+    private final Map<File, Refusal> refusals = new HashMap<File, Refusal>();
     private int copies;
     private int ticks;
     private boolean running;
@@ -390,6 +397,7 @@ public final class PluginHost implements PluginManager {
             return null;
         }
         refused.remove(jar);
+        refusals.remove(jar);
         Entry e = new Entry(description.getName(), jar, stamp, description);
         entries.put(e.name, e);
         return e;
@@ -397,6 +405,7 @@ public final class PluginHost implements PluginManager {
 
     private void refuse(File jar, Stamp stamp, String why) {
         refused.put(jar, stamp);
+        refusals.put(jar, new Refusal(stamp, sha256(jar), why));
         LOG.error(why);
         announce(red(why));
     }
@@ -534,6 +543,7 @@ public final class PluginHost implements PluginManager {
         disableAll(all);
         List<Entry> usable = new ArrayList<Entry>();
         for (Entry e : all) {
+            e.sha256 = null; // the next load hashes the new bytes; until then /hadron status reads the jar itself
             try {
                 PluginDescription d = describe(e.jar);
                 if (!d.getName().equalsIgnoreCase(e.name)) {
@@ -656,7 +666,8 @@ public final class PluginHost implements PluginManager {
         try {
             loadedDir.mkdirs();
             Files.copy(e.jar.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            loader = new PluginLoader(d, e.jar, copy, data, server, deps, parent);
+            e.sha256 = sha256(copy);
+            loader =new PluginLoader(d, e.jar, copy, data, server, deps, parent);
         } catch (IOException ex) {
             fail(e, "couldn't copy its jar to plugins/.loaded (" + ex.getMessage() + ")", ex);
             return;
@@ -985,6 +996,42 @@ public final class PluginHost implements PluginManager {
             LOG.error(e.name + " didn't enable: " + why);
         }
         announce(red(e.name + " didn't enable: " + why));
+    }
+
+    /**
+     * Every plugin and every refused jar as plain text, for {@code /hadron status}. A plugin's hash is that of the
+     * copy it loaded; one that failed before loading reports the jar's, unless the file changed since the host read it.
+     */
+    List<PluginStatus> statuses() {
+        List<PluginStatus> out = new ArrayList<PluginStatus>();
+        for (Entry e : entries.values()) {
+            Stamp stamp = e.stamp;
+            String sha = e.sha256;
+            if (sha == null) sha = stamp != null && stamp.equals(new Stamp(e.jar)) ? sha256(e.jar) : PluginStatus.UNKNOWN;
+            PluginStatus.State state = e.state instanceof State.Enabled ? PluginStatus.State.ENABLED
+                    : e.state instanceof State.Loaded ? PluginStatus.State.LOADING
+                    : e.state instanceof State.Failed ? PluginStatus.State.FAILED
+                    : e.state instanceof State.Off ? PluginStatus.State.OFF : PluginStatus.State.STOPPED;
+            String why = e.state instanceof State.Failed f ? (f.why == null ? "no reason was given" : f.why) : null;
+            out.add(new PluginStatus(e.name, state, e.jar.getName(), stamp == null ? 0 : stamp.modified, sha, why));
+        }
+        for (Map.Entry<File, Refusal> r : refusals.entrySet()) {
+            Refusal refusal = r.getValue();
+            if (!refusal.stamp().equals(new Stamp(r.getKey()))) continue; // replaced or deleted since
+            out.add(new PluginStatus(null, PluginStatus.State.REFUSED, r.getKey().getName(), refusal.stamp().modified,
+                    refusal.sha256(), refusal.why()));
+        }
+        return out;
+    }
+
+    /** Hex SHA-256 of a file's bytes, or {@link PluginStatus#UNKNOWN} if it can't be read. */
+    private static String sha256(File file) {
+        try {
+            byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file.toPath()));
+            return java.util.HexFormat.of().formatHex(hash);
+        } catch (IOException | java.security.NoSuchAlgorithmException ex) {
+            return PluginStatus.UNKNOWN;
+        }
     }
 
     static String describeState(State s) {
