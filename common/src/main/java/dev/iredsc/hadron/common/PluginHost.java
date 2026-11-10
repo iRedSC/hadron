@@ -40,6 +40,7 @@ import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.TreeSet;
@@ -135,6 +136,14 @@ public final class PluginHost implements PluginManager {
         final String name;
         File jar;
         @Nullable Stamp stamp;
+        /**
+         * What was loaded: the jar file version (as the host stamped it) and the hash of the copy made from it. Null
+         * until a load copies a jar. It stays the running jar's while a replacement is refused, though {@link #stamp}
+         * moves on to the refused one so it isn't tried again every poll.
+         */
+        @Nullable Source source;
+        /** The snapshot the current load attempt reads from, taken at its start and used up by {@link #load}. */
+        Snapshot.@Nullable Usable attempt;
         PluginDescription description;
         State state = new State.Stopped();
 
@@ -154,6 +163,29 @@ public final class PluginHost implements PluginManager {
             return out;
         }
     }
+
+    /** One jar version an outcome is about: its file name, its stamp then, and the SHA-256 of those bytes. */
+    record Source(String jarName, Stamp stamp, String sha256) {}
+
+    /**
+     * One immutable view of a jar, taken once by {@link #snapshot}: a private copy, and everything read from that copy
+     * and from nothing else, so no part of an attempt can come from a different version of the file in plugins/ than
+     * another part. Every decision about the attempt (what the plugin is called, what it needs, which class is its
+     * main, which jar a status line is about) reads the snapshot; the live file is never read again for it.
+     */
+    sealed interface Snapshot {
+        /** The jar this snapshot is of: its name, its file stamp around the copy, and the hash of the copy. */
+        Source source();
+
+        /** A copy whose plugin.yml was read: the plugin runs from {@code copy}. */
+        record Usable(File copy, Source source, PluginDescription description) implements Snapshot {}
+
+        /** A jar that can't become a plugin, and why; there is no copy left. */
+        record Unusable(Source source, String why) implements Snapshot {}
+    }
+
+    /** A refused jar's reason, and the jar version it was refused at. */
+    private record Refusal(Source source, String why) {}
 
     /** A jar's modification time and size; equal stamps mean an unchanged file. */
     static final class Stamp {
@@ -196,6 +228,8 @@ public final class PluginHost implements PluginManager {
     private final Map<File, Stamp> settling = new HashMap<File, Stamp>();
     /** Jars that can't be used as they are (duplicate name, unreadable), by the stamp they were refused at. */
     private final Map<File, Stamp> refused = new HashMap<File, Stamp>();
+    /** Why each refused jar was, and its hash, for {@code /hadron status}; the same keys as {@link #refused}. */
+    private final Map<File, Refusal> refusals = new HashMap<File, Refusal>();
     private int copies;
     private int ticks;
     private boolean running;
@@ -377,32 +411,89 @@ public final class PluginHost implements PluginManager {
     }
 
     /** Reads a jar into a new entry. @return the entry, or null if the jar was refused (and logged). */
-    private @Nullable Entry adopt(File jar, Stamp stamp) {
-        PluginDescription description;
-        try {
-            description = describe(jar);
-        } catch (PluginException e) {
-            refuse(jar, stamp, jar.getName() + " isn't a usable plugin: " + e.getMessage());
+    private @Nullable Entry adopt(File jar, Stamp scanned) {
+        Snapshot seen = snapshot(jar);
+        delete(seen); // only the name and the verdict matter here: a load takes its own snapshot
+        if (!(seen instanceof Snapshot.Usable usable)) {
+            refuse(jar, seen.source(), jar.getName() + " isn't a usable plugin: " + ((Snapshot.Unusable) seen).why());
             return null;
         }
+        PluginDescription description = usable.description();
         Entry existing = entries.get(description.getName());
         if (existing != null && !existing.jar.equals(jar)) {
-            refuse(jar, stamp, jar.getName() + " is ignored: " + existing.jar.getName() + " is already "
+            refuse(jar, seen.source(), jar.getName() + " is ignored: " + existing.jar.getName() + " is already "
                     + description.getName() + ". Delete one of them.");
             return null;
         }
         refused.remove(jar);
-        Entry e = new Entry(description.getName(), jar, stamp, description);
+        refusals.remove(jar);
+        Entry e = new Entry(description.getName(), jar, seen.source().stamp(), description);
         entries.put(e.name, e);
         return e;
     }
 
-    private void refuse(File jar, Stamp stamp, String why) {
-        refused.put(jar, stamp);
+    /** Records that this version of the jar can't be used, with the identity of the snapshot that showed it. */
+    private void refuse(File jar, Source seen, String why) {
+        refused.put(jar, seen.stamp());
+        refusals.put(jar, new Refusal(seen, why));
         LOG.error(why);
         announce(red(why));
     }
 
+    /**
+     * The one way a jar is read: copies it to a file of its own in {@code plugins/.loaded}, then reads the description
+     * and the hash from that copy. The file's stamp is taken around the copy: if it moved meanwhile the copy is taken
+     * again (a few times), and a jar that never holds still has an {@link PluginStatus#UNKNOWN} hash, which matches no
+     * deploy. A jar that can't be copied or described comes back {@link Snapshot.Unusable} with the hash of what was
+     * copied, so the failure is about that version.
+     */
+    private Snapshot snapshot(File jar) {
+        File copy = new File(loadedDir, jar.getName() + "-" + (++copies) + ".jar");
+        Stamp stamp = new Stamp(jar);
+        boolean steady = false;
+        try {
+            loadedDir.mkdirs();
+            for (int tries = 0; tries < 3 && !steady; tries++) {
+                stamp = new Stamp(jar);
+                Files.copy(jar.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING);
+                steady = stamp.equals(new Stamp(jar));
+            }
+        } catch (IOException ex) {
+            // An earlier try may have copied before this one failed; Unusable carries no copy, so nothing else can.
+            delete(copy);
+            return new Snapshot.Unusable(new Source(jar.getName(), stamp, PluginStatus.UNKNOWN),
+                    "couldn't copy its jar to plugins/.loaded (" + ex.getMessage() + ")");
+        }
+        Source source = new Source(jar.getName(), stamp, steady ? sha256(copy) : PluginStatus.UNKNOWN);
+        try {
+            return new Snapshot.Usable(copy, source, describe(copy));
+        } catch (PluginException ex) {
+            delete(copy);
+            return new Snapshot.Unusable(source, String.valueOf(ex.getMessage()));
+        }
+    }
+
+    private static void delete(File copy) {
+        try {
+            Files.deleteIfExists(copy.toPath());
+        } catch (IOException ex) {
+            LOG.warn("Couldn't delete " + copy + ": " + ex.getMessage());
+        }
+    }
+
+    /** Drops a snapshot that nothing will run from. */
+    private static void delete(Snapshot snapshot) {
+        if (snapshot instanceof Snapshot.Usable usable) delete(usable.copy());
+    }
+
+    /** Drops the entry's unused snapshot, if it has one. */
+    private static void discard(Entry e) {
+        Snapshot.Usable unused = e.attempt;
+        e.attempt = null;
+        if (unused != null) delete(unused.copy());
+    }
+
+    /** Reads a snapshot's plugin.yml. Only {@link #snapshot} calls it, on its own copy. */
     private static PluginDescription describe(File jar) {
         ZipFile zip = null;
         try {
@@ -435,16 +526,17 @@ public final class PluginHost implements PluginManager {
 
     private void poll() {
         Map<File, Stamp> now = scan();
+        // A refusal is about one file version: once the file is replaced or gone, its status line goes too.
+        refusals.entrySet().removeIf(r -> !r.getValue().source().stamp().equals(now.get(r.getKey())));
         // A new jar with a running plugin's name replaces it in place (a deploy renames the file, version or not),
         // so the old version keeps running until the new one is ready instead of its dependents losing it.
         Map<String, File> newByName = new TreeMap<String, File>(String.CASE_INSENSITIVE_ORDER);
         for (Map.Entry<File, Stamp> jar : now.entrySet()) {
             if (entryFor(jar.getKey()) != null || jar.getValue().equals(refused.get(jar.getKey()))) continue;
-            try {
-                newByName.put(describe(jar.getKey()).getName(), jar.getKey());
-            } catch (PluginException notYet) {
-                // Half copied, or broken: the settle step below deals with it.
-            }
+            Snapshot seen = snapshot(jar.getKey());
+            delete(seen);
+            if (seen instanceof Snapshot.Usable usable) newByName.put(usable.description().getName(), jar.getKey());
+            // Otherwise half copied, or broken: the settle step below deals with it.
         }
         for (Entry e : new ArrayList<Entry>(entries.values())) {
             if (now.containsKey(e.jar)) continue;
@@ -495,22 +587,21 @@ public final class PluginHost implements PluginManager {
     }
 
     private void changed(Entry e, File jar, Stamp stamp) {
-        PluginDescription description;
-        try {
-            description = describe(jar);
-        } catch (PluginException ex) {
+        Snapshot seen = snapshot(jar);
+        delete(seen); // a reload takes its own snapshot; this one decides only whether to try
+        if (!(seen instanceof Snapshot.Usable usable)) {
             // The old version keeps running until the jar is fixed.
-            refuse(jar, stamp, jar.getName() + " changed but isn't usable, so the running version stays: "
-                    + ex.getMessage());
-            e.stamp = stamp;
+            refuse(jar, seen.source(), jar.getName() + " changed but isn't usable, so the running version stays: "
+                    + ((Snapshot.Unusable) seen).why());
+            e.stamp = seen.source().stamp();
             return;
         }
-        if (!description.getName().equalsIgnoreCase(e.name)) {
+        if (!usable.description().getName().equalsIgnoreCase(e.name)) {
             remove(e);
             added(jar, stamp);
             return;
         }
-        e.stamp = stamp;
+        e.stamp = seen.source().stamp();
         restart(Collections.singleton(e), "reloaded");
     }
 
@@ -534,21 +625,8 @@ public final class PluginHost implements PluginManager {
         if (stopping) return;
         Set<Entry> all = dependents(roots);
         disableAll(all);
-        List<Entry> usable = new ArrayList<Entry>();
-        for (Entry e : all) {
-            try {
-                PluginDescription d = describe(e.jar);
-                if (!d.getName().equalsIgnoreCase(e.name)) {
-                    throw new PluginException("its plugin.yml now names it " + d.getName());
-                }
-                e.description = d;
-                usable.add(e);
-            } catch (PluginException ex) {
-                fail(e, ex.getMessage(), null);
-            }
-        }
         long start = logClock();
-        enableInOrder(usable);
+        enableInOrder(new ArrayList<Entry>(all)); // each takes its own snapshot of its jar, and fails with it if unusable
         long ms = (logClock() - start) / 1000000;
         for (Entry e : roots) {
             if (e.state instanceof State.Enabled) {
@@ -599,9 +677,12 @@ public final class PluginHost implements PluginManager {
 
     /** Loads each after what it needs. @return them in that order. A dependency cycle fails every plugin in it. */
     private List<Entry> loadInOrder(List<Entry> which) {
-        List<Entry> left = new ArrayList<Entry>(which);
+        // Every jar is snapshotted before anything loads, so no plugin's onLoad can change what another is read from.
+        List<Entry> left = new ArrayList<Entry>();
+        for (Entry e : which) if (attempt(e)) left.add(e);
         left.removeIf(e -> {
             if (!off.contains(e.name)) return false;
+            discard(e);
             e.state = new State.Off();
             return true;
         });
@@ -615,7 +696,10 @@ public final class PluginHost implements PluginManager {
             left.remove(next);
             order.add(next);
         }
-        for (Entry e : left) fail(e, unstartable(e, left), null);
+        for (Entry e : left) {
+            discard(e);
+            fail(e, unstartable(e, left), null);
+        }
         for (Entry e : order) load(e);
         return order;
     }
@@ -628,16 +712,48 @@ public final class PluginHost implements PluginManager {
     }
 
 
+    /**
+     * Starts a load attempt: takes the one snapshot of the entry's jar that the attempt reads, and sets from it the
+     * entry's description (what it is called, what it needs) and the identity its status lines report. A jar that
+     * can't be used fails the entry, with that snapshot's identity. @return whether the entry may go on.
+     */
+    private boolean attempt(Entry e) {
+        discard(e);
+        Snapshot snapshot = snapshot(e.jar);
+        e.source = snapshot.source();
+        if (snapshot instanceof Snapshot.Unusable unusable) {
+            fail(e, unusable.why(), null);
+            return false;
+        }
+        Snapshot.Usable usable = (Snapshot.Usable) snapshot;
+        if (!usable.description().getName().equalsIgnoreCase(e.name)) {
+            delete(usable);
+            fail(e, "its plugin.yml now names it " + usable.description().getName(), null);
+            return false;
+        }
+        e.description = usable.description();
+        e.attempt = usable;
+        return true;
+    }
+
     /** The first of a plugin's two steps: its own loader, its main class constructed, {@code onLoad} called. */
     private void load(Entry e) {
-        if (e.state instanceof State.Running) return;
+        if (e.state instanceof State.Running) {
+            discard(e);
+            return;
+        }
+        if (e.attempt == null && !attempt(e)) return;
+        Snapshot.Usable snapshot = Objects.requireNonNull(e.attempt);
+        e.attempt = null;
         if (off.contains(e.name)) {
+            delete(snapshot);
             e.state = new State.Off();
             return;
         }
-        PluginDescription d = e.description;
+        PluginDescription d = snapshot.description();
         String missing = missingDependency(e);
         if (missing != null) {
+            delete(snapshot);
             fail(e, missing, null);
             return;
         }
@@ -650,17 +766,16 @@ public final class PluginHost implements PluginManager {
         try {
             data = dataFolder(folder, e.name);
         } catch (PluginException ex) {
+            delete(snapshot);
             fail(e, ex.getMessage(), null);
             return;
         }
-        File copy = new File(loadedDir, e.name + "-" + (++copies) + ".jar");
         PluginLoader loader;
         try {
-            loadedDir.mkdirs();
-            Files.copy(e.jar.toPath(), copy.toPath(), StandardCopyOption.REPLACE_EXISTING);
-            loader = new PluginLoader(d, e.jar, copy, data, server, deps, parent);
+            loader = new PluginLoader(d, e.jar, snapshot.copy(), data, server, deps, parent);
         } catch (IOException ex) {
-            fail(e, "couldn't copy its jar to plugins/.loaded (" + ex.getMessage() + ")", ex);
+            delete(snapshot);
+            fail(e, "couldn't load its jar from plugins/.loaded (" + ex.getMessage() + ")", ex);
             return;
         }
         State.Loaded loaded = new State.Loaded(loader);
@@ -1012,6 +1127,43 @@ public final class PluginHost implements PluginManager {
             LOG.error(e.name + " didn't enable: " + why);
         }
         announce(red(e.name + " didn't enable: " + why));
+    }
+
+    /**
+     * Every plugin and every refused jar as plain text, for {@code /hadron status}. A plugin's file version and hash
+     * are those of the jar its outcome is about, recorded when the host decided it (it loaded the jar, or failed or
+     * switched it off before loading), even while a replacement is refused (that one is a line of its own). Nothing
+     * here reads a jar from disk: an identity read now would belong to whatever file is there now.
+     */
+    List<PluginStatus> statuses() {
+        List<PluginStatus> out = new ArrayList<PluginStatus>();
+        for (Entry e : entries.values()) {
+            Source source = e.source; // recorded when the outcome was decided; null only before any decision
+            long modified = source == null ? 0 : source.stamp().modified;
+            String sha = source == null ? PluginStatus.UNKNOWN : source.sha256();
+            PluginStatus.State state = e.state instanceof State.Enabled ? PluginStatus.State.ENABLED
+                    : e.state instanceof State.Loaded ? PluginStatus.State.LOADING
+                    : e.state instanceof State.Failed ? PluginStatus.State.FAILED
+                    : e.state instanceof State.Off ? PluginStatus.State.OFF : PluginStatus.State.STOPPED;
+            String why = e.state instanceof State.Failed f ? (f.why == null ? "no reason was given" : f.why) : null;
+            out.add(new PluginStatus(e.name, state, source == null ? e.jar.getName() : source.jarName(), modified, sha, why));
+        }
+        for (Refusal refusal : refusals.values()) {
+            Source seen = refusal.source();
+            out.add(new PluginStatus(null, PluginStatus.State.REFUSED, seen.jarName(), seen.stamp().modified,
+                    seen.sha256(), refusal.why()));
+        }
+        return out;
+    }
+
+    /** Hex SHA-256 of a file's bytes, or {@link PluginStatus#UNKNOWN} if it can't be read. */
+    private static String sha256(File file) {
+        try {
+            byte[] hash = java.security.MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file.toPath()));
+            return java.util.HexFormat.of().formatHex(hash);
+        } catch (IOException | java.security.NoSuchAlgorithmException ex) {
+            return PluginStatus.UNKNOWN;
+        }
     }
 
     static String describeState(State s) {
