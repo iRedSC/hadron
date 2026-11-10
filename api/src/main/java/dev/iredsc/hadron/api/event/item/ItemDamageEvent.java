@@ -24,19 +24,34 @@ public class ItemDamageEvent extends ItemChangeEvent {
 
     /**
      * @param entity who holds the item, or null when nobody does (a dispenser's shears)
+     * @param damage durability about to be lost, at least 0
      */
     public ItemDamageEvent(ServerLevel level, InventoryHolder holder, @Nullable LivingEntity entity, ItemStack item, int damage,
             Actor actor) {
-        super(level, holder, item, damaged(item, damage), actor);
+        super(level, holder, item, damaged(item, checked(damage)), actor);
         this.entity = entity;
         this.damage = damage;
     }
 
+    /** The one rule for an amount, from the constructor and {@link #setDamage} alike. */
+    private static int checked(int damage) {
+        if (damage < 0) {
+            throw new IllegalArgumentException("Damage can't be negative (" + damage + "); to repair an item, change "
+                    + "it directly, and to stop the damage, setDamage(0) or cancel the event");
+        }
+        return damage;
+    }
+
+    /** Whether {@code damage} more uses {@code item} up. In longs, so a huge amount can't wrap around to a repair. */
+    private static boolean breaks(ItemStack item, int damage) {
+        return (long) item.getDamageValue() + damage >= item.getMaxDamage();
+    }
+
     private static ItemStack damaged(ItemStack item, int damage) {
-        ItemStack after = Objects.requireNonNull(item, "item").copy();
-        int value = after.getDamageValue() + damage;
-        if (value >= after.getMaxDamage()) return ItemStack.EMPTY;
-        after.setDamageValue(value);
+        Objects.requireNonNull(item, "item is null; pass the stack about to lose durability");
+        if (breaks(item, damage)) return ItemStack.EMPTY;
+        ItemStack after = item.copy();
+        after.setDamageValue(item.getDamageValue() + damage);
         return after;
     }
 
@@ -52,16 +67,12 @@ public class ItemDamageEvent extends ItemChangeEvent {
 
     /** Change how much durability is lost; 0 loses none. {@link #getAfter()} follows. */
     public void setDamage(int damage) {
-        if (damage < 0) {
-            throw new IllegalArgumentException("Damage can't be negative (" + damage + "); to repair an item, change "
-                    + "it directly, and to stop the damage, setDamage(0) or cancel the event");
-        }
+        setAfter(damaged(getBefore(), checked(damage)));
         this.damage = damage;
-        setAfter(damaged(getBefore(), damage));
     }
 
     /** Whether this damage will break the item; if so, {@link ItemBreakEvent} follows. */
     public boolean willBreak() {
-        return getBefore().getDamageValue() + damage >= getBefore().getMaxDamage();
+        return breaks(getBefore(), damage);
     }
 }

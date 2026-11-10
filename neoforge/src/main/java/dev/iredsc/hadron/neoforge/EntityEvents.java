@@ -52,7 +52,7 @@ import net.neoforged.neoforge.event.entity.player.PlayerXpEvent;
  * ({@code hadron.entity.mixins.json}). Cancellable translations listen last, so plugins hear only what mods let
  * through and a cancel here is the final word.
  */
-final class EntityEvents {
+public final class EntityEvents {
     private EntityEvents() {}
 
     static void register() {
@@ -89,14 +89,29 @@ final class EntityEvents {
 
     private static void damage(LivingIncomingDamageEvent event) {
         LivingEntity entity = event.getEntity();
-        if (!server(entity) || !Hooks.listens(EntityDamageEvent.class)) return;
-        EntityDamageEvent hadron = Hooks.post(new EntityDamageEvent(entity, event.getSource(), event.getAmount(),
+        float amount = event.getAmount();
+        if (!server(entity) || !dealsDamage(amount) || !Hooks.listens(EntityDamageEvent.class)) return;
+        float reported = reportedDamage(amount);
+        EntityDamageEvent hadron = Hooks.post(new EntityDamageEvent(entity, event.getSource(), reported,
                 EntityActors.damage(event.getSource(), entity)));
         if (hadron.isCancelled()) {
             event.setCanceled(true);
-        } else if (hadron.getDamage() != event.getAmount()) {
+        } else if (hadron.getDamage() != reported) {
             event.setAmount(hadron.getDamage());
         }
+    }
+
+    /**
+     * Whether an incoming amount is one {@link EntityDamageEvent} reports: a negative or NaN amount (only a mod's
+     * mistake makes one) deals nothing a plugin could stop, and the event refuses it.
+     */
+    public static boolean dealsDamage(float amount) {
+        return amount >= 0;
+    }
+
+    /** The amount {@link EntityDamageEvent} reports: an infinite blow as {@code Float.MAX_VALUE}, which it accepts. */
+    public static float reportedDamage(float amount) {
+        return Math.min(amount, Float.MAX_VALUE);
     }
 
     private static void heal(LivingHealEvent event) {
@@ -132,8 +147,9 @@ final class EntityEvents {
         Entity source = event.getEffectSource();
         Actor actor = source != null && source != entity
                 ? EntityActors.of(source) : EntityActors.fromStack(entity, Actor.Nature.INSTANCE);
-        EntityPotionEffectEvent hadron = Hooks.post(new EntityPotionEffectEvent(entity, added.getEffect(), old, added,
-                old == null ? EntityPotionEffectEvent.Action.ADDED : EntityPotionEffectEvent.Action.CHANGED, actor));
+        EntityPotionEffectEvent hadron = Hooks.post(old == null
+                ? EntityPotionEffectEvent.added(entity, added, actor)
+                : EntityPotionEffectEvent.changed(entity, old, added, actor));
         if (hadron.isCancelled()) event.setResult(MobEffectEvent.Applicable.Result.DO_NOT_APPLY);
     }
 
@@ -142,8 +158,8 @@ final class EntityEvents {
         if (!server(entity) || !Hooks.listens(EntityPotionEffectEvent.class)) return;
         MobEffectInstance old = entity.getEffect(event.getEffect());
         if (old == null) return;
-        EntityPotionEffectEvent hadron = Hooks.post(new EntityPotionEffectEvent(entity, event.getEffect(), old, null,
-                EntityPotionEffectEvent.Action.REMOVED, EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
+        EntityPotionEffectEvent hadron = Hooks.post(EntityPotionEffectEvent.removed(entity, old,
+                EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
         if (hadron.isCancelled()) event.setCanceled(true);
     }
 

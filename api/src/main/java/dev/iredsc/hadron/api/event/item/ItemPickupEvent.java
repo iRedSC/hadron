@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
@@ -27,7 +28,7 @@ public class ItemPickupEvent extends ItemEvent implements Cancellable {
     private boolean cancelled;
 
     public ItemPickupEvent(ServerLevel level, ItemEntity entity, InventoryHolder destination, Actor actor) {
-        super(level, Objects.requireNonNull(entity, "entity").getItem(), actor);
+        super(level, EventStack.live(Objects.requireNonNull(entity, "entity").getItem(), "entity's item"), actor);
         this.entity = entity;
         this.destination = Objects.requireNonNull(destination,
                 "destination; use InventoryHolder.Unknown.INSTANCE when nothing is known");

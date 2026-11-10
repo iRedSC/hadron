@@ -23,10 +23,24 @@ public class EntityDamageEvent extends EntityEvent implements Cancellable {
     private float damage;
     private boolean cancelled;
 
+    /**
+     * @param damage the amount before armour and other reductions: finite and at least 0. Report an infinite blow
+     *     as {@code Float.MAX_VALUE}; a negative or NaN amount deals nothing, so fire no event for it.
+     */
     public EntityDamageEvent(LivingEntity entity, DamageSource source, float damage, Actor actor) {
         super(entity, actor);
         this.source = Objects.requireNonNull(source, "source");
-        this.damage = damage;
+        this.damage = checked(damage);
+    }
+
+    /** The one rule for an amount, from the constructor and {@link #setDamage} alike. */
+    private static float checked(float damage) {
+        if (!(damage >= 0) || Float.isInfinite(damage)) {
+            throw new IllegalArgumentException("Damage must be a finite number of at least 0, got " + damage
+                    + "; to stop the damage use setCancelled(true), and for a blow that should kill anything use "
+                    + "Float.MAX_VALUE");
+        }
+        return damage;
     }
 
     @Override
@@ -44,10 +58,10 @@ public class EntityDamageEvent extends EntityEvent implements Cancellable {
         return Optional.ofNullable(source.getEntity());
     }
 
-    /** The weapon or tool it was dealt with, if one was. */
+    /** The weapon or tool it was dealt with, if one was. A new copy each call, so editing it changes nothing. */
     public Optional<ItemStack> getWeapon() {
         ItemStack weapon = source.getWeaponItem();
-        return weapon == null || weapon.isEmpty() ? Optional.empty() : Optional.of(weapon);
+        return weapon == null || weapon.isEmpty() ? Optional.empty() : Optional.of(weapon.copy());
     }
 
     /** The damage before armour, enchantments and effects reduce it. */
@@ -56,11 +70,7 @@ public class EntityDamageEvent extends EntityEvent implements Cancellable {
     }
 
     public void setDamage(float damage) {
-        if (!(damage >= 0) || Float.isInfinite(damage)) {
-            throw new IllegalArgumentException("Damage must be a finite number of at least 0, got " + damage
-                    + "; to stop the damage use setCancelled(true)");
-        }
-        this.damage = damage;
+        this.damage = checked(damage);
     }
 
     @Override

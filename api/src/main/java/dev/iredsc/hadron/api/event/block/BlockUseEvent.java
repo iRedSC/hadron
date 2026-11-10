@@ -3,6 +3,7 @@ package dev.iredsc.hadron.api.event.block;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import net.minecraft.core.BlockPos;
@@ -25,7 +26,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 @FiredBy(core = FULL)
 public class BlockUseEvent extends BlockEvent implements Cancellable {
     private final InteractionHand hand;
-    private final ItemStack item;
+    private final EventStack.Copy item;
     private final BlockHitResult hit;
     private boolean cancelled;
 
@@ -33,7 +34,7 @@ public class BlockUseEvent extends BlockEvent implements Cancellable {
             BlockHitResult hit, Actor actor) {
         super(level, pos, state, List.of(BlockChange.unchanged(level, pos, state)), actor);
         this.hand = hand;
-        this.item = item.copy();
+        this.item = EventStack.copyOf(item, "item");
         this.hit = hit;
     }
 
@@ -43,12 +44,12 @@ public class BlockUseEvent extends BlockEvent implements Cancellable {
 
     /** A copy of the item in that hand; empty when the hand is empty. */
     public ItemStack getItem() {
-        return item.copy();
+        return item.get();
     }
 
     /** Whether something is held in that hand. */
     public boolean hasItem() {
-        return !item.isEmpty();
+        return !item.get().isEmpty();
     }
 
     /** The face clicked. */

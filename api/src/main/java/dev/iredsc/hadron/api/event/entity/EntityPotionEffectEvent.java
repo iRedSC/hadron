@@ -36,13 +36,44 @@ public class EntityPotionEffectEvent extends EntityEvent implements Cancellable 
     private final Action action;
     private boolean cancelled;
 
-    public EntityPotionEffectEvent(LivingEntity entity, Holder<MobEffect> effect, @Nullable MobEffectInstance oldEffect,
-            @Nullable MobEffectInstance newEffect, Action action, Actor actor) {
+    private EntityPotionEffectEvent(LivingEntity entity, Holder<MobEffect> effect,
+            @Nullable MobEffectInstance oldEffect, @Nullable MobEffectInstance newEffect, Action action, Actor actor) {
         super(entity, actor);
-        this.effect = Objects.requireNonNull(effect, "effect");
-        this.oldEffect = oldEffect;
-        this.newEffect = newEffect;
-        this.action = Objects.requireNonNull(action, "action");
+        this.effect = effect;
+        this.oldEffect = oldEffect == null ? null : new MobEffectInstance(oldEffect);
+        this.newEffect = newEffect == null ? null : new MobEffectInstance(newEffect);
+        this.action = action;
+    }
+
+    /** {@link Action#ADDED}: {@code entity} doesn't have {@code added}'s effect yet. */
+    public static EntityPotionEffectEvent added(LivingEntity entity, MobEffectInstance added, Actor actor) {
+        Objects.requireNonNull(added, "added is null; pass the effect instance about to be applied");
+        return new EntityPotionEffectEvent(entity, added.getEffect(), null, added, Action.ADDED, actor);
+    }
+
+    /**
+     * {@link Action#CHANGED}: {@code entity} has {@code old}, and {@code added}, of the same effect, may replace or
+     * extend it.
+     */
+    public static EntityPotionEffectEvent changed(LivingEntity entity, MobEffectInstance old, MobEffectInstance added,
+            Actor actor) {
+        Objects.requireNonNull(old, "old is null; for an effect the entity doesn't have yet, use "
+                + "EntityPotionEffectEvent.added");
+        Objects.requireNonNull(added, "added is null; for an effect being taken away, use "
+                + "EntityPotionEffectEvent.removed");
+        if (!old.is(added.getEffect())) {
+            throw new IllegalArgumentException("A change keeps the same effect, but old is " + old + " and added is "
+                    + added + ": pass the entity's current instance of added's effect, "
+                    + "entity.getEffect(added.getEffect()), as old, or fire removed and added for two effects");
+        }
+        return new EntityPotionEffectEvent(entity, added.getEffect(), old, added, Action.CHANGED, actor);
+    }
+
+    /** {@link Action#REMOVED}: {@code old} is being taken away before it runs out. */
+    public static EntityPotionEffectEvent removed(LivingEntity entity, MobEffectInstance old, Actor actor) {
+        Objects.requireNonNull(old, "old is null; pass the entity's instance being removed, "
+                + "entity.getEffect(effect), and fire nothing when it has none");
+        return new EntityPotionEffectEvent(entity, old.getEffect(), old, null, Action.REMOVED, actor);
     }
 
     @Override
@@ -55,14 +86,20 @@ public class EntityPotionEffectEvent extends EntityEvent implements Cancellable 
         return effect;
     }
 
-    /** The effect the entity had; empty when it is being added. */
+    /**
+     * The effect the entity had: present for {@link Action#CHANGED} and {@link Action#REMOVED}, empty for
+     * {@link Action#ADDED}. A new copy each call, so editing it changes nothing.
+     */
     public Optional<MobEffectInstance> getOldEffect() {
-        return Optional.ofNullable(oldEffect);
+        return oldEffect == null ? Optional.empty() : Optional.of(new MobEffectInstance(oldEffect));
     }
 
-    /** The effect being applied; empty when it is being removed. */
+    /**
+     * The effect being applied: present for {@link Action#ADDED} and {@link Action#CHANGED}, empty for
+     * {@link Action#REMOVED}. A new copy each call, so editing it changes nothing.
+     */
     public Optional<MobEffectInstance> getNewEffect() {
-        return Optional.ofNullable(newEffect);
+        return newEffect == null ? Optional.empty() : Optional.of(new MobEffectInstance(newEffect));
     }
 
     public Action getAction() {

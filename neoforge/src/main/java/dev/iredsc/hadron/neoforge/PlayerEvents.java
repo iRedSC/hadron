@@ -14,6 +14,7 @@ import dev.iredsc.hadron.api.event.player.PlayerSwapHandItemsEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.player.Player;
+import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.portal.DimensionTransition;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.ServerChatEvent;
@@ -133,14 +134,19 @@ final class PlayerEvents {
     /** The swap-hands key; fired before either hand changes. */
     private static void swapHands(LivingSwapItemsEvent.Hands event) {
         if (!(event.getEntity() instanceof ServerPlayer p) || !Hooks.listens(PlayerSwapHandItemsEvent.class)) return;
-        PlayerSwapHandItemsEvent hadron = Hooks.post(new PlayerSwapHandItemsEvent(p,
-                event.getItemSwappedToMainHand(), event.getItemSwappedToOffHand()));
+        ItemStack toMain = event.getItemSwappedToMainHand();
+        ItemStack toOff = event.getItemSwappedToOffHand();
+        PlayerSwapHandItemsEvent hadron = Hooks.post(new PlayerSwapHandItemsEvent(p, toMain, toOff));
         if (hadron.isCancelled()) {
             event.setCanceled(true);
             return;
         }
-        event.setItemSwappedToMainHand(hadron.getMainHandItem());
-        event.setItemSwappedToOffHand(hadron.getOffHandItem());
+        // The event hands out copies; set one only where a listener changed it, so an untouched swap moves the
+        // player's own stacks.
+        ItemStack main = hadron.getMainHandItem();
+        ItemStack off = hadron.getOffHandItem();
+        if (!ItemStack.matches(main, toMain)) event.setItemSwappedToMainHand(main);
+        if (!ItemStack.matches(off, toOff)) event.setItemSwappedToOffHand(off);
     }
 
     /** ServerPlayer.startSleepInBed; only when vanilla would let them sleep. */

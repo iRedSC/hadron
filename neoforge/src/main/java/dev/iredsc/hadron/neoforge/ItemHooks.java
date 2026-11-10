@@ -557,10 +557,9 @@ public final class ItemHooks {
             ItemStack item, Direction face, Container initiator) {
         if (item.isEmpty() || !Hooks.listens(InventoryMoveItemEvent.class)) return false;
         if (!canAccept(destination, item, face)) return false;
-        ItemStack sourceBefore = item.copyWithCount(sourceCount);
-        return Hooks.post(new InventoryMoveItemEvent(InventoryHolders.of(source, null), sourceSlot, sourceBefore,
-                InventoryHolders.of(destination, null), item, InventoryHolders.of(initiator, null),
-                container(initiator))).isCancelled();
+        return moveHandler(InventoryHolders.of(source, null), sourceSlot, item.copyWithCount(sourceCount),
+                InventoryHolders.of(destination, null), null, item, InventoryHolders.of(initiator, null),
+                container(initiator));
     }
 
     /** As {@link #move}, into or out of a NeoForge item handler. */
@@ -569,8 +568,20 @@ public final class ItemHooks {
             Actor actor) {
         if (item.isEmpty() || !Hooks.listens(InventoryMoveItemEvent.class)) return false;
         if (destinationHandler != null && !canAccept(destinationHandler, item)) return false;
-        return Hooks.post(new InventoryMoveItemEvent(source, sourceSlot, sourceBefore, destination, item, initiator,
-                actor)).isCancelled();
+        InventoryMoveItemEvent event = slotHolds(sourceSlot, sourceBefore, item)
+                ? new InventoryMoveItemEvent(source, sourceSlot, sourceBefore, destination, item, initiator, actor)
+                : new InventoryMoveItemEvent(source, destination, item, initiator, actor);
+        return Hooks.post(event).isCancelled();
+    }
+
+    /**
+     * Whether a move can name its source slot: the slot is known and its stack holds what moves, as
+     * {@link InventoryMoveItemEvent} requires. A mod's handler may report a slot whose stack differs from what it
+     * extracts; that move is reported without a slot rather than throw inside a hopper's tick.
+     */
+    static boolean slotHolds(int slot, ItemStack slotStack, ItemStack item) {
+        return slot >= 0 && ItemStack.isSameItemSameComponents(slotStack, item)
+                && slotStack.getCount() >= item.getCount();
     }
 
     /** Whether vanilla's HopperBlockEntity.addItem would move at least one of {@code stack} into the container. */
