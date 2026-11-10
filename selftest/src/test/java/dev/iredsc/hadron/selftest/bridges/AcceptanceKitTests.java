@@ -19,6 +19,7 @@ import dev.iredsc.hadron.api.event.entity.EntityEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
+import dev.iredsc.hadron.api.event.entity.ProjectileLaunchEvent;
 import dev.iredsc.hadron.api.event.item.EquipEvent;
 import dev.iredsc.hadron.api.event.item.ItemHeldEvent;
 import dev.iredsc.hadron.api.event.item.EquipmentChangeEvent;
@@ -1436,5 +1437,30 @@ public final class AcceptanceKitTests {
         Actor machine = new Actor.Machine(t.level(), t.pos(-6, 0, 0), Attribution.of(alice.uuid()));
         t.assertTrue(Hadron.getPluginManager().callEvent(new ItemHeldEvent(alice.player(), 0, 1, machine)),
                 "a machine outside changing what alice, in the area, holds was refused: " + area.events());
+    }
+
+    @HadronTest
+    void anAttackerInTheAreaHurtingAMobOutsideIsLeftAlone(TestContext t) {
+        Pig attacker = pig(t, t.pos(2, 0, 0));
+        Pig victim = pig(t, t.pos(-3, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        t.assertFalse(Hadron.getPluginManager().callEvent(new EntityDamageEvent(victim,
+                t.level().damageSources().mobAttack(attacker), 1, Actor.Unknown.INSTANCE)),
+                "a pig outside hurt from the area isn't the area's: " + area.events());
+        t.assertTrue(area.events().isEmpty(), "nothing heard in the area: " + area.events());
+    }
+
+    @HadronTest
+    void aShotLaunchedOutsideByAShooterInTheAreaIsLeftAlone(TestContext t) {
+        Pig shooter = pig(t, t.pos(2, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        net.minecraft.world.entity.projectile.Arrow arrow = EntityType.ARROW.create(t.level());
+        t.assertTrue(arrow != null, "an arrow");
+        BlockPos out = t.pos(-3, 0, 0);
+        arrow.moveTo(out.getX() + 0.5, out.getY() + 1, out.getZ() + 0.5);
+        arrow.setOwner(shooter);
+        t.assertFalse(Hadron.getPluginManager().callEvent(new ProjectileLaunchEvent(arrow, Actor.Unknown.INSTANCE)),
+                "an arrow launched outside isn't the area's: " + area.events());
+        t.assertTrue(area.events().isEmpty(), "nothing heard in the area: " + area.events());
     }
 }

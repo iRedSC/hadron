@@ -518,7 +518,7 @@ final class TestAcceptance implements Acceptance, Listener {
 
     /**
      * The entities an event happens to or between, which say where it happens: {@link #named} without the player
-     * who did it (a breeder, a tamer, a menu's viewer) and, with {@code holders} false, without the entities holding
+     * who did it ({@link #AGENTS}) and, with {@code holders} false, without the entities holding
      * inventories or resources it names.
      */
     private static List<Entity> participants(Event event, boolean holders) {
@@ -546,10 +546,11 @@ final class TestAcceptance implements Acceptance, Listener {
     private static final Set<String> ATTRIBUTION = Set.of("getActor", "getActingPlayer", "getOperation");
 
     /**
-     * The player who did it, standing wherever they fed, tamed or work a menu from: named, but not where it happens,
-     * which is at the animals or the inventory.
+     * Whoever did it, from wherever they stand: a breeder, a tamer, a menu's viewer, an attacker, a shooter. Named, so
+     * what happens to them is compared, but not where it happens, which is at what they act on.
      */
-    private static final Set<String> AGENTS = Set.of("getBreeder", "getOwner", "getViewer");
+    private static final Set<String> AGENTS = Set.of("getBreeder", "getOwner", "getViewer", "getDamager",
+            "getShooter");
 
     /** Each event class's public no-argument getters, outside {@link Object} and attribution. */
     @dev.iredsc.hadron.checks.StaticState(reason = "a cache of each event class's getters, which never change; "
