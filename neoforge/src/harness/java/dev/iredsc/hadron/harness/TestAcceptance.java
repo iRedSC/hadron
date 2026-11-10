@@ -25,10 +25,7 @@ import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
-import dev.iredsc.hadron.api.event.item.EquipEvent;
-import dev.iredsc.hadron.api.event.item.EquipmentChangeEvent;
 import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
-import dev.iredsc.hadron.api.event.item.ItemConsumeEvent;
 import dev.iredsc.hadron.api.event.item.ItemCraftEvent;
 import dev.iredsc.hadron.api.event.item.ItemDespawnEvent;
 import dev.iredsc.hadron.api.event.item.ItemDropEvent;
@@ -36,7 +33,6 @@ import dev.iredsc.hadron.api.event.item.ItemEvent;
 import dev.iredsc.hadron.api.event.item.ItemMergeEvent;
 import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
 import dev.iredsc.hadron.api.event.item.ItemSmeltEvent;
-import dev.iredsc.hadron.api.event.item.ItemUseEvent;
 import dev.iredsc.hadron.api.event.item.PrepareAnvilEvent;
 import dev.iredsc.hadron.api.event.item.PrepareItemCraftEvent;
 import dev.iredsc.hadron.api.event.item.TradeEvent;
@@ -386,10 +382,7 @@ final class TestAcceptance implements Acceptance, Listener {
         }
         if (event instanceof EntityEvent e) {
             // Either of a pair: a rider boarding a vehicle in the area, a lead tied to a knot in it.
-            for (Entity named : named(event)) {
-                // A player named beside the subject (a breeder, a viewer) took part from where they stand; the event
-                // happens where the entities it is about are. A player that is the subject is placed below.
-                if (named instanceof ServerPlayer) continue;
+            for (Entity named : participants(event, true)) {
                 if (named.level() == level && at(level, named.position()) instanceof Place.In p) return p;
             }
             return at(e.getLevel(), e.getPosition());
@@ -442,11 +435,14 @@ final class TestAcceptance implements Acceptance, Listener {
             if (i.getLevel() != level) return OUT;
             // An item event naming the inventory it happens in (a craft, a smelt, a trade, an anvil) happens there.
             // An item used, eaten or equipped happens where the entity it is about stands.
-            Optional<LivingEntity> about = itemUser(i);
-            // Where the entity it is about stands, then whoever did it: outside both, it is known to be outside.
-            if (about.isPresent()) {
-                Place on = about.get().level() == level ? at(level, about.get().position()) : OUT;
-                return on instanceof Place.In ? on : actorAt(i.getActor());
+            List<LivingEntity> about = participants(i, false).stream().filter(LivingEntity.class::isInstance)
+                    .map(LivingEntity.class::cast).toList();
+            // Where an entity it is about stands, then whoever did it: outside both, it is known to be outside.
+            if (!about.isEmpty()) {
+                for (LivingEntity user : about) {
+                    if (user.level() == level && at(level, user.position()) instanceof Place.In on) return on;
+                }
+                return actorAt(i.getActor());
             }
             Optional<InventoryHolder> in = itemHolder(i);
             Place named = in.map(this::holder).orElse(OUT);
@@ -517,10 +513,24 @@ final class TestAcceptance implements Acceptance, Listener {
      * entity it touches uncompared.
      */
     static List<Entity> named(Event event) {
+        return read(event, false, true);
+    }
+
+    /**
+     * The entities an event happens to or between, which say where it happens: {@link #named} without the player
+     * who did it (a breeder, a tamer, a menu's viewer) and, with {@code holders} false, without the entities holding
+     * inventories or resources it names.
+     */
+    private static List<Entity> participants(Event event, boolean holders) {
+        return read(event, true, holders);
+    }
+
+    private static List<Entity> read(Event event, boolean participants, boolean holders) {
         Set<Entity> out = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
         for (java.lang.reflect.Method getter : GETTERS.get(event.getClass())) {
+            if (participants && AGENTS.contains(getter.getName())) continue;
             try {
-                collect(getter.invoke(event), out);
+                collect(getter.invoke(event), out, holders);
             } catch (ReflectiveOperationException | RuntimeException e) {
                 // A getter that can't answer names nothing.
             }
@@ -528,8 +538,18 @@ final class TestAcceptance implements Acceptance, Listener {
         return List.copyOf(out);
     }
 
-    /** Who an action is for, not who took part in it: an owner far from their machine is no participant. */
+    /**
+     * Who an action is for, not who took part in it: an owner far from their machine is no participant. An optional
+     * {@code getPlayer} is the same as {@code getActingPlayer} on every action that has one; a player event's own
+     * {@code getPlayer}, never empty, is its subject and is read.
+     */
     private static final Set<String> ATTRIBUTION = Set.of("getActor", "getActingPlayer", "getOperation");
+
+    /**
+     * The player who did it, standing wherever they fed, tamed or work a menu from: named, but not where it happens,
+     * which is at the animals or the inventory.
+     */
+    private static final Set<String> AGENTS = Set.of("getBreeder", "getOwner", "getViewer");
 
     /** Each event class's public no-argument getters, outside {@link Object} and attribution. */
     @dev.iredsc.hadron.checks.StaticState(reason = "a cache of each event class's getters, which never change; "
@@ -541,7 +561,8 @@ final class TestAcceptance implements Acceptance, Listener {
             for (java.lang.reflect.Method m : type.getMethods()) {
                 if (m.getParameterCount() != 0 || m.getDeclaringClass() == Object.class
                         || java.lang.reflect.Modifier.isStatic(m.getModifiers()) || !m.getName().startsWith("get")
-                        || ATTRIBUTION.contains(m.getName())) {
+                        || ATTRIBUTION.contains(m.getName())
+                        || m.getName().equals("getPlayer") && m.getReturnType() == Optional.class) {
                     continue;
                 }
                 // A public getter on an event class that isn't public (a bridge's nested one) is read all the same.
@@ -552,14 +573,14 @@ final class TestAcceptance implements Acceptance, Listener {
         }
     };
 
-    private static void collect(@Nullable Object value, Set<Entity> out) {
+    private static void collect(@Nullable Object value, Set<Entity> out, boolean holders) {
         switch (value) {
             case null -> {}
             case Entity e -> out.add(e);
-            case Optional<?> o -> o.ifPresent(v -> collect(v, out));
-            case java.util.Collection<?> c -> c.forEach(v -> collect(v, out));
-            case InventoryHolder h -> holderEntity(h).ifPresent(out::add);
-            case ResourceHolder.Entity r -> out.add(r.entity());
+            case Optional<?> o -> o.ifPresent(v -> collect(v, out, holders));
+            case java.util.Collection<?> c -> c.forEach(v -> collect(v, out, holders));
+            case InventoryHolder h when holders -> holderEntity(h).ifPresent(out::add);
+            case ResourceHolder.Entity r when holders -> out.add(r.entity());
             default -> {}
         }
     }
@@ -586,16 +607,6 @@ final class TestAcceptance implements Acceptance, Listener {
     private static Place unplacedHolder() {
         return new Place.Unplaced("its holder is unknown, so nothing says whose inventory changed: name the holder "
                 + "(InventoryHolder.Block or InventoryHolder.Entity)");
-    }
-
-    private static Optional<LivingEntity> itemUser(ItemEvent event) {
-        return switch (event) {
-            case EquipEvent e -> Optional.of(e.getEntity());
-            case ItemUseEvent e -> Optional.of(e.getUser());
-            case ItemConsumeEvent e -> Optional.of(e.getConsumer());
-            case EquipmentChangeEvent e -> Optional.of(e.getEntity());
-            default -> Optional.empty();
-        };
     }
 
     private static Optional<InventoryHolder> itemHolder(ItemEvent event) {

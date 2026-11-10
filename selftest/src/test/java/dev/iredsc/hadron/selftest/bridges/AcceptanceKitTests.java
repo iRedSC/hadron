@@ -20,6 +20,7 @@ import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
 import dev.iredsc.hadron.api.event.item.EquipEvent;
+import dev.iredsc.hadron.api.event.item.ItemHeldEvent;
 import dev.iredsc.hadron.api.event.item.EquipmentChangeEvent;
 import dev.iredsc.hadron.api.event.player.PlayerSwapHandItemsEvent;
 import dev.iredsc.hadron.api.event.world.TickAccelerateEvent;
@@ -1415,5 +1416,25 @@ public final class AcceptanceKitTests {
                 t.level().damageSources().generic(), 1, machine)), "bob's machine hurting a pig outside isn't the "
                 + "area's, though bob stands in it: " + area.events());
         t.assertTrue(area.events().isEmpty(), "nothing heard in the area: " + area.events());
+    }
+
+    @HadronTest
+    void mountingAPlayerInTheAreaFromOutsideIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        bob.moveTo(t.pos(2, 0, 0));
+        Pig rider = pig(t, t.pos(-3, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        t.assertTrue(Hadron.getPluginManager().callEvent(new EntityMountEvent(rider, bob.player(),
+                Actor.Unknown.INSTANCE)), "a pig outside climbing onto bob in the area was refused: " + area.events());
+    }
+
+    @HadronTest
+    void anItemHeldByAPlayerInTheAreaIsPlacedByThemNotTheMachine(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        alice.moveTo(t.pos(2, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        Actor machine = new Actor.Machine(t.level(), t.pos(-6, 0, 0), Attribution.of(alice.uuid()));
+        t.assertTrue(Hadron.getPluginManager().callEvent(new ItemHeldEvent(alice.player(), 0, 1, machine)),
+                "a machine outside changing what alice, in the area, holds was refused: " + area.events());
     }
 }
