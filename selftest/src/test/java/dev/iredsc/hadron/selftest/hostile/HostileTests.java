@@ -67,8 +67,8 @@ public final class HostileTests {
 
     /**
      * A plugin built without Hadron's checks calls what only the host may: claiming the HostKey, clearing the running
-     * server and economy, replacing the packet backend, and calling into Hadron's host itself, outside its api. Each
-     * is refused, saying what to use, and nothing changes.
+     * server and economy, replacing the packet backend, calling into Hadron's host itself, outside its api, and
+     * pushing an actor through the port's unchecked handle. Each is refused, saying what to use, and nothing changes.
      */
     @HadronTest(timeout = 1200)
     void aPluginCanNotReplaceOrClearWhatTheHostInstalled(TestContext t) throws Exception {
@@ -80,7 +80,7 @@ public final class HostileTests {
             t.await("the hostile plugin to enable", () -> h.plugins().isPluginEnabled(Hostile.HOSTILE), 200);
             List<String> tried = h.hostileLog.stream().map(String::valueOf).filter(l -> l.startsWith("host "))
                     .toList();
-            t.assertEquals(5, tried.size(), "one line per call the plugin tried, in " + tried);
+            t.assertEquals(6, tried.size(), "one line per call the plugin tried, in " + tried);
             for (String line : tried) {
                 t.assertTrue(line.contains(" refused: "), "a plugin's host-only call must be refused: " + line);
             }
@@ -91,6 +91,7 @@ public final class HostileTests {
             h.assertSays(tried.get(3), "NetBackend.Port.install is for Hadron's own host", "Packets");
             h.assertSays(tried.get(4), "dev.iredsc.hadron.common.PluginHost is inside Hadron's plugin host",
                     "only Hadron's api (dev.iredsc.hadron.api)");
+            h.assertSays(tried.get(5), "Actors.Port.enter is for Hadron's own host", "Actors.push(actor)");
             t.assertTrue(Hadron.getServer() == server, "the running server must be the host's still");
             t.assertTrue(Economy.Lifecycle.running() == economy, "the economy must be the host's still");
             h.assertHealthy();

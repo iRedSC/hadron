@@ -231,6 +231,9 @@ public final class Actors {
 
     /** For the loader port only. */
     public static final class Port {
+        private static final String PUSH = "push an actor with try (Actors.Scope scope = Actors.push(actor)) { ... }, "
+                + "or Actors.acting(actor, work)";
+
         private Port() {}
 
         /** Takes the {@link HostKey}. */
@@ -242,9 +245,12 @@ public final class Actors {
 
         /**
          * Pushes an actor without allocating, for paths that run every tick (entity ticks, machine ticks, packets).
-         * Returns a handle for {@link #exit}, which must be called in a {@code finally} on the same thread.
+         * Returns a handle for {@link #exit}, which must be called in a {@code finally} on the same thread. Takes the
+         * {@link HostKey}: a plugin or bridge uses {@link Actors#push} or {@link Actors#acting}, which can't be left
+         * open by mistake.
          */
-        public static long enter(Actor actor) {
+        public static long enter(HostKey key, Actor actor) {
+            HostKey.require(key, "Actors.Port.enter", PUSH);
             Stack stack = STACK.get();
             int index = stack.depth;
             long token = stack.push(checked(actor), index == 0 ? null : stack.operations[index - 1]);
@@ -252,18 +258,20 @@ public final class Actors {
         }
 
         /**
-         * As {@link #enter(Actor)}, inside {@code operation}: for one operation held open across steps with other
-         * code running between them, such as a build whose events are posted with nobody behind them.
+         * As {@link #enter(HostKey, Actor)}, inside {@code operation}: for one operation held open across steps with
+         * other code running between them, such as a build whose events are posted with nobody behind them.
          */
-        public static long enter(Actor actor, Operation operation) {
+        public static long enter(HostKey key, Actor actor, Operation operation) {
+            HostKey.require(key, "Actors.Port.enter", PUSH);
             Stack stack = STACK.get();
             int index = stack.depth;
             long token = stack.push(checked(actor), Objects.requireNonNull(operation, "operation"));
             return ((long) index << 40) | token;
         }
 
-        /** Pops what {@link #enter} pushed, and anything left open above it. */
-        public static void exit(long handle) {
+        /** Pops what {@link #enter} pushed, and anything left open above it. Takes the {@link HostKey}. */
+        public static void exit(HostKey key, long handle) {
+            HostKey.require(key, "Actors.Port.exit", PUSH);
             STACK.get().close((int) (handle >>> 40), handle & TOKEN_MASK);
         }
     }

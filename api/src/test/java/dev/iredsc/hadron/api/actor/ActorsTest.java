@@ -214,11 +214,11 @@ class ActorsTest {
     @Covers(value = Actors.Port.class, method = "exit")
     @Test
     void portEnterAndExitPushAndPop() {
-        long handle = Actors.Port.enter(CONSOLE);
+        long handle = Actors.Port.enter(TestHost.KEY, CONSOLE);
         try {
             assertSame(CONSOLE, Actors.current().orElseThrow());
         } finally {
-            Actors.Port.exit(handle);
+            Actors.Port.exit(TestHost.KEY, handle);
         }
         assertTrue(Actors.isEmpty());
     }
@@ -226,41 +226,41 @@ class ActorsTest {
     @Covers(value = Actors.Port.class, method = "enter")
     @Test
     void portHandlesCarryTheirDepth() {
-        long outer = Actors.Port.enter(CONSOLE);
-        long inner = Actors.Port.enter(BLOCK);
+        long outer = Actors.Port.enter(TestHost.KEY, CONSOLE);
+        long inner = Actors.Port.enter(TestHost.KEY, BLOCK);
         assertEquals(0, outer >>> 40);
         assertEquals(1, inner >>> 40);
-        Actors.Port.exit(inner);
+        Actors.Port.exit(TestHost.KEY, inner);
         assertSame(CONSOLE, Actors.current().orElseThrow(), "exiting the inner handle leaves the outer on top");
-        Actors.Port.exit(outer);
+        Actors.Port.exit(TestHost.KEY, outer);
         assertTrue(Actors.isEmpty());
     }
 
     @Covers(value = Actors.Port.class, method = "exit")
     @Test
     void portExitOfAStaleHandleDoesNothing() {
-        long stale = Actors.Port.enter(CONSOLE);
-        Actors.Port.exit(stale);
-        long fresh = Actors.Port.enter(BLOCK);
-        Actors.Port.exit(stale); // same index, older token
+        long stale = Actors.Port.enter(TestHost.KEY, CONSOLE);
+        Actors.Port.exit(TestHost.KEY, stale);
+        long fresh = Actors.Port.enter(TestHost.KEY, BLOCK);
+        Actors.Port.exit(TestHost.KEY, stale); // same index, older token
         assertSame(BLOCK, Actors.current().orElseThrow());
-        Actors.Port.exit(fresh);
+        Actors.Port.exit(TestHost.KEY, fresh);
         assertTrue(Actors.isEmpty());
     }
 
     @Covers(value = Actors.Port.class, method = "exit")
     @Test
     void portExitClosesWhatWasLeftOpenAboveIt() {
-        long handle = Actors.Port.enter(CONSOLE);
+        long handle = Actors.Port.enter(TestHost.KEY, CONSOLE);
         Actors.push(BLOCK); // leaked by some mod's code inside the tick
-        Actors.Port.exit(handle);
+        Actors.Port.exit(TestHost.KEY, handle);
         assertTrue(Actors.isEmpty());
     }
 
     @Covers(value = Actors.Port.class, method = "enter")
     @Test
     void portEnterRefusesNull() {
-        assertThrows(NullPointerException.class, () -> Actors.Port.enter(null));
+        assertThrows(NullPointerException.class, () -> Actors.Port.enter(TestHost.KEY, null));
         assertTrue(Actors.isEmpty());
     }
 
@@ -269,16 +269,16 @@ class ActorsTest {
     void tokensWrapWithinFortyBitsAndSkipZero() throws Exception {
         long mask = (1L << 40) - 1;
         setNextToken(mask - 1);
-        long last = Actors.Port.enter(CONSOLE); // token mask
+        long last = Actors.Port.enter(TestHost.KEY, CONSOLE); // token mask
         assertEquals(mask, last & mask);
-        Actors.Port.exit(last);
-        long wrapped = Actors.Port.enter(BLOCK); // would be 0: becomes 1
+        Actors.Port.exit(TestHost.KEY, last);
+        long wrapped = Actors.Port.enter(TestHost.KEY, BLOCK); // would be 0: becomes 1
         assertEquals(1, wrapped & mask);
         assertEquals(0, wrapped >>> 40);
         assertSame(BLOCK, Actors.current().orElseThrow());
-        Actors.Port.exit(last); // the pre-wrap handle at the same index must not close the new frame
+        Actors.Port.exit(TestHost.KEY, last); // the pre-wrap handle at the same index must not close the new frame
         assertSame(BLOCK, Actors.current().orElseThrow());
-        Actors.Port.exit(wrapped);
+        Actors.Port.exit(TestHost.KEY, wrapped);
         assertTrue(Actors.isEmpty());
     }
 
@@ -321,9 +321,9 @@ class ActorsTest {
                 assertSame(open, Operation.current());
                 assertSame(BLOCK, Actors.current().orElseThrow());
             }
-            long handle = Actors.Port.enter(Actor.Nature.INSTANCE);
+            long handle = Actors.Port.enter(TestHost.KEY, Actor.Nature.INSTANCE);
             assertSame(open, Operation.current());
-            Actors.Port.exit(handle);
+            Actors.Port.exit(TestHost.KEY, handle);
         }
     }
 
@@ -354,7 +354,7 @@ class ActorsTest {
     @Covers(value = Actors.Port.class, method = "exit")
     @Test
     void anEmptyStackStaysUsableAfterRepeatedCleanup() {
-        assertDoesNotThrow(() -> Actors.Port.exit(1));
+        assertDoesNotThrow(() -> Actors.Port.exit(TestHost.KEY, 1));
         assertTrue(Actors.isEmpty());
     }
 }

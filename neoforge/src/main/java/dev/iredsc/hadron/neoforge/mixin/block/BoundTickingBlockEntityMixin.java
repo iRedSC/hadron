@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.block;
 
+import dev.iredsc.hadron.neoforge.PortKey;
 import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
@@ -48,11 +49,11 @@ public abstract class BoundTickingBlockEntityMixin {
             return;
         }
         hadron$machine = BlockHooks.machine(hadron$machine, server, blockEntity);
-        long scope = Actors.Port.enter(hadron$machine);
+        long scope = Actors.Port.enter(PortKey.KEY, hadron$machine);
         try {
             original.call(ticker, level, pos, state, blockEntity);
         } finally {
-            Actors.Port.exit(scope);
+            Actors.Port.exit(PortKey.KEY, scope);
         }
     }
 }

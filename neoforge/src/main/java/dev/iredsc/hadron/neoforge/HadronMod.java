@@ -32,8 +32,8 @@ public final class HadronMod {
     private static volatile @Nullable PluginHost host;
 
     public HadronMod(IEventBus modBus, ModContainer container) {
-        // Before any plugin can run, so no plugin ever holds it: only this mod can replace what it installs.
-        HostKey key = HostKey.claim();
+        // Before any plugin can run, so no plugin holds it by mistake: only this mod replaces what it installs.
+        HostKey key = PortKey.KEY;
         NeoForge.EVENT_BUS.addListener((ServerAboutToStartEvent e) -> aboutToStart(key, e));
         NeoForge.EVENT_BUS.addListener(HadronMod::starting);
         NeoForge.EVENT_BUS.addListener(HadronMod::tick);

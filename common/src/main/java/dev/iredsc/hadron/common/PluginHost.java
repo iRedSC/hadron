@@ -221,7 +221,7 @@ public final class PluginHost implements PluginManager {
     private final Services services;
     private final dev.iredsc.hadron.common.economy.EconomyCore economy;
     private final Platform platform;
-    private final EventBus events = new EventBus();
+    private final EventBus events;
     private final Trace trace;
     private final Commands commands;
     private final Map<String, Entry> entries = new TreeMap<String, Entry>(String.CASE_INSENSITIVE_ORDER);
@@ -247,6 +247,7 @@ public final class PluginHost implements PluginManager {
     public PluginHost(HostKey key, MinecraftServer minecraft, File serverDir, Platform platform) {
         HostKey.require(key, "new PluginHost", "reach the running server through Hadron.getServer()");
         this.key = key;
+        this.events = new EventBus(key);
         this.platform = platform;
         File configFolder = platform.configFolder();
         this.minecraft = minecraft;

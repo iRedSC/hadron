@@ -5,7 +5,9 @@ import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
+import dev.iredsc.hadron.api.actor.Operation;
 import dev.iredsc.hadron.api.bridge.Bridge;
 import dev.iredsc.hadron.api.data.PersistentData;
 import dev.iredsc.hadron.api.economy.Economy;
@@ -99,6 +101,22 @@ class HostKeyTest {
         assertEquals(null, Node.get("hadron.stolen"));
         Node.Lifecycle.release(TestHost.KEY, owner);
         assertEquals(null, Node.get(id), "the host's release still works");
+    }
+
+    @Test
+    void pushingAnActorThroughThePortWithoutTheKeyIsRefusedSayingToUsePush() {
+        refused(() -> Actors.Port.enter(null, Actor.Nature.INSTANCE), "Actors.Port.enter", "Actors.push(actor)");
+        refused(() -> Actors.Port.enter(null, Actor.Nature.INSTANCE, Operation.single(Actor.Nature.INSTANCE)),
+                "Actors.Port.enter", "Actors.acting(actor, work)");
+        assertTrue(Actors.isEmpty(), "a refused enter pushes nothing");
+        long handle = Actors.Port.enter(TestHost.KEY, Actor.Nature.INSTANCE);
+        try {
+            refused(() -> Actors.Port.exit(null, handle), "Actors.Port.exit", "Actors.push(actor)");
+            assertSame(Actor.Nature.INSTANCE, Actors.current().orElseThrow(), "a refused exit pops nothing");
+        } finally {
+            Actors.Port.exit(TestHost.KEY, handle);
+        }
+        assertTrue(Actors.isEmpty());
     }
 
     @Test

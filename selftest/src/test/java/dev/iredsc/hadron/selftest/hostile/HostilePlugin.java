@@ -2,6 +2,8 @@ package dev.iredsc.hadron.selftest.hostile;
 
 import dev.iredsc.hadron.api.Hadron;
 import dev.iredsc.hadron.api.HostKey;
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.economy.Economy;
 import dev.iredsc.hadron.api.net.NetBackend;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
@@ -76,6 +78,9 @@ public final class HostilePlugin extends JavaPlugin {
             // Not in api at all: Hadron's own insides, which a plugin's class loader must not link.
             asHost("hook every plugin's disable", () -> dev.iredsc.hadron.common.PluginHost.onPluginDisable(p -> {}),
                     () -> {});
+            long[] handle = new long[1];
+            asHost("push an actor through the port", () -> handle[0] = Actors.Port.enter(null, Actor.Nature.INSTANCE),
+                    () -> Actors.Port.exit(null, handle[0]));
         }
     }
 

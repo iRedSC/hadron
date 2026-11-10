@@ -65,7 +65,7 @@ public final class EntitySpawns {
                         EntityActors.fromStack(entity, fallback(entity)));
             };
         } finally {
-            if (build != 0) Actors.Port.exit(build);
+            if (build != 0) Actors.Port.exit(PortKey.KEY, build);
         }
         attempts++;
         boolean cancelled = Hooks.post(event).isCancelled();

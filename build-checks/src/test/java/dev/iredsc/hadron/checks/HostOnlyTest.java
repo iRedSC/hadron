@@ -19,6 +19,15 @@ class HostOnlyTest {
             "    public static Object running() { return null; }",
             "  }",
             "}"};
+    private static final String[] ACTORS = {
+            "package dev.iredsc.hadron.api.actor;",
+            "public final class Actors {",
+            "  public static AutoCloseable push(Object actor) { return null; }",
+            "  public static final class Port {",
+            "    public static long enter(dev.iredsc.hadron.api.HostKey key, Object actor) { return 0; }",
+            "    public static void exit(dev.iredsc.hadron.api.HostKey key, long handle) {}",
+            "  }",
+            "}"};
     private static final String[] HOST = {
             "package dev.iredsc.hadron.common;",
             "public final class PluginHost {",
@@ -29,6 +38,7 @@ class HostOnlyTest {
     private final CompilationTestHelper plugin = CompilationTestHelper.newInstance(HostOnly.class, getClass())
             .addSourceLines("dev/iredsc/hadron/api/HostKey.java", HOST_KEY)
             .addSourceLines("dev/iredsc/hadron/api/Hadron.java", HADRON)
+            .addSourceLines("dev/iredsc/hadron/api/actor/Actors.java", ACTORS)
             .addSourceLines("dev/iredsc/hadron/common/PluginHost.java", HOST);
     /** As Hadron's own modules compile. */
     private final CompilationTestHelper hadron = CompilationTestHelper.newInstance(HostOnly.class, getClass())
@@ -58,6 +68,10 @@ class HostOnlyTest {
                 "    new PluginHost(null);",
                 "    // BUG: Diagnostic contains: HostKey.claim is for Hadron's own host",
                 "    Supplier<HostKey> later = HostKey::claim;",
+                "    // BUG: Diagnostic contains: Actors.Port.enter is for Hadron's own host",
+                "    long handle = dev.iredsc.hadron.api.actor.Actors.Port.enter(null, this);",
+                "    // BUG: Diagnostic contains: Actors.push(actor)",
+                "    dev.iredsc.hadron.api.actor.Actors.Port.exit(null, handle);",
                 "  }",
                 "}")
                 .doTest();

@@ -23,7 +23,8 @@ import javax.inject.Inject;
 /**
  * Refuses, outside Hadron's own code, every call or method reference to something that takes Hadron's
  * {@code HostKey}, and to {@code HostKey}'s own methods: {@code Hadron.Lifecycle.install}, {@code
- * Economy.Lifecycle.install}, {@code Node.Lifecycle}, the loader port's {@code install} methods, and anything else
+ * Economy.Lifecycle.install}, {@code Node.Lifecycle}, the loader port's {@code install} methods, {@code
+ * Actors.Port.enter} and {@code exit} (pointing at {@code Actors.push}), and anything else
  * given a {@code HostKey} parameter later. Only Hadron's mod holds the key, so in a plugin each of these throws at
  * runtime; this says so at build time, with what to use instead. Hadron's own modules ({@code
  * -XepOpt:Hadron:AllowExemptions=true}) pass. Nothing suppresses it.
@@ -69,11 +70,15 @@ public final class HostOnly extends BugChecker
 
     private Description check(ExpressionTree tree, MethodSymbol method) {
         if (hadron || !hostOnly(method)) return Description.NO_MATCH;
-        return buildDescription(tree).setMessage(name(method) + " is for Hadron's own host: it takes the HostKey, "
-                + "which Hadron's mod claims before any plugin loads, so in a plugin it always throws. A plugin "
-                + "reads what the host installed instead: Hadron.getServer() or getServer(), Economy.get(), "
-                + "Node.declare, Packets, Visibility, DisplayNames, Worlds, Areas, PersistentData.of. A test gets a "
-                + "running server from @HadronTest.").build();
+        String name = name(method);
+        String instead = name.equals("Actors.Port.enter") || name.equals("Actors.Port.exit")
+                ? "Push an actor with try (Actors.Scope scope = Actors.push(actor)) { ... }, or Actors.acting(actor, "
+                        + "work): both close on their own, so the actor can't be left on the stack."
+                : "A plugin reads what the host installed instead: Hadron.getServer() or getServer(), Economy.get(), "
+                        + "Node.declare, Packets, Visibility, DisplayNames, Worlds, Areas, PersistentData.of. A test "
+                        + "gets a running server from @HadronTest.";
+        return buildDescription(tree).setMessage(name + " is for Hadron's own host: it takes the HostKey, which "
+                + "Hadron's mod claims before any plugin loads, so in a plugin it always throws. " + instead).build();
     }
 
     private static boolean hostOnly(MethodSymbol method) {
