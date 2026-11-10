@@ -559,3 +559,18 @@ guards = [
     { test = "HostileTests.aPluginCanNotReplaceOrClearWhatTheHostInstalled", tier = "in-game" },
 ]
 note = "Hand-made: keeps HOST_PACKAGES (the bench's comment names it) and only stops loadClass from using it, so the parent is asked for every class again."
+
+# ---- Found by the PR #27 acceptance kit's suite ----
+
+
+[[regression]]
+id = "unregistered-listener-kept"
+bug = "An unregistered listener stayed referenced until its plugin disabled, keeping everything it held in memory."
+note = "The patch undoes PluginHost.unregister, which the fix grew so a handler still running stays listed until it finishes; EventBus.finished stays, unused."
+fix = "5692658"
+paths = [
+    "common/src/main/java/dev/iredsc/hadron/common/PluginHost.java",
+]
+guards = [
+    { test = "ListenerReleaseTests.anUnregisteredListenerIsLetGo", tier = "in-game" },
+]

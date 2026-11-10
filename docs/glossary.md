@@ -12,6 +12,8 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **`Platform`**: the interface through which `common` asks what only the loader knows.
 - **Host key**: `HostKey`, which everything that replaces or clears what the host installed takes: the running server, the economy, plugins' nodes, the port's backends. There is one per JVM, claimed by Hadron's mod as it loads, before any plugin, so no plugin can hold it; a plugin's build refuses any call that takes it (`HostOnly`). ([design](design.md#what-makes-make-me-a-plugin-for-x-work))
 - **Bridge**: a mod that makes one other mod speak Hadron's events, by attributing its actions and routing its effects that skip vanilla. ([bridges](bridges.md))
+- **Claim**: a bridge's `Bridge.claim` on the mod ids it translates, made in its mod's constructor. Each mod id has one claim at most, and a bridge fires events only through its claim. ([bridges](bridges.md#claiming-a-mod))
+- **`bridge-depend:`**: a plugin that needs a mod's bridge installed, for that bridge's API. Stays write-once.
 - **Bridge API**: a loader-neutral interface or event a bridge publishes for extras, such as a network's contents. Official plugins use it with `bridge-depend:` and stay write-once.
 - **Promotion**: adding a core event for what two official bridges' events, or their proposed leaves, share, made the superclass of each so no plugin depending on those events breaks. The exception is a data kind moving from `EntityDataChangeEvent` to a new leaf, which plugins listening for that kind must follow. ([bridges](bridges.md#promotion-when-bridges-events-become-core))
 - **`mod-depend:`**: a plugin that compiles against a mod directly. It must declare `loader:`, and Hadron refuses it on any other loader.
@@ -45,6 +47,7 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **Attribution gap**: an action Hadron sees but can't tie to a person (`Unknown`, or no owner). Fails closed: protection treats it as an outsider. ([bridges](bridges.md#two-kinds-of-gap))
 - **Interception gap**: an effect that skips every chokepoint, so no event fires and nothing can deny it. Only a bridge closes it.
 - **Fail closed**: an uncertain actor is denied where outsiders are denied, so a missing bridge shows up as a machine that won't work, never as silent griefing.
+- **Acceptance kit**: `t.acceptance(box)`, the bridge acceptance test as an in-game helper: a protection plugin and a logger that know no mod, and a record of the box. A refused step must change nothing, which proves interception; `refuse(kind)` lets a trusted machine run while one kind is refused. ([bridges](bridges.md#the-acceptance-kit))
 - **Coverage report**: Hadron's list, at startup and on `/hadron coverage`, of installed mods without a bridge and what that leaves uncovered. Not the same as `coverageCheck`.
 - **Trace**: `/hadron trace`, which prints events live as they fire, with actor, operation and outcome.
 

@@ -192,6 +192,19 @@ class PluginDescriptionTest {
         assertEquals("plugin.yml 'api-depend' must be a list, such as api-depend: [modid]", refusal(yaml));
     }
 
+    @Covers(value = PluginDescription.class, method = "getBridgeDepend")
+    @Test
+    void bridgeDependNeedsNoLoader() {
+        Map<String, Object> yaml = minimal();
+        assertEquals(List.of(), PluginDescription.parse(yaml).getBridgeDepend());
+        yaml.put("bridge-depend", List.of("mekanism", "ae2"));
+        PluginDescription d = PluginDescription.parse(yaml);
+        assertEquals(List.of("mekanism", "ae2"), d.getBridgeDepend());
+        assertEquals(null, d.getLoader());
+        yaml.put("bridge-depend", Map.of("mekanism", 1));
+        assertEquals("plugin.yml 'bridge-depend' must be a list, such as bridge-depend: [modid]", refusal(yaml));
+    }
+
     @Covers(value = PluginDescription.class, method = "getCommands")
     @Test
     void commandsAreLowercasedWithUsageAndAliases() {

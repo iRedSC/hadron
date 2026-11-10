@@ -118,11 +118,11 @@ Hadron ships lightweight plugins server owners expect: essentials-style commands
 1. ~~Plugin host~~: done. Loads, enables, disables and hot-reloads jars, each with its own class loader, and undoes everything a plugin registered (listeners, commands, tasks, services, permission nodes). Ported from FTAM's Foundation.
 2. ~~Loader-neutral split~~: done. `api` and `common` on vanilla Minecraft, `neoforge` as the port, Hadron's own event bus, `loader:` for plugins that use mods directly, reserved node roots.
 3. ~~Hadron's API, first slice~~: done. Config and storage, placeholders, the LuckPerms provider.
-4. The actor stack and the events in [events.md](events.md) at their chokepoints, with a benchmark for the chokepoint cost (done: `:bench:chokepointBench`, [bridges.md](bridges.md#the-chokepoint-cost)) and watched areas (done: `Areas.watch`); then the coverage report ([bridges.md](bridges.md)). `EntityRemoveEvent` and `EntityCaptureEvent`, the most needed in a survey of 21 mods ([#19](https://github.com/iRedSC/hadron/pull/19)), have shipped; core fires them for `/kill` and buckets, and bridges for the rest.
+4. The actor stack and the events in [events.md](events.md) at their chokepoints, with a benchmark for the chokepoint cost (done: `:bench:chokepointBench`, [bridges.md](bridges.md#the-chokepoint-cost)) and watched areas (done: `Areas.watch`); bridges claiming their mods and firing through the claim (done: `Bridge.claim`, `bridge-depend:`). The coverage report ([bridges.md](bridges.md)) waits for the first pilot bridge, since it reports missing bridges and there are none to report yet. `EntityRemoveEvent` and `EntityCaptureEvent`, the most needed in a survey of 21 mods ([#19](https://github.com/iRedSC/hadron/pull/19)), have shipped; core fires them for `/kill` and buckets, and bridges for the rest.
 5. Gradle plugin and project template, with the build checks.
 6. The skill, written against what exists, then tested by asking fresh agents for real plugins and fixing whatever they trip on.
 7. ~~Headless test runner~~: done ([testing.md](testing.md)). `hadronTest` for `examples/hello` and `selftest`; moves into the Gradle plugin with step 5.
-8. Bundled plugins; pilot bridges (Mekanism, AE2, Superb Warfare); the client companion.
+8. Pilot bridges, Mekanism first, with the acceptance kit to judge them, then the coverage report; bundled plugins; the client companion.
 9. Helpers for NPCs, bulk block edits and packets.
 10. A second Minecraft version: its rename table, the load-time link check, and the first port guide.
 
