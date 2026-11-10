@@ -10,6 +10,7 @@
     "BoatLeashMixin",
     "BucketableMixin",
     "DeathMessageMixin",
+    "EndCrystalMixin",
     "EntityLeashMixin",
     "EntityMixin",
     "EntityRemovedLeashMixin",
@@ -22,6 +23,7 @@
     "LeashFenceKnotEntityMixin",
     "LeashableMixin",
     "LivingEntityMixin",
+    "MinecartTNTMixin",
     "MobMixin",
     "PlayerInteractMixin",
     "ProjectileMixin",
@@ -30,7 +32,8 @@
     "ServerPlayerGameModeMixin",
     "ServerPlayerMixin",
     "TamableAnimalMixin",
-    "TraderLlamaLeashMixin"
+    "TraderLlamaLeashMixin",
+    "VehicleEntityMixin"
   ],
   "injectors": {
     "defaultRequire": 1
