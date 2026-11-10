@@ -1,0 +1,13 @@
+diff --git a/api/src/main/java/dev/iredsc/hadron/api/event/EventStack.java b/api/src/main/java/dev/iredsc/hadron/api/event/EventStack.java
+index a81256e..850decc 100644
+--- a/api/src/main/java/dev/iredsc/hadron/api/event/EventStack.java
++++ b/api/src/main/java/dev/iredsc/hadron/api/event/EventStack.java
+@@ -61,7 +61,7 @@ public sealed interface EventStack permits EventStack.Copy, EventStack.Live {
+ 
+         @Override
+         public ItemStack get() {
+-            return stack.copy();
++            return stack;
+         }
+ 
+         @Override
