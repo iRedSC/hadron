@@ -15,10 +15,14 @@ path, the diff command (`git diff <base-sha>...<head-sha>`, where `<base-sha>` i
 
 > READ ONLY: never edit, commit or push; probe with copies under /tmp. Read AGENTS.md and docs/coding-standards.md
 > first. Review this change as it stands. List each finding with a priority by docs/coding-standards.md
-> ("Priority"), the file and line, and what goes wrong. You may run builds and tests. End with one line:
+> ("Priority"), the file and line, what goes wrong, and its layer: `core` when the fix needs a fact an event
+> should have carried (where something really ends up, who is behind it, what it touches) or a missing event,
+> otherwise `plugin`. You may run builds and tests. End with one line:
 > `Found: <n>, top P<k>`, where P<k> is your most serious finding (`Found: 0, top P4` if none).
 
-If it finds anything more serious than `stop_at`, fix it, push, and run another pass on the new head; a finding you
+If it finds anything more serious than `stop_at`, fix it, push, and run another pass on the new head. Fix a `core`
+finding in core or the bridge, in its own PR merged first, never by teaching the plugin Minecraft; if `core` findings
+keep coming, stop and tell the owner the events need a design change rather than running more passes; a finding you
 disagree with, answer in the PR with evidence, and tell the next pass it's answered. When a pass on the head finds
 nothing more serious than `stop_at`, put exactly one line in the PR description, replacing any earlier one:
 

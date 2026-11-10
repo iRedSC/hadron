@@ -12,6 +12,7 @@ Read [docs/design.md](docs/design.md) first. It holds the decisions and why. Wor
 Hadron's real users are agents writing plugins for people who don't code. When adding API:
 
 - Name it what an agent would guess, which usually means Bukkit's name when the meaning matches.
+- Take Bukkit's names, not its gaps: an event states every fact a plugin acting on it needs (what it touches, where, as it really happens, and who is behind it). A plugin that must know Minecraft or a mod to read an event is a core or bridge bug; fix it there, in its own PR, before the plugin PR merges ([design](docs/design.md), "Core states facts").
 - Prefer a build-time check over documentation. A mistake the build refuses can't ship.
 - Write every error message so the reader knows the fix without opening the source.
 - When what fires an event changes, update its `@FiredBy` and run `./gradlew bridgeHooks`, which rewrites [docs/bridge-hooks.md](docs/bridge-hooks.md).
