@@ -56,7 +56,7 @@ final class AcceptanceDiff {
 
     /** Each change in {@code parts}, with the events heard for it. Empty when nothing in them changed. */
     static List<String> changes(Snapshot before, Snapshot after, Set<Part> parts, List<Seen> seen,
-            List<Seen> elsewhere, Set<UUID> touched, Set<UUID> joinedOutside) {
+            List<Seen> elsewhere, Set<UUID> touched, Map<UUID, Thing> joinedOutside) {
         List<Change> found = new ArrayList<>();
         if (parts.contains(Part.BLOCKS)) blocks(before, after, found);
         if (parts.contains(Part.INVENTORIES)) inventories(before, after, found);
@@ -121,12 +121,15 @@ final class AcceptanceDiff {
         }
     }
 
-    private static void entities(Snapshot before, Snapshot after, Set<UUID> touched, Set<UUID> joinedOutside,
+    private static void entities(Snapshot before, Snapshot after, Set<UUID> touched, Map<UUID, Thing> joinedOutside,
             List<Change> out) {
         Set<UUID> ids = new LinkedHashSet<>(before.entities().keySet());
         ids.addAll(after.entities().keySet());
         for (UUID id : ids) {
-            Thing was = before.entities().get(id), is = after.entities().get(id);
+            Thing is = after.entities().get(id);
+            // One that joined the world outside after the mark is compared with itself as it joined: coming in is
+            // motion, but what happened to it on the way isn't.
+            Thing was = before.entities().containsKey(id) ? before.entities().get(id) : joinedOutside.get(id);
             // What was in the area at either end, or that an event there named on its way through.
             if (!(was != null && was.inBox() || is != null && is.inBox() || touched.contains(id))) continue;
             // An item lying in the area is also what a pickup, a merge or a despawn is about.
@@ -136,8 +139,6 @@ final class AcceptanceDiff {
                             || m.getTarget().getUUID().equals(id))
                     || s.event() instanceof ItemDespawnEvent d && d.getItemEntity().getUUID().equals(id);
             if (was == null && is != null) {
-                // Joined the world outside and came in: motion, as any entity walking in is.
-                if (joinedOutside.contains(id)) continue;
                 out.add(new Change("a " + is.type() + describe(is) + " appeared at " + at(is.pos()), concerns));
                 continue;
             }

@@ -1067,4 +1067,62 @@ public final class AcceptanceKitTests {
         t.assertFalse(Hadron.getPluginManager().callEvent(new ItemMergeEvent(t.level(), a, b, Actor.Unknown.INSTANCE)),
                 "a merge lying wholly outside the area isn't the area's");
     }
+
+    @HadronTest
+    void aCartBornOutsideAndChangedOnItsWayInIsCaught(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Acceptance area = t.acceptance(around(t));
+        BlockPos start = t.pos(0, 0, 4), in = t.pos(2, 0, 0);
+        MinecartChest cart = new MinecartChest(t.level(), start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+        cart.setItem(0, new ItemStack(Items.DIAMOND, 3));
+        try (Actors.Scope s = Actors.push(new Actor.Server("a cart placed outside"))) {
+            t.level().addFreshEntity(cart);
+        }
+        cart.teleportTo(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        t.assertTrue(Hadron.getPluginManager().callEvent(new ItemChangeEvent(t.level(),
+                new InventoryHolder.Entity(cart), new ItemStack(Items.DIAMOND, 3), ItemStack.EMPTY,
+                new Actor.Player(bob.player()))), "bob's change to the cart was refused");
+        cart.setItem(0, ItemStack.EMPTY);
+        String why = failure(t, () -> area.assertUnchanged("a cart emptied as it came in", Part.ENTITIES));
+        t.assertTrue(why.contains("chest_minecart") && why.contains("diamond"), why);
+    }
+
+    @HadronTest
+    void aCartDrainedThroughAResourceOnItsWayThroughIsCaught(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos start = t.pos(0, 0, 4), in = t.pos(2, 0, 0);
+        MinecartChest cart = new MinecartChest(t.level(), start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+        cart.setItem(0, new ItemStack(Items.DIAMOND, 3));
+        t.level().addFreshEntity(cart);
+        t.tick();
+        Acceptance area = t.acceptance(around(t));
+        cart.teleportTo(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        t.assertTrue(Hadron.getPluginManager().callEvent(new ResourceConsumeEvent(new Actor.Player(bob.player()),
+                Resource.ENERGY, new ResourceHolder.Entity(cart), 100, 40)), "bob's drain was refused");
+        cart.setItem(0, ItemStack.EMPTY);
+        cart.teleportTo(start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+        String why = failure(t, () -> area.assertUnchanged("a cart drained on its way through", Part.ENTITIES));
+        t.assertTrue(why.contains("chest_minecart") && why.contains("diamond"), why);
+    }
+
+    @HadronTest
+    void aMobComingFromAnotherWorldIsMotion(TestContext t) {
+        ServerLevel nether = t.server().getLevel(Level.NETHER);
+        t.assertTrue(nether != null, "the test server has a Nether");
+        nether.setChunkForced(0, 0, true);
+        try {
+            nether.getChunk(0, 0);
+            Pig pig = EntityType.PIG.create(nether);
+            pig.moveTo(0.5, 100, 0.5);
+            t.assertTrue(nether.addFreshEntity(pig), "the pig is in the Nether");
+            t.awaitAsync("the Nether to list the pig", () -> nether.getEntity(pig.getUUID()) != null, 400);
+            Acceptance area = t.acceptance(around(t));
+            BlockPos in = t.pos(2, 0, 0);
+            pig.changeDimension(new DimensionTransition(t.level(), new Vec3(in.getX() + 0.5, in.getY(),
+                    in.getZ() + 0.5), Vec3.ZERO, 0, 0, DimensionTransition.DO_NOTHING));
+            area.assertUnchanged("a pig coming through a portal into the area", Part.ENTITIES);
+        } finally {
+            nether.setChunkForced(0, 0, false);
+        }
+    }
 }

@@ -132,12 +132,13 @@ final class TestAcceptance implements Acceptance, Listener {
      * Entities that joined the world outside the box this step: one of them in the box at the end walked, rolled or
      * flowed in, which is motion, not something appearing there.
      */
-    private final Set<UUID> joinedOutside = new HashSet<>();
+    private final Map<UUID, AcceptanceDiff.Thing> joinedOutside = new LinkedHashMap<>();
     private final java.util.function.Consumer<EntityJoinLevelEvent> joins = this::joined;
 
     private void joined(EntityJoinLevelEvent event) {
-        if (event.getLevel() == level && !box.isInside(event.getEntity().blockPosition())) {
-            joinedOutside.add(event.getEntity().getUUID());
+        if (event.getLevel() == level && !box.isInside(event.getEntity().blockPosition())
+                && !(event.getEntity() instanceof ServerPlayer)) {
+            joinedOutside.put(event.getEntity().getUUID(), thing(event.getEntity()));
         }
     }
 
@@ -510,6 +511,8 @@ final class TestAcceptance implements Acceptance, Listener {
             }
             case InventoryChangeEvent c -> c.getHolders().stream().flatMap(h -> holderEntity(h).stream()).toList();
             case InventoryEvent i -> holderEntity(i.getHolder()).map(List::of).orElse(List.of());
+            case ResourceEvent r -> r.getHolders().stream().<Entity>flatMap(h -> h instanceof ResourceHolder.Entity e
+                    ? java.util.stream.Stream.of(e.entity()) : java.util.stream.Stream.empty()).toList();
             default -> List.of();
         };
     }
@@ -635,6 +638,20 @@ final class TestAcceptance implements Acceptance, Listener {
 
     // ---- Recording the box ----------------------------------------------------------------------------------------
 
+    /** An entity as it stands now: what the snapshot compares. */
+    private AcceptanceDiff.Thing thing(Entity e) {
+        ItemStack stack = e instanceof ItemEntity item ? item.getItem().copy() : ItemStack.EMPTY;
+        Map<String, ItemStack> held = new LinkedHashMap<>();
+        if (e instanceof Container c) {
+            for (int i = 0; i < c.getContainerSize(); i++) held.put("slot " + i, c.getItem(i).copy());
+        }
+        float health = e instanceof LivingEntity living ? living.getHealth() : -1;
+        return new AcceptanceDiff.Thing(e.getUUID(), String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(e.getType())),
+                stack, health, held,
+                // By the block it stands in, as place() puts its events.
+                e.blockPosition(), e.level() == level && box.isInside(e.blockPosition()));
+    }
+
     /** From a mark on, every entity in the box then is followed, however many times the step is asserted. */
     private void follow(AcceptanceDiff.Snapshot at) {
         followed.clear();
@@ -662,7 +679,12 @@ final class TestAcceptance implements Acceptance, Listener {
         }
         Map<UUID, AcceptanceDiff.Thing> entities = new LinkedHashMap<>();
         Map<UUID, Entity> present = new LinkedHashMap<>();
+        // Every loaded world's, the test's first: a mob that comes from another world was already somewhere.
         for (Entity e : level.getAllEntities()) present.put(e.getUUID(), e);
+        for (ServerLevel other : level.getServer().getAllLevels()) {
+            if (other == level) continue;
+            for (Entity e : other.getAllEntities()) present.putIfAbsent(e.getUUID(), e);
+        }
         for (Map.Entry<UUID, Entity> f : new ArrayList<>(followed.entrySet())) {
             Entity e = f.getValue();
             if (!e.isRemoved()) {
@@ -696,17 +718,7 @@ final class TestAcceptance implements Acceptance, Listener {
             }
         }
         for (Entity e : present.values()) {
-            if (e instanceof ServerPlayer) continue;
-            ItemStack stack = e instanceof ItemEntity item ? item.getItem().copy() : ItemStack.EMPTY;
-            Map<String, ItemStack> held = new LinkedHashMap<>();
-            if (e instanceof Container c) {
-                for (int i = 0; i < c.getContainerSize(); i++) held.put("slot " + i, c.getItem(i).copy());
-            }
-            float health = e instanceof LivingEntity living ? living.getHealth() : -1;
-            entities.put(e.getUUID(), new AcceptanceDiff.Thing(e.getUUID(),
-                    String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(e.getType())), stack, health, held,
-                    // By the block it stands in, as place() puts its events.
-                    e.blockPosition(), e.level() == level && box.isInside(e.blockPosition())));
+            if (!(e instanceof ServerPlayer)) entities.put(e.getUUID(), thing(e));
         }
         Map<String, List<ItemStack>> players = new LinkedHashMap<>();
         Map<String, Float> health = new LinkedHashMap<>();
