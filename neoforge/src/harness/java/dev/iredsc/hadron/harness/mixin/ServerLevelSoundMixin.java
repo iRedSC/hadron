@@ -23,8 +23,10 @@ import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 
 /**
- * Every sound and numbered event a world sends, for {@code SideEffects}: read at the broadcast itself, so a sound
- * NeoForge's event cancelled or a hold dropped is never seen, and one a hold kept is seen once, when it plays.
+ * Every sound and numbered event a world sends, for {@code SideEffects}: read at the broadcast itself, once whoever
+ * it reaches (nobody near, or everyone but the player whose client plays it), so a sound NeoForge's event cancelled
+ * or a hold dropped is never seen, and one a hold kept is seen once, when it plays. The packets the broadcast then
+ * sends aren't recorded again ({@code PlayerConnectionSoundMixin}).
  */
 @Mixin(ServerLevel.class)
 abstract class ServerLevelSoundMixin {
@@ -38,7 +40,7 @@ abstract class ServerLevelSoundMixin {
             TestSideEffects.soundSent((ServerLevel) (Object) this, except, sound.getSound(), sound.getSource(),
                     new Vec3(x, y, z), null);
         }
-        original.call(players, except, x, y, z, range, dimension, packet);
+        TestSideEffects.broadcasting(() -> original.call(players, except, x, y, z, range, dimension, packet));
     }
 
     @WrapOperation(method = "playSeededSound(Lnet/minecraft/world/entity/player/Player;Lnet/minecraft/world/entity/Entity;Lnet/minecraft/core/Holder;Lnet/minecraft/sounds/SoundSource;FFJ)V",
@@ -50,7 +52,7 @@ abstract class ServerLevelSoundMixin {
             TestSideEffects.soundSent((ServerLevel) (Object) this, except, sound.getSound(), sound.getSource(),
                     new Vec3(x, y, z), entity);
         }
-        original.call(players, except, x, y, z, range, dimension, packet);
+        TestSideEffects.broadcasting(() -> original.call(players, except, x, y, z, range, dimension, packet));
     }
 
     @WrapOperation(method = "levelEvent", at = @At(value = "INVOKE", target = BROADCAST))
@@ -60,7 +62,7 @@ abstract class ServerLevelSoundMixin {
             TestSideEffects.levelEventSent((ServerLevel) (Object) this, except, event.getType(), event.getPos(),
                     event.getData(), false);
         }
-        original.call(players, except, x, y, z, range, dimension, packet);
+        TestSideEffects.broadcasting(() -> original.call(players, except, x, y, z, range, dimension, packet));
     }
 
     @WrapOperation(method = "globalLevelEvent", at = @At(value = "INVOKE",
@@ -70,6 +72,6 @@ abstract class ServerLevelSoundMixin {
             TestSideEffects.levelEventSent((ServerLevel) (Object) this, null, event.getType(), event.getPos(),
                     event.getData(), true);
         }
-        original.call(players, packet);
+        TestSideEffects.broadcasting(() -> original.call(players, packet));
     }
 }

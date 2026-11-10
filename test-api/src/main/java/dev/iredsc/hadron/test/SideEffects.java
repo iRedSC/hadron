@@ -37,9 +37,10 @@ import net.minecraft.world.phys.Vec3;
  * each change to experience points or levels or to food exhaustion; every game event in the test's world, or
  * caused by one of its players anywhere; and every sound the server sends, from the test's world or for one of its
  * players anywhere: a sound ({@link SoundPlayed}), one of vanilla's numbered events that plays one
- * ({@link LevelEventPlayed}), or a sound sent to one player alone. A sound is recorded once, when the server sends it,
- * whether or not anyone is near enough to hear it, and also when the player who caused it is left out of the
- * broadcast because their own client plays it. A cancelled NeoForge event (a stat award, a game event, a sound, an
+ * ({@link LevelEventPlayed}), or either sent straight to one player ({@code /playsound}, a raid's horn, a portal's
+ * whoosh). A world's sound is recorded once, when the server broadcasts it, whether or not anyone is near enough to
+ * hear it, and also when the player who caused it is left out because their own client plays it; one sent straight
+ * to a player is recorded once per player it is sent to. A cancelled NeoForge event (a stat award, a game event, a sound, an
  * experience change) never happened, so it isn't recorded.
  *
  * <p><b>What it leaves out</b>, because nothing an action does causes it: the statistics every player's tick counts

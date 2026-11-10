@@ -8,6 +8,8 @@ import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
+import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
 import net.minecraft.sounds.SoundSource;
@@ -79,6 +81,40 @@ public final class SideEffectsTests {
         SideEffects.SoundPlayed click = effects.seen(SideEffects.SoundPlayed.class).get(0);
         t.assertEquals(SoundEvents.LEVER_CLICK, click.sound().value(), "the first sound recorded");
         t.assertEquals(t.level(), click.level(), "the click's world");
+    }
+
+    @HadronTest
+    void aSoundSentStraightToAPlayerIsRecordedOnce(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        t.server().getCommands().performPrefixedCommand(t.server().createCommandSourceStack().withLevel(t.level()),
+                "execute at alice run playsound minecraft:block.lever.click master alice");
+        // A portal's whoosh, sent to the player who went through it alone.
+        alice.player().connection.send(new ClientboundLevelEventPacket(LevelEvent.SOUND_PORTAL_TRAVEL, t.pos(0, 0, 0),
+                0, false));
+        t.tick(); // the packets reach alice's client
+        assertNames(t, failure(effects, "sounds sent to alice alone"), "left 2:",
+                "sound minecraft:block.lever.click (master) at ", "level event 1032 SOUND_PORTAL_TRAVEL at ",
+                "sent to alice only", "from SideEffectsTests.aSoundSentStraightToAPlayerIsRecordedOnce(");
+        t.assertEquals(1L, alice.received(ClientboundSoundPacket.class).stream()
+                // /playsound sends a sound made from its name, so compare names
+                .filter(p -> p.getSound().value().getLocation().equals(SoundEvents.LEVER_CLICK.getLocation())).count(),
+                "lever clicks alice was sent");
+    }
+
+    @HadronTest
+    void aBroadcastTwoPlayersHearIsRecordedOnce(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        alice.clearReceived();
+        bob.clearReceived();
+        SideEffects effects = t.watchSideEffects();
+        t.level().playSound(null, t.pos(1, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1.0F, 1.0F);
+        t.tick();
+        t.assertEquals(1, alice.received(ClientboundSoundPacket.class).size(), "sound packets alice was sent");
+        t.assertEquals(1, bob.received(ClientboundSoundPacket.class).size(), "sound packets bob was sent");
+        t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "sounds recorded for one broadcast "
+                + "both heard; seen: " + effects.seen());
     }
 
     @HadronTest

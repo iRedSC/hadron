@@ -5,10 +5,10 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "NetworkRegistryAccessor",
+    "PlayerConnectionSoundMixin",
     "PlayerExhaustionMixin",
     "ServerLevelEntitiesAccessor",
     "ServerLevelSoundMixin",
-    "ServerPlayerNotifySoundMixin",
     "SimpleCriterionTriggerMixin"
   ],
   "injectors": {
