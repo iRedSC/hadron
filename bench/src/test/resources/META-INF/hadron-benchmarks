@@ -1,0 +1,2 @@
+This suite's tests are benchmarks: the test harness runs them without its failure recorder, so their timings are a
+real server's. Every test in bench/ gets this, because it is in the suite's jar, not on a test.
