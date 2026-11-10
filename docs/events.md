@@ -56,62 +56,83 @@ An identifiable mob is always an `EntityActor`, even when it spawned naturally. 
 Rule 3 says a parent carries enough to act on. **Touches are that payload in one shape, on every action:** `ActionEvent.getTouches()` lists what the action touches, where, as it really happens, so a protection plugin needs one listener and a lookup in its own data, and no knowledge of Minecraft or any mod ([design](design.md), "Core states facts"). The actor already says who; touches say what and where.
 
 ```java
-@EventHandler(priority = EventPriority.HIGH)
+@EventHandler(priority = EventPriority.HIGHEST)
 void on(ActionEvent e) {
-    if (!(e instanceof Cancellable c) || trusted(e.getActor())) return;
+    if (trusted(e.getActor())) return;
     for (Touch touch : e.getTouches()) {
-        if (regions.refuses(touch, e.getActor())) c.refuse(touch);
+        if (regions.refuses(touch, e.getActor())) e.refuse(touch);
     }
 }
 ```
 
-A `Touch` is a record: a `Kind`, a `Place`, the entity it is about if any, and where it comes from (`List<Place>`, empty when it comes from nowhere in particular). A `Place` is sealed: `Spot(level, box)` for one block or an area, `Level(level)` for a whole level (weather, time), and `Nowhere` for something with no place in a world (linked storage, an account, an inventory nothing identified). Nothing is left out for want of a place: it is `Nowhere`, and the plugin decides what that means (regions treats it as outside every region, so a protected chest can't be drained into it).
+A `Touch` is a record: a `Kind`, a `Place`, the entity it is about if any, and where it comes from (`List<Place>`, empty when it comes from no particular place). A `Place` is sealed:
+
+- `Spot(level, box)`: one block or an area.
+- `Level(level)`: a whole level (weather, time).
+- `Nowhere`: known to have no place in a world (linked storage such as an ender chest, an account).
+- `Unknown`: core or a bridge couldn't say where (an inventory nothing identified, a bridge's operation aimed it can't say where, fire from an origin nobody saw). Protection refuses it unless it trusts the actor, as it does `Actor.Unknown`.
+
+Nothing is left out for want of a place; it is `Nowhere` or `Unknown`, and the two are never confused, so a plugin can let the first through and refuse the second without reading the event.
 
 | Kind | Means | From |
 |---|---|---|
-| `BUILD` | a block, or an object that stands in for one (a frame and its item, a stand, a boat, a crystal), is placed, changes or goes | for the world on its own (water, fire, a piston, a hopper nobody owns), where the change comes from; `Nowhere` when that isn't known, as for fire from lava |
-| `USE` | a block or entity is interacted with without changing it: a door, a lever, a villager's trades; the same word as `BlockUseEvent` and `EntityUseEvent` | |
-| `CONTAINER` | an inventory's contents are seen or change; one per block it stands on, so a double chest is two | the other inventory, for items moving between two |
+| `BUILD` | the world changes: a block, or an object that stands in for one (a frame and its item, a stand, a boat, a crystal, an item on the ground), is placed, changes or goes; the level as a whole (weather, time); an area's ticking or loading (an accelerator, a chunk loader) | for the world on its own (water, fire, a piston, a hopper nobody owns), where the change comes from |
+| `USE` | a block or entity is interacted with, not harmed or changed: a door, a lever, trading, taming, breeding, leashing, shearing, riding, a beneficial effect, starting to mine | |
+| `CONTAINER` | stored contents are seen or change: an inventory, a tank, a mod's energy or mana; one per block the storage stands on, so a double chest is two | the other storage, for contents moving between two |
 | `ENTER` | an entity arrives in a block: walking, riding, landing, being set down; one per entity carried, players included | the block it left |
-| `ATTACK` | a creature (a mob or a player) is harmed, by a hit, a harmful effect or being set alight; objects are `BUILD` | every place the attack comes from: the attacker, the projectile, the machine |
+| `ATTACK` | a creature (a mob or a player) is harmed or forced: a hit, a harmful effect, being set alight, a push, being charmed or controlled; objects are `BUILD` | every place the attack comes from: the attacker, the projectile, the machine |
+| `SPAWN` | a creature appears: a spawner, an egg, a summon, a natural spawn; objects appearing are `BUILD` | |
 
-Kinds are what a plugin's general rule needs. A plugin that treats placing differently from breaking listens to those leaves as well; touches don't replace the catalog.
+Each family gives every leaf, and a bridge firing the family's parent, at least one touch:
 
-**Read from the payload, never stored.** `getTouches()` works out the touches from the event's own getters each time it is called, so it can't disagree with them, and a listener that redirects a teleport or trims an explosion changes the touches with it. Protection listens at `HIGH`, after the listeners that redirect (`LOWEST` to `NORMAL`); `HIGHEST` is for a plugin that must have the last word, and `MONITOR` changes nothing. Each family (blocks, entities, items, inventories, resources, world) defines them once, so a bridge firing a parent gets them for free, which is what rule 3 asked of it.
+| Family | Touches |
+|---|---|
+| `BlockEvent` | `BUILD` per block changed (`getBlocks()`), from the source for the world on its own; `BlockUseEvent` and `BlockDamageEvent` `USE` |
+| `EntityEvent` | by what the leaf does, per the kinds above: moves, teleports, mounts and dismounts `ENTER` for everyone carried; damage, harmful effects, combustion, knockback, velocity from someone else, control and targeting `ATTACK`; spawns `SPAWN` or `BUILD`; removal, hanging breaks, vehicle hits, frame and stand changes `BUILD`; use, taming, breeding, leashing, shearing, beneficial effects `USE`; the parent alone `USE` on the entity |
+| `ItemEvent` | `CONTAINER` at the storage an item is in, `BUILD` at an item on the ground, `USE` at whoever uses it |
+| `InventoryEvent` | `CONTAINER` per spot each inventory involved stands on |
+| `ResourceEvent` | `CONTAINER` at each end, `Nowhere` for an account |
+| `WorldEvent` | an explosion `BUILD` per block and `ATTACK` per creature, its prime `BUILD` over its reach; weather and time `BUILD` at `Level`; accelerators, chunk loaders, portals and lightning `BUILD` where they act |
 
-**Refusing one touch.** `Cancellable.refuse(touch)` cancels the event, except where its targets are independent: an explosion drops just that block or entity, an area spell spares just that entity, as "Per-target events" above already does by hand. A rider isn't an independent target: a vehicle can't leave one behind, so refusing a rider's `ENTER` stops the vehicle with everyone on it.
+A self-test fires every event class core fires and fails on any action with no touches, naming it. Kinds serve a plugin's general rule; a plugin that treats placing differently from breaking listens to those leaves as well.
 
-**An opening event touches what the operation is aimed at**: a gadget's paste is the box it will build in, a waystone the place it sends you. Each per-target event after it carries its own. A bridge that can't say where its operation is aimed gives `Nowhere`, which protection refuses unless it trusts the actor.
+**Read from the payload, never stored.** `getTouches()` works out the touches from the event's own getters each time it is called, so it can't disagree with them, and a listener that redirects a teleport or trims an explosion changes the touches with it. Redirects end at `HIGH`: a payload setter called from a `HIGHEST` or `MONITOR` listener throws, saying to listen at `HIGH` or earlier. Protection listens at `HIGHEST`, so what it reads is what happens. A redirect is exact: `EntityTeleportEvent.setTo` places the entity at the position given, with no settling, and its Javadoc changes to say so.
 
-**True, not requested.** Where an action ends somewhere other than where it set out to, core works out the real place first and then does exactly that: a chorus fruit or random teleport picks its spot and settles it on the ground, fires its event with that landing as `getTo()` and its `ENTER`, and moves there with no second roll; a dismount picks where it sets the rider down before asking. This is the committed attempt's own choice, not a simulation (rule 8). Cancelled, nothing moves.
+**Refusing a touch.** `ActionEvent.refuse(touch)` stops what the touch describes and returns whether it could: it cancels a cancellable event, except where its targets are independent (an explosion drops just that block or entity, an area spell spares just that entity, as "Per-target events" above already does by hand), and returns false for one that can't be stopped, such as a forced dismount. A touch that isn't among the event's current touches throws, naming both. A rider isn't an independent target: a vehicle can't leave one behind, so refusing a rider's `ENTER` stops the vehicle with everyone on it.
 
-**A menu's inventories** are every container behind a slot of the menu other than the player's own, the ones a click can move items between, read from the menu itself. A mod's menu that moves items into storage with no slot (a storage network's terminal) is its bridge's to state, as `Nowhere` or a linked holder.
+**An opening event touches what the operation is aimed at**: a gadget's paste is the box it will build in, a waystone the place it sends you. Each per-target event after it carries its own. A bridge that can't say where its operation is aimed gives `Unknown`.
 
-**Attribution reaches every tick.** A harmful effect and fire keep who caused them, as projectiles already do, saved with the entity and cleared when they end. Refreshing or replacing one credits whoever did it last.
+**True, not requested.** Where an action ends somewhere other than where it set out to, core works out the real place first and then does exactly that: a chorus fruit or random teleport picks its spot and settles it on the ground, fires its event with that landing as `getTo()` and its `ENTER`, and moves there with no second roll; a dismount picks where it sets the rider down before asking. This is the committed attempt's own choice, not a simulation (rule 8). Cancelled, nothing moves. A forced dismount (the vehicle gone, the rider teleported) still lists its `ENTER` but can't be refused; protection decides at what forced it: the hit that broke the vehicle, the teleport.
 
-**Who checks the touches.** The acceptance kit keeps comparing the box itself: a refused step must leave it unchanged. That never reads touches, so a wrong or missing touch shows up as a change protection should have stopped and didn't, whether core or a bridge got it wrong.
+**Riders move with their vehicle's event.** A vehicle's move fires whenever anyone it carries changes block, even when the vehicle itself stays in its block (a rider's seat crossing a boundary as a boat turns), with an `ENTER` for each who did, from the block they left.
+
+**A menu's inventories** are every container behind a slot of the menu other than the player's own, the ones a click can move items between, read from the menu itself. A mod's menu that moves items into storage with no slot (a storage network's terminal) is its bridge's to state, as a linked holder (`Nowhere`) or `Unknown`.
+
+**Attribution reaches every tick.** Each effect instance, the hidden weaker ones Minecraft resumes included, and an entity's fire keep the actor that caused them, saved with the entity and cleared when they end. The credit changes only when the instance changes: an application that leaves it as it was credits nobody new. Their damage acts for that actor while its entity is still in the world, and otherwise for `Actor.Remembered`, a new actor for a cause that has gone (an offline player, a spent cloud) whose `actingFor()` still answers; its `ATTACK` comes from `Unknown` then.
+
+**Who checks the touches.** The acceptance kit compares the box itself: a refused step must leave it unchanged, which never reads touches, so a wrong or missing touch shows up as a change protection should have stopped. Today it compares blocks, inventories, entities' presence and items, and creatures' health. Step 3 below adds who stands in the box, active effects and burning, so `ENTER` and `ATTACK` are checked the same way; until then they are checked only by their own tests.
 
 ### Closing the known gaps
 
-`MissingFactTests` holds each fact the regions plugin had to guess, as a `@KnownGap`. Each closes as follows; the design is done when all are green, the acceptance kit decides what to refuse by `getTouches()` instead of its own rules, and the regions plugin's protection is the listener above.
+`MissingFactTests` holds each fact the regions plugin had to guess, as a `@KnownGap`. Each closes as follows, and its assertion moves to `getTouches()` as it does; the design is done when all are green, the acceptance kit decides what to refuse by `getTouches()` instead of its own rules, and the regions plugin's protection is the listener above.
 
-| Gap | Closed by |
-|---|---|
-| A teleport states where it settles | the landing worked out before firing; `ENTER` there |
-| A rider is named when their vehicle carries them | an `ENTER` per indirect passenger on a vehicle's move and teleport |
-| A dismount states where the rider is set down | `EntityDismountEvent` gains the destination, worked out first; `ENTER` there |
-| A shift-click names the inventory items move into | a click's touches are every inventory its menu moves items between |
-| Opening a double chest names both halves | a `CONTAINER` per block an inventory stands on |
-| Poison and burning act for whoever caused them | the causal actor kept on the effect and on the fire |
-| Starting to mine fires an event | `BlockDamageEvent` takes Bukkit's meaning, a player starting to mine (`USE`; refusing it stops the dig), and today's lasting-damage event, which only bridges fire, becomes `BlockCrackEvent` |
+| Gap | Closed by | Asserted as |
+|---|---|---|
+| A teleport states where it settles | the landing worked out before firing | an `ENTER` for alice at the block she landed on |
+| A rider is named when their vehicle carries them | an `ENTER` for every passenger, direct or nested, on a vehicle's move and teleport | an `ENTER` for bob at his new block |
+| A dismount states where the rider is set down | `EntityDismountEvent` gains the destination, worked out first | an `ENTER` for alice where she was set down |
+| A shift-click names the inventory items move into | a click's touches are every inventory its menu moves items between | a `CONTAINER` at the chest |
+| Opening a double chest names both halves | a `CONTAINER` per block an inventory stands on | a `CONTAINER` at each half |
+| Poison and burning act for whoever caused them | the causal actor kept on each effect instance and on the fire | unchanged: the damage acts for bob |
+| Starting to mine fires an event | `BlockDamageEvent` takes Bukkit's meaning, a player starting to mine (`USE`; refusing it stops the dig), and today's lasting-damage event, which only bridges fire, becomes `BlockCrackEvent` | a `USE` at the block, cancellable |
 
 ### Order of work
 
 Each step lands on its own, with the gaps it closes going green. Until a gap closes, its touch is missing exactly where `MissingFactTests` says, as it is today; nothing a plugin sees gets worse.
 
-1. `Touch`, `Place` and `refuse` on `ActionEvent` and `Cancellable`, worked out for every family from the payload it has today.
-2. The facts: landing, riders, dismount destination, menu inventories, chest halves, attribution on effects and fire, and `BlockDamageEvent`. Each closes its gap.
-3. The acceptance kit decides what to refuse by `getTouches()`, and its own placement rules go.
+1. `Touch`, `Place`, `ActionEvent.refuse` and the family table, worked out from the payload each family has today; setters that throw after `HIGH`; the self-test that every action has a touch.
+2. The facts: landing, riders and passenger crossings, dismount destination, menu inventories, chest halves, attribution on effects and fire with `Actor.Remembered`, and `BlockDamageEvent`. Each closes its gap.
+3. The acceptance kit decides what to refuse by `getTouches()`, and its own placement rules go; it also compares who stands in the box, effects and burning, and `docs/bridges.md` says so.
 4. The regions plugin's protection becomes the one listener; what it keeps is policy (which flag a kind reads, what `Nowhere` and a crossing mean).
 
 ## Catalog
