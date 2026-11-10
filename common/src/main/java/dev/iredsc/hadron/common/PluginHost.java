@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
@@ -212,13 +213,15 @@ public final class PluginHost implements PluginManager {
     private final File loadedDir;
     private final File disabledFile;
     private final ClassLoader parent;
+    /** Lets this host declare and release plugins' nodes and install the economy; no plugin holds it. */
+    private final HostKey key;
     private final MinecraftServer minecraft;
     private final ServerImpl server;
     private final TaskScheduler scheduler;
     private final Services services;
     private final dev.iredsc.hadron.common.economy.EconomyCore economy;
     private final Platform platform;
-    private final EventBus events = new EventBus();
+    private final EventBus events;
     private final Trace trace;
     private final Commands commands;
     private final Map<String, Entry> entries = new TreeMap<String, Entry>(String.CASE_INSENSITIVE_ORDER);
@@ -241,7 +244,10 @@ public final class PluginHost implements PluginManager {
     /** Loaded at pre-initialization, enabled at server start, in this order. */
     private List<Entry> startupOrder = Collections.emptyList();
 
-    public PluginHost(MinecraftServer minecraft, File serverDir, Platform platform) {
+    public PluginHost(HostKey key, MinecraftServer minecraft, File serverDir, Platform platform) {
+        HostKey.require(key, "new PluginHost", "reach the running server through Hadron.getServer()");
+        this.key = key;
+        this.events = new EventBus(key);
         this.platform = platform;
         File configFolder = platform.configFolder();
         this.minecraft = minecraft;
@@ -253,7 +259,8 @@ public final class PluginHost implements PluginManager {
         this.scheduler = new TaskScheduler(this);
         this.services = new Services(this);
         this.commands = new Commands(minecraft);
-        this.economy = new dev.iredsc.hadron.common.economy.EconomyCore(this, minecraft, new File(serverDir, "hadron"));
+        this.economy = new dev.iredsc.hadron.common.economy.EconomyCore(key, this, minecraft,
+                new File(serverDir, "hadron"));
         this.trace = new Trace(events, minecraft);
         readOff();
     }
@@ -809,7 +816,7 @@ public final class PluginHost implements PluginManager {
         final ClassLoader owner = loader;
         // Pushed before any of the plugin's classes initialize (a static node in a constructor counts), and first,
         // so it runs last: nodes outlive the code that might still check them.
-        loaded.undo.push(() -> Node.Lifecycle.release(owner));
+        loaded.undo.push(() -> Node.Lifecycle.release(key, owner));
         loaded.undo.push(() -> {
             JavaPlugin plugin = loader.plugin();
             if (plugin != null) {
@@ -841,11 +848,11 @@ public final class PluginHost implements PluginManager {
             final JavaPlugin plugin = (JavaPlugin) construct(main);
             step = "declaring its permissions and commands";
             for (PluginDescription.PermissionSpec p : d.getPermissions()) {
-                Node.Lifecycle.declare(p.node, p.fallback, p.description, loader);
+                Node.Lifecycle.declare(key, p.node, p.fallback, p.description, loader);
             }
             for (PluginDescription.CommandSpec c : d.getCommands().values()) {
                 loader.commands().put(c.name, new PluginCommand(plugin, c));
-                if (c.permission != null) Node.Lifecycle.declareImplicit(c.permission, "Use /" + c.name, loader);
+                if (c.permission != null) Node.Lifecycle.declareImplicit(key, c.permission, "Use /" + c.name, loader);
             }
             step = "onLoad";
             loading = loader;

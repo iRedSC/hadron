@@ -643,6 +643,33 @@ guards = [
 ]
 note = "Compares the event's amount with the report instead of the raw incoming amount; every hit still fires the event."
 
+[[regression]]
+id = "plugin-replaces-host-state"
+bug = "Any plugin could replace or clear the running server, the economy, another plugin's nodes or a port backend through public host-only setters."
+fix = "ff1c595"
+paths = [
+    "api/src/main/java/dev/iredsc/hadron/api/HostKey.java",
+]
+guards = [
+    { test = "HostKeyTest.replacingOrClearingTheServerWithoutTheKeyIsRefusedAndChangesNothing", tier = "fast" },
+    { test = "HostKeyTest.aKeyMadeByReflectionIsNotTheHostsKey", tier = "fast" },
+    { test = "HostKeyTest.installingAPortBackendWithoutTheKeyIsRefusedSayingWhatToUse", tier = "fast" },
+    { test = "HostileTests.aPluginCanNotReplaceOrClearWhatTheHostInstalled", tier = "in-game" },
+]
+note = "Hand-made: keeps HostKey and every key parameter (the guards call them) and only empties HostKey.require, so a missing, null or forged key passes."
+
+[[regression]]
+id = "plugin-links-host-internals"
+bug = "A plugin's class loader resolved Hadron's common and port classes from the mod's loader, so a plugin could call their public statics (PluginHost.onPluginDisable, Hooks.host(), mixin hooks)."
+fix = "755f97a"
+paths = [
+    "common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java",
+]
+guards = [
+    { test = "PluginBoundaryTest.aPluginCanNotLinkHadronsInsidesAndIsToldToUseTheApi", tier = "fast" },
+    { test = "HostileTests.aPluginCanNotReplaceOrClearWhatTheHostInstalled", tier = "in-game" },
+]
+note = "Hand-made: keeps HOST_PACKAGES (the bench's comment names it) and only stops loadClass from using it, so the parent is asked for every class again."
 
 # ---- Found by the PR #27 acceptance kit's suite ----
 
@@ -658,6 +685,18 @@ paths = [
 guards = [
     { test = "ListenerReleaseTests.anUnregisteredListenerIsLetGo", tier = "in-game" },
 ]
+
+[[regression]]
+id = "plugin-build-loosens-checks"
+bug = "A plugin's build could set hadronChecks.exemptions, or drop main or test from staticState or determinism, switching off the checks meant to catch its mistakes, HostOnly included."
+fix = "105bc58"
+paths = [
+    "gradle/hadron-checks.gradle.kts",
+]
+guards = [
+    { test = "ChecksScriptTest.aPluginBuildThatLoosensTheChecksFailsSayingWhatToDoInstead", tier = "fast" },
+]
+note = "Hand-made: keeps hadronModule and loosened (what the fix computes) and drops only the refusal that uses them."
 
 [[regression]]
 id = "vehicle-damage-deals-raw-amount"
@@ -770,6 +809,19 @@ guards = [
     { test = "AcceptanceKitTests.aPlayersVibrationAtTheSameCoordinatesInAnotherWorldIsNoChange", tier = "in-game" },
 ]
 note = "The patch drops only the world comparison; SideEffects.GameEventEmitted keeps its level, which the guard doesn't read."
+
+[[regression]]
+id = "plugin-pushes-port-actor"
+bug = "Any plugin could push or pop actors through Actors.Port.enter and exit, which have no scope to close, so a mistake left an actor on the stack or popped the host's."
+fix = "3684f1e"
+paths = [
+    "api/src/main/java/dev/iredsc/hadron/api/actor/Actors.java",
+]
+guards = [
+    { test = "HostKeyTest.pushingAnActorThroughThePortWithoutTheKeyIsRefusedSayingToUsePush", tier = "fast" },
+    { test = "HostileTests.aPluginCanNotReplaceOrClearWhatTheHostInstalled", tier = "in-game" },
+]
+note = "Hand-made: keeps the HostKey parameters (every caller passes one) and drops only the three HostKey.require lines."
 
 [[regression]]
 id = "refused-action-sounds"

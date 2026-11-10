@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.net;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.EventPriority;
@@ -36,14 +37,15 @@ public interface NetBackend {
 
     void setNameTag(JavaPlugin plugin, ServerPlayer player, @Nullable String tag);
 
-    /** For the loader port only. */
+    /** For the loader port only: installing the backend takes the {@link HostKey}. */
     final class Port {
         @StaticState(reason = "the port installs its one backend when the mod loads; Hadron itself is never reloaded")
         private static volatile @Nullable NetBackend backend;
 
         private Port() {}
 
-        public static void install(NetBackend installed) {
+        public static void install(HostKey key, NetBackend installed) {
+            HostKey.require(key, "NetBackend.Port.install", "use Packets, Visibility and DisplayNames");
             backend = Objects.requireNonNull(installed, "backend");
         }
 

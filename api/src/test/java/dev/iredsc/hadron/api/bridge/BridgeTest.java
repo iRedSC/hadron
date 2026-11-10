@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.bridge;
 
+import dev.iredsc.hadron.api.TestHost;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -55,7 +56,7 @@ class BridgeTest {
     private static final Loader LOADER = new Loader();
 
     static {
-        Bridge.Port.install(LOADER);
+        Bridge.Port.install(TestHost.KEY, LOADER);
     }
 
     private final Loader loader = LOADER;
@@ -70,7 +71,8 @@ class BridgeTest {
 
     @Test
     void aSecondBackendIsRefused() {
-        IllegalStateException e = assertThrows(IllegalStateException.class, () -> Bridge.Port.install(new Loader()));
+        IllegalStateException e = assertThrows(IllegalStateException.class,
+                () -> Bridge.Port.install(TestHost.KEY, new Loader()));
         assertEquals("Bridge's backend is installed already, by Hadron's loader port; nothing else installs one",
                 e.getMessage());
     }

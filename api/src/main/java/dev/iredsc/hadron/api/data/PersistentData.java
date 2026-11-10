@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.data;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import java.util.Objects;
@@ -132,7 +133,9 @@ public final class PersistentData {
     public static final class Port {
         private Port() {}
 
-        public static void installStore(Store installed) {
+        /** Takes the {@link HostKey}. */
+        public static void installStore(HostKey key, Store installed) {
+            HostKey.require(key, "PersistentData.Port.installStore", "keep data with PersistentData.of(...)");
             store = Objects.requireNonNull(installed, "store");
         }
 

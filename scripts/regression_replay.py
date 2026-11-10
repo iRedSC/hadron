@@ -44,7 +44,8 @@ LOCK = os.environ.get("HADRON_GRADLE_LOCK", "/tmp/hadron-ingame.lock")
 ID_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 # Where a test's class lives decides its tier and the Gradle task that runs it.
-FAST_PROJECTS = {"api": ":api", "common": ":common", "neoforge": ":neoforge", "examples/hello": ":examples:hello"}
+FAST_PROJECTS = {"api": ":api", "common": ":common", "neoforge": ":neoforge", "examples/hello": ":examples:hello",
+                 "build-checks": ":build-checks"}
 IN_GAME_PROJECT = "selftest"
 
 

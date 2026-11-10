@@ -8,11 +8,13 @@ import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.world.Area;
 import dev.iredsc.hadron.api.world.Areas;
 import dev.iredsc.hadron.checks.Nondeterministic;
-import dev.iredsc.hadron.neoforge.BlockHooks;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.lang.invoke.MethodHandle;
+import java.lang.invoke.MethodHandles;
+import java.lang.invoke.MethodType;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -23,6 +25,7 @@ import java.util.Locale;
 import java.util.Map;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -49,6 +52,12 @@ public final class ChokepointBench {
     private static final int HOOK_EVENT_CALLS = 200_000;
     /** Whole passes over the grid, an even number of them, so every case starts and ends with the grid white. */
     private static final int WRITES = 200 * 2 * SIDE * SIDE;
+    /**
+     * {@code BlockHooks.cancelSetBlock}, the hook timed alone. A plugin can't link Hadron's insides (PluginLoader's
+     * HOST_PACKAGES), so the bench finds it through Hadron's own class loader; a static final handle is inlined like
+     * a direct call.
+     */
+    private static final MethodHandle CANCEL_SET_BLOCK = cancelSetBlock();
 
     private final Actor machine = new Actor.Server("bench machine");
     private int heard;
@@ -128,11 +137,27 @@ public final class ChokepointBench {
         }
     }
 
+    private static MethodHandle cancelSetBlock() {
+        try {
+            Class<?> hooks = Class.forName("dev.iredsc.hadron.neoforge.BlockHooks", true, Areas.class.getClassLoader());
+            return MethodHandles.publicLookup().findStatic(hooks, "cancelSetBlock",
+                    MethodType.methodType(boolean.class, Level.class, BlockPos.class, BlockState.class));
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException("The bench times BlockHooks.cancelSetBlock(Level, BlockPos, BlockState), "
+                    + "which is gone or changed shape: update CANCEL_SET_BLOCK to match", e);
+        }
+    }
+
     /** Asks the hook about writes that would change each block, without making them. */
     private static void hook(ServerLevel level, BlockPos[] grid, int n) {
         int refused = 0;
-        for (int i = 0; i < n; i++) {
-            if (BlockHooks.cancelSetBlock(level, grid[i % grid.length], RED)) refused++;
+        Level at = level;
+        try {
+            for (int i = 0; i < n; i++) {
+                if ((boolean) CANCEL_SET_BLOCK.invokeExact(at, grid[i % grid.length], RED)) refused++;
+            }
+        } catch (Throwable e) {
+            throw new IllegalStateException("BlockHooks.cancelSetBlock threw", e);
         }
         if (refused != 0) throw new AssertionError("Nothing refuses, yet the hook refused " + refused + ".");
     }

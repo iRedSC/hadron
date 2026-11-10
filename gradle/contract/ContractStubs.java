@@ -59,7 +59,7 @@ import javax.tools.ToolProvider;
  */
 public final class ContractStubs {
     static final String THROW = "throw new UnsupportedOperationException(\"contract stub\");";
-    static final Set<String> PORT_TYPES = Set.of("Port", "Lifecycle", "Backend", "NetBackend", "Memory", "PluginContext");
+    static final Set<String> PORT_TYPES = Set.of("Port", "Lifecycle", "Backend", "NetBackend", "Memory", "PluginContext", "HostKey");
     static final Pattern CONSTANT_NAME = Pattern.compile("[A-Z][A-Z0-9_]*");
     static final String NOT_CONTRACT = "/* value not part of the contract; see the Javadoc */";
     static final Set<String> BOXED =Set.of("Byte", "Short", "Integer", "Long", "Float", "Double", "Character");

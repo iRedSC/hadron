@@ -1,0 +1,28 @@
+diff --git a/api/src/main/java/dev/iredsc/hadron/api/actor/Actors.java b/api/src/main/java/dev/iredsc/hadron/api/actor/Actors.java
+index ef18c28..78c30c3 100644
+--- a/api/src/main/java/dev/iredsc/hadron/api/actor/Actors.java
++++ b/api/src/main/java/dev/iredsc/hadron/api/actor/Actors.java
+@@ -250,7 +250,6 @@ public final class Actors {
+          * open by mistake.
+          */
+         public static long enter(HostKey key, Actor actor) {
+-            HostKey.require(key, "Actors.Port.enter", PUSH);
+             Stack stack = STACK.get();
+             int index = stack.depth;
+             long token = stack.push(checked(actor), index == 0 ? null : stack.operations[index - 1]);
+@@ -262,7 +261,6 @@ public final class Actors {
+          * other code running between them, such as a build whose events are posted with nobody behind them.
+          */
+         public static long enter(HostKey key, Actor actor, Operation operation) {
+-            HostKey.require(key, "Actors.Port.enter", PUSH);
+             Stack stack = STACK.get();
+             int index = stack.depth;
+             long token = stack.push(checked(actor), Objects.requireNonNull(operation, "operation"));
+@@ -271,7 +269,6 @@ public final class Actors {
+ 
+         /** Pops what {@link #enter} pushed, and anything left open above it. Takes the {@link HostKey}. */
+         public static void exit(HostKey key, long handle) {
+-            HostKey.require(key, "Actors.Port.exit", PUSH);
+             STACK.get().close((int) (handle >>> 40), handle & TOKEN_MASK);
+         }
+     }

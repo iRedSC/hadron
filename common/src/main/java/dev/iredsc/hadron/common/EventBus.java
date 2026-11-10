@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.common;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.checks.Nondeterministic;
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
@@ -49,14 +50,17 @@ final class EventBus {
         private final Logger log;
         /** Who the handler acts as when nobody is on the stack: its plugin. */
         private final Actor.Server owner;
+        /** Lets the bus push {@link #owner} without allocating; the bus's own. */
+        private final HostKey key;
         private final AtomicInteger failures = new AtomicInteger();
         /** Admission and removal share this monitor; calls already in progress are tracked until they finish. */
         private boolean removed;
         private final Map<Thread, Integer> calls = new HashMap<>();
         private @Nullable EventBus bus;
 
-        private Subscription(Listener listener, Class<?> type, EventHandler h, long order, MethodHandle handle,
-                String where, Logger log, String plugin) {
+        private Subscription(HostKey key, Listener listener, Class<?> type, EventHandler h, long order,
+                MethodHandle handle, String where, Logger log, String plugin) {
+            this.key = key;
             this.listener = listener;
             this.type = type;
             this.priority = h.priority();
@@ -119,7 +123,7 @@ final class EventBus {
             }
             // With nobody on the stack, a handler's own changes are its plugin's, as its tasks are: a plugin that wants
             // the event's actor behind its reaction pushes it.
-            long scope = Actors.isEmpty() ? Actors.Port.enter(owner) : 0;
+            long scope = Actors.isEmpty() ? Actors.Port.enter(key, owner) : 0;
             try {
                 if (ignoreCancelled && event instanceof Cancellable c && c.isCancelled()) return;
                 handle.invoke(event);
@@ -133,7 +137,7 @@ final class EventBus {
                     log.error(where + " has thrown " + n + " times; latest failure", t);
                 }
             } finally {
-                if (scope != 0) Actors.Port.exit(scope);
+                if (scope != 0) Actors.Port.exit(key, scope);
                 synchronized (this) {
                     int remaining = calls.getOrDefault(thread, 1) - 1;
                     if (remaining == 0) calls.remove(thread);
@@ -191,6 +195,12 @@ final class EventBus {
      */
     private volatile Map<Class<?>, Baked> baked = new ConcurrentHashMap<>();
     private final AtomicLong registered = new AtomicLong();
+    /** Lets each handler run as its plugin ({@code Actors.Port.enter}); the host's. */
+    private final HostKey key;
+
+    EventBus(HostKey key) {
+        this.key = key;
+    }
     /** Guarded by this; replaced whole. */
     private Observer[] observers = NO_OBSERVERS;
     /**
@@ -375,6 +385,7 @@ final class EventBus {
         } catch (IllegalAccessException | RuntimeException e) {
             throw new IllegalArgumentException(where + " can't be called by Hadron: " + e.getMessage(), e);
         }
-        return new Subscription(listener, params[0], h, registered.incrementAndGet(), handle, where, log, plugin);
+        return new Subscription(key, listener, params[0], h, registered.incrementAndGet(), handle, where, log,
+                plugin);
     }
 }

@@ -1,7 +1,14 @@
 package dev.iredsc.hadron.selftest.hostile;
 
+import dev.iredsc.hadron.api.Hadron;
+import dev.iredsc.hadron.api.HostKey;
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Actors;
+import dev.iredsc.hadron.api.economy.Economy;
+import dev.iredsc.hadron.api.net.NetBackend;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.PluginCommand;
+import dev.iredsc.hadron.api.plugin.Server;
 import dev.iredsc.hadron.checks.Nondeterministic;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -57,6 +64,37 @@ public final class HostilePlugin extends JavaPlugin {
             getServer().getScheduler().runTaskAsynchronously(this, this::runForever);
         }
         if (is("reload")) getServer().getScheduler().runTaskTimer(this, () -> log("tick " + version), 1, 1);
+        if (is("host")) {
+            // What a plugin built without Hadron's checks could call: each must be refused at runtime.
+            // Where Hadron wrongly lets one through, the plugin puts things back, so the test fails instead of the run.
+            Server server = Hadron.Lifecycle.running();
+            Economy economy = Economy.Lifecycle.running();
+            asHost("claim", () -> HostKey.claim(), () -> {});
+            asHost("clear the server", () -> Hadron.Lifecycle.install(null, null),
+                    () -> Hadron.Lifecycle.install(null, server));
+            asHost("clear the economy", () -> Economy.Lifecycle.install(null, null),
+                    () -> Economy.Lifecycle.install(null, economy));
+            asHost("replace the packet backend", () -> NetBackend.Port.install(null, null), () -> {});
+            // Not in api at all: Hadron's own insides, which a plugin's class loader must not link.
+            asHost("hook every plugin's disable", () -> dev.iredsc.hadron.common.PluginHost.onPluginDisable(p -> {}),
+                    () -> {});
+            long[] handle = new long[1];
+            asHost("push an actor through the port", () -> handle[0] = Actors.Port.enter(null, Actor.Nature.INSTANCE),
+                    () -> Actors.Port.exit(null, handle[0]));
+        }
+    }
+
+    /** Logs {@code host <what> refused: <message>}, or {@code host <what> allowed} if Hadron let it through. */
+    private static void asHost(String what, Runnable call, Runnable putBack) {
+        try {
+            call.run();
+            log("host " + what + " allowed");
+            putBack.run();
+        } catch (RuntimeException | LinkageError refused) {
+            // A class a plugin can't link fails as NoClassDefFoundError, with the loader's reason as its cause.
+            Throwable why = refused.getCause() != null ? refused.getCause() : refused;
+            log("host " + what + " refused: " + why.getMessage());
+        }
     }
 
     /** The task that never returns until {@link #RELEASE}, as a plugin's runaway worker thread would. */

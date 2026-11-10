@@ -57,7 +57,7 @@ class EventBusTest {
                 });
     }
 
-    private final EventBus bus = new EventBus();
+    private final EventBus bus = new EventBus(TestHost.KEY);
     private final Errors errors = new Errors();
 
     private List<EventBus.Subscription> subscribe(Listener listener) {

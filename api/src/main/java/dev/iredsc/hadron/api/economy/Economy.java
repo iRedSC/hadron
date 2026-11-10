@@ -2,6 +2,7 @@ package dev.iredsc.hadron.api.economy;
 
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import java.math.BigDecimal;
 import java.util.List;
@@ -135,14 +136,16 @@ public interface Economy {
 
     EconomyResult transfer(UUID from, UUID to, Currency currency, BigDecimal amount);
 
-    /** For Hadron's plugin host only. */
+    /** For Hadron's plugin host only: replacing or clearing the economy takes the {@link HostKey}. */
     final class Lifecycle {
         @StaticState(reason = "Hadron's economy installs itself when the server starts and clears it when it stops")
         private static volatile @Nullable Economy running;
 
         private Lifecycle() {}
 
-        public static void install(@Nullable Economy economy) {
+        public static void install(HostKey key, @Nullable Economy economy) {
+            HostKey.require(key, "Economy.Lifecycle.install", "use Economy.get(); to store the accounts yourself, "
+                    + "register an EconomyProvider service");
             running = economy;
         }
 

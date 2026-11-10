@@ -101,22 +101,29 @@ public final class Node {
         return node;
     }
 
-    /** For Hadron's plugin host only. */
+    /** For Hadron's plugin host only: declaring for another owner, or releasing, takes the {@link HostKey}. */
     public static final class Lifecycle {
+        private static final String INSTEAD = "declare your plugin's nodes with Node.declare or plugin.yml's "
+                + "permissions:, and Hadron releases them when it unloads";
+
         private Lifecycle() {}
 
         /** A node from a plugin.yml {@code permissions:} entry. */
-        public static Node declare(String id, Default fallback, String description, ClassLoader owner) {
+        public static Node declare(HostKey key, String id, Default fallback, String description,
+                ClassLoader owner) {
+            HostKey.require(key, "Node.Lifecycle.declare", INSTEAD);
             return Node.declare(id, fallback, description, owner, false);
         }
 
         /** A plugin.yml command's permission nothing declared: operators only, as in Bukkit. */
-        public static Node declareImplicit(String id, String description, ClassLoader owner) {
+        public static Node declareImplicit(HostKey key, String id, String description, ClassLoader owner) {
+            HostKey.require(key, "Node.Lifecycle.declareImplicit", INSTEAD);
             return Node.declare(id, Default.OPS, description, owner, true);
         }
 
         /** Forgets an unloaded plugin version's declarations; nodes nobody else declared go. */
-        public static void release(ClassLoader owner) {
+        public static void release(HostKey key, ClassLoader owner) {
+            HostKey.require(key, "Node.Lifecycle.release", INSTEAD);
             synchronized (Node.class) {
                 owners.entrySet().removeIf(e -> {
                     if (!e.getValue().remove(owner) || !e.getValue().isEmpty()) return false;

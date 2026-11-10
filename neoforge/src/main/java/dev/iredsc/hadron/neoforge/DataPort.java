@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.api.HostKey;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.data.PersistentData;
 import java.util.function.Supplier;
@@ -49,8 +50,8 @@ final class DataPort {
     static final Supplier<AttachmentType<CompoundTag>> MOVING = ATTACHMENTS.register("moving_block_data",
             () -> AttachmentType.builder(() -> new CompoundTag()).serialize(COMPOUND).build());
 
-    static void register() {
+    static void register(HostKey key) {
         ATTACHMENTS.register(ModLoadingContext.get().getActiveContainer().getEventBus());
-        PersistentData.Port.installStore(new DataStore());
+        PersistentData.Port.installStore(key, new DataStore());
     }
 }

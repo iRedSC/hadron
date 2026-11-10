@@ -1,9 +1,9 @@
 diff --git a/common/src/main/java/dev/iredsc/hadron/common/EventBus.java b/common/src/main/java/dev/iredsc/hadron/common/EventBus.java
-index 80f808d..ad34082 100644
+index 941948a..bc7fe66 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/EventBus.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/EventBus.java
-@@ -192,10 +192,7 @@ final class EventBus {
-     private final AtomicLong registered = new AtomicLong();
+@@ -203,10 +203,7 @@ final class EventBus {
+     }
      /** Guarded by this; replaced whole. */
      private Observer[] observers = NO_OBSERVERS;
 -    /**
@@ -14,7 +14,7 @@ index 80f808d..ad34082 100644
      private final Set<Class<?>> seen = ConcurrentHashMap.newKeySet();
  
      /** Adds an observer; the events it hears are built and posted from now on, even with no plugin listening. */
-@@ -218,14 +215,8 @@ final class EventBus {
+@@ -229,14 +226,8 @@ final class EventBus {
          return Collections.unmodifiableSet(seen);
      }
  
@@ -32,10 +32,10 @@ index 80f808d..ad34082 100644
      /** Subscribes every {@code @EventHandler} method; all or nothing. */
      List<Subscription> subscribe(Listener listener, String plugin, Logger log) {
 diff --git a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-index 4ce0805..be76814 100644
+index c1dbd99..b280e93 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-@@ -1003,8 +1003,16 @@ public final class PluginHost implements PluginManager {
+@@ -1010,8 +1010,16 @@ public final class PluginHost implements PluginManager {
          String why = cause instanceof PluginException ? cause.getMessage()
                  : step + " threw " + cause + pluginFrame(cause, running.loader) + ". Fix that there; the stack trace "
                          + "is in the server log";
@@ -54,7 +54,7 @@ index 4ce0805..be76814 100644
      }
  
      /** " at File.java:line", the first frame in the plugin's own code, or "" when none of the trace is its. */
-@@ -1045,44 +1053,31 @@ public final class PluginHost implements PluginManager {
+@@ -1052,44 +1060,31 @@ public final class PluginHost implements PluginManager {
              if (!(e.state instanceof State.Failed) || next instanceof State.Off) e.state = next;
              return;
          }

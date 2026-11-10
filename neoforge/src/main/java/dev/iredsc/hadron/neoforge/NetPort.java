@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.api.HostKey;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.net.NetBackend;
@@ -26,8 +27,8 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
 final class NetPort implements NetBackend {
     private NetPort() {}
 
-    static void register() {
-        NetBackend.Port.install(new NetPort());
+    static void register(HostKey key) {
+        NetBackend.Port.install(key, new NetPort());
         // Lowest, so the name a plugin asked for is the one shown, whatever mods add earlier.
         NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST, NetNames::nameFormat);
         NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST, NetNames::tabListNameFormat);

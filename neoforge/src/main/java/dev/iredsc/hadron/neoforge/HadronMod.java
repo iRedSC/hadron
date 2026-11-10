@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.api.HostKey;
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.Hadron;
@@ -31,32 +32,34 @@ public final class HadronMod {
     private static volatile @Nullable PluginHost host;
 
     public HadronMod(IEventBus modBus, ModContainer container) {
-        NeoForge.EVENT_BUS.addListener(HadronMod::aboutToStart);
+        // Before any plugin can run, so no plugin holds it by mistake: only this mod replaces what it installs.
+        HostKey key = PortKey.KEY;
+        NeoForge.EVENT_BUS.addListener((ServerAboutToStartEvent e) -> aboutToStart(key, e));
         NeoForge.EVENT_BUS.addListener(HadronMod::starting);
         NeoForge.EVENT_BUS.addListener(HadronMod::tick);
         NeoForge.EVENT_BUS.addListener(HadronMod::stopping);
-        NeoForge.EVENT_BUS.addListener(HadronMod::stopped);
+        NeoForge.EVENT_BUS.addListener((ServerStoppedEvent e) -> stopped(key, e));
         // Last, so a plugin command taking over a mod's name replaces the mod's, not the other way round.
         NeoForge.EVENT_BUS.addListener(EventPriority.LOWEST, HadronMod::commands);
         Hooks.install(() -> host);
         PluginHost.aroundDispatch(HandlerScope.INSTANCE);
-        BridgePort.register();
+        BridgePort.register(key);
         BlockEvents.register();
-        EntityEvents.register();
+        EntityEvents.register(key);
         ItemEvents.register();
         WorldEvents.register();
-        DataPort.register();
-        NetPort.register();
-        WorldsPort.register();
-        AreasPort.register();
+        DataPort.register(key);
+        NetPort.register(key);
+        WorldsPort.register(key);
+        AreasPort.register(key);
     }
 
-    private static void aboutToStart(ServerAboutToStartEvent event) {
+    private static void aboutToStart(HostKey key, ServerAboutToStartEvent event) {
         MinecraftServer server = event.getServer();
         // Absolute: the server directory is often an empty path, and new File("", "plugins") means /plugins.
         File dir = server.getServerDirectory().toAbsolutePath().normalize().toFile();
-        host = new PluginHost(server, dir, new NeoForgePlatform());
-        Hadron.Lifecycle.install(host.server());
+        host = new PluginHost(key, server, dir, new NeoForgePlatform());
+        Hadron.Lifecycle.install(key, host.server());
         host.load();
     }
 
@@ -73,10 +76,10 @@ public final class HadronMod {
         if (host != null) host.stop();
     }
 
-    private static void stopped(ServerStoppedEvent event) {
+    private static void stopped(HostKey key, ServerStoppedEvent event) {
         if (host != null) host.stop();
         host = null;
-        Hadron.Lifecycle.install(null);
+        Hadron.Lifecycle.install(key, null);
     }
 
     /** Every new dispatcher: at startup, and on each datapack /reload. */

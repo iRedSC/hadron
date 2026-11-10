@@ -10,7 +10,10 @@
 //   hadronChecks.determinism  source sets Determinism refuses wall-clock time, sleeps and unseeded randomness in
 //                             (default: test, where a plugin's tests live).
 //   hadronChecks.exemptions   true for Hadron's own code only: @StaticState and @Nondeterministic, each with a
-//                             reason, may exempt one field or method. A plugin's build refuses them.
+//                             reason, may exempt one field or method, and HostOnly lets it call what takes the
+//                             HostKey. A plugin's code can use none of the three.
+// Only Hadron's own modules (by directory, below) may set exemptions or leave a default source set out of
+// staticState or determinism; any other build that tries fails here, saying what to do instead.
 // TooLong prints a warning for a file over 800 lines or a method over 120 and never fails.
 
 @Suppress("UNCHECKED_CAST")
@@ -20,6 +23,25 @@ val nullAwaySets = setting("hadronChecks.nullAway", listOf<String>())
 val staticStateSets = setting("hadronChecks.staticState", listOf("main", "test"))
 val determinismSets = setting("hadronChecks.determinism", listOf("test"))
 val exemptions = setting("hadronChecks.exemptions", false)
+
+// Hadron's own modules, by directory beside this script's folder. A plugin's build is never one of them, so it can't
+// switch a check off; it can only add source sets.
+val hadronRoot = buildscript.sourceFile!!.parentFile.parentFile.canonicalFile
+val hadronModule = project.projectDir.canonicalFile in
+        listOf("api", "common", "neoforge", "test-api", "selftest", "bench").map { File(hadronRoot, it).canonicalFile }
+val loosened = buildList {
+    if (exemptions) add("hadronChecks.exemptions = true")
+    val skipped = listOf("main", "test") - staticStateSets.toSet()
+    if (skipped.isNotEmpty()) add("hadronChecks.staticState without " + skipped.joinToString(" and "))
+    if ("test" !in determinismSets) add("hadronChecks.determinism without test")
+}
+if (!hadronModule && loosened.isNotEmpty()) {
+    throw GradleException("${project.buildFile} sets ${loosened.joinToString(", ")}, but only Hadron's own modules may "
+            + "loosen Hadron's checks: a plugin's build keeps them all, so a mistake they catch can't ship. Remove "
+            + "those lines, then fix what the checks name: keep state on your plugin object (or one it holds) instead "
+            + "of a static field, wait in ticks and seed randomness instead of reading the clock, and use Hadron's api "
+            + "instead of anything that takes the HostKey.")
+}
 
 val errorprone = configurations.create("errorprone") {
     isCanBeConsumed = false

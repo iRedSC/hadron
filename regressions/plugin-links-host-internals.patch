@@ -1,0 +1,26 @@
+diff --git a/common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java b/common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java
+index dcd9efa..ee5439a 100644
+--- a/common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java
++++ b/common/src/main/java/dev/iredsc/hadron/common/PluginLoader.java
+@@ -71,8 +71,7 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
+     protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+         synchronized (getClassLoadingLock(name)) {
+             Class<?> c = findLoadedClass(name);
+-            boolean host = HOST_PACKAGES.matcher(name).matches();
+-            if (c == null && !host) {
++            if (c == null) {
+                 try {
+                     c = getParent().loadClass(name);
+                 } catch (ClassNotFoundException ignored) {
+@@ -80,11 +79,6 @@ final class PluginLoader extends URLClassLoader implements PluginContext {
+                 }
+             }
+             if (c == null) c = findOwnOrDependency(name);
+-            if (c == null && host) {
+-                throw new ClassNotFoundException(name + " is inside Hadron's plugin host, which plugins can't use. "
+-                        + description.getName() + " can use only Hadron's api (dev.iredsc.hadron.api): the server "
+-                        + "through getServer(), its events, services, scheduler and the rest.");
+-            }
+             if (c == null) {
+                 throw new ClassNotFoundException(name + " isn't in " + description.getName() + " or the plugins it "
+                         + "lists under depend or softdepend");
