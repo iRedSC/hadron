@@ -531,3 +531,18 @@ guards = [
     { test = "FireAndTntTests.cancelledIgniteLeavesNoFireAndTheFlintUnworn", tier = "in-game" },
 ]
 note = "5515df2 is a merge; the patch drops only CommonHooksPlaceMixin and its line in hadron.block.mixins.json."
+
+[[regression]]
+id = "plugin-replaces-host-state"
+bug = "Any plugin could replace or clear the running server, the economy, another plugin's nodes or a port backend through public host-only setters."
+fix = "ff1c595"
+paths = [
+    "api/src/main/java/dev/iredsc/hadron/api/HostKey.java",
+]
+guards = [
+    { test = "HostKeyTest.replacingOrClearingTheServerWithoutTheKeyIsRefusedAndChangesNothing", tier = "fast" },
+    { test = "HostKeyTest.aKeyMadeByReflectionIsNotTheHostsKey", tier = "fast" },
+    { test = "HostKeyTest.installingAPortBackendWithoutTheKeyIsRefusedSayingWhatToUse", tier = "fast" },
+    { test = "HostileTests.aPluginCanNotReplaceOrClearWhatTheHostInstalled", tier = "in-game" },
+]
+note = "Hand-made: keeps HostKey and every key parameter (the guards call them) and only empties HostKey.require, so a missing, null or forged key passes."

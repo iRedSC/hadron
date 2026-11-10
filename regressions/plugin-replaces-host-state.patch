@@ -1,0 +1,14 @@
+diff --git a/api/src/main/java/dev/iredsc/hadron/api/HostKey.java b/api/src/main/java/dev/iredsc/hadron/api/HostKey.java
+index 387341e..6aea944 100644
+--- a/api/src/main/java/dev/iredsc/hadron/api/HostKey.java
++++ b/api/src/main/java/dev/iredsc/hadron/api/HostKey.java
+@@ -45,9 +45,5 @@ public final class HostKey {
+      * @throws IllegalStateException without the key, saying what to use instead.
+      */
+     public static void require(@Nullable HostKey key, String member, String instead) {
+-        if (key == null || key != issued.get()) {
+-            throw new IllegalStateException(member + " is for Hadron's own host, which holds the only HostKey it "
+-                    + "takes, so a plugin can't replace or clear what Hadron installed. Instead, " + instead + ".");
+-        }
+     }
+ }
