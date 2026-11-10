@@ -45,11 +45,11 @@ index 5a38414..0000000
 -    }
 -}
 diff --git a/neoforge/src/main/resources/hadron.block.mixins.json b/neoforge/src/main/resources/hadron.block.mixins.json
-index 9915335..9981318 100644
+index 4952910..1cae87c 100644
 --- a/neoforge/src/main/resources/hadron.block.mixins.json
 +++ b/neoforge/src/main/resources/hadron.block.mixins.json
-@@ -20,7 +20,6 @@
-     "LeavesBlockMixin",
+@@ -22,7 +22,6 @@
+     "LevelChunkMixin",
      "LevelMixin",
      "LiquidBlockMixin",
 -    "MobBucketItemMixin",

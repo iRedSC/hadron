@@ -1,5 +1,5 @@
 diff --git a/api/src/main/java/dev/iredsc/hadron/api/Permissions.java b/api/src/main/java/dev/iredsc/hadron/api/Permissions.java
-index 8b5c78a..1b836b1 100644
+index ffc432d..6fc8917 100644
 --- a/api/src/main/java/dev/iredsc/hadron/api/Permissions.java
 +++ b/api/src/main/java/dev/iredsc/hadron/api/Permissions.java
 @@ -1,49 +1,23 @@
@@ -55,9 +55,9 @@ index 8b5c78a..1b836b1 100644
      }
  
      /** Players by their ranks; the console, command blocks and other sources by operator level 2. */
-@@ -54,24 +28,24 @@ public final class Permissions {
+@@ -54,14 +28,14 @@ public final class Permissions {
  
-     /** The name of the player's heaviest group, which supplies their prefix first. */
+     /** The name of the player's heaviest group, counting groups they're in through another. */
      public static String group(ServerPlayer player) {
 -        String group = ask(ranks -> ranks.group(player), DEFAULT_GROUP);
 -        return group == null ? DEFAULT_GROUP : group;
@@ -73,6 +73,10 @@ index 8b5c78a..1b836b1 100644
 +        return ranks == null ? group.equalsIgnoreCase(DEFAULT_GROUP) : ranks.inGroup(player, group);
      }
  
+     /**
+@@ -69,14 +43,14 @@ public final class Permissions {
+      * {@link #group}: LuckPerms, for one, shows the prefix with the highest priority, whichever group gives it.
+      */
      public static String prefix(ServerPlayer player) {
 -        String prefix = ask(ranks -> ranks.prefix(player), "");
 -        return prefix == null ? "" : prefix;
@@ -80,6 +84,7 @@ index 8b5c78a..1b836b1 100644
 +        return ranks == null ? "" : ranks.prefix(player);
      }
  
+     /** The suffix the permissions plugin picks, as {@link #prefix} does. */
      public static String suffix(ServerPlayer player) {
 -        String suffix = ask(ranks -> ranks.suffix(player), "");
 -        return suffix == null ? "" : suffix;

@@ -1,16 +1,16 @@
 diff --git a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-index 28c29bf..33347fc 100644
+index 4ce0805..a897345 100644
 --- a/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
 +++ b/common/src/main/java/dev/iredsc/hadron/common/PluginHost.java
-@@ -893,7 +893,6 @@ public final class PluginHost implements PluginManager {
+@@ -1067,7 +1067,6 @@ public final class PluginHost implements PluginManager {
                          + ASYNC_GRACE_MILLIS / 1000 + "s; " + (callOnDisable ? "disabling" : "stopping") + " it anyway. "
                          + "A background task that loops should return once isEnabled() is false");
              }
 -            runBeforeDisableHooks(plugin, deadline);
              if (callOnDisable && running instanceof State.Enabled) {
                  try {
-                     plugin.onDisable();
-@@ -1189,29 +1188,6 @@ public final class PluginHost implements PluginManager {
+                     PluginActors.asPlugin(plugin.getName(), plugin::onDisable);
+@@ -1408,29 +1407,6 @@ public final class PluginHost implements PluginManager {
      private static final java.util.List<java.util.function.Consumer<JavaPlugin>> DISABLE_HOOKS =
              new java.util.concurrent.CopyOnWriteArrayList<>();
  
@@ -41,7 +41,7 @@ index 28c29bf..33347fc 100644
          for (java.util.function.Consumer<JavaPlugin> hook : DISABLE_HOOKS) {
              try {
 diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java
-index 6071410..d52bb1b 100644
+index 378f966..711429c 100644
 --- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java
 +++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/NetPackets.java
 @@ -12,7 +12,6 @@ import java.util.ArrayList;
@@ -52,7 +52,7 @@ index 6071410..d52bb1b 100644
  import net.minecraft.network.protocol.Packet;
  import net.minecraft.network.protocol.PacketFlow;
  import net.minecraft.network.protocol.common.ClientboundDisconnectPacket;
-@@ -130,7 +129,6 @@ final class NetPackets {
+@@ -128,7 +127,6 @@ final class NetPackets {
                  throw new IllegalStateException(plugin.getName() + " can't register packet handlers while it isn't "
                          + "enabled; register them in onEnable");
              }
@@ -60,7 +60,7 @@ index 6071410..d52bb1b 100644
              Handler h = new Handler(plugin, type, priority, body, registered++, side);
              side.all.add(h);
              side.changed();
-@@ -138,45 +136,9 @@ final class NetPackets {
+@@ -136,45 +134,9 @@ final class NetPackets {
          }
      }
  
@@ -106,7 +106,7 @@ index 6071410..d52bb1b 100644
              for (Side side : new Side[] {OUT, IN}) {
                  boolean changed = side.all.removeIf(h -> {
                      if (h.plugin != plugin) return false;
-@@ -260,29 +222,15 @@ final class NetPackets {
+@@ -258,29 +220,15 @@ final class NetPackets {
          for (Handler h : handlers) {
              // A dispatch may hold a snapshot from before an unregister or a disable. The plugin stops counting as
              // enabled before its onDisable runs, so no handler runs against what onDisable closed.

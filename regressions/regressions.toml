@@ -192,7 +192,7 @@ guards = [
     { test = "HostLifecycleTests.aPluginWhoseEnableFailsLeavesNoMenuOfItsOpen", tier = "in-game" },
     { test = "HostLifecycleTests.aDisabledPluginIsGoneWhenItsDisableIsAnnouncedAndItsEventsAreForgotten", tier = "in-game" },
 ]
-note = "PluginHost keeps 5e68bb9's runBeforeDisableHooks; EventBus keeps forget(ClassLoader) as a no-op so EventBusTest compiles."
+note = "Hand-made: PluginHost goes back to a failed enable that closes no menus and a disable that announces PluginDisableEvent before the state changes, without teardown or events.forget; it keeps later work (f975d3a's snapshots, 089d416's PluginActors.asPlugin, 5e68bb9's runBeforeDisableHooks) and 04877ae's other changes (dataFolder, announce). EventBus keeps forget(ClassLoader) as a no-op so EventBusTest compiles."
 
 [[regression]]
 id = "service-events-out-of-order"

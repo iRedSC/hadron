@@ -28,7 +28,7 @@ index e449874..0000000
 -    }
 -}
 diff --git a/neoforge/src/main/resources/hadron.block.mixins.json b/neoforge/src/main/resources/hadron.block.mixins.json
-index 9915335..fa3b9c1 100644
+index 4952910..1eaf509 100644
 --- a/neoforge/src/main/resources/hadron.block.mixins.json
 +++ b/neoforge/src/main/resources/hadron.block.mixins.json
 @@ -10,7 +10,6 @@
@@ -37,5 +37,5 @@ index 9915335..fa3b9c1 100644
      "CloneCommandsMixin",
 -    "CommonHooksPlaceMixin",
      "DispenserBlockMixin",
+     "EndDragonFightMixin",
      "ExplosionMixin",
-     "FillCommandMixin",
