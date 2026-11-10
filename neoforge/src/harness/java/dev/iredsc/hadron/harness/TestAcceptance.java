@@ -55,6 +55,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.CompoundContainer;
 import net.minecraft.world.Container;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -279,7 +280,11 @@ final class TestAcceptance implements Acceptance, Listener {
         if (event instanceof ItemPickupEvent pickup) {
             if (pickup.getLevel() != level) return OUT;
             Place into = holder(pickup.getDestination());
-            return into instanceof Place.In ? into : at(level, pickup.getItemEntity().position());
+            if (into instanceof Place.In) return into;
+            Place lay = at(level, pickup.getItemEntity().position());
+            // An unknown destination might be in the area: fail closed unless the item lay in it anyway.
+            return lay instanceof Place.In || !(into instanceof Place.Unplaced) ? lay
+                    : unplacedHolder();
         }
         if (event instanceof ItemDropEvent drop) {
             // Where the item lands, or where whoever dropped it stands.
@@ -297,7 +302,12 @@ final class TestAcceptance implements Acceptance, Listener {
             if (i.getLevel() != level) return OUT;
             // An item event naming the inventory it happens in (a craft, a smelt, a trade, an anvil) happens there.
             Optional<InventoryHolder> in = itemHolder(i);
-            if (in.isPresent() && holder(in.get()) instanceof Place.In p) return p;
+            Place named = in.map(this::holder).orElse(OUT);
+            if (named instanceof Place.In) return named;
+            if (named instanceof Place.Unplaced) {
+                Place by = actorAt(i.getActor());
+                return by instanceof Place.In ? by : unplacedHolder();
+            }
             return i.getActor() instanceof Actor.Unknown
                     ? new Place.Unplaced("nobody is behind it, so nothing says where it happened: push the actor "
                             + "(the player or machine using the item)")
@@ -314,6 +324,13 @@ final class TestAcceptance implements Acceptance, Listener {
                         && box.isInside(be.getBlockPos())) {
                     return in(be.getBlockPos());
                 }
+                // A double chest: either half may be the one in the area.
+                if (slot.container instanceof CompoundContainer both) {
+                    for (BlockPos p : BlockPos.betweenClosed(box.minX(), box.minY(), box.minZ(),
+                            box.maxX(), box.maxY(), box.maxZ())) {
+                        if (level.getBlockEntity(p) instanceof Container half && both.contains(half)) return in(p);
+                    }
+                }
             }
         }
         if (event instanceof InventoryEvent i) {
@@ -324,8 +341,7 @@ final class TestAcceptance implements Acceptance, Listener {
                 if (p instanceof Place.In) return p;
                 unknown |= p instanceof Place.Unplaced;
             }
-            return unknown ? new Place.Unplaced("its holder is unknown, so nothing says whose inventory changed: name "
-                    + "the holder (InventoryHolder.Block or InventoryHolder.Entity)") : OUT;
+            return unknown ? unplacedHolder() : OUT;
         }
         if (event instanceof ResourceEvent r) {
             boolean held = false;
@@ -360,6 +376,11 @@ final class TestAcceptance implements Acceptance, Listener {
             case ItemDespawnEvent e -> Optional.of(e.getItemEntity());
             default -> Optional.empty();
         };
+    }
+
+    private static Place unplacedHolder() {
+        return new Place.Unplaced("its holder is unknown, so nothing says whose inventory changed: name the holder "
+                + "(InventoryHolder.Block or InventoryHolder.Entity)");
     }
 
     private static Optional<InventoryHolder> itemHolder(ItemEvent event) {
@@ -445,7 +466,20 @@ final class TestAcceptance implements Acceptance, Listener {
         Map<UUID, AcceptanceDiff.Thing> entities = new LinkedHashMap<>();
         Map<UUID, Entity> present = new LinkedHashMap<>();
         for (Entity e : level.getAllEntities()) present.put(e.getUUID(), e);
-        for (Entity e : followed.values()) if (!e.isRemoved()) present.putIfAbsent(e.getUUID(), e);
+        for (Entity e : followed.values()) {
+            if (!e.isRemoved()) {
+                present.putIfAbsent(e.getUUID(), e);
+            } else if (e.getRemovalReason() == Entity.RemovalReason.CHANGED_DIMENSION) {
+                // A mob changing worlds is replaced by a copy with the same id there: follow the copy, or, while
+                // the world it went to doesn't list it yet, the mob as it left. Changing worlds is motion, not a change.
+                Entity moved = e;
+                for (ServerLevel other : level.getServer().getAllLevels()) {
+                    Entity copy = other.getEntity(e.getUUID());
+                    if (copy != null) moved = copy;
+                }
+                present.putIfAbsent(e.getUUID(), moved);
+            }
+        }
         for (Entity e : present.values()) {
             if (e instanceof ServerPlayer) continue;
             ItemStack stack = e instanceof ItemEntity item ? item.getItem().copy() : ItemStack.EMPTY;
@@ -457,7 +491,7 @@ final class TestAcceptance implements Acceptance, Listener {
             entities.put(e.getUUID(), new AcceptanceDiff.Thing(e.getUUID(),
                     String.valueOf(BuiltInRegistries.ENTITY_TYPE.getKey(e.getType())), stack, health, held,
                     // By the block it stands in, as place() puts its events.
-                    e.blockPosition(), box.isInside(e.blockPosition())));
+                    e.blockPosition(), e.level() == level && box.isInside(e.blockPosition())));
         }
         Map<String, List<ItemStack>> players = new LinkedHashMap<>();
         Map<String, Float> health = new LinkedHashMap<>();

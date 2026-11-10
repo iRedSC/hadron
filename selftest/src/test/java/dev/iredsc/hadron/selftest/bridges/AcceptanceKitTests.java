@@ -49,6 +49,8 @@ import net.minecraft.world.level.block.ChestBlock;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.level.portal.DimensionTransition;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
@@ -591,5 +593,46 @@ public final class AcceptanceKitTests {
         TestPlayer alice = t.player("alice");
         String why = failure(t, () -> area.assertActingFor(alice, "alice, who joined after the mark"));
         t.assertTrue(why.contains("Join every player before calling mark()"), why);
+    }
+
+    @HadronTest
+    void aDoubleChestWithOnlyItsSecondHalfInTheAreaIsProtected(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos outside = t.pos(3, 0, 3), inside = t.pos(3, 0, 2);
+        t.setBlock(outside, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, Direction.EAST)
+                .setValue(ChestBlock.TYPE, ChestType.LEFT));
+        t.setBlock(inside, Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, Direction.EAST)
+                .setValue(ChestBlock.TYPE, ChestType.RIGHT));
+        Acceptance area = t.acceptance(around(t));
+        CompoundContainer both = new CompoundContainer((ChestBlockEntity) t.level().getBlockEntity(outside),
+                (ChestBlockEntity) t.level().getBlockEntity(inside));
+        ChestMenu menu = ChestMenu.sixRows(1, bob.player().getInventory(), both);
+        boolean cancelled = Hadron.getPluginManager().callEvent(new InventoryClickEvent(bob.player(),
+                new InventoryHolder.Entity(bob.player()), menu, 60, 0, ClickType.QUICK_MOVE,
+                new Actor.Player(bob.player())));
+        t.assertTrue(cancelled, "a shift-click into a double chest half in the area was refused: " + area.events());
+    }
+
+    @HadronTest
+    void anItemChangeInAnUnknownInventoryIsRefusedAndNamed(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Acceptance area = t.acceptance(around(t));
+        boolean cancelled = Hadron.getPluginManager().callEvent(new ItemChangeEvent(t.level(),
+                InventoryHolder.Unknown.INSTANCE, new ItemStack(Items.IRON_SWORD), new ItemStack(Items.DIAMOND_SWORD),
+                new Actor.Player(bob.player())));
+        t.assertTrue(cancelled, "an item change nothing can place was refused");
+        String why = failure(t, () -> area.assertActingFor(bob, "bob changing an item nobody can place"));
+        t.assertTrue(why.contains("its holder is unknown"), why);
+    }
+
+    @HadronTest
+    void aMobTakenToAnotherWorldIsNotGone(TestContext t) {
+        Pig pig = pig(t, t.pos(2, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        ServerLevel nether = t.server().getLevel(Level.NETHER);
+        t.assertTrue(nether != null, "the test server has a Nether");
+        pig.changeDimension(new DimensionTransition(nether, new Vec3(0.5, 100, 0.5), Vec3.ZERO, 0, 0,
+                DimensionTransition.DO_NOTHING));
+        area.assertUnchanged("a pig taken through a portal", Part.ENTITIES);
     }
 }
