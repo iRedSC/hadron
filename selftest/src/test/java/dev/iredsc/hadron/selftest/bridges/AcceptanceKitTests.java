@@ -5,7 +5,11 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.block.BlockBreakEvent;
+import dev.iredsc.hadron.api.event.EventHandler;
+import dev.iredsc.hadron.api.event.Listener;
+import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
+import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDataChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
@@ -43,6 +47,7 @@ import net.minecraft.world.CompoundContainer;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
 import net.minecraft.world.entity.item.ItemEntity;
@@ -59,6 +64,7 @@ import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.ChestType;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -793,5 +799,81 @@ public final class AcceptanceKitTests {
         Acceptance area = t.acceptance(around(t));
         t.assertTrue(Hadron.getPluginManager().callEvent(new EntityMountEvent(bob.player(), horse,
                 new Actor.Player(bob.player()))), "bob boarding a mount in the area was refused: " + area.events());
+    }
+
+    @HadronTest
+    void aMobReloadedAndThenDestroyedIsGone(TestContext t) {
+        Pig pig = pig(t, t.pos(2, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        CompoundTag saved = new CompoundTag();
+        pig.save(saved);
+        pig.remove(Entity.RemovalReason.UNLOADED_TO_CHUNK);
+        Entity reloaded = EntityType.loadEntityRecursive(saved, t.level(), e -> e);
+        t.assertTrue(reloaded != null, "the pig loads back from its saved data");
+        try (Actors.Scope s = Actors.push(new Actor.Server("its chunk loading"))) {
+            t.level().addFreshEntity(reloaded);
+        }
+        area.assertUnchanged("a pig unloaded and loaded back", Part.ENTITIES);
+        reloaded.discard();
+        String why = failure(t, () -> area.assertUnchanged("the loaded-back pig destroyed", Part.ENTITIES));
+        t.assertTrue(why.contains("minecraft:pig") && why.contains("is gone"), why);
+    }
+
+    @HadronTest
+    void aStructureSweepingThroughTheAreaIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Acceptance area = t.acceptance(around(t));
+        BlockPos from = t.pos(-2, 0, 0), to = t.pos(5, 0, 0);
+        BlockState stone = Blocks.STONE.defaultBlockState();
+        // A ship flying across the area: it leaves from outside and lands outside, sweeping through.
+        boolean cancelled = Hadron.getPluginManager().callEvent(new BlockMoveEvent(t.level(), from, stone,
+                List.of(new BlockMoveEvent.Move(from, to, stone)), List.of(t.pos(2, 0, 0)),
+                List.of(BlockChange.unchanged(t.level(), from, stone)), new Actor.Player(bob.player())));
+        t.assertTrue(cancelled, "a structure sweeping through the area was refused: " + area.events());
+    }
+
+    @HadronTest
+    void anotherListenersCancelDoesNotShowTheMachineTried(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos stone = t.pos(2, 0, 0);
+        t.setBlock(stone, Blocks.STONE);
+        bob.hold(new ItemStack(Items.IRON_PICKAXE));
+        Acceptance area = t.acceptance(around(t));
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockBreakEvent e) {
+                e.setCancelled(true);
+            }
+        });
+        area.trust(bob).refuse(InventoryEvent.class).mark();
+        bob.breakBlock(stone);
+        t.tick(2);
+        String why = failure(t, () -> area.assertRefused(bob, "bob's miner, its inventory changes refused"));
+        t.assertTrue(why.contains("nothing acting for bob was refused"), why);
+    }
+
+    @HadronTest
+    void anEquipmentChangeOnAPlayerInTheAreaIsLogged(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos in = t.pos(2, 0, 0);
+        alice.teleport(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(alice).mark();
+        Hadron.getPluginManager().callEvent(new EquipmentChangeEvent(t.level(), alice.player(), EquipmentSlot.HEAD,
+                ItemStack.EMPTY, new ItemStack(Items.IRON_HELMET),
+                new Actor.Machine(t.level(), t.pos(-3, 0, 0), Attribution.none())));
+        String why = failure(t, () -> area.assertActingFor(alice, "a machine nobody owns dressing alice"));
+        t.assertTrue(why.contains("EquipmentChangeEvent") && why.contains("nobody is responsible"), why);
+    }
+
+    @HadronTest
+    void anItemChangeElsewhereWithNobodyBehindItIsLeftAlone(TestContext t) {
+        BlockPos chest = t.pos(-3, 0, 0);
+        t.setBlock(chest, Blocks.CHEST);
+        Acceptance area = t.acceptance(around(t));
+        boolean cancelled = Hadron.getPluginManager().callEvent(new ItemChangeEvent(t.level(),
+                new InventoryHolder.Block(t.level(), chest), new ItemStack(Items.IRON_SWORD),
+                new ItemStack(Items.DIAMOND_SWORD), Actor.Unknown.INSTANCE));
+        t.assertFalse(cancelled, "an item change in a chest known to be outside the area isn't the area's");
     }
 }

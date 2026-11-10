@@ -9,6 +9,7 @@ import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
+import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
 import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
@@ -25,6 +26,7 @@ import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
 import dev.iredsc.hadron.api.event.item.EquipEvent;
+import dev.iredsc.hadron.api.event.item.EquipmentChangeEvent;
 import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
 import dev.iredsc.hadron.api.event.item.ItemConsumeEvent;
 import dev.iredsc.hadron.api.event.item.ItemCraftEvent;
@@ -115,6 +117,8 @@ final class TestAcceptance implements Acceptance, Listener {
     private final List<Unplaced> unplaced = new ArrayList<>();
     /** Entities an event in the box named this step: compared even if they only passed through. */
     private final Set<UUID> touched = new HashSet<>();
+    /** Events the kit itself refused, so another listener's cancel never shows the machine tried. */
+    private final Set<Event> denied = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
 
     /** An event that couldn't be placed, as it stood after every listener ran, and what to fix. */
     private record Unplaced(Seen seen, String why) {
@@ -183,6 +187,7 @@ final class TestAcceptance implements Acceptance, Listener {
         seen.clear();
         unplaced.clear();
         touched.clear();
+        denied.clear();
     }
 
     @Override
@@ -201,7 +206,7 @@ final class TestAcceptance implements Acceptance, Listener {
 
     @Override
     public void assertRefused(TestPlayer player, String step) {
-        java.util.function.Predicate<Seen> refusedFor = s -> s.cancelled()
+        java.util.function.Predicate<Seen> refusedFor = s -> s.cancelled() && denied.contains(s.event())
                 && s.actor().actingFor().filter(player.uuid()::equals).isPresent();
         boolean tried = seen.stream().anyMatch(refusedFor)
                 || unplaced.stream().map(Unplaced::seen).anyMatch(refusedFor);
@@ -263,7 +268,10 @@ final class TestAcceptance implements Acceptance, Listener {
         if (place instanceof Place.Out) return;
         // An event that can't be placed might be in the box: fail closed, as protection should.
         if (!allowed(a.getActor(), event) || place instanceof Place.Unplaced) {
-            if (!(a.getActor() instanceof Actor.Server)) c.setCancelled(true);
+            if (!(a.getActor() instanceof Actor.Server)) {
+                c.setCancelled(true);
+                denied.add(event);
+            }
         }
     }
 
@@ -303,6 +311,14 @@ final class TestAcceptance implements Acceptance, Listener {
             if (b.getLevel() != level) return OUT;
             if (box.isInside(b.getPos())) return new Place.In(Optional.of(b.getPos()));
             for (BlockChange change : b.getBlocks()) if (box.isInside(change.getPos())) return in(change.getPos());
+            if (b instanceof BlockMoveEvent move) {
+                // A structure sweeping through: where its blocks come from, go to, or pass on the way.
+                for (BlockMoveEvent.Move m : move.getMoves()) {
+                    if (box.isInside(m.from())) return in(m.from());
+                    if (box.isInside(m.to())) return in(m.to());
+                }
+                for (BlockPos swept : move.getSweptSpace()) if (box.isInside(swept)) return in(swept);
+            }
             return OUT;
         }
         if (event instanceof ProjectileHitEvent hit && hit.getLevel() == level) {
@@ -368,6 +384,8 @@ final class TestAcceptance implements Acceptance, Listener {
                 Place by = actorAt(i.getActor());
                 return by instanceof Place.In ? by : unplacedHolder();
             }
+            // An inventory it names, known to be elsewhere: the area isn't where it happened, whoever is behind it.
+            if (in.isPresent()) return OUT;
             return i.getActor() instanceof Actor.Unknown
                     ? new Place.Unplaced("nobody is behind it, so nothing says where it happened: push the actor "
                             + "(the player or machine using the item)")
@@ -447,6 +465,7 @@ final class TestAcceptance implements Acceptance, Listener {
             case EquipEvent e -> Optional.of(e.getEntity());
             case ItemUseEvent e -> Optional.of(e.getUser());
             case ItemConsumeEvent e -> Optional.of(e.getConsumer());
+            case EquipmentChangeEvent e -> Optional.of(e.getEntity());
             default -> Optional.empty();
         };
     }
@@ -566,25 +585,32 @@ final class TestAcceptance implements Acceptance, Listener {
         Map<UUID, AcceptanceDiff.Thing> entities = new LinkedHashMap<>();
         Map<UUID, Entity> present = new LinkedHashMap<>();
         for (Entity e : level.getAllEntities()) present.put(e.getUUID(), e);
-        for (Entity e : followed.values()) {
+        for (Map.Entry<UUID, Entity> f : new ArrayList<>(followed.entrySet())) {
+            Entity e = f.getValue();
             if (!e.isRemoved()) {
-                present.putIfAbsent(e.getUUID(), e);
-            } else if (e.getRemovalReason() == Entity.RemovalReason.UNLOADED_TO_CHUNK
-                    || e.getRemovalReason() == Entity.RemovalReason.UNLOADED_WITH_PLAYER) {
-                // Saved with its chunk, not destroyed: motion, so it counts as it left.
-                present.putIfAbsent(e.getUUID(), e);
-            } else if (e.getRemovalReason() == Entity.RemovalReason.CHANGED_DIMENSION) {
-                // Replaced by a copy with the same id in the world it went to: the copy, once that world lists it,
-                // or the mob as it left while the world only holds it. Held nowhere, it is gone.
-                Entity moved = null;
-                boolean held = false;
-                for (ServerLevel other : level.getServer().getAllLevels()) {
-                    Entity copy = other.getEntity(e.getUUID());
-                    if (copy != null && !copy.isRemoved()) moved = copy;
-                    held |= ((ServerLevelEntitiesAccessor) other).hadron$entityManager().isLoaded(e.getUUID());
-                }
-                if (moved != null) present.putIfAbsent(e.getUUID(), moved);
-                else if (held) present.putIfAbsent(e.getUUID(), e);
+                present.putIfAbsent(f.getKey(), e);
+                continue;
+            }
+            // Gone from this instance: a live one with the same id anywhere (reloaded from its chunk, a copy in the
+            // world it went to) is it now, and is followed from here on, so its own end is seen.
+            Entity live = null;
+            boolean held = false;
+            for (ServerLevel other : level.getServer().getAllLevels()) {
+                Entity copy = other.getEntity(f.getKey());
+                if (copy != null && !copy.isRemoved()) live = copy;
+                held |= ((ServerLevelEntitiesAccessor) other).hadron$entityManager().isLoaded(f.getKey());
+            }
+            if (live != null) {
+                followed.put(f.getKey(), live);
+                present.putIfAbsent(f.getKey(), live);
+                continue;
+            }
+            // Saved with its chunk, or held but not yet listed by the world it went to: motion, so it counts as it
+            // left. Anything else, or a change of worlds no world holds, is gone.
+            Entity.RemovalReason why = e.getRemovalReason();
+            if (why == Entity.RemovalReason.UNLOADED_TO_CHUNK || why == Entity.RemovalReason.UNLOADED_WITH_PLAYER
+                    || why == Entity.RemovalReason.CHANGED_DIMENSION && held) {
+                present.putIfAbsent(f.getKey(), e);
             }
         }
         for (Entity e : present.values()) {
