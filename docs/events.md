@@ -51,6 +51,55 @@ Protection uses the controller where there is one, otherwise the responsible pla
 
 An identifiable mob is always an `EntityActor`, even when it spawned naturally. `Nature` is reserved for processes with no entity, so a logger never loses which creature griefed.
 
+## Facts
+
+Rule 3 says a parent carries enough to act on. This section says what that means for the facts a plugin can't work out for itself: **where an action really happens, everything it carries, and who is behind it, stated by core and bridges, true, and never guessed by a plugin** ([design](design.md), "Core states facts"). It states facts, not meanings: whether eating is a player's own business or a machine's inventory is protected is policy, which plugins decide, and which a protection helper Hadron ships will decide once for the plugins that want it (its own design, after these facts land).
+
+These are the principles. How each event meets them is settled in the step that builds it, by a test there; the open questions per event are tracked in the [facts checklist](https://github.com/iRedSC/hadron/issues/45).
+
+### Places
+
+Every action says where it happens: `getPlaces()`, declared once on `Placed`, which `ActionEvent` and `PlayerEvent` implement, and so does every `ServerEvent` with a target or a source in a world. It returns a list of `Place`s read from the event's own payload each time it is called, so it can't disagree with its getters, and a listener that redirects a teleport or trims an explosion changes the places with it. Each part of a payload that has a place of its own (a move's source and destination, each inventory a change touches, each entity carried) keeps it, and `getPlaces()` is their union, so a reader can tell which place belongs to which part. A `Place` is sealed:
+
+- `Spot(level, box)`: one block or an area.
+- `Level(level)`: a whole level.
+- `Nowhere(identity)`: known to have no place in a world, with what it is (linked storage, an account).
+- `Unknown(bound, reason)`: core or a bridge can't say exactly where, why, and a bound that contains every place it could be (`anywhere` when nothing narrows it).
+
+**Never guessed, never empty.** Where core can't know where something happens, it says `Unknown`, never a guessed spot and never an empty list: an empty list or a spot that isn't true is a bug. The actor's own position is never a bound on a target; the actor already says where it is.
+
+**Self-tests hold it.** One fires every `Placed` class core fires and fails on any with no places. Another runs vanilla fixtures (a chest, a double chest, a furnace, a piston, a boat, a teleport) through every event they cause and fails on any `Unknown` whose reason vanilla shouldn't have. Per-family tests check the places against the payload and the world.
+
+### True outcomes
+
+Where an action ends somewhere other than where it set out to (a teleport settling on the ground, a dismount setting the rider down), core works out the real outcome first, fires with it, and then does exactly that. Where it can't yet, the event says `Unknown` for that part rather than stating the requested outcome.
+
+**Carrying has one shape.** An event that moves entities along with it lists them in `getCarried()`, each with where it was and where it ends up, and its places include each. What it can't know it carries is marked unknown, not left out.
+
+**The actor is who caused it.** An entity moved by something else (pushed by a piston, carried by water, knocked back) acts for what moved it, not for itself.
+
+### Attribution reaches every tick
+
+An effect and an entity's fire keep the actor that caused them and where it was applied, saved with the entity. While they act, that actor is on the actor stack as an explicit cause, kept even when it is the entity itself, so everything they cause acts for it: damage, healing, what they spawn. A cause that has gone (an offline player, a spent cloud) is `Actor.Remembered`, whose `actingFor()` still answers.
+
+### Closing the known gaps
+
+`MissingFactTests` holds each fact the regions plugin had to guess, as a `@KnownGap`. Each step below lands on its own and turns its gaps green; until then a gap is missing exactly where the tests say, as today.
+
+| Gap | Closed by |
+|---|---|
+| A teleport states where it settles | the outcome worked out before firing |
+| A rider is named when their vehicle carries them | `getCarried()` |
+| A dismount states where the rider is set down | the outcome worked out before firing |
+| A shift-click names the inventory items move into | the click's places |
+| Opening a double chest names both halves | the inventory's places |
+| Poison and burning act for whoever caused them | attribution on effects and fire |
+| Starting to mine fires an event | an event for it (Bukkit's `BlockDamageEvent`) |
+
+1. `Placed`, `Place` and `getPlaces()` for every family, with the self-tests above; the acceptance kit places events by `getPlaces()` and its own placement rules go.
+2. Each fact, one or a few per PR, each closing its gap and the checklist items for the events it touches, by a test.
+3. The protection helper, its own design and council: the meanings (kinds, whose business, what an attack is) over these facts, for the plugins that want them. The regions plugin becomes a policy over it.
+
 ## Catalog
 
 **Core** means fired at a vanilla chokepoint, so mods that go through vanilla are covered with no bridge. **Bridge** means only a bridge can fire it. Where core's coverage stops and what bridges fire is in [bridge-hooks.md](bridge-hooks.md), generated from the code. All are cancellable unless marked *(after)*.
