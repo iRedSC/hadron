@@ -167,7 +167,7 @@ void cancellingABreakKeepsTheBlock(TestContext t) { ... }
 
 **What must be covered:**
 
-- **Every concrete event:** each public, non-abstract class in `api` that extends `Event`, core and bridge events alike. A test covers it by firing it the way core does (a player, machine, command or nature causing it) and checking a listener receives it, or, for an event only bridges fire, the way a bridge must: its actor pushed, fired through `callEvent` before the change, the change made only if no listener cancelled ([bridge-hooks.md](bridge-hooks.md)). A listener for a parent class hearing it counts only where the test names the leaf.
+- **Every concrete event:** each public, non-abstract class in `api` that extends `Event`, core and bridge events alike. A test covers it by firing it the way core does (a player, machine, command or nature causing it) and checking a listener receives it, or, for an event only bridges fire, the way a bridge must: its actor pushed, fired through a claim (`t.bridge()`, the harness's) before the change, the change made only if no listener cancelled ([bridge-hooks.md](bridge-hooks.md)). A listener for a parent class hearing it counts only where the test names the leaf.
 - **Every public API method:** each public method (and protected, on classes that aren't final) declared by a type in `api` outside `dev.iredsc.hadron.api.event` that code outside can reach: the type and every class around it public. A test covers it by calling it and checking what it did. An override is the method it overrides: covering `MemorySection.getString` and covering `ConfigurationSection.getString` are the same claim.
 
 **What isn't counted, and why:**

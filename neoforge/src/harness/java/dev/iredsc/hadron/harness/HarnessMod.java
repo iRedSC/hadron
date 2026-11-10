@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.harness;
 
+import dev.iredsc.hadron.checks.StaticState;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.common.Mod;
 
@@ -11,8 +12,13 @@ import net.neoforged.fml.common.Mod;
 @Mod(HarnessMod.MOD_ID)
 public final class HarnessMod {
     public static final String MOD_ID = "hadron_test";
+    /** The harness's claim on {@code hadron_test_target}, which tests fire through as a bridge does. */
+    @StaticState(reason = "claimed once in the harness mod's constructor; mods never unload")
+    static volatile dev.iredsc.hadron.api.bridge.@org.jspecify.annotations.Nullable Bridge bridge;
 
     public HarnessMod(IEventBus modBus) {
         TestRunner.register(modBus);
+        // Claimed here, in a mod's constructor, as a real bridge claims, so BridgeClaimTests sees the loader's path.
+        bridge = dev.iredsc.hadron.api.bridge.Bridge.claim(TargetMod.MOD_ID);
     }
 }

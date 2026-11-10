@@ -241,6 +241,11 @@ final class TestWorld implements TestContext {
     }
 
     @Override
+    public dev.iredsc.hadron.api.bridge.Bridge bridge() {
+        return java.util.Objects.requireNonNull(HarnessMod.bridge, "the harness claims its bridge as it loads");
+    }
+
+    @Override
     public void registerEvents(Listener listener) {
         requireIdle("register listeners");
         Hadron.getPluginManager().registerEvents(listener, plugin);
