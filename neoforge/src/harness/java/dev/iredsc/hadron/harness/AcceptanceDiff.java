@@ -55,15 +55,15 @@ final class AcceptanceDiff {
     private record Change(String text, Predicate<Seen> concerns) {}
 
     /** Each change in {@code parts}, with the events heard for it. Empty when nothing in them changed. */
-    static List<String> changes(Snapshot before, Snapshot after, Set<Part> parts, List<Seen> seen, Set<UUID> touched,
-            Set<UUID> joinedOutside) {
+    static List<String> changes(Snapshot before, Snapshot after, Set<Part> parts, List<Seen> seen,
+            List<Seen> elsewhere, Set<UUID> touched, Set<UUID> joinedOutside) {
         List<Change> found = new ArrayList<>();
         if (parts.contains(Part.BLOCKS)) blocks(before, after, found);
         if (parts.contains(Part.INVENTORIES)) inventories(before, after, found);
         if (parts.contains(Part.ENTITIES)) entities(before, after, touched, joinedOutside, found);
         if (parts.contains(Part.PLAYERS)) players(before, after, found);
         List<String> out = new ArrayList<>();
-        for (Change c : found) out.add(c.text() + ": " + heard(c, seen));
+        for (Change c : found) out.add(c.text() + ": " + heard(c, seen, elsewhere));
         return out;
     }
 
@@ -72,8 +72,13 @@ final class AcceptanceDiff {
         return actor instanceof Actor.Server || actor instanceof Actor.Nature;
     }
 
-    private static String heard(Change c, List<Seen> seen) {
+    private static String heard(Change c, List<Seen> seen, List<Seen> elsewhere) {
         List<Seen> here = seen.stream().filter(c.concerns()).toList();
+        List<Seen> outside = elsewhere.stream().filter(c.concerns()).toList();
+        if (here.isEmpty() && !outside.isEmpty()) {
+            return "heard " + outside.get(0) + ", but placed outside the area, so protection didn't judge it. If it "
+                    + "happened here, the event says the wrong place: give it where it happens";
+        }
         if (here.isEmpty()) {
             return "no event was heard for it. An interception gap: the bridge fires the core event before this "
                     + "change, so protection can refuse it (docs/bridge-hooks.md)";

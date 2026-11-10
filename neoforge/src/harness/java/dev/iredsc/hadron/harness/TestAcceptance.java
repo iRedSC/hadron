@@ -126,6 +126,8 @@ final class TestAcceptance implements Acceptance, Listener {
     private final List<Unplaced> unplaced = new ArrayList<>();
     /** Entities an event in the box named this step: compared even if they only passed through. */
     private final Set<UUID> touched = new HashSet<>();
+    /** Events about compared entities or players that were placed outside the area: for failure messages only. */
+    private final List<Seen> elsewhere = new ArrayList<>();
     /**
      * Entities that joined the world outside the box this step: one of them in the box at the end walked, rolled or
      * flowed in, which is motion, not something appearing there.
@@ -217,6 +219,7 @@ final class TestAcceptance implements Acceptance, Listener {
         seen.clear();
         unplaced.clear();
         touched.clear();
+        elsewhere.clear();
         denied.clear();
         joinedOutside.clear();
     }
@@ -256,7 +259,8 @@ final class TestAcceptance implements Acceptance, Listener {
         AcceptanceDiff.Snapshot after = snapshot();
         requireSamePlayers(step, after);
         Set<Part> which = parts.length == 0 ? EnumSet.allOf(Part.class) : EnumSet.copyOf(List.of(parts));
-        List<String> problems = AcceptanceDiff.changes(before, after, which, seen, touched, joinedOutside);
+        List<String> problems = AcceptanceDiff.changes(before, after, which, seen, elsewhere, touched,
+                joinedOutside);
         if (!problems.isEmpty()) {
             throw new AssertionError(step + " should have changed nothing in " + which + ", but " + problems.size()
                     + " thing(s) changed:\n  " + String.join("\n  ", problems));
@@ -327,7 +331,15 @@ final class TestAcceptance implements Acceptance, Listener {
                             && c.isCancelled(), Optional.empty()), u.why()));
                 }
             }
-            case Place.Out o -> { }
+            case Place.Out o -> {
+                // Kept for failure messages only: an event about an entity being compared, placed outside the area.
+                boolean motion = MOTION.stream().anyMatch(m -> m.isInstance(event));
+                if (!motion && event instanceof EntityEvent ee && (followed.containsKey(ee.getEntity().getUUID())
+                        || t.players().stream().anyMatch(p -> p.uuid().equals(ee.getEntity().getUUID())))) {
+                    elsewhere.add(new Seen(event, a.getActor(), event instanceof Cancellable c && c.isCancelled(),
+                            Optional.empty()));
+                }
+            }
         }
     }
 

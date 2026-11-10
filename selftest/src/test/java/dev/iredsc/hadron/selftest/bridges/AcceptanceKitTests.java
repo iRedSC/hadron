@@ -1019,4 +1019,19 @@ public final class AcceptanceKitTests {
                 Actor.Unknown.INSTANCE));
         t.assertFalse(cancelled, "a drop landing outside the area isn't the area's");
     }
+
+    @HadronTest
+    void aChangeByAnEventPlacedOutsideSaysSo(TestContext t) {
+        Pig pig = pig(t, t.pos(2, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        CompoundTag after = new CompoundTag();
+        after.putInt("level", 2);
+        // An event about the pig that says it happened somewhere else.
+        pig.teleportTo(t.pos(-3, 0, 0).getX() + 0.5, t.pos(-3, 0, 0).getY(), t.pos(-3, 0, 0).getZ() + 0.5);
+        t.bridge().fire(new EntityDataChangeEvent(pig, ResourceLocation.fromNamespaceAndPath("hadron_test_target",
+                "mark"), new CompoundTag(), after, Actor.Nature.INSTANCE));
+        pig.setHealth(pig.getHealth() - 4);
+        String why = failure(t, () -> area.assertUnchanged("a pig changed by an event placed outside", Part.ENTITIES));
+        t.assertTrue(why.contains("EntityDataChangeEvent") && why.contains("placed outside the area"), why);
+    }
 }
