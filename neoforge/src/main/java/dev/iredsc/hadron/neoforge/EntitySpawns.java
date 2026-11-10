@@ -67,9 +67,8 @@ public final class EntitySpawns {
         } finally {
             if (build != 0) Actors.Port.exit(PortKey.KEY, build);
         }
-        attempts++;
         boolean cancelled = Hooks.post(event).isCancelled();
-        if (cancelled) refused++;
+        tried(cancelled);
         if (cancelled && entity instanceof FishingHook hook) return refuseHook(hook);
         return !cancelled;
     }
@@ -83,7 +82,19 @@ public final class EntitySpawns {
         return false;
     }
 
-    /** Spawns asked about and refused so far on the server thread; {@link EntitySpawnRefunds} compares them. */
+    /**
+     * Counts one thing a dispense or a use tried that a listener could refuse: a spawn, or an equip
+     * ({@link ItemHooks#cancelEquip}). Server thread only.
+     */
+    static void tried(boolean refusedNow) {
+        attempts++;
+        if (refusedNow) refused++;
+    }
+
+    /**
+     * What dispenses and uses tried (spawns, equips) and how many were refused, so far on the server thread;
+     * {@link EntitySpawnRefunds} compares them.
+     */
     @StaticState(reason = "a running count; EntitySpawnRefunds reads only its change across one dispense")
     static int attempts;
     @StaticState(reason = "a running count; EntitySpawnRefunds reads only its change across one dispense")

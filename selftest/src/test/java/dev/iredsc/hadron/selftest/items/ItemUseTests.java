@@ -295,9 +295,11 @@ public final class ItemUseTests {
             }
         });
         Support.awaitLoaded(t, stand);
+        SideEffects effects = t.watchSideEffects();
         t.setBlock(t.pos(2, 0, 1), Blocks.REDSTONE_BLOCK);
         t.await("the dispenser to fire", () -> !heard.isEmpty(), 60);
         t.tick(2);
+        effects.assertNone("a refused dispenser equip");
         EquipEvent e = one(t, heard, "EquipEvent");
         assertMachineActor(t, e.getActor(), dispenser);
         t.assertTrue(e.getEntity() == stand, "the entity equipped should be the armor stand, but was " + e.getEntity());
