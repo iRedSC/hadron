@@ -51,7 +51,7 @@ A test must be able to fail. Reject:
 
 - **Decisions in plain functions, Minecraft at the edges.** A mixin or listener that decides something (who the actor is, which event fits, allow or refuse) instead of handing it to a fast-testable function goes back.
 - **Invalid states can't be built.** Prefer a sealed type, a record that validates in its constructor, or an `Optional` to a nullable field and a comment saying when it's set.
-- **A cancel undoes everything it covers**: no item consumed, no durability lost, no half-moved stack, no cost kept. A cancel test checks the world after, not just the flag.
+- **A cancel undoes everything it covers**: no item consumed, no durability lost, no half-moved stack, no cost kept. A cancel test checks the world after, not just the flag, and starts `t.watchSideEffects()` right before the refused action and ends with `assertNone`, so a statistic, advancement trigger or vibration left behind fails it ([testing.md](testing.md)).
 - **Every error message says the fix**, naming the file, the line or key, and what to write instead.
 - **Names are what an agent would guess**, which is Bukkit's where the meaning matches. A rename from Bukkit needs a reason in [events.md](events.md) rule 6.
 - **Hot paths cost one check when nobody listens.** Code on `setBlock`, `setDeltaMovement`, ticking or packet handling allocates nothing and returns at once without a listener.
