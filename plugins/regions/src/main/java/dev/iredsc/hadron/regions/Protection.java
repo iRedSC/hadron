@@ -15,6 +15,10 @@ import dev.iredsc.hadron.api.event.block.BlockSpreadEvent;
 import dev.iredsc.hadron.api.event.block.BlockUseEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryMoveItemEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
+import dev.iredsc.hadron.api.event.entity.EntityDismountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityUseEvent;
 import dev.iredsc.hadron.api.event.entity.HangingBreakEvent;
@@ -162,11 +166,27 @@ final class Protection implements Listener {
     private void landed(EntityTeleportEvent e) {
         Set<ServerPlayer> going = going(e);
         if (going.isEmpty()) return;
-        ServerLevel fromLevel = e.getFromLevel();
-        Vec3 from = e.getFrom();
+        recheck(going, e.getFromLevel(), e.getFrom());
+    }
+
+    /**
+     * Getting off can set a player down inside a region (a boat facing into it), with no move or teleport to ask
+     * before, so they are checked where they stand a tick later, as after a teleport.
+     */
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    private void dismount(EntityDismountEvent e) {
+        if (!(e.getEntity() instanceof ServerPlayer p) || bypass.active(p)) return;
+        recheck(Set.of(p), p.serverLevel(), p.position());
+    }
+
+    /**
+     * A tick from now, sends each player back to {@code from} if they stand in a region they may not enter and
+     * weren't in there.
+     */
+    private void recheck(Set<ServerPlayer> players, ServerLevel fromLevel, Vec3 from) {
         List<Region> before = store.at(fromLevel, BlockPos.containing(from));
         plugin.getServer().getScheduler().runTask(plugin, () -> {
-            for (ServerPlayer p : going) {
+            for (ServerPlayer p : players) {
                 if (p.hasDisconnected() || p.isRemoved() || bypass.active(p)) continue;
                 Optional<Region> no = Rules.refusingEntry(before, store.at(p.serverLevel(), p.blockPosition()),
                         Optional.of(p.getUUID()));
@@ -238,9 +258,12 @@ final class Protection implements Listener {
             return;
         }
         if (!(victim instanceof ServerPlayer hurt)) return;
-        // Whoever answers for it, online or not: a turret keeps its owner while they're away.
-        Optional<UUID> who = e.getActor().actingFor().filter(id -> !id.equals(hurt.getUUID()));
-        if (who.isEmpty()) return;
+        // Whoever answers for it, online or not: a turret keeps its owner while they're away. A machine nobody owns
+        // is an outsider; a mob nobody controls isn't PvP at all.
+        Optional<UUID> who = e.getActor().actingFor();
+        if (who.isPresent() && who.get().equals(hurt.getUUID())) return;
+        boolean machine = e.getActor() instanceof Actor.Machine || e.getActor() instanceof Actor.FakePlayer;
+        if (who.isEmpty() && !machine) return;
         // Both sides count: nobody fights out of a safe zone or into one.
         ServerLevel level = e.getLevel();
         List<BlockPos> sides = new ArrayList<>(3);
@@ -288,14 +311,47 @@ final class Protection implements Listener {
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void spawn(EntitySpawnEvent e) {
-        Entity placed = e.getEntity();
-        if (placed instanceof HangingEntity || placed instanceof ArmorStand || placed instanceof VehicleEntity
-                || placed instanceof EndCrystal) {
-            entityChange(e, e, placed, Flag.BUILD);
-        }
+        Entity spawned = e.getEntity();
+        if (placed(spawned)) entityChange(e, e, spawned, Flag.BUILD);
     }
 
-    private void entityChange(ActionEvent e, Cancellable c, Entity target, Flag flag) {
+    /** Removing a placed object outright (/kill on a stand, a mod's remover) is building, as breaking it is. */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    private void remove(EntityRemoveEvent e) {
+        if (placed(e.getEntity())) entityChange(e, e, e.getEntity(), Flag.BUILD);
+    }
+
+    /**
+     * Items carried across a region's edge (a hopper under a chest, a pipe) are the world on its own reaching in or
+     * out: held to {@link Rules#refusingCrossing} both ways, as a piston is.
+     */
+    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    private void items(InventoryMoveItemEvent e) {
+        if (trusted(e)) return;
+        Optional<List<Region>> source = regionsAt(e.getSource());
+        Optional<List<Region>> destination = regionsAt(e.getDestination());
+        if (source.isEmpty() || destination.isEmpty()) return;
+        Optional<Region> no = Rules.refusingCrossing(destination.get(), source.get())
+                .or(() -> Rules.refusingCrossing(source.get(), destination.get()));
+        if (no.isPresent()) e.setCancelled(true);
+    }
+
+    /** The regions an inventory stands in; empty when it has no place in a world (linked storage, unknown). */
+    private Optional<List<Region>> regionsAt(InventoryHolder holder) {
+        return switch (holder.place()) {
+            case InventoryHolder.Block b -> Optional.of(store.at(b.level(), b.pos()));
+            case InventoryHolder.Entity en when en.entity().level() instanceof ServerLevel level ->
+                    Optional.of(store.at(level, en.entity().blockPosition()));
+            default -> Optional.empty();
+        };
+    }
+
+    private static boolean placed(Entity entity) {
+        return entity instanceof HangingEntity || entity instanceof ArmorStand || entity instanceof VehicleEntity
+                || entity instanceof EndCrystal;
+    }
+
+        private void entityChange(ActionEvent e, Cancellable c, Entity target, Flag flag) {
         if (!(target.level() instanceof ServerLevel level)) return;
         BlockPos pos = target.blockPosition();
         Optional<Region> no = e.getActor() instanceof Actor.Nature ? Optional.empty()

@@ -3,6 +3,7 @@ package dev.iredsc.hadron.regions;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
+import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
 import dev.iredsc.hadron.test.HadronTest;
@@ -20,6 +21,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.GameType;
 import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
@@ -351,5 +353,69 @@ public final class RegionsTests {
                 turret);
         t.plugin().getServer().getPluginManager().callEvent(shot);
         t.assertTrue(shot.isCancelled(), "a turret inside a pvp deny region should not hurt a player");
+    }
+
+    @HadronTest
+    void anOwnerlessMachineCantAttackOutOfASafeZone(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "ownerless-zone", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        alice.command("rg flag ownerless-zone pvp deny");
+        TestPlayer carol = t.player("carol");
+        Actor turret = new Actor.Machine(t.level(), t.pos(3, 0, 0), Attribution.none());
+        EntityDamageEvent shot = new EntityDamageEvent(carol.player(), t.level().damageSources().generic(), 4f,
+                turret);
+        t.plugin().getServer().getPluginManager().callEvent(shot);
+        t.assertTrue(shot.isCancelled(), "a turret nobody owns inside a pvp deny region should not hurt a player");
+    }
+
+    @HadronTest
+    void gettingOffABoatIntoARegionSendsThemBack(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "dismount-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        alice.command("rg flag dismount-vault entry deny");
+        TestPlayer bob = t.player("bob");
+        Boat boat = EntityType.BOAT.create(t.level());
+        BlockPos start = t.pos(0, 0, 0);
+        boat.moveTo(start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+        t.level().addFreshEntity(boat);
+        bob.interact(boat);
+        t.assertTrue(bob.player().getVehicle() == boat, "bob should be in the boat");
+        t.tick(2);
+        // As vanilla's dismount does: off, then set down beside the boat, which here is inside the vault.
+        bob.player().stopRiding();
+        BlockPos inside = t.pos(2, 0, 0);
+        bob.player().setPos(inside.getX() + 0.5, inside.getY(), inside.getZ() + 0.5);
+        t.tick(3);
+        t.assertTrue(bob.player().getBlockX() < inside.getX(),
+                "bob should be sent back out of the vault, but stands at " + bob.player().blockPosition());
+    }
+
+    @HadronTest
+    void aHopperOutsideCantDrainAChestInside(TestContext t) {
+        BlockPos chest = t.pos(3, 0, 0);
+        t.setBlock(chest, Blocks.CHEST);
+        ((ChestBlockEntity) t.level().getBlockEntity(chest)).setItem(0, new ItemStack(Items.DIAMOND, 8));
+        TestPlayer alice = admin(t);
+        define(t, alice, "hopper-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        // The hopper comes after the region, below it and outside.
+        t.setBlock(chest.below(), Blocks.HOPPER);
+        t.tick(40);
+        t.assertEquals(8, ((ChestBlockEntity) t.level().getBlockEntity(chest)).getItem(0).getCount(),
+                "the diamonds left in the chest");
+    }
+
+    @HadronTest
+    void anOutsiderCantRemoveAnArmorStandOutright(TestContext t) {
+        ArmorStand stand = EntityType.ARMOR_STAND.create(t.level());
+        BlockPos at = t.pos(3, 0, 0);
+        stand.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5);
+        t.level().addFreshEntity(stand);
+        TestPlayer alice = admin(t);
+        define(t, alice, "stand-removal", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer bob = t.player("bob");
+        EntityRemoveEvent killed = new EntityRemoveEvent(stand, EntityRemoveEvent.Cause.KILLED,
+                new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(killed);
+        t.assertTrue(killed.isCancelled(), "an outsider removing a stand in a region should be refused");
     }
 }
