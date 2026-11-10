@@ -471,7 +471,8 @@ final class TestAcceptance implements Acceptance, Listener {
                 present.putIfAbsent(e.getUUID(), e);
             } else if (e.getRemovalReason() == Entity.RemovalReason.CHANGED_DIMENSION) {
                 // A mob changing worlds is replaced by a copy with the same id there: follow the copy, or, while
-                // the world it went to doesn't list it yet, the mob as it left. Changing worlds is motion, not a change.
+                // the world it went to doesn't list it yet, the mob as it left. Changing worlds is motion, not a
+                // change.
                 Entity moved = e;
                 for (ServerLevel other : level.getServer().getAllLevels()) {
                     Entity copy = other.getEntity(e.getUUID());
