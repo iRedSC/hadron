@@ -2,13 +2,20 @@ package dev.iredsc.hadron.selftest.harness;
 
 import static dev.iredsc.hadron.selftest.entities.Fixtures.spawnWithAi;
 
+import dev.iredsc.hadron.api.net.PacketRegistration;
+import dev.iredsc.hadron.api.net.Packets;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
+import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import net.minecraft.advancements.CriteriaTriggers;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
+import net.minecraft.network.protocol.game.ClientboundBundlePacket;
 import net.minecraft.network.protocol.game.ClientboundLevelEventPacket;
+import net.minecraft.network.protocol.game.ClientboundSoundEntityPacket;
 import net.minecraft.network.protocol.game.ClientboundSoundPacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
@@ -115,6 +122,67 @@ public final class SideEffectsTests {
         t.assertEquals(1, bob.received(ClientboundSoundPacket.class).size(), "sound packets bob was sent");
         t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "sounds recorded for one broadcast "
                 + "both heard; seen: " + effects.seen());
+    }
+
+    @HadronTest
+    void aSoundAHandlerSendsDuringABroadcastIsRecorded(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        t.player("bob");
+        t.tick();
+        alice.clearReceived();
+        // While the click goes to bob (alice's own client plays it), a handler sends alice a portal's whoosh.
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class, e -> {
+            if (e.getPacket().getSound().value() == SoundEvents.LEVER_CLICK) alice.player().connection.send(whoosh(t));
+        });
+        try {
+            SideEffects effects = t.watchSideEffects();
+            t.level().playSound(alice.player(), t.pos(0, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, alice.received(ClientboundLevelEventPacket.class).size(), "whooshes alice was sent");
+            t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "the click, recorded once");
+            t.assertEquals(1, effects.seen(SideEffects.LevelEventPlayed.class).size(), "the whoosh sent during it");
+        } finally {
+            handler.unregister();
+        }
+    }
+
+    @HadronTest
+    void aSoundAnotherThreadSendsDuringABroadcastIsRecorded(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        t.player("bob");
+        t.tick();
+        alice.clearReceived();
+        PacketRegistration handler = Packets.onSend(t.plugin(), ClientboundSoundPacket.class, e -> {
+            if (e.getPacket().getSound().value() == SoundEvents.LEVER_CLICK) {
+                CompletableFuture.runAsync(() -> alice.player().connection.send(whoosh(t))).join();
+            }
+        });
+        try {
+            SideEffects effects = t.watchSideEffects();
+            t.level().playSound(alice.player(), t.pos(0, 0, 0), SoundEvents.LEVER_CLICK, SoundSource.BLOCKS, 1, 1);
+            t.tick();
+            t.assertEquals(1, alice.received(ClientboundLevelEventPacket.class).size(), "whooshes alice was sent");
+            t.assertEquals(1, effects.seen(SideEffects.LevelEventPlayed.class).size(), "the other thread's whoosh");
+        } finally {
+            handler.unregister();
+        }
+    }
+
+    @HadronTest
+    void soundsInABundleAreRecorded(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        SideEffects effects = t.watchSideEffects();
+        alice.player().connection.send(new ClientboundBundlePacket(List.of(whoosh(t), new ClientboundSoundEntityPacket(
+                BuiltInRegistries.SOUND_EVENT.wrapAsHolder(SoundEvents.LEVER_CLICK), SoundSource.BLOCKS, alice.player(),
+                1, 1, 1))));
+        t.tick();
+        t.assertEquals(1, effects.seen(SideEffects.SoundPlayed.class).size(), "entity sounds in the bundle");
+        t.assertEquals(1, effects.seen(SideEffects.LevelEventPlayed.class).size(), "whooshes in the bundle");
+    }
+
+    /** A portal's whoosh, which the server sends straight to the player who went through. */
+    private static ClientboundLevelEventPacket whoosh(TestContext t) {
+        return new ClientboundLevelEventPacket(LevelEvent.SOUND_PORTAL_TRAVEL, t.pos(0, 0, 0), 0, false);
     }
 
     @HadronTest

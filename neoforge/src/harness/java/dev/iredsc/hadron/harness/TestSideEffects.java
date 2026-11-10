@@ -58,11 +58,12 @@ public final class TestSideEffects implements SideEffects {
     private static int ambientDepth;
 
     /**
-     * How deep the server thread is inside a world's sound broadcast, which is recorded once as a whole: the packets it
-     * then sends each player near aren't recorded again.
+     * The packet of the world broadcast this thread is running, which was recorded once as a whole: its copies, sent
+     * to each player near, aren't recorded again. Only those: another packet sent meanwhile (a packet handler sending
+     * someone a portal's whoosh) is recorded, and so is every packet another thread sends.
      */
-    @StaticState(reason = "a depth counter of broadcasts on the server thread, back to 0 as each one returns")
-    private static int broadcasting;
+    @StaticState(reason = "each thread's innermost running broadcast, put back to the outer one as each returns")
+    private static final ThreadLocal<@Nullable Packet<?>> BROADCAST = new ThreadLocal<>();
 
     /** Frames of the bookkeeping between an action and the hook, skipped so {@code from} starts at the action. */
     private static final Set<String> BOOKKEEPING_METHODS = Set.of("awardStat", "resetStat", "gameEvent",
@@ -230,14 +231,43 @@ public final class TestSideEffects implements SideEffects {
                 from()));
     }
 
-    /** From {@code ServerLevelSoundMixin}: runs a broadcast it has just recorded, so its packets aren't recorded too. */
-    public static void broadcasting(Runnable broadcast) {
-        broadcasting++;
+    /**
+     * From {@code ServerLevelSoundMixin}: runs the broadcast of {@code packet}, which it has just recorded, so the
+     * copies it sends each player near aren't recorded too.
+     */
+    public static void broadcasting(Packet<?> packet, Runnable broadcast) {
+        @Nullable Packet<?> outer = BROADCAST.get();
+        BROADCAST.set(packet);
         try {
             broadcast.run();
         } finally {
-            broadcasting--;
+            if (outer == null) BROADCAST.remove();
+            else BROADCAST.set(outer);
         }
+    }
+
+    /**
+     * Whether {@code sent} is a copy of the broadcast running on this thread: that very packet, or one with the same
+     * sound, place and source, as a handler that rebuilt it would send.
+     */
+    private static boolean ofBroadcast(Packet<?> sent) {
+        @Nullable Packet<?> b = BROADCAST.get();
+        if (b == null) return false;
+        if (sent == b) return true;
+        return switch (sent) {
+            case ClientboundSoundPacket p when b instanceof ClientboundSoundPacket q -> sameSound(p.getSound(),
+                    q.getSound()) && p.getSource() == q.getSource() && p.getX() == q.getX() && p.getY() == q.getY()
+                    && p.getZ() == q.getZ();
+            case ClientboundSoundEntityPacket p when b instanceof ClientboundSoundEntityPacket q -> sameSound(
+                    p.getSound(), q.getSound()) && p.getSource() == q.getSource() && p.getId() == q.getId();
+            case ClientboundLevelEventPacket p when b instanceof ClientboundLevelEventPacket q -> p.getType()
+                    == q.getType() && p.getPos().equals(q.getPos()) && p.getData() == q.getData();
+            default -> false;
+        };
+    }
+
+    private static boolean sameSound(Holder<SoundEvent> a, Holder<SoundEvent> b) {
+        return a.value().getLocation().equals(b.value().getLocation());
     }
 
     /**
@@ -248,11 +278,11 @@ public final class TestSideEffects implements SideEffects {
     public static void packetSent(ServerPlayer to, Packet<?> packet) {
         if (ACTIVE.isEmpty() || ambientDepth > 0) return;
         boolean serverThread = to.server.isSameThread();
-        if (broadcasting > 0 && serverThread) return;
         if (packet instanceof ClientboundBundlePacket bundle) {
             for (Packet<?> part : bundle.subPackets()) packetSent(to, part);
             return;
         }
+        if (ofBroadcast(packet)) return;
         ServerLevel level = to.serverLevel();
         Optional<Player> only = Optional.of(to);
         switch (packet) {
