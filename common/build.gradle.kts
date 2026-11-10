@@ -29,6 +29,8 @@ dependencies {
 }
 
 tasks.test {
+    // DeployClientTest runs gradle/deploy/HadronDeploy.java, the client of the deploy task.
+    inputs.file(rootProject.file("gradle/deploy/HadronDeploy.java"))
     useJUnitPlatform()
     testLogging { events("failed"); exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL }
 }

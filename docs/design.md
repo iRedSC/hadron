@@ -18,7 +18,7 @@ Hadron makes promises (a cancel fully undoes, a machine's break is its owner's, 
 
 - **Two tiers of tests.** Fast tests run on the JVM with Minecraft's registries but no server or world, in milliseconds, for everything that decides rather than acts. In-game tests run in a headless server with real players over an in-memory connection, for everything that touches the world, a player or a packet ([testing.md](testing.md)). A warm test server reruns a plugin's in-game tests in about a second after each build, so iterating doesn't pay a server boot each time. There is no fake Minecraft: a mock that disagrees with the real game is a test that passes while the plugin is broken.
 - **Logic in the middle, Minecraft at the edges.** Decisions (who is the actor, which event fits, refuse or allow, the new balance) live in plain functions the fast tier tests; mixins and listeners only translate between Minecraft and those functions.
-- **Every claim has a test, and the build checks it.** A test declares what it proves with `@Covers`. Every shipped event, bridge contract and public API method must be covered, or the build fails and names what isn't: an event ships only with its producer and a test.
+- **Every claim has a test, and the build checks it.** A test declares what it proves with `@Covers`. Every shipped event, bridge contract and public API method must be covered, or the build fails and names what isn't: an event ships only with its producer and a test. The build checks that each `@Covers` names a real target on a test that runs; whether the test really exercises it is a reviewer's call.
 - **Deterministic.** Time is server ticks, randomness can be seeded, and nothing in Hadron is timed by the wall clock where a test can't control it.
 - **Results machines read.** Test reports come as JSON as well as text, so an agent reads exactly which test failed and why.
 - **Tests written blind to the implementation.** `contractBundle` writes a folder with only the contract: API stubs (signatures and Javadoc, no bodies), the spec docs without their implementation detail, and a test project wired to prebuilt Hadron jars. A test agent works only there, so its tests come from what Hadron promises, not from what the code happens to do, and a contract too vague to test from shows up as a gap, the same gap a plugin-writing agent would fall into. The blind agent never changes an assertion to match what it observed: a failure goes to a sighted triage agent, which decides whether Hadron is wrong (fix the code), the test misread the contract (fix the test), or the contract is unclear (fix the docs, then the test), and lists every docs change it made.
@@ -75,7 +75,7 @@ A plugin is built for one Minecraft version and keeps loading on later ones unti
 
 Hadron's own classes change only when Minecraft forces them to, and each such change goes in the port guide like any other.
 
-Today the host still refuses any jar built for another Minecraft version; the rename tables and link check come with Hadron's first port to a second version.
+Today the host still refuses any jar built for another Minecraft version; the rename tables and link check come with Hadron's first port to a second version, and the `hadron { }` line with the Gradle plugin.
 
 ## Permissions
 
@@ -100,13 +100,15 @@ The agent is working in the user's folder, not this repo. So everything it needs
 
 Every error a plugin hits at runtime (a failed load, an exception in a listener) is written to say what went wrong and where, since an agent fixes what the message tells it.
 
+Today this works only inside this repo, where each plugin project applies Hadron's scripts with `apply(from = ...)`: the compile checks of step 4 (a loader class doesn't compile; Error Prone, static mutable state and test determinism), the API's sources jar, `hadronTest`, and a dev server that reloads a jar `deploy` copies into it. `plugin.yml` is checked when the server loads it, and earlier only by a fast test the plugin writes (`examples/hello`'s `HelloFastTest`). The skill, the Gradle plugin and project template, the delivery message and client MCP are still to build (see "Order of work").
+
 ## Mistakes, not malice
 
 **Plugins are trusted code, as in Bukkit**, where a plugin runs with the server's full rights and nothing sandboxes it. Hadron's boundaries exist so a plugin can't do the wrong thing by mistake or by guessing at an API, and each one refuses with the fix: the `HostKey` that replacing or clearing what the host installed takes, the class loader that links nothing of Hadron's outside `api`, the build's `HostOnly`, static-state and wall-clock checks, and a plugin build that can't loosen those checks. Getting past them on purpose, by reflection on a private field or through another class loader, is out of scope: no boundary inside one JVM can stop code that sets out to get around it, and an owner who installs a plugin trusts it as they would a mod.
 
 ## Bundled plugins
 
-Hadron ships lightweight plugins server owners expect: essentials-style commands, regions, placeholders, holograms, chat formatting, and the LuckPerms provider. They are write-once plugins, written the way the skill tells agents to write plugins, so they double as its examples, and each Hadron port runs them first, which is how the port guides get written.
+Hadron ships lightweight plugins server owners expect: essentials-style commands, regions, placeholders, holograms, chat formatting, and the LuckPerms provider. They are write-once plugins, written the way the skill tells agents to write plugins, so they double as its examples, and each Hadron port runs them first, which is how the port guides get written. Only the LuckPerms provider exists so far (`plugins/luckperms`); the rest come with step 8 of the order of work.
 
 **Regions** are Hadron's own, written from scratch under MIT, using FTAM's WorldGuard plugin only as a description of what it should do (commands, flags, nesting), never as code. It has its own selection wand and protects through core's events and the actor stack, so it covers every mod a bridge covers. WorldEdit selections come from a small separate plugin, licensed GPL like WorldEdit, so no GPL code reaches Hadron or the regions plugin.
 
@@ -125,7 +127,7 @@ Hadron ships lightweight plugins server owners expect: essentials-style commands
 4. The actor stack and the events in [events.md](events.md) at their chokepoints, with a benchmark for the chokepoint cost (done: `:bench:chokepointBench`, [bridges.md](bridges.md#the-chokepoint-cost)) and watched areas (done: `Areas.watch`); bridges claiming their mods and firing through the claim (done: `Bridge.claim`, `bridge-depend:`). The coverage report ([bridges.md](bridges.md)) waits for the first pilot bridge, since it reports missing bridges and there are none to report yet. `EntityRemoveEvent` and `EntityCaptureEvent`, the most needed in a survey of 21 mods ([#19](https://github.com/iRedSC/hadron/pull/19)), have shipped; core fires them for `/kill` and buckets, and bridges for the rest.
 5. Gradle plugin and project template, with the build checks.
 6. The skill, written against what exists, then tested by asking fresh agents for real plugins and fixing whatever they trip on.
-7. ~~Headless test runner~~: done ([testing.md](testing.md)). `hadronTest` for `examples/hello` and `selftest`; moves into the Gradle plugin with step 5.
+7. ~~Headless test runner~~: done ([testing.md](testing.md)). `hadronTest` for this repo's plugin projects; moves into the Gradle plugin with step 5.
 8. Pilot bridges, Mekanism first, with the acceptance kit to judge them, then the coverage report; bundled plugins; the client companion.
 9. Helpers for NPCs, bulk block edits and packets.
 10. A second Minecraft version: its rename table, the load-time link check, and the first port guide.

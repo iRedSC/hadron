@@ -34,14 +34,16 @@ the head SHA, the worktree path, the diff command (`git diff <base-sha>...<head-
 > Read AGENTS.md, docs/design.md and docs/coding-standards.md first. Find at least <min_findings> issues in this
 > change, ideally more, and give each a priority by the table in docs/coding-standards.md ("Priority"): the highest
 > level whose test it meets. Each names a file and line, what goes wrong, and a suggested fix. You may run builds and
-> tests. If you can't find <min_findings> real issues more serious than P4, list P4s to make up the number. Findings
-> on the "Deferred" list are known and going to their own PR, and those on the "Answered" list were disputed with
-> evidence: don't count either unless you can show the answer is wrong. End with one line:
-> `Found: <n>, top P<k>`, where P<k> is your most serious finding.
+> tests. If you can't find <min_findings> real issues more serious than P4, list P4s to make up the number; never
+> raise a finding's priority to reach it. Findings on the "Deferred" list are known and going to their own PR, and
+> those on the "Answered" list were disputed with evidence: don't count either unless you can show the answer is
+> wrong. End with one line: `Found: <n>, top P<k>`, where P<k> is your most serious finding.
 
 Record each member's `<n> found, top P<k>` in the round's column. Then, highest priority first:
 
-- **Fix P0 to P2.** Leave P3 for the cleanup and drop P4.
+- **Fix what is more serious than `stop_at`** (P0 to P2 while it's P3). Leave findings at `stop_at` for the cleanup.
+- **A finding less serious than `stop_at` is recorded, not work**: change nothing for it. `min_findings` makes members
+  dig, so a round's padding lands here and never turns into fixes.
 - **A fix must not make the code more complex.** A fix that adds net non-test lines, a new branch or a new concept
   (a rule, a file, an option) is flagged. For a P3, it goes under "Deferred" in the PR, to its own PR, and reviewers
   are told it's known. A P0 to P2 is fixed here even so, and listed under "Complex fixes" so the growth is visible;
