@@ -139,12 +139,14 @@ final class TestAcceptance implements Acceptance, Listener {
 
     private void joined(EntityJoinLevelEvent event) {
         Entity e = event.getEntity();
-        if (e instanceof ServerPlayer || before.entities().containsKey(e.getUUID())) return;
+        if (e instanceof ServerPlayer) return;
+        // Its newest instance (born, reloaded from its chunk, a copy through a portal) is the one followed, so where
+        // it ends is seen even if that is inside the box and nothing reported it.
+        followed.put(e.getUUID(), e);
+        if (before.entities().containsKey(e.getUUID())) return;
         AcceptanceDiff.Thing now = thing(e);
         // One loaded from disk inside the box was already there, not born there: it is compared with how it loaded.
         arrived.putIfAbsent(e.getUUID(), now.inBox() && !event.loadedFromDisk() ? Optional.empty() : Optional.of(now));
-        // Followed from its birth, so where it ends is seen even if that is inside the box and nothing reported it.
-        followed.putIfAbsent(e.getUUID(), e);
     }
 
     /** Stops hearing the loader when the test ends. */
@@ -179,7 +181,9 @@ final class TestAcceptance implements Acceptance, Listener {
         t.registerEvents(this);
         this.before = snapshot();
         follow(before);
-        NeoForge.EVENT_BUS.addListener(EntityJoinLevelEvent.class, joins);
+        // Last and uncancelled only: a join another listener refused never happened.
+        NeoForge.EVENT_BUS.addListener(net.neoforged.bus.api.EventPriority.LOWEST, false, EntityJoinLevelEvent.class,
+                joins);
     }
 
     @Override
@@ -398,6 +402,10 @@ final class TestAcceptance implements Acceptance, Listener {
             Place centre = at(level, x.getLocation());
             if (centre instanceof Place.In) return centre;
             for (BlockPos p : x.blockList()) if (box.isInside(p)) return in(p);
+            // And whoever it hurts there: a blast outside reaching a mob in the box.
+            for (Entity hurt : x.getEntities()) {
+                if (hurt.level() == level && at(level, hurt.position()) instanceof Place.In p) return p;
+            }
             return OUT;
         }
         if (event instanceof ItemPickupEvent pickup) {
@@ -504,6 +512,11 @@ final class TestAcceptance implements Acceptance, Listener {
         return switch (event) {
             case EntityMountEvent e -> List.of(e.getEntity(), e.getMount());
             case EntityLeashEvent e -> List.of(e.getEntity(), e.getHolder());
+            case ExplosionEvent x -> {
+                List<Entity> all = new ArrayList<>(x.getEntities());
+                x.getSource().ifPresent(all::add);
+                yield all;
+            }
             case ProjectileHitEvent e -> e.getHitEntity().map(hit -> List.of(e.getEntity(), hit))
                     .orElse(List.of(e.getEntity()));
             case EntityEvent e -> List.of(e.getEntity());

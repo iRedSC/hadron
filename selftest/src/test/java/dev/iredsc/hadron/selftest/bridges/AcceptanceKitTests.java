@@ -64,6 +64,7 @@ import net.minecraft.world.entity.vehicle.MinecartChest;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Explosion;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -1247,5 +1248,42 @@ public final class AcceptanceKitTests {
         } finally {
             nether.setChunkForced(0, 0, false);
         }
+    }
+
+    @HadronTest
+    void aMobReloadedAndDestroyedBeforeAnyAssertionIsGone(TestContext t) {
+        Pig pig = pig(t, t.pos(2, 0, 0));
+        Acceptance area = t.acceptance(around(t));
+        CompoundTag saved = new CompoundTag();
+        pig.save(saved);
+        pig.remove(Entity.RemovalReason.UNLOADED_TO_CHUNK);
+        Entity reloaded = EntityType.loadEntityRecursive(saved, t.level(), e -> e);
+        t.assertTrue(reloaded != null, "the pig reloaded");
+        try (Actors.Scope s = Actors.push(new Actor.Server("its chunk loading"))) {
+            t.assertTrue(t.level().addFreshEntity(reloaded), "the reloaded pig is in the world");
+        }
+        reloaded.discard();
+        String why = failure(t, () -> area.assertUnchanged("a pig reloaded, then destroyed", Part.ENTITIES));
+        t.assertTrue(why.contains("minecraft:pig") && why.contains("is gone"), why);
+    }
+
+    @HadronTest
+    void aBlastsVictimHurtOnItsWayThroughIsChecked(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos out = t.pos(0, 0, 4), in = t.pos(2, 0, 0), far = t.pos(-4, 0, 0);
+        Pig pig = pig(t, out);
+        Acceptance area = t.acceptance(around(t));
+        pig.teleportTo(in.getX() + 0.5, in.getY(), in.getZ() + 0.5);
+        // The blast is outside the area and breaks nothing in it: only its victim is in it.
+        Explosion blast = new Explosion(t.level(), null, far.getX() + 0.5, far.getY() + 0.5, far.getZ() + 0.5, 2.0f,
+                false, Explosion.BlockInteraction.KEEP);
+        t.assertTrue(Hadron.getPluginManager().callEvent(new ExplosionEvent(new Actor.Player(bob.player()),
+                t.level(), blast, new java.util.ArrayList<>(), new java.util.ArrayList<>(List.of(pig)))),
+                "bob's blast reaching a pig in the area was refused");
+        area.assertRefused(bob, "bob's blast");
+        pig.setHealth(pig.getHealth() - 4);
+        pig.teleportTo(out.getX() + 0.5, out.getY(), out.getZ() + 0.5);
+        String why = failure(t, () -> area.assertUnchanged("a pig hurt by a refused blast", Part.ENTITIES));
+        t.assertTrue(why.contains("minecraft:pig") && why.contains("health"), why);
     }
 }
