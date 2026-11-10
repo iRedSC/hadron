@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import dev.iredsc.hadron.api.event.EventStack;
@@ -48,5 +50,15 @@ public abstract class ItemEvent extends ActionEvent {
      */
     public Optional<ServerPlayer> getPlayer() {
         return getActingPlayer();
+    }
+
+    /**
+     * Where it happens. An item has no place of its own, so each leaf names where its stack is: the inventory it is
+     * in, the entity holding or using it, where it lies. A leaf that names none (a bridge's own) is
+     * {@link Place.Unknown} within {@link #getLevel()}.
+     */
+    @Override
+    public Places getPlaces() {
+        return Places.of(new Place.Unknown(new Place.Level(getLevel()), Place.Unknown.Reason.UNPLACEABLE_OPERATION));
     }
 }

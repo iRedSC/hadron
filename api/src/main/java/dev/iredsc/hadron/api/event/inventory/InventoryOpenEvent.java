@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.inventory;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
@@ -22,16 +24,22 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 public class InventoryOpenEvent extends InventoryEvent implements Cancellable {
     private final ServerPlayer viewer;
     private final @Nullable AbstractContainerMenu menu;
+    private final InventoryHolder menuHolder;
     private boolean cancelled;
 
     /**
      * @param menu the menu about to open, or null where it doesn't exist yet (horse inventories are opened before
      *     their menu is built)
+     * @param menuHolder what the menu is open on, as the menu says ({@link #getMenuHolder()}); {@link
+     *     InventoryHolder.Unknown} when it says nothing, never a guess from its slots
      */
-    public InventoryOpenEvent(ServerPlayer viewer, InventoryHolder holder, @Nullable AbstractContainerMenu menu, Actor actor) {
+    public InventoryOpenEvent(ServerPlayer viewer, InventoryHolder holder, @Nullable AbstractContainerMenu menu,
+            InventoryHolder menuHolder, Actor actor) {
         super(holder, actor);
         this.viewer = Objects.requireNonNull(viewer, "viewer");
         this.menu = menu;
+        this.menuHolder = Objects.requireNonNull(menuHolder,
+                "menuHolder; pass InventoryHolder.Unknown.INSTANCE when the menu doesn't say what it is open on");
     }
 
     /** Who will see the menu. May be a fake player; {@link #getActor()} says who is behind it. */
@@ -44,6 +52,15 @@ public class InventoryOpenEvent extends InventoryEvent implements Cancellable {
         return Optional.ofNullable(menu);
     }
 
+    /**
+     * What the menu is open on, as the menu itself says: the block a crafting table's or a chest's menu was opened on,
+     * a horse, the viewer for their own inventory screen. {@link InventoryHolder.Unknown} when the menu says nothing
+     * (a mod's menu no bridge describes); its own slots are then placed {@code Unknown}.
+     */
+    public InventoryHolder getMenuHolder() {
+        return menuHolder;
+    }
+
     @Override
     public boolean isCancelled() {
         return cancelled;
@@ -52,5 +69,15 @@ public class InventoryOpenEvent extends InventoryEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /**
+     * Where {@link #getHolder()} is, then, once the menu exists, every inventory behind its slots (both halves of a
+     * double chest), as for {@link InventoryClickEvent#getPlaces()}.
+     */
+    @Override
+    public Places getPlaces() {
+        Places own = Place.of(getHolder());
+        return menu == null ? own : own.and(Menus.places(menu, viewer, menuHolder, getHolder()));
     }
 }

@@ -12,9 +12,9 @@ import net.minecraft.server.level.ServerPlayer;
 /**
  * Something done to the world, an entity, an item, an inventory or a resource, by an {@link Actor}. Every block,
  * entity, item, inventory, resource and world event is one, so a plugin can always ask who did it, whether the actor
- * was a player, a machine, a mob or nature.
+ * was a player, a machine, a mob or nature, and where it happened ({@link #getPlaces()}).
  */
-public abstract class ActionEvent extends Event {
+public abstract class ActionEvent extends Event implements Placed {
     private final Actor actor;
     private final Operation operation;
 
@@ -46,4 +46,13 @@ public abstract class ActionEvent extends Event {
         if (id.isEmpty() || server == null) return Optional.empty();
         return Optional.ofNullable(server.getPlayer(id.get()));
     }
+
+    /**
+     * {@inheritDoc}
+     *
+     * <p>Abstract here so every kind of action must say where it happens: a bridge's own action type that doesn't
+     * fails to compile. One that can't say returns {@link Place.Unknown} with a reason.
+     */
+    @Override
+    public abstract Places getPlaces();
 }

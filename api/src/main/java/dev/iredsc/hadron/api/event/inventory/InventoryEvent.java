@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.inventory;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import java.util.Objects;
@@ -30,5 +32,11 @@ public abstract class InventoryEvent extends ActionEvent {
      */
     public Optional<ServerPlayer> getPlayer() {
         return getActingPlayer();
+    }
+
+    /** Where the inventory is ({@link Place#of(InventoryHolder)} of {@link #getHolder()}). */
+    @Override
+    public Places getPlaces() {
+        return Place.of(getHolder());
     }
 }

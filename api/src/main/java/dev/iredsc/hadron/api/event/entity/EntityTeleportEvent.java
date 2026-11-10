@@ -1,5 +1,8 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import java.util.ArrayList;
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
@@ -123,5 +126,14 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /** Where it leaves from, where it goes ({@link #getTo()}, as it stands now), then where each passenger is. */
+    @Override
+    public Places getPlaces() {
+        List<Place> more = new ArrayList<>();
+        more.add(Place.Spot.at(getToLevel(), getTo()));
+        for (Entity passenger : getPassengers()) more.add(Place.of(passenger));
+        return Places.of(Place.Spot.at(getFromLevel(), getFrom()), more);
     }
 }

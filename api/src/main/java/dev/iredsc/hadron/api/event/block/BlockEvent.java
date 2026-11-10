@@ -1,5 +1,8 @@
 package dev.iredsc.hadron.api.event.block;
 
+import java.util.ArrayList;
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
@@ -75,5 +78,13 @@ public abstract class BlockEvent extends ActionEvent {
             if (change.getPos().equals(pos)) return change;
         }
         return blocks.get(0);
+    }
+
+    /** Where it happens: {@link #getPos()}, then each space in {@link #getBlocks()}, one block each. */
+    @Override
+    public Places getPlaces() {
+        List<Place> spaces = new ArrayList<>();
+        for (BlockChange change : getBlocks()) spaces.add(Place.Spot.at(getLevel(), change.getPos()));
+        return Places.of(Place.Spot.at(getLevel(), getPos()), spaces);
     }
 }

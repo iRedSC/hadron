@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import java.util.Objects;
@@ -49,5 +51,14 @@ public abstract class EntityEvent extends ActionEvent {
     /** The block the entity was in when this fired. */
     public BlockPos getBlockPos() {
         return BlockPos.containing(position);
+    }
+
+    /**
+     * Where it happens: the block the entity was in when this fired. Leaves that name more (a mount, a breeding's
+     * parents, a teleport's destination) add each.
+     */
+    @Override
+    public Places getPlaces() {
+        return Places.of(Place.Spot.at(getLevel(), getPosition()));
     }
 }

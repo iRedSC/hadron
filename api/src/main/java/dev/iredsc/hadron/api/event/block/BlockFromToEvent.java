@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.block;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -46,5 +48,11 @@ public class BlockFromToEvent extends BlockChangeEvent {
     /** The direction of the flow, from {@link #getFromPos()} to {@link #getToPos()}. */
     public Direction getFace() {
         return face;
+    }
+
+    /** Its own places, then where the flow comes from and where it goes. */
+    @Override
+    public Places getPlaces() {
+        return super.getPlaces().and(Place.Spot.at(getLevel(), getFromPos()), Place.Spot.at(getLevel(), getToPos()));
     }
 }

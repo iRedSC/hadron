@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.world;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
@@ -47,5 +49,12 @@ public abstract class WorldEvent extends ActionEvent {
     protected static BoundingBox chunk(ServerLevel level, ChunkPos pos) {
         return new BoundingBox(pos.getMinBlockX(), level.getMinBuildHeight(), pos.getMinBlockZ(),
                 pos.getMaxBlockX(), level.getMaxBuildHeight() - 1, pos.getMaxBlockZ());
+    }
+
+    /** Where it happens: {@link #getArea()} in its level, or the whole level when it has no area. */
+    @Override
+    public Places getPlaces() {
+        return Places.of(getArea().<Place>map(area -> new Place.Spot(getLevel(), area))
+                .orElseGet(() -> new Place.Level(getLevel())));
     }
 }

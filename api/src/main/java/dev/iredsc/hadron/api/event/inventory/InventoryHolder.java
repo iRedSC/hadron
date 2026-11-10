@@ -22,26 +22,12 @@ import net.minecraft.world.item.ItemStack;
  *     case InventoryHolder.Unknown u -> ...   // a mod's inventory nothing identified
  * }
  * }</pre>
+ *
+ * <p>Where each one is, for protection, is {@code Place.of(holder)}: an item's inventory is where its outer holder is,
+ * a per-player copy is at its {@code at()}, linked storage is {@code Place.Nowhere}, and one nothing identified is
+ * {@code Place.Unknown}.
  */
 public sealed interface InventoryHolder {
-    /**
-     * What the inventory comes down to, for protection: its {@link Block}, {@link Entity}, {@link Linked} storage or
-     * {@link Unknown}, never an {@link Item} or {@link PerPlayer}, so a backpack in a chest or a Lootr chest's copy is
-     * the chest. Switch on this rather than on the holder. Deny {@link Unknown}, which belongs to nobody protection
-     * trusts. {@link Linked} storage has no place, so decide by its frequency: an {@link Linked#ENDER_CHEST}'s is its
-     * owner's UUID; any other network's owner only its mod's bridge knows, so deny it unless the bridge says otherwise.
-     */
-    default InventoryHolder place() {
-        return switch (this) {
-            case Item i -> i.outer().place();
-            case PerPlayer p -> p.at().place();
-            case Block b -> b;
-            case Entity e -> e;
-            case Linked l -> l;
-            case Unknown u -> u;
-        };
-    }
-
     /** A block's inventory: a chest, a furnace, a machine. A crafting table or anvil's grid counts as its block's. */
     record Block(ServerLevel level, BlockPos pos) implements InventoryHolder {
         public Block {

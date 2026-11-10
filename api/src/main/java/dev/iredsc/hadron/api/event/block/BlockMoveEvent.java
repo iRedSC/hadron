@@ -1,5 +1,8 @@
 package dev.iredsc.hadron.api.event.block;
 
+import java.util.ArrayList;
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -65,5 +68,17 @@ public class BlockMoveEvent extends BlockEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /** Its own places, then each move's source and target, then every space swept. */
+    @Override
+    public Places getPlaces() {
+        List<Place> more = new ArrayList<>();
+        for (Move move : getMoves()) {
+            more.add(Place.Spot.at(getLevel(), move.from()));
+            more.add(Place.Spot.at(getLevel(), move.to()));
+        }
+        for (BlockPos swept : getSweptSpace()) more.add(Place.Spot.at(getLevel(), swept));
+        return super.getPlaces().and(more);
     }
 }

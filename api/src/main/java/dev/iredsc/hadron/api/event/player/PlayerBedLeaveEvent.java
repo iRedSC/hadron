@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.player;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.FiredBy;
 import org.jspecify.annotations.Nullable;
 import java.util.Optional;
@@ -24,5 +26,12 @@ public class PlayerBedLeaveEvent extends PlayerEvent {
     /** The bed they were in; empty if it's already gone. */
     public Optional<BlockPos> getBed() {
         return Optional.ofNullable(bed);
+    }
+
+    /** Where the player is, then both halves of the bed, when known. */
+    @Override
+    public Places getPlaces() {
+        Places own = super.getPlaces();
+        return getBed().map(bed -> own.and(PlayerBedEnterEvent.halves(getPlayer().serverLevel(), bed))).orElse(own);
     }
 }

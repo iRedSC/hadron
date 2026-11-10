@@ -1,5 +1,8 @@
 package dev.iredsc.hadron.api.event.world;
 
+import java.util.ArrayList;
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -69,5 +72,18 @@ public class ExplosionEvent extends WorldEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /**
+     * Where it goes off, then each block it will destroy and each entity it will hurt, as the lists stand now: a
+     * listener that spares a block or an entity takes its place out too. Not {@link #getArea()}, the farthest it could
+     * reach, which stays the same however much is spared.
+     */
+    @Override
+    public Places getPlaces() {
+        List<Place> hit = new ArrayList<>();
+        for (BlockPos pos : blockList()) hit.add(Place.Spot.at(getLevel(), pos));
+        for (Entity entity : getEntities()) hit.add(Place.of(entity));
+        return Places.of(Place.Spot.at(getLevel(), getLocation()), hit);
     }
 }

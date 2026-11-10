@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.inventory;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -30,16 +32,24 @@ public class InventoryClickEvent extends InventoryEvent implements Cancellable {
 
     private final ServerPlayer viewer;
     private final AbstractContainerMenu menu;
+    private final InventoryHolder menuHolder;
     private final int rawSlot;
     private final int button;
     private final ClickType click;
     private boolean cancelled;
 
-    public InventoryClickEvent(ServerPlayer viewer, InventoryHolder holder, AbstractContainerMenu menu, int rawSlot,
-            int button, ClickType click, Actor actor) {
+    /**
+     * @param holder what holds the clicked slot's inventory, or {@code menuHolder} for a click outside any slot
+     * @param menuHolder what the menu is open on, as the menu says ({@link #getMenuHolder()}); {@link
+     *     InventoryHolder.Unknown} when it says nothing, never a guess from its slots
+     */
+    public InventoryClickEvent(ServerPlayer viewer, InventoryHolder holder, AbstractContainerMenu menu,
+            InventoryHolder menuHolder, int rawSlot, int button, ClickType click, Actor actor) {
         super(holder, actor);
         this.viewer = Objects.requireNonNull(viewer, "viewer");
         this.menu = Objects.requireNonNull(menu, "menu");
+        this.menuHolder = Objects.requireNonNull(menuHolder,
+                "menuHolder; pass InventoryHolder.Unknown.INSTANCE when the menu doesn't say what it is open on");
         this.rawSlot = rawSlot;
         this.button = button;
         this.click = Objects.requireNonNull(click, "click");
@@ -52,6 +62,15 @@ public class InventoryClickEvent extends InventoryEvent implements Cancellable {
 
     public AbstractContainerMenu getMenu() {
         return menu;
+    }
+
+    /**
+     * What the menu is open on, as the menu itself says: the block a crafting table's or a chest's menu was opened on,
+     * a horse, the viewer for their own inventory screen. {@link InventoryHolder.Unknown} when the menu says nothing
+     * (a mod's menu no bridge describes); its own slots are then placed {@code Unknown}.
+     */
+    public InventoryHolder getMenuHolder() {
+        return menuHolder;
     }
 
     /** The slot's index in the whole menu, or {@link #OUTSIDE}; -1 for some drag steps. */
@@ -92,5 +111,17 @@ public class InventoryClickEvent extends InventoryEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /**
+     * Where {@link #getHolder()} is, then every inventory behind the menu's slots, since a click can move items into
+     * any of them (a shift-click, a number-key swap): a chest and the player's own, both halves of a double chest. A
+     * slot that is the menu's own (a crafting grid) is where the menu is open ({@link #getMenuHolder()}), and a mod's
+     * menu that says nothing of where it is adds {@link Place.Unknown.Reason#UNDESCRIBED_MENU}. An inventory nothing
+     * identifies, such as a double chest's half that isn't a chest, adds its own {@code Unknown}.
+     */
+    @Override
+    public Places getPlaces() {
+        return Place.of(getHolder()).and(Menus.places(menu, viewer, menuHolder, getHolder()));
     }
 }

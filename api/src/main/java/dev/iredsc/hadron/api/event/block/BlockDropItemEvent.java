@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.block;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
@@ -131,5 +133,11 @@ public class BlockDropItemEvent extends BlockEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /** Its own places, then where each item it drops lies. */
+    @Override
+    public Places getPlaces() {
+        return super.getPlaces().and(getItems().stream().filter(Objects::nonNull).map(Place::of).toList());
     }
 }

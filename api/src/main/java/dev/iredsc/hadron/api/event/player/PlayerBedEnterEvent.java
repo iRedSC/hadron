@@ -1,5 +1,11 @@
 package dev.iredsc.hadron.api.event.player;
 
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.server.level.ServerLevel;
+import java.util.List;
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.core.BlockPos;
@@ -33,5 +39,19 @@ public class PlayerBedEnterEvent extends PlayerEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /** Where the player is, then both halves of the bed. */
+    @Override
+    public Places getPlaces() {
+        return super.getPlaces().and(halves(getPlayer().serverLevel(), bed));
+    }
+
+    /** A bed's spaces: {@code pos}, and its other half when it is a vanilla-shaped bed. */
+    static List<Place> halves(ServerLevel level, BlockPos pos) {
+        BlockState state = level.getBlockState(pos);
+        if (!(state.getBlock() instanceof BedBlock)) return List.of(Place.Spot.at(level, pos));
+        return List.of(Place.Spot.at(level, pos),
+                Place.Spot.at(level, pos.relative(BedBlock.getConnectedDirection(state))));
     }
 }

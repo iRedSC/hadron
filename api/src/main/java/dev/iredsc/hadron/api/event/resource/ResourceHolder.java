@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.event.resource;
 
+import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import java.util.Objects;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
@@ -36,10 +37,23 @@ public sealed interface ResourceHolder {
         }
     }
 
-    /** An item stack, such as a charged tool. Changes to the stack itself are item events; this is its store. */
-    record Item(ItemStack stack) implements ResourceHolder {
+    /**
+     * An item stack, such as a charged tool. Changes to the stack itself are item events; this is its store.
+     * {@code heldIn} is the inventory the stack is in (a player's, a machine's), which is where its resource is.
+     */
+    record Item(ItemStack stack, InventoryHolder heldIn) implements ResourceHolder {
         public Item {
             Objects.requireNonNull(stack, "stack");
+            Objects.requireNonNull(heldIn, "heldIn; pass the inventory the stack is in, such as "
+                    + "new InventoryHolder.Entity(player), or InventoryHolder.Unknown.INSTANCE when nothing is known");
+        }
+
+        /**
+         * A stack whose inventory nothing identified: its place is {@code Place.Unknown}. Name the inventory with
+         * {@link #Item(ItemStack, InventoryHolder)} wherever it is known.
+         */
+        public Item(ItemStack stack) {
+            this(stack, InventoryHolder.Unknown.INSTANCE);
         }
     }
 

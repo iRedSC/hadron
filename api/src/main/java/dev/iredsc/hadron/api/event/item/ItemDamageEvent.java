@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -74,5 +76,12 @@ public class ItemDamageEvent extends ItemChangeEvent {
     /** Whether this damage will break the item; if so, {@link ItemBreakEvent} follows. */
     public boolean willBreak() {
         return breaks(getBefore(), damage);
+    }
+
+    /** Where the inventory holding it is, then where the entity using it is, if any. */
+    @Override
+    public Places getPlaces() {
+        Places own = super.getPlaces();
+        return getEntity().map(user -> own.and(Place.of(user))).orElse(own);
     }
 }

@@ -1,5 +1,8 @@
 package dev.iredsc.hadron.api.event.server;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Placed;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -17,7 +20,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  * run.
  */
 @FiredBy(core = FULL)
-public class CommandExecuteEvent extends ServerEvent implements Cancellable {
+public class CommandExecuteEvent extends ServerEvent implements Cancellable, Placed {
     private final Actor actor;
     private final CommandSourceStack source;
     private String command;
@@ -69,5 +72,14 @@ public class CommandExecuteEvent extends ServerEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /**
+     * {@link Place.Unknown.Reason#COMMAND}, anywhere: a command's source (the console sits at spawn) isn't where it
+     * acts. What it does fires its own events, which place themselves.
+     */
+    @Override
+    public Places getPlaces() {
+        return Places.of(Place.Unknown.anywhere(Place.Unknown.Reason.COMMAND));
     }
 }
