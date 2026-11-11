@@ -409,7 +409,8 @@ final class Protection implements Listener {
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void remove(EntityRemoveEvent e) {
         List<Place> places = new ArrayList<>();
-        if (placed(e.getEntity())) places.add(Place.of(e.getEntity()));
+        // A placed object counts everywhere its event says it is: its block, and a frame's or painting's wall.
+        if (placed(e.getEntity())) places.addAll(e.getPlaces());
         if (e instanceof EntityCaptureEvent capture) {
             switch (capture.getStorage()) {
                 case EntityCaptureEvent.Storage.Block b -> places.add(Place.Spot.at(b.level(), b.pos()));

@@ -355,4 +355,22 @@ public final class PlacedRegionsTests {
         t.assertFalse(frame.isRemoved(), "the frame should still hang");
         effects.assertNone("a refused hit on an outward frame");
     }
+
+    @HadronTest
+    void anOutwardFrameCantBeRemovedOrCapturedByAnOutsider(TestContext t) {
+        BlockPos wall = t.pos(2, 0, 0);
+        t.setBlock(wall, Blocks.STONE);
+        ItemFrame frame = new ItemFrame(t.level(), wall.west(), Direction.WEST);
+        t.level().addFreshEntity(frame);
+        define(t, admin(t), "outward-remove", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer bob = t.player("bob");
+        EntityRemoveEvent remove = new EntityRemoveEvent(frame, EntityRemoveEvent.Cause.KILLED,
+                new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(remove);
+        t.assertTrue(remove.isCancelled(), "bob should not remove a frame on the region's wall");
+        EntityCaptureEvent capture = new EntityCaptureEvent(frame, new EntityCaptureEvent.Storage.Carried(bob.player()),
+                new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(capture);
+        t.assertTrue(capture.isCancelled(), "bob should not carry off a frame on the region's wall");
+    }
 }
