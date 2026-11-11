@@ -6,8 +6,13 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import java.util.Objects;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.decoration.HangingEntity;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -54,11 +59,23 @@ public abstract class EntityEvent extends ActionEvent {
     }
 
     /**
-     * Where it happens: the block the entity was in when this fired. Leaves that name more (a mount, a breeding's
-     * parents, a teleport's destination) add each.
+     * Where it happens: the block the entity was in when this fired, and, for a frame or painting, the wall it hangs
+     * on (every block of it behind a large painting), since a hanging entity belongs to its wall as much as to its
+     * spot. Leaves that name more (a mount, a breeding's parents, a teleport's destination) add each.
      */
     @Override
     public Places getPlaces() {
-        return Places.of(Place.Spot.at(getLevel(), getPosition()));
+        Places here = Places.of(Place.Spot.at(getLevel(), getPosition()));
+        return entity instanceof HangingEntity hanging ? here.and(wall(hanging)) : here;
+    }
+
+    /** The blocks a hanging entity rests on: its box, pushed half a block into what it faces away from. */
+    private Place.Spot wall(HangingEntity hanging) {
+        Direction back = hanging.getDirection().getOpposite();
+        AABB behind = hanging.getBoundingBox().move(back.getStepX() * 0.5, back.getStepY() * 0.5, back.getStepZ() * 0.5);
+        double in = 1.0E-4;
+        return new Place.Spot(getLevel(), new BoundingBox(Mth.floor(behind.minX + in), Mth.floor(behind.minY + in),
+                Mth.floor(behind.minZ + in), Mth.floor(behind.maxX - in), Mth.floor(behind.maxY - in),
+                Mth.floor(behind.maxZ - in)));
     }
 }

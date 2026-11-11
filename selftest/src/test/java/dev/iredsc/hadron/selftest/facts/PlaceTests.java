@@ -54,6 +54,12 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.entity.decoration.PaintingVariants;
+import net.minecraft.world.entity.decoration.Painting;
+import net.minecraft.world.entity.decoration.ItemFrame;
+import net.minecraft.core.registries.Registries;
+import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -345,6 +351,31 @@ public final class PlaceTests {
     }
 
     // ---- Each family against its payload -------------------------------------------------------------------------
+
+    @HadronTest
+    void aFrameOrPaintingNamesTheWallItHangsOn(TestContext t) {
+        BlockPos wall = t.pos(2, 1, 0);
+        t.setBlock(wall, Blocks.STONE);
+        ItemFrame frame = new ItemFrame(t.level(), wall.west(), Direction.WEST);
+        t.level().addFreshEntity(frame);
+        EntityRemoveEvent hit = new EntityRemoveEvent(frame, EntityRemoveEvent.Cause.KILLED, new Actor.Server("test"));
+        t.assertEquals(Set.of(Place.of(frame), Place.Spot.at(t.level(), wall)), Set.copyOf(hit.getPlaces()),
+                "the frame's spot and its wall");
+        for (int x = 4; x <= 7; x++) for (int y = 0; y <= 2; y++) t.setBlock(t.pos(x, y, 3), Blocks.STONE);
+        Painting painting = new Painting(t.level(), t.pos(5, 1, 2), Direction.NORTH, t.level().registryAccess()
+                .registryOrThrow(Registries.PAINTING_VARIANT).getHolderOrThrow(PaintingVariants.BUST));
+        t.level().addFreshEntity(painting);
+        EntityRemoveEvent tear = new EntityRemoveEvent(painting, EntityRemoveEvent.Cause.KILLED,
+                new Actor.Server("test"));
+        List<Place.Spot> walls = tear.getPlaces().stream().filter(p -> p instanceof Place.Spot sp && !sp.isBlock())
+                .map(p -> (Place.Spot) p).toList();
+        t.assertEquals(1, walls.size(), "one wall behind a 2x2 painting, among " + tear.getPlaces());
+        BoundingBox box = walls.get(0).box();
+        t.assertEquals(List.of(2, 2, 1), List.of(box.getXSpan(), box.getYSpan(), box.getZSpan()), "its size " + box);
+        t.assertEquals(t.pos(0, 0, 3).getZ(), box.minZ(), "the wall's z, behind the painting");
+        BlockPos.betweenClosedStream(box).forEach(pos -> t.assertTrue(t.level().getBlockState(pos).is(Blocks.STONE),
+                "every block of the wall is the stone it hangs on, but " + pos + " isn't"));
+    }
 
     @HadronTest
     @Covers(InventoryClickEvent.class)
