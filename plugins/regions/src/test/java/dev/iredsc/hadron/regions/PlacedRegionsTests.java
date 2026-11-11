@@ -336,4 +336,23 @@ public final class PlacedRegionsTests {
         erin.command("rg bypass");
         t.assertChat(erin, "Region bypass is off");
     }
+
+    @HadronTest
+    void aFrameFacingOutFromAProtectedWallStaysProtected(TestContext t) {
+        BlockPos wall = t.pos(2, 0, 0);
+        t.setBlock(wall, Blocks.STONE);
+        // The owner's frame, on the region's wall, facing out: the frame's own block is outside.
+        ItemFrame frame = new ItemFrame(t.level(), wall.west(), Direction.WEST);
+        frame.setItem(new ItemStack(Items.DIAMOND));
+        t.level().addFreshEntity(frame);
+        define(t, admin(t), "outward-frame", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer bob = t.player("bob");
+        standAt(bob, t.pos(-1, 0, 0));
+        SideEffects effects = t.watchSideEffects();
+        bob.attack(frame);
+        t.tick(2);
+        t.assertTrue(frame.getItem().is(Items.DIAMOND), "the frame should keep its diamond, but holds " + frame.getItem());
+        t.assertFalse(frame.isRemoved(), "the frame should still hang");
+        effects.assertNone("a refused hit on an outward frame");
+    }
 }

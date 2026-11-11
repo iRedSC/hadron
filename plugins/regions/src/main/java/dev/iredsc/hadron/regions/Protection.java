@@ -60,6 +60,7 @@ import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
 import dev.iredsc.hadron.api.event.world.ExplosionEvent;
+import dev.iredsc.hadron.api.event.world.ExplosionPrimeEvent;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import java.util.ArrayList;
 import net.minecraft.resources.ResourceLocation;
@@ -512,8 +513,8 @@ final class Protection implements Listener {
      * Every other action that can be refused, held to {@code build} wherever it happens: a mod's change to an
      * entity's data, shearing, taming, leashing, a portal or lightning made, chunks force-loaded, a tick accelerator.
      * The handlers above decide their own kinds; moving, aiming and breathing are anyone's, weather and time are a
-     * whole world's, a projectile's hit is decided by what it does (damage, a block it changes), and what happens to
-     * a player themselves is no region's, but PvP's.
+     * whole world's, a projectile's hit and an explosion about to go off are decided by what they do (damage, the
+     * blocks they change), and what happens to a player themselves is no region's, but PvP's.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void action(Event ev) {
@@ -530,8 +531,8 @@ final class Protection implements Listener {
             EntityMountEvent.class, EntityDismountEvent.class, EntityDamageEvent.class, EntityPotionEffectEvent.class,
             EntityUseEvent.class, ArmorStandManipulateEvent.class, HangingBreakEvent.class, VehicleDamageEvent.class,
             ItemFrameChangeEvent.class, EntitySpawnEvent.class, EntityRemoveEvent.class, EntityVelocityEvent.class,
-            EntityTargetEvent.class, EntityAirChangeEvent.class, ProjectileHitEvent.class, WeatherChangeEvent.class,
-            TimeSkipEvent.class);
+            EntityTargetEvent.class, EntityAirChangeEvent.class, ProjectileHitEvent.class, ExplosionPrimeEvent.class,
+            WeatherChangeEvent.class, TimeSkipEvent.class);
 
     private static boolean decidedElsewhere(Event e) {
         for (Class<?> kind : DECIDED_ELSEWHERE) if (kind.isInstance(e)) return true;
@@ -661,14 +662,12 @@ final class Protection implements Listener {
                 || entity instanceof EndCrystal;
     }
 
-        private void entityChange(ActionEvent e, Cancellable c, Entity target, Flag flag) {
-        if (!(target.level() instanceof ServerLevel level)) return;
-        BlockPos pos = target.blockPosition();
-        Optional<Region> no = e.getActor() instanceof Actor.Nature ? Optional.empty()
-                : refusing(e, level, pos, flag);
-        if (no.isEmpty()) return;
-        c.setCancelled(true);
-        tell(e, pos, no.get());
+    /**
+     * Refuses a change to {@code target} wherever its event says it happens: its own block and, for a frame or
+     * painting, the wall it hangs on, so one facing out from a protected wall stays protected.
+     */
+    private void entityChange(ActionEvent e, Cancellable c, Entity target, Flag flag) {
+        refuse(e, c, List.copyOf(e.getPlaces()), flag, Optional.of(target.blockPosition()));
     }
 
     /** The region refusing this actor here, unless the actor is trusted. */

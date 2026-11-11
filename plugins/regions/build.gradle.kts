@@ -43,12 +43,11 @@ tasks.processResources {
     filesMatching("plugin.yml") { expand(props) }
 }
 
-// Drops the jar into the core dev server's plugins/, where Hadron picks it up within a second or two.
-tasks.register<Copy>("deploy") {
-    from(tasks.jar)
-    into(rootProject.layout.projectDirectory.dir("neoforge/run/plugins"))
-    rename { "Regions.jar" }
-}
+// ./gradlew :plugins:regions:deploy drops the jar into the running dev server (./gradlew :neoforge:runServer) as
+// Regions.jar, then waits until the server reports that jar enabled, and fails with the host's reason and fix if it
+// didn't load (gradle/hadron-deploy.gradle.kts).
+extra["hadronDeploy.installAs"] = "Regions.jar"
+apply(from = rootProject.file("gradle/hadron-deploy.gradle.kts"))
 
 // ./gradlew :plugins:regions:hadronTest runs src/test/java's @HadronTests in a headless server.
 apply(from = rootProject.file("gradle/hadron-test.gradle.kts"))
