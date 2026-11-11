@@ -54,6 +54,11 @@ import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.block.state.properties.BedPart;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.level.block.BedBlock;
+import dev.iredsc.hadron.api.event.block.BlockUseEvent;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.entity.decoration.PaintingVariants;
 import net.minecraft.world.entity.decoration.Painting;
@@ -351,6 +356,40 @@ public final class PlaceTests {
     }
 
     // ---- Each family against its payload -------------------------------------------------------------------------
+
+    @HadronTest
+    @Covers(BlockUseEvent.class)
+    void usingOneHalfOfABedADoorOrADoubleChestNamesTheOther(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos foot = t.pos(2, 0, 0);
+        BlockState bed = Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
+        t.setBlock(foot, bed.setValue(BedBlock.PART, BedPart.FOOT));
+        t.setBlock(foot.east(), bed.setValue(BedBlock.PART, BedPart.HEAD));
+        BlockPos door = t.pos(2, 0, 3);
+        BlockState oak = Blocks.OAK_DOOR.defaultBlockState();
+        t.setBlock(door, oak.setValue(DoorBlock.HALF, DoubleBlockHalf.LOWER));
+        t.setBlock(door.above(), oak.setValue(DoorBlock.HALF, DoubleBlockHalf.UPPER));
+        BlockState half = Blocks.CHEST.defaultBlockState().setValue(ChestBlock.FACING, Direction.NORTH);
+        BlockPos chest = t.pos(-3, 0, 0);
+        t.setBlock(chest, half.setValue(ChestBlock.TYPE, ChestType.LEFT));
+        t.setBlock(chest.east(), half.setValue(ChestBlock.TYPE, ChestType.RIGHT));
+        List<List<Place>> heard = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(BlockUseEvent e) {
+                heard.add(List.copyOf(e.getPlaces()));
+                e.setCancelled(true);
+            }
+        });
+        alice.useBlock(foot);
+        alice.useBlock(door);
+        alice.useBlock(chest);
+        t.assertEquals(3, heard.size(), "uses heard");
+        t.assertTrue(heard.get(0).contains(Place.Spot.at(t.level(), foot.east())), "the bed's head: " + heard.get(0));
+        t.assertTrue(heard.get(1).contains(Place.Spot.at(t.level(), door.above())), "the door's top: " + heard.get(1));
+        t.assertTrue(heard.get(2).contains(Place.Spot.at(t.level(), chest.east())), "the chest's other half: "
+                + heard.get(2));
+    }
 
     @HadronTest
     void aFrameOrPaintingNamesTheWallItHangsOn(TestContext t) {
