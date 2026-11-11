@@ -65,6 +65,15 @@ public abstract class EntityEvent extends ActionEvent {
      */
     @Override
     public Places getPlaces() {
+        return getEntityPlaces();
+    }
+
+    /**
+     * Where the entity itself is, apart from anything else a leaf names (a carrier, a mount, a destination): the block
+     * it was in when this fired, and, for a frame or painting, the wall it hangs on. {@link #getPlaces()} starts with
+     * these.
+     */
+    public final Places getEntityPlaces() {
         Places here = Places.of(Place.Spot.at(getLevel(), getPosition()));
         return entity instanceof HangingEntity hanging ? here.and(wall(hanging)) : here;
     }
