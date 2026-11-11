@@ -34,6 +34,10 @@ import dev.iredsc.hadron.api.event.entity.EntityCombustEvent;
 import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.level.Level;
+import dev.iredsc.hadron.api.event.entity.EntityUseEvent;
+import net.minecraft.world.level.block.BedBlock;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.block.state.properties.BedPart;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
@@ -372,5 +376,49 @@ public final class PlacedRegionsTests {
                 new Actor.Player(bob.player()));
         t.plugin().getServer().getPluginManager().callEvent(capture);
         t.assertTrue(capture.isCancelled(), "bob should not carry off a frame on the region's wall");
+    }
+
+    @HadronTest
+    void aBedsFootOutsideDoesntSetASpawnAtItsHeadInside(TestContext t) {
+        BlockPos foot = t.pos(1, 0, 0);
+        BlockState bed = Blocks.RED_BED.defaultBlockState().setValue(BedBlock.FACING, Direction.EAST);
+        t.setBlock(foot, bed.setValue(BedBlock.PART, BedPart.FOOT));
+        t.setBlock(foot.east(), bed.setValue(BedBlock.PART, BedPart.HEAD));
+        define(t, admin(t), "bed-head", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer bob = t.player("bob");
+        standAt(bob, t.pos(-1, 0, 0));
+        SideEffects effects = t.watchSideEffects();
+        bob.useBlock(foot);
+        t.tick();
+        t.assertTrue(bob.player().getRespawnPosition() == null, "bob's spawn should stay unset, but is "
+                + bob.player().getRespawnPosition());
+        effects.assertNone("a refused bed");
+    }
+
+    @HadronTest
+    void carryingOffAStandFromOutsideIsntRefusedForWhereTheCarrierStands(TestContext t) {
+        ArmorStand stand = EntityType.ARMOR_STAND.create(t.level());
+        BlockPos field = t.pos(-5, 0, 0);
+        stand.moveTo(field.getX() + 0.5, field.getY(), field.getZ() + 0.5);
+        t.level().addFreshEntity(stand);
+        define(t, admin(t), "carrier-inside", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer bob = t.player("bob");
+        standAt(bob, t.pos(3, 0, 0));
+        EntityCaptureEvent carried = new EntityCaptureEvent(stand, new EntityCaptureEvent.Storage.Carried(bob.player()),
+                new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(carried);
+        t.assertFalse(carried.isCancelled(), "the stand is outside, and what bob carries goes where he goes");
+    }
+
+    @HadronTest
+    void usingAnotherPlayerInARegionIsntTheRegions(TestContext t) {
+        define(t, admin(t), "people", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer bob = t.player("bob");
+        TestPlayer carol = t.player("carol");
+        standAt(carol, t.pos(3, 0, 0));
+        EntityUseEvent heal = new EntityUseEvent(carol.player(), InteractionHand.MAIN_HAND, ItemStack.EMPTY,
+                new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(heal);
+        t.assertFalse(heal.isCancelled(), "people aren't a region's: bob may use carol");
     }
 }

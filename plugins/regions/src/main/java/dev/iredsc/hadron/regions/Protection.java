@@ -364,6 +364,8 @@ final class Protection implements Listener {
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void use(EntityUseEvent e) {
         Entity target = e.getEntity();
+        // People aren't a region's: trading items with a player, healing one, is between the two of them.
+        if (target instanceof Player) return;
         entityChange(e, e, target, target instanceof ArmorStand || target instanceof HangingEntity ? Flag.BUILD
                 : Flag.USE);
     }
@@ -410,7 +412,7 @@ final class Protection implements Listener {
     private void remove(EntityRemoveEvent e) {
         List<Place> places = new ArrayList<>();
         // A placed object counts everywhere its event says it is: its block, and a frame's or painting's wall.
-        if (placed(e.getEntity())) places.addAll(e.getPlaces());
+        if (placed(e.getEntity())) places.addAll(e.getEntityPlaces());
         if (e instanceof EntityCaptureEvent capture) {
             switch (capture.getStorage()) {
                 case EntityCaptureEvent.Storage.Block b -> places.add(Place.Spot.at(b.level(), b.pos()));
@@ -702,16 +704,17 @@ final class Protection implements Listener {
     }
 
     /**
-     * Every space the event touches, including all a move sweeps through, and, for a block used, every block of the
-     * inventory using it opens: both halves of a double chest, so the half outside a region doesn't open the half in.
+     * Every space the event touches, including all a move sweeps through, and, for a block used, every block the use
+     * acts on (a bed's or door's other half, a double chest's), so the half outside a region doesn't reach the half in.
      */
     private static Set<BlockPos> touched(BlockEvent e) {
         Set<BlockPos> out = new LinkedHashSet<>();
         out.add(e.getPos());
         if (e instanceof BlockUseEvent) {
-            for (Place p : Place.of(new InventoryHolder.Block(e.getLevel(), e.getPos()))) {
-                if (p instanceof Place.Spot s && s.isBlock()) out.add(new BlockPos(s.box().minX(), s.box().minY(),
-                        s.box().minZ()));
+            for (Place p : e.getPlaces()) {
+                if (p instanceof Place.Spot s && s.level() == e.getLevel()) {
+                    BlockPos.betweenClosedStream(s.box()).forEach(pos -> out.add(pos.immutable()));
+                }
             }
         }
         for (BlockChange change : e.getBlocks()) out.add(change.getPos());
