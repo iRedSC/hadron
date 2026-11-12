@@ -3,7 +3,6 @@ package dev.iredsc.hadron.neoforge;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.iredsc.hadron.api.actor.Actor;
-import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.Place;
 import java.lang.ref.WeakReference;
@@ -145,15 +144,24 @@ public final class LastingCause implements Lasting.Acting {
         return who != null;
     }
 
+    /** Whether this cause is {@code entity} itself: its own splash potion, its own poison. */
+    boolean names(Entity entity) {
+        return who instanceof EntityWho e && e.id().isPresent() && e.id().get().equals(entity.getUUID());
+    }
+
     /**
-     * Who acts now: the cause itself while it is still there, otherwise an {@link Actor.Remembered} for the same
-     * people; null for nobody. Remembers what it found, so a cause that is still there costs one check a call.
+     * Who acts now: the cause itself while it is still there, for the people it had when it applied this (a bridge's
+     * turret firing for its owner keeps that owner), otherwise an {@link Actor.Remembered} for the same people; null
+     * for nobody. Remembers what it found, so a cause that is still there costs one check a call, and allocates
+     * nothing unless a bridge gave a live entity people other than its own.
      */
     public @Nullable Actor actor(MinecraftServer server) {
         if (who == null) return null;
         WeakReference<Entity> ref = entity;
         Entity live = ref == null ? null : ref.get();
-        if (live != null && !live.isRemoved()) return EntityActors.of(live);
+        if (live != null && !live.isRemoved() && who instanceof EntityWho e) {
+            return EntityActors.as(live, e.attribution());
+        }
         Actor kept = fixed;
         if (live == null && kept != null && !stale(kept, server)) return kept;
         return resolve(server);
@@ -178,7 +186,7 @@ public final class LastingCause implements Lasting.Acting {
                 Entity found = e.id().map(id -> find(server, e.kind(), id)).orElse(null);
                 if (found != null) {
                     entity = new WeakReference<>(found);
-                    yield EntityActors.of(found);
+                    yield EntityActors.as(found, e.attribution());
                 }
                 yield new Actor.Remembered(e.kind(), e.id(), e.attribution());
             }
@@ -187,7 +195,7 @@ public final class LastingCause implements Lasting.Acting {
                 BlockPos pos = m.at().pos();
                 BlockEntity be = level != null && level.isLoaded(pos) ? level.getBlockEntity(pos) : null;
                 yield be != null && BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType()).equals(m.kind())
-                        ? new Actor.Machine(level, pos, Actors.remembered(be))
+                        ? new Actor.Machine(level, pos, m.attribution())
                         : new Actor.Remembered(m.kind(), Optional.empty(), m.attribution());
             }
         };

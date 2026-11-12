@@ -33,6 +33,9 @@ public class EntityDamageEvent extends EntityEvent implements Cancellable {
     private boolean cancelled;
 
     /**
+     * For damage nothing applied earlier. Damage from an effect or fire, or from a bridge's own lingering effect, uses
+     * the constructor taking where it was applied, so {@link #getAppliedAt()} isn't empty.
+     *
      * @param damage the amount before armour and other reductions: finite and at least 0. Report an infinite blow
      *     as {@code Float.MAX_VALUE} and a negative or NaN one as 0, and apply what was reported.
      */

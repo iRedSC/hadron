@@ -4,6 +4,7 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.Place;
 import java.util.Optional;
+import java.util.function.Supplier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
@@ -37,7 +38,18 @@ public final class Lasting {
         @Nullable Acting hadron$acting();
 
         void hadron$setActing(@Nullable Acting acting);
+
+        /** How to undo the last ignition that took the fire's credit, within the tick it happened; see {@link #fireSet}. */
+        @Nullable FireUndo hadron$fireUndo();
+
+        void hadron$setFireUndo(@Nullable FireUndo undo);
     }
+
+    /**
+     * What an ignition replaced: the fire's cause before it ({@code null} for none), its burning time before it, and
+     * the game tick it happened in. Not saved: only a rollback in the same tick uses it.
+     */
+    public record FireUndo(@Nullable LastingCause cause, int ticks, long gameTime) {}
 
     /**
      * What the effect mixin adds to every {@link MobEffectInstance}: who applied it and where. Hidden effects keep
@@ -58,13 +70,27 @@ public final class Lasting {
     }
 
     /**
-     * An effect is being applied to {@code subject}: it takes the credit, given to {@code source} when there is one
-     * (which may be the subject itself, a player's own splash potion), otherwise to whoever is on the stack, with
-     * where the subject stands. Whether it then replaces the effect already there is {@code update}'s to decide.
+     * Runs {@code apply}, vanilla applying {@code effect} to {@code subject}, with the credit going to {@code source}
+     * when there is one (which may be the subject itself, a player's own splash potion), otherwise to whoever is on
+     * the stack, with where the subject stands. The credit lands only where vanilla really applies it: on {@code
+     * effect} when it becomes the subject's active effect, on the active one when {@code update} replaces it (a higher
+     * amplifier, or the same for longer), and on a hidden copy when it waits underneath. An instance that ends up
+     * nowhere new (refused, weaker and shorter, or already the active one) keeps the cause it had, so passing in an
+     * instance that is already someone's active effect never moves that effect's credit.
      */
-    public static void effectApplied(LivingEntity subject, MobEffectInstance effect, @Nullable Entity source) {
+    public static <T> T applying(LivingEntity subject, MobEffectInstance effect, @Nullable Entity source,
+            Supplier<T> apply) {
+        MobEffectInstance before = subject.getEffect(effect.getEffect());
+        EffectState state = (EffectState) effect;
+        LastingCause own = state.hadron$cause();
         Actor actor = source != null ? EntityActors.of(source) : EntityActors.current();
-        ((EffectState) effect).hadron$setCause(LastingCause.of(actor, subject));
+        // Carried on the instance while vanilla runs, so update() and the hidden copies it makes can take it.
+        state.hadron$setCause(LastingCause.of(actor, subject));
+        try {
+            return apply.get();
+        } finally {
+            if (effect == before || subject.getEffect(effect.getEffect()) != effect) state.hadron$setCause(own);
+        }
     }
 
     /** What is acting on the entity now, or null; pass it back to {@link #exit}. */
@@ -74,7 +100,8 @@ public final class Lasting {
 
     /**
      * Marks {@code cause} as acting on {@code subject} and pushes who it is, if anyone. Returns the stack handle for
-     * {@link #exit}, or 0 when nothing was pushed. Allocates nothing once the cause has been looked up.
+     * {@link #exit}, or 0 when nothing was pushed. Allocates nothing once the cause has been looked up, unless a bridge
+     * gave a live entity people of its own ({@link LastingCause#actor}).
      */
     public static long enter(Entity subject, @Nullable LastingCause cause) {
         ((State) subject).hadron$setActing(cause != null ? cause : Unrecorded.INSTANCE);
@@ -109,17 +136,37 @@ public final class Lasting {
      * burning time than before takes the credit, with who is on the stack (not the entity itself: walking into fire
      * or lava is nature's, since a fire block or lava has nowhere to keep who placed it) and where the entity stands;
      * going out drops it. Anything else (burning down, a shorter ignition) leaves the credit where it was.
+     *
+     * <p>An extension that is taken back in the same tick gives the credit back: vanilla sets a target alight before a
+     * flaming arrow's hit and, when the hit is refused, puts its burning time back exactly as it was. So setting the
+     * fire back down to the burning time the last ignition replaced, in the tick it happened, restores that
+     * ignition's cause and where it was applied.
      */
     public static void fireSet(Entity entity, int before, int after) {
+        State state = (State) entity;
         if (after <= 0) {
-            if (before > 0 && entity.hasData(AttributionMemory.FIRE_CAUSE)) {
-                entity.removeData(AttributionMemory.FIRE_CAUSE);
-            }
+            state.hadron$setFireUndo(null);
+            if (before > 0) setFireCause(entity, null);
+            return;
+        }
+        long now = entity.level().getGameTime();
+        FireUndo undo = state.hadron$fireUndo();
+        if (undo != null && after < before && after == undo.ticks() && undo.gameTime() == now) {
+            state.hadron$setFireUndo(null);
+            setFireCause(entity, undo.cause());
             return;
         }
         if (after <= Math.max(before, 0)) return;
-        Actor actor = EntityActors.fromStack(entity, Actor.Nature.INSTANCE);
-        entity.setData(AttributionMemory.FIRE_CAUSE, Optional.of(LastingCause.of(actor, entity)));
+        state.hadron$setFireUndo(new FireUndo(fireCause(entity), before, now));
+        setFireCause(entity, LastingCause.of(EntityActors.fromStack(entity, Actor.Nature.INSTANCE), entity));
+    }
+
+    private static void setFireCause(Entity entity, @Nullable LastingCause cause) {
+        if (cause != null) {
+            entity.setData(AttributionMemory.FIRE_CAUSE, Optional.of(cause));
+        } else if (entity.hasData(AttributionMemory.FIRE_CAUSE)) {
+            entity.removeData(AttributionMemory.FIRE_CAUSE);
+        }
     }
 
     /** Who set the entity alight and where, or null when nothing recorded it. */
@@ -133,8 +180,7 @@ public final class Lasting {
      * it is kept rather than read as the entity hurting itself.
      */
     static boolean isExplicitCause(Entity subject, Actor top) {
-        Acting acting = ((State) subject).hadron$acting();
-        MinecraftServer server = subject.getServer();
-        return acting instanceof LastingCause c && server != null && c.actor(server) == top;
+        return EntityActors.isSelf(top, subject) && ((State) subject).hadron$acting() instanceof LastingCause c
+                && c.names(subject);
     }
 }

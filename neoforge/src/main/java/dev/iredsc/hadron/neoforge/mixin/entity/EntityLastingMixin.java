@@ -39,6 +39,19 @@ abstract class EntityLastingMixin implements Lasting.State {
         hadron$acting = acting;
     }
 
+    @Unique
+    private Lasting.@Nullable FireUndo hadron$fireUndo;
+
+    @Override
+    public Lasting.@Nullable FireUndo hadron$fireUndo() {
+        return hadron$fireUndo;
+    }
+
+    @Override
+    public void hadron$setFireUndo(Lasting.@Nullable FireUndo undo) {
+        hadron$fireUndo = undo;
+    }
+
     @Inject(method = "setRemainingFireTicks", at = @At("HEAD"))
     private void hadron$fireCause(int ticks, CallbackInfo ci) {
         if (ticks != remainingFireTicks && !level().isClientSide()) {

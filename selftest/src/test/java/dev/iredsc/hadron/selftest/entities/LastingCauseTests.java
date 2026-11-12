@@ -4,6 +4,7 @@ import static dev.iredsc.hadron.selftest.entities.Fixtures.spawn;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
+import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.Place;
@@ -35,8 +36,13 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.projectile.Arrow;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.item.alchemy.Potions;
+import net.minecraft.world.phys.EntityHitResult;
 
 /**
  * An effect and an entity's fire keep who caused them and where, saved with the entity, and act for that cause on
@@ -346,4 +352,82 @@ public final class LastingCauseTests {
                 oldBurn.getAppliedAt(), "where fire saved before causes were kept was set");
     }
 
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void reapplyingTheActiveEffectChangesNoCredit(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        MobEffectInstance effect = poison(400, 0);
+        golem.addEffect(effect, bob.player());
+        // The very instance already active: vanilla changes nothing and says so.
+        t.assertFalse(golem.addEffect(effect, alice.player()), "reapplying the active instance should change nothing");
+        assertFor(t, bob, nextPoison(t, hurts(t, golem)), "poison after its own instance was reapplied");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aBridgesCauseKeepsItsPeopleWhileTheSourceLives(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Pig turret = spawn(t, EntityType.PIG, t.pos(-3, 0, 0));
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        // A bridge says bob answers for this turret's shot, which the turret itself doesn't remember.
+        Actor shot = new Actor.EntityActor(turret, Attribution.of(bob.uuid()));
+        Actors.acting(shot, () -> golem.addEffect(poison(400, 0), turret));
+        EntityDamageEvent tick = nextPoison(t, hurts(t, golem));
+        t.assertTrue(tick.getActor() instanceof Actor.EntityActor e && e.entity() == turret,
+                "the poison should act as the turret, still there, but acted as " + tick.getActor());
+        assertFor(t, bob, tick, "the turret's poison");
+        IronGolem loaded = reload(t, golem, tag -> {}, IronGolem.class);
+        assertFor(t, bob, nextPoison(t, hurts(t, loaded)), "the turret's poison after a save");
+    }
+
+    /** An arrow whose hit a test can make happen now, as vanilla's own flight would. */
+    private static final class HittingArrow extends Arrow {
+        HittingArrow(TestContext t, TestPlayer shooter) {
+            super(t.level(), shooter.player(), new ItemStack(Items.ARROW), null);
+        }
+
+        void hit(Entity target) {
+            onHitEntity(new EntityHitResult(target));
+        }
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aRefusedFlamingArrowLeavesTheFiresCreditWhereItWas(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        BlockPos litAt = t.pos(2, 0, 0);
+        Pig pig = spawn(t, EntityType.PIG, litAt);
+        Actors.acting(new Actor.Player(bob.player()), () -> pig.igniteForTicks(40));
+        HittingArrow arrow = new HittingArrow(t, alice);
+        arrow.setDeltaMovement(0, 0, 1);
+        arrow.igniteForTicks(100);
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDamageEvent e) {
+                if (e.getEntity() == pig && e.getDamageSource().getDirectEntity() == arrow) e.setCancelled(true);
+            }
+        });
+        // Vanilla sets the pig alight for longer before the hit, and puts its burning time back when the hit is refused.
+        Actors.acting(new Actor.EntityActor(arrow, Attribution.of(alice.uuid())), () -> arrow.hit(pig));
+        t.assertEquals(40, pig.getRemainingFireTicks(), "the pig's burning time after the refused arrow");
+        EntityDamageEvent burn = nextBurn(t, hurts(t, pig));
+        assertFor(t, bob, burn, "burning after a refused flaming arrow");
+        t.assertEquals(Optional.of(Place.Spot.at(t.level(), litAt)), burn.getAppliedAt(), "where bob set it alight");
+    }
+
+    @HadronTest
+    @Covers(value = EntityDamageEvent.class, method = "getAppliedAt")
+    void aBurningArmorStandSaysWhereItWasLit(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos litAt = t.pos(2, 0, 0);
+        ArmorStand stand = spawn(t, EntityType.ARMOR_STAND, litAt);
+        Actors.acting(new Actor.Player(bob.player()), () -> stand.igniteForTicks(100));
+        EntityDamageEvent burn = nextBurn(t, hurts(t, stand));
+        assertFor(t, bob, burn, "the stand's burning");
+        t.assertEquals(Optional.of(Place.Spot.at(t.level(), litAt)), burn.getAppliedAt(), "where the stand was lit");
+    }
 }

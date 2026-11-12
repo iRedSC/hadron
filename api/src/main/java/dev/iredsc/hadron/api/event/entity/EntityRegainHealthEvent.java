@@ -23,6 +23,10 @@ public class EntityRegainHealthEvent extends EntityEvent implements Cancellable 
     private float amount;
     private boolean cancelled;
 
+    /**
+     * For healing nothing applied earlier. Healing from an effect or fire, or from a bridge's own lingering
+     * effect, uses the constructor taking where it was applied, so {@link #getAppliedAt()} isn't empty.
+     */
     public EntityRegainHealthEvent(LivingEntity entity, float amount, Actor actor) {
         super(entity, actor);
         this.amount = amount;
