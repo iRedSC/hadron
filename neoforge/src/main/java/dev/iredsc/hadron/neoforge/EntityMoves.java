@@ -11,6 +11,7 @@ import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 import net.minecraft.network.protocol.game.ClientboundMoveVehiclePacket;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
@@ -36,10 +37,6 @@ import org.jspecify.annotations.Nullable;
  * Refused, the whole snapshot is put back, the root and every rider, before any client is sent the move.
  */
 public final class EntityMoves {
-    /** The moving piston block a piston tick is moving entities for, so each names it; null outside one. */
-    @StaticState(reason = "set only while a piston block entity ticks on the server thread, cleared in finally")
-    private static @Nullable BlockPos pushing;
-
     private EntityMoves() {}
 
     /** Whether the move check watches {@code entity} itself: a player riding nothing, or a vehicle a player drives. */
@@ -217,7 +214,110 @@ public final class EntityMoves {
         if (state.hadron$checkAt() == now) snapshotRiders(entity.getId(), now, entity);
     }
 
+    // ---- Packets ----------------------------------------------------------------------------------------------
+
+    /** One entity as it stood, and how it faced: to measure a move from and put it back. */
+    private record Stood(Entity entity, double x, double y, double z, float yRot, float xRot) {
+        static Stood of(Entity e) {
+            return new Stood(e, e.getX(), e.getY(), e.getZ(), e.getYRot(), e.getXRot());
+        }
+
+        Vec3 position() {
+            return new Vec3(x, y, z);
+        }
+
+        boolean crossed() {
+            return !sameBlock(entity.getX(), entity.getY(), entity.getZ(), x, y, z);
+        }
+
+        /** Back where it stood, how it faced; a rider simply placed, since its vehicle seats it. */
+        void putBack() {
+            entity.setPos(x, y, z);
+            entity.setYRot(yRot);
+            entity.setXRot(xRot);
+        }
+    }
+
+    /** Everyone riding {@code root}, riders of riders too, as they stand. */
+    private static List<Stood> riders(Entity root) {
+        List<Stood> out = new ArrayList<>();
+        for (Entity r : root.getIndirectPassengers()) out.add(Stood.of(r));
+        return out;
+    }
+
+    private static Map<Entity, Vec3> positions(List<Stood> stood) {
+        Map<Entity, Vec3> out = new IdentityHashMap<>();
+        for (Stood s : stood) out.put(s.entity(), s.position());
+        return out;
+    }
+
+    /**
+     * A walking player's movement packet ({@code handleMovePlayer}): applied, then, if they or anything riding them is
+     * in another block, asked about there, before anything is broadcast. Refused, they are put back and their client
+     * told (a teleport, as vanilla corrects a bad move).
+     */
+    public static void walked(ServerPlayer player, Runnable handle) {
+        if (player.isPassenger() || !Hooks.listens(PlayerMoveEvent.class)) {
+            handle.run();
+            return;
+        }
+        Stood was = Stood.of(player);
+        List<Stood> riders = riders(player);
+        handle.run();
+        if (player.isRemoved() || player.isPassenger()) return;
+        seat(player);
+        if (!was.crossed() && riders.stream().noneMatch(Stood::crossed)) return;
+        if (refused(player, was.position(), positions(riders), new Actor.Player(player))) {
+            player.connection.teleport(was.x(), was.y(), was.z(), player.getYRot(), player.getXRot());
+            riders.forEach(Stood::putBack);
+        }
+        if (((EntityState) player).hadron$tracked()) trackRoot(player);
+    }
+
+    /**
+     * A driver's vehicle packet ({@code handleMoveVehicle}): vanilla applies it and seats only the driver; here every
+     * rider is seated too, and, if the vehicle or any rider is in another block, the move is asked about there, before
+     * anything is broadcast. Refused, the vehicle and every rider are put back, the handler's own record of where the
+     * vehicle last was with them, and the driver's client is sent where the vehicle really is.
+     */
+    public static void steered(ServerPlayer driver, Runnable handle, VehiclePackets packets) {
+        Entity root = driver.getRootVehicle();
+        if (root == driver || root.getControllingPassenger() != driver || !Hooks.listens(EntityMoveEvent.class)) {
+            handle.run();
+            return;
+        }
+        Stood was = Stood.of(root);
+        List<Stood> riders = riders(root);
+        handle.run();
+        if (root.isRemoved() || driver.getRootVehicle() != root) return;
+        seat(root);
+        if (!was.crossed() && riders.stream().noneMatch(Stood::crossed)) return;
+        if (refused(root, was.position(), positions(riders), EntityActors.of(driver))) {
+            root.absMoveTo(was.x(), was.y(), was.z(), was.yRot(), was.xRot());
+            riders.forEach(Stood::putBack);
+            packets.lastGood(was.x(), was.y(), was.z());
+            driver.connection.send(new ClientboundMoveVehiclePacket(root));
+        }
+        if (((EntityState) root).hadron$tracked()) trackRoot(root);
+    }
+
+    /** Where the packet handler last saw its player's vehicle in a good place, which a refusal puts back too. */
+    @FunctionalInterface
+    public interface VehiclePackets {
+        void lastGood(double x, double y, double z);
+    }
+
     // ---- Pistons ------------------------------------------------------------------------------------------------
+
+    /** The moving piston block a piston tick is moving entities for, so each names it; null outside one. */
+    @StaticState(reason = "set only while a piston block entity ticks on the server thread, cleared in finally")
+    private static @Nullable BlockPos pushing;
+
+    /** A slime launch vanilla set for an entity just before pushing it, held until its push is asked about. */
+    @StaticState(reason = "one launch held during a piston tick on the server thread, applied or dropped by its push")
+    private static @Nullable Entity launched;
+    @StaticState(reason = "one launch held during a piston tick on the server thread, applied or dropped by its push")
+    private static @Nullable Runnable launch;
 
     /** Runs a piston block's entity moves for this tick, each naming the moving block at {@code pos}. */
     public static void pushing(BlockPos pos, Runnable moves) {
@@ -226,59 +326,75 @@ public final class EntityMoves {
         try {
             moves.run();
         } finally {
+            launchHeld();
             pushing = was;
         }
     }
 
-    /** One entity and where it stood, and how it faced, before a piston moved it or what it rides. */
-    private record Stood(Entity entity, double x, double y, double z, float yRot, float xRot) {
-        static Stood of(Entity e) {
-            return new Stood(e, e.getX(), e.getY(), e.getZ(), e.getYRot(), e.getXRot());
+    /**
+     * A slime block launching an entity it is about to push: held until that push is asked about, so a refused push
+     * launches nothing; any held for an entity that then isn't pushed is applied as vanilla would.
+     */
+    public static void launching(Entity entity, Runnable set) {
+        if (pushing == null || !(entity.level() instanceof ServerLevel) || !Hooks.listens(type(entity))) {
+            set.run();
+            return;
         }
+        launchHeld();
+        launched = entity;
+        launch = set;
+    }
 
-        boolean crossed() {
-            return !sameBlock(entity.getX(), entity.getY(), entity.getZ(), x, y, z);
-        }
-
-        void putBack() {
-            if (entity instanceof ServerPlayer player) {
-                player.connection.teleport(x, y, z, yRot, xRot);
-            } else {
-                entity.setPos(x, y, z);
-                entity.setYRot(yRot);
-                entity.setXRot(xRot);
-            }
-        }
+    private static void launchHeld() {
+        Runnable held = launch;
+        launched = null;
+        launch = null;
+        if (held != null) held.run();
     }
 
     /**
-     * A piston moving {@code entity} (vanilla's {@code moveEntityByPiston}, on each tick of its travel): moved, its
-     * passengers seated as they will be, and, if it or one of them is in another block, the move is asked about,
-     * naming the piston as its actor. Refused, it and its passengers are put back; the piston's blocks finish moving.
+     * A piston about to move {@code entity} {@code distance} along {@code direction} (vanilla's
+     * {@code moveEntityByPiston}, on each tick of its travel): asked about before it moves, with where the push takes it
+     * and each passenger, if any of them would be in another block, naming the piston as its actor. Refused, nothing
+     * moves (nothing is stepped on, nothing launched) and it is pinned where it stands; the piston's blocks finish
+     * moving. Let through, vanilla moves it and its passengers are seated.
      */
-    public static void pushed(Entity entity, Runnable move) {
+    public static void pushed(Entity entity, Direction direction, double distance, Runnable move) {
         BlockPos piston = pushing;
         if (piston == null || !(entity.level() instanceof ServerLevel level) || !Hooks.listens(type(entity))) {
+            if (launched == entity) launchHeld();
             move.run();
             return;
         }
-        List<Stood> stood = new ArrayList<>();
-        stood.add(Stood.of(entity));
-        for (Entity r : entity.getIndirectPassengers()) stood.add(Stood.of(r));
+        Vec3 delta = new Vec3(direction.getStepX() * distance, direction.getStepY() * distance,
+                direction.getStepZ() * distance);
+        Stood was = Stood.of(entity);
+        List<Stood> riders = riders(entity);
+        boolean crosses = !sameBlock(was.x() + delta.x, was.y() + delta.y, was.z() + delta.z, was.x(), was.y(), was.z())
+                || riders.stream().anyMatch(r -> !sameBlock(r.x() + delta.x, r.y() + delta.y, r.z() + delta.z, r.x(),
+                        r.y(), r.z()));
+        if (crosses) {
+            Map<Entity, Vec3> to = new IdentityHashMap<>();
+            for (Stood r : riders) to.put(r.entity(), r.position().add(delta));
+            Actor actor = Actors.currentOr(new Actor.Machine(level, piston, Attribution.none()));
+            Vec3 going = was.position().add(delta);
+            EntityMoveEvent event = entity instanceof ServerPlayer player
+                    ? new PlayerMoveEvent(player, was.position(), going, positions(riders), to, actor)
+                    : new EntityMoveEvent(entity, was.position(), going, positions(riders), to, actor);
+            if (Hooks.post(event).isCancelled()) {
+                if (launched == entity) {
+                    launched = null;
+                    launch = null;
+                }
+                ((EntityState) entity).hadron$pin(was.x(), was.y(), was.z());
+                return;
+            }
+        }
+        if (launched == entity) launchHeld();
         move.run();
         seat(entity);
-        if (stood.stream().noneMatch(Stood::crossed)) return;
-        Map<Entity, Vec3> starts = new IdentityHashMap<>();
-        for (Stood s : stood.subList(1, stood.size())) starts.put(s.entity(), new Vec3(s.x(), s.y(), s.z()));
-        Stood root = stood.get(0);
-        Actor actor = Actors.currentOr(new Actor.Machine(level, piston, Attribution.none()));
-        if (refused(entity, new Vec3(root.x(), root.y(), root.z()), starts, actor)) {
-            stood.forEach(Stood::putBack);
-            return;
-        }
         // Its own check starts from where the piston left it, so the push isn't seen twice.
-        EntityState state = (EntityState) entity;
-        if (state.hadron$tracked()) trackRoot(entity);
+        if (((EntityState) entity).hadron$tracked()) trackRoot(entity);
     }
 
     /** Seats every passenger of {@code vehicle} where it now puts them, riders of riders after the one they ride. */

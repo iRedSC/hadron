@@ -59,6 +59,9 @@ abstract class EntityMixin implements EntityState {
     @Unique private float hadron$seatYRot;
     @Unique private float hadron$seatXRot;
     @Unique private long hadron$checkAt = -1;
+    @Unique private double hadron$pinX = Double.NaN;
+    @Unique private double hadron$pinY = Double.NaN;
+    @Unique private double hadron$pinZ = Double.NaN;
     @Unique private boolean hadron$converted;
     @Unique private boolean hadron$dying;
     @Unique private LeashDrop hadron$leashDrop = LeashDrop.UNSAID;
@@ -202,6 +205,39 @@ abstract class EntityMixin implements EntityState {
         hadron$seatZ = z;
         hadron$seatYRot = yRot;
         hadron$seatXRot = xRot;
+    }
+
+    @Override
+    public double hadron$pinX() {
+        return hadron$pinX;
+    }
+
+    @Override
+    public double hadron$pinY() {
+        return hadron$pinY;
+    }
+
+    @Override
+    public double hadron$pinZ() {
+        return hadron$pinZ;
+    }
+
+    @Override
+    public void hadron$pin(double x, double y, double z) {
+        hadron$pinX = x;
+        hadron$pinY = y;
+        hadron$pinZ = z;
+    }
+
+    /**
+     * An entity a refused piston push left in place isn't nudged out of the block the piston put on it, while nothing
+     * else has moved it: the nearest open face can be the space it was refused.
+     */
+    @WrapMethod(method = "moveTowardsClosestSpace")
+    private void hadron$nudge(double x, double y, double z, Operation<Void> original) {
+        Entity self = (Entity) (Object) this;
+        if (self.getX() == hadron$pinX && self.getY() == hadron$pinY && self.getZ() == hadron$pinZ) return;
+        original.call(x, y, z);
     }
 
     @Override

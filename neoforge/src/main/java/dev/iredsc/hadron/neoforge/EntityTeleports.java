@@ -85,13 +85,14 @@ public final class EntityTeleports {
     /**
      * A same-world teleport has landed and vanilla has seated its riders: any rider in a block the event's places
      * don't hold (a seat the event couldn't foresee) is asked about once more, as the vehicle's {@code EntityMoveEvent}
-     * from where it set out, with every rider's observed start and end. Refused, the whole teleport is put back.
+     * from where it set out, with every rider's observed start and end. Refused, the whole teleport is put back; returns
+     * whether it was.
      */
-    private static void landed(Entity entity) {
+    private static boolean landed(Entity entity) {
         Asked a = asked;
-        if (a == null || a.root().entity() != entity) return;
+        if (a == null || a.root().entity() != entity) return false;
         asked = null;
-        if (entity.level() != a.level() || a.level().getGameTime() != a.tick() || a.riders().isEmpty()) return;
+        if (entity.level() != a.level() || a.level().getGameTime() != a.tick() || a.riders().isEmpty()) return false;
         List<Place> places = a.places();
         boolean outside = false;
         for (Stood r : a.riders()) {
@@ -104,13 +105,13 @@ public final class EntityTeleports {
                 break;
             }
         }
-        if (!outside || !Hooks.listens(EntityMoveEvent.class)) return;
+        if (!outside || !Hooks.listens(EntityMoveEvent.class)) return false;
         Map<Entity, Vec3> starts = new IdentityHashMap<>();
         for (Stood r : a.riders()) starts.put(r.entity(), r.position());
         EntityMoveEvent check = entity instanceof ServerPlayer player
                 ? new PlayerMoveEvent(player, a.root().position(), entity.position(), starts, a.event().getActor())
                 : new EntityMoveEvent(entity, a.root().position(), entity.position(), starts, a.event().getActor());
-        if (!Hooks.post(check).isCancelled()) return;
+        if (!Hooks.post(check).isCancelled()) return false;
         Stood root = a.root();
         quietly(entity, () -> {
             if (entity instanceof ServerPlayer player) {
@@ -126,6 +127,7 @@ public final class EntityTeleports {
             r.entity().setYRot(r.yRot());
             r.entity().setXRot(r.xRot());
         }
+        return true;
     }
 
     /** Whether either is in a teleport under way, so a dismount it causes can't be refused. */
@@ -269,7 +271,9 @@ public final class EntityTeleports {
         List<Entity> covered = cover(entity);
         try {
             T result = teleport.get();
-            landed(entity);
+            // Put back by the landing check: a method that reports whether it teleported says it didn't, as when
+            // its event is cancelled.
+            if (landed(entity) && result instanceof Boolean) return refused();
             return result;
         } finally {
             covered.forEach(travelling::remove);
@@ -285,6 +289,12 @@ public final class EntityTeleports {
             if (travelling.add(passenger)) added.add(passenger);
         }
         return added;
+    }
+
+    /** What a teleport method that reports whether it went returns when it didn't. */
+    @SuppressWarnings("unchecked")
+    private static <T> T refused() {
+        return (T) Boolean.FALSE;
     }
 
     /** Moves an entity without firing teleport events: the port putting back what a listener refused. */

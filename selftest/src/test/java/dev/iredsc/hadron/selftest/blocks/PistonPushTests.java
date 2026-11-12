@@ -152,4 +152,92 @@ public final class PistonPushTests {
                 "alice's push should be a PlayerMoveEvent naming the piston: " + heard);
         t.assertEquals(stood, alice.player().blockPosition(), "alice's block, her push refused");
     }
+
+    /** A loose diamond in the stone's path, at x + 2.8 on the push's row, held still. */
+    private static net.minecraft.world.entity.item.ItemEntity diamond(TestContext t, BlockPos piston) {
+        net.minecraft.world.entity.item.ItemEntity item = new net.minecraft.world.entity.item.ItemEntity(t.level(),
+                piston.getX() + 2.8, piston.getY(), piston.getZ() + 0.5,
+                new net.minecraft.world.item.ItemStack(net.minecraft.world.item.Items.DIAMOND));
+        item.setNoGravity(true);
+        item.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        item.setNeverPickUp();
+        t.level().addFreshEntity(item);
+        t.tick();
+        return item;
+    }
+
+    /** A piston on the ground, facing east with {@code front} in front; the item path is at y + 0. */
+    private static BlockPos groundPiston(TestContext t, net.minecraft.world.level.block.Block front) {
+        BlockPos piston = t.pos(2, 0, 0);
+        Fixtures.awaitTicking(t, piston);
+        t.setBlock(piston, Blocks.PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST));
+        t.setBlock(piston.east(), front);
+        return piston;
+    }
+
+    /** A refused push is never made: the item never touches the pressure plate it would have been pushed onto. */
+    @HadronTest
+    @Covers(EntityMoveEvent.class)
+    void aRefusedPushTouchesNothingOnTheWay(TestContext t) {
+        t.player("alice");
+        BlockPos piston = groundPiston(t, Blocks.STONE);
+        BlockPos plate = piston.east(3);
+        t.setBlock(plate.below(), Blocks.STONE);
+        t.setBlock(plate, Blocks.OAK_PRESSURE_PLATE);
+        net.minecraft.world.entity.item.ItemEntity item = diamond(t, piston);
+        List<EntityMoveEvent> refused = hearAny(t, item);
+        t.setBlock(piston.west(), Blocks.REDSTONE_BLOCK);
+        t.tick(5);
+        t.assertTrue(!refused.isEmpty(), "the item's push should have been asked about");
+        t.assertTrue(!t.getBlock(plate).getValue(net.minecraft.world.level.block.PressurePlateBlock.POWERED),
+                "the plate should never have been pressed; the item is at " + item.position());
+    }
+
+    /** A refused slime push doesn't launch what it would have pushed. */
+    @HadronTest
+    @Covers(EntityMoveEvent.class)
+    void aRefusedSlimePushLaunchesNothing(TestContext t) {
+        t.player("alice");
+        BlockPos piston = groundPiston(t, Blocks.SLIME_BLOCK);
+        net.minecraft.world.entity.item.ItemEntity item = diamond(t, piston);
+        BlockPos was = item.blockPosition();
+        List<EntityMoveEvent> refused = hearAny(t, item);
+        t.setBlock(piston.west(), Blocks.REDSTONE_BLOCK);
+        t.tick(5);
+        t.assertTrue(!refused.isEmpty(), "the item's push should have been asked about");
+        t.assertEquals(was, item.blockPosition(), "the item's block; its velocity is " + item.getDeltaMovement());
+    }
+
+    /**
+     * Refused, the item stays where it was, which the arriving stone then fills: vanilla would nudge it out toward
+     * the nearest open face, east into the space it was refused; core keeps it pinned while nothing else moves it.
+     */
+    @HadronTest
+    @Covers(EntityMoveEvent.class)
+    void aRefusedItemTheStoneArrivesOnIsntNudgedIntoTheRefusedSpace(TestContext t) {
+        t.player("alice");
+        BlockPos piston = groundPiston(t, Blocks.STONE);
+        net.minecraft.world.entity.item.ItemEntity item = diamond(t, piston);
+        BlockPos was = item.blockPosition();
+        List<EntityMoveEvent> refused = hearAny(t, item);
+        t.setBlock(piston.west(), Blocks.REDSTONE_BLOCK);
+        t.tick(10);
+        t.assertTrue(!refused.isEmpty(), "the item's push should have been asked about");
+        t.assertBlock(was, Blocks.STONE);
+        t.assertEquals(was, item.blockPosition(), "the item's block, ten ticks after the stone arrived on it");
+    }
+
+    /** Every move of {@code entity} heard, each refused. */
+    private static List<EntityMoveEvent> hearAny(TestContext t, Entity entity) {
+        List<EntityMoveEvent> heard = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityMoveEvent e) {
+                if (e.getEntity() != entity) return;
+                heard.add(e);
+                e.setCancelled(true);
+            }
+        });
+        return heard;
+    }
 }

@@ -75,6 +75,19 @@ public interface EntityState {
 
     void hadron$seat(int vehicle, long at, double x, double y, double z, float yRot, float xRot);
 
+    /**
+     * Where a refused piston push left this entity: while it is still exactly there, vanilla doesn't nudge it out of
+     * the block the piston then put on it (an item or orb would be nudged toward the nearest open face, which can be
+     * the space it was refused). NaN when no refusal pinned it.
+     */
+    double hadron$pinX();
+
+    double hadron$pinY();
+
+    double hadron$pinZ();
+
+    void hadron$pin(double x, double y, double z);
+
     /** Set on the new entity of a conversion, so its arrival isn't a spawn. */
     boolean hadron$converted();
 

@@ -126,7 +126,9 @@ public final class TeleportCarryTests {
             }
         });
         BlockPos to = t.pos(2, 0, 4);
-        pig.teleportTo(to.getX() + 0.5, to.getY(), to.getZ() + 0.5);
+        boolean went = pig.teleportTo(t.level(), to.getX() + 0.5, to.getY(), to.getZ() + 0.5, java.util.Set.of(), 0f,
+                0f);
+        t.assertTrue(!went, "teleportTo should report the teleport didn't happen, as for a cancelled one");
         t.assertEquals(1, refused.size(), "the check on where the chicken landed");
         t.assertTrue(landed.size() == 1 && landed.get(0).to().equals(Place.Spot.at(t.level(), to.east(5))),
                 "the check should state where the chicken really landed, " + to.east(5) + ": " + landed);

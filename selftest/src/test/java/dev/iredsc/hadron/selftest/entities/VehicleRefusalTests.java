@@ -12,8 +12,6 @@ import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.List;
 import net.minecraft.core.BlockPos;
-import net.minecraft.network.protocol.game.ClientboundMoveEntityPacket;
-import net.minecraft.network.protocol.game.ClientboundTeleportEntityPacket;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.horse.Horse;
 import net.minecraft.world.entity.vehicle.Boat;
@@ -101,11 +99,7 @@ public final class VehicleRefusalTests {
         t.tick(3);
         t.assertTrue(boat.position().distanceTo(boatWas) < 1.0E-6, "the boat should be exactly where it was");
         t.assertTrue(alice.player().position().distanceTo(aliceWas) < 1.0E-6, "alice should be exactly where she was");
-        long moves = carol.received(ClientboundMoveEntityPacket.class).stream()
-                .filter(p -> p.getEntity(t.level()) == boat).count()
-                + carol.received(ClientboundTeleportEntityPacket.class).stream()
-                .filter(p -> p.getId() == boat.getId()).count();
-        t.assertEquals(0L, moves, "the boat's position packets carol received");
+        t.assertEquals(0L, VehiclePacketTests.movesShown(t, carol, boat), "the packets showing carol the boat moved");
     }
 
     /** A turn made before the first tick anyone listens is still measured from where the boat faced before it. */
