@@ -72,12 +72,16 @@ final class BlockEvents {
         event.setDroppedExperience(hadron.getExperience());
     }
 
-    /** A player or fake player mining a block, through the game mode. Fired before anything drops. */
+    /**
+     * A player or fake player mining a block, through the game mode, or a mod asking whether it may break one. Fired
+     * before anything drops.
+     */
     private static void breakBlock(BlockEvent.BreakEvent event) {
         if (!(event.getLevel() instanceof ServerLevel level) || !Hooks.listens(BlockBreakEvent.class)) return;
         BlockPos pos = event.getPos();
         BlockBreakEvent hadron = Hooks.post(new BlockBreakEvent(level, pos, event.getState(),
-                level.getFluidState(pos).createLegacyBlock(), BlockHooks.orUnknown(BlockHooks.actorOrStack(event.getPlayer()))));
+                level.getFluidState(pos).createLegacyBlock(), BlockHooks.breakEventTool(level, pos, event.getPlayer()),
+                BlockHooks.orUnknown(BlockHooks.actorOrStack(event.getPlayer()))));
         if (hadron.isCancelled()) event.setCanceled(true);
     }
 
