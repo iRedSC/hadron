@@ -3,13 +3,18 @@ package dev.iredsc.hadron.neoforge.mixin.entity;
 import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
+import net.minecraft.world.entity.ai.navigation.PathNavigation;
 import dev.iredsc.hadron.neoforge.AreaIndex;
 import dev.iredsc.hadron.neoforge.EntityActors;
 import dev.iredsc.hadron.neoforge.EntityDeaths;
+import dev.iredsc.hadron.neoforge.EntityDismounts;
 import dev.iredsc.hadron.neoforge.EntitySpawnRefunds;
 import dev.iredsc.hadron.neoforge.EntityTeleports;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.damagesource.DamageSource;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
@@ -21,7 +26,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
  * Brackets the death loot, so the death event can decide drops and experience together; refunds a released bow or
- * trident whose every spawn was refused; remembers the hit in progress; and makes a random teleport one teleport.
+ * trident whose every spawn was refused; remembers the hit in progress; asks about a random teleport where it lands;
+ * and sets a rider down where its dismount said.
  */
 @Mixin(LivingEntity.class)
 abstract class LivingEntityMixin implements EntityActors.Hurting {
@@ -78,11 +84,48 @@ abstract class LivingEntityMixin implements EntityActors.Hurting {
         }
     }
 
-    /** An enderman's or chorus fruit's teleport, with its step back when the spot doesn't fit: one teleport. */
+    /**
+     * A random teleport (an enderman, chorus fruit, a mod): vanilla's search for ground and room runs first, without
+     * moving anything anyone sees, and the teleport is asked about with where it found.
+     */
     @WrapMethod(method = "randomTeleport")
     private boolean hadron$randomTeleport(double x, double y, double z, boolean effects, Operation<Boolean> original) {
-        return EntityTeleports.randomTeleport((LivingEntity) (Object) this, x, y, z,
-                (tx, ty, tz) -> original.call(tx, ty, tz, effects));
+        return EntityTeleports.randomTeleport((LivingEntity) (Object) this, x, y, z, effects,
+                (tx, ty, tz, fx) -> original.call(tx, ty, tz, fx));
+    }
+
+    /** While the search runs as a probe, it places the entity without a teleport: nothing is sent, nothing asked. */
+    @WrapOperation(method = "randomTeleport", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/LivingEntity;teleportTo(DDD)V"))
+    private void hadron$probeTeleport(LivingEntity self, double x, double y, double z, Operation<Void> original) {
+        if (EntityTeleports.probing(self)) {
+            self.setPos(x, y, z);
+        } else {
+            original.call(self, x, y, z);
+        }
+    }
+
+    /** A probe stops nothing: a mob's path is dropped once its teleport goes ahead. */
+    @WrapWithCondition(method = "randomTeleport", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/ai/navigation/PathNavigation;stop()V"))
+    private boolean hadron$probeKeepsPath(PathNavigation navigation) {
+        return !EntityTeleports.probing((LivingEntity) (Object) this);
+    }
+
+    /** Getting off: the set-down is worked out for its event and applied exactly ({@link EntityDismounts}). */
+    @WrapMethod(method = "stopRiding")
+    private void hadron$stopRiding(Operation<Void> original) {
+        LivingEntity self = (LivingEntity) (Object) this;
+        if (!(self.level() instanceof ServerLevel)) {
+            original.call();
+            return;
+        }
+        EntityDismounts.stopRiding(self, original::call);
+    }
+
+    @WrapMethod(method = "dismountVehicle")
+    private void hadron$dismountVehicle(Entity vehicle, Operation<Void> original) {
+        if (!EntityDismounts.setDownAsDecided((LivingEntity) (Object) this, vehicle)) original.call(vehicle);
     }
 
     @Inject(method = "knockback", at = @At("HEAD"))

@@ -19,8 +19,15 @@ import net.minecraft.world.phys.Vec3;
 import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
- * An entity is about to move other than by walking: a command, an ender pearl, chorus fruit, an enderman, a portal,
- * a mod's waystone or teleporter. Cancel it and nothing moves; an ender pearl's fall damage is not dealt.
+ * An entity is about to move other than by walking: a command, an ender pearl, chorus fruit, an enderman, a shulker, a
+ * portal, a mod's waystone or teleporter. Cancel it and nothing moves; an ender pearl's fall damage is not dealt, and a
+ * thrower or chorus fruit eater riding something stays on.
+ *
+ * <p>{@link #getTo()} is where it lands, not where it was asked to go. Chorus fruit, an enderman and a mod's
+ * {@code randomTeleport} search down for ground and check there is room; this fires once that search has found the
+ * spot, so a spot with no room fires nothing, and refusing a chorus fruit landing lets it try its next spot. A shulker
+ * lands at the bottom centre of a block, and that centre is what this states. Everything else lands exactly where it
+ * was sent.
  *
  * <p>Whatever rides it and goes along is {@link #getCarried()}, rather than getting events of its own. Riders go
  * wherever it goes within a world. To another world, it depends on how it is sent, and {@link #getCarried()} says which
@@ -28,10 +35,8 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  * pig sent with {@code /execute in ... run tp}) leaves them behind ({@link Riders#LEFT_BEHIND}), unless a listener
  * sends it to yet another world, which takes them; a player's own riders never change world with them.
  *
- * <p>{@link #setTo} sends it somewhere else instead, in this world or another. A redirected ender pearl still deals its
- * fall damage. Chorus fruit and endermen sent elsewhere in the same world still settle on the
- * ground below the new spot, and stay put if there is none, as they do in vanilla; sent to another world, they go to
- * exactly the position given.
+ * <p>{@link #setTo} sends it exactly there instead, in this world or another, with no search for ground. A redirected
+ * ender pearl still deals its fall damage.
  */
 @FiredBy(core = FULL)
 public class EntityTeleportEvent extends EntityEvent implements Cancellable {
@@ -92,7 +97,7 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
         super(entity, actor);
         this.toLevel = Objects.requireNonNull(toLevel, "toLevel");
         this.askedLevel = toLevel;
-        this.to = Objects.requireNonNull(to, "to");
+        this.to = landing(toLevel, Objects.requireNonNull(to, "to"));
         this.toYRot = yRot;
         this.toXRot = xRot;
         this.cause = Objects.requireNonNull(cause, "cause; use TeleportCause.UNKNOWN when no other fits");
@@ -109,7 +114,7 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
         return getLevel();
     }
 
-    /** Where it is going. */
+    /** Where it lands: where it was sent, except a shulker, which sits at the bottom centre of that block. */
     public Vec3 getTo() {
         return to;
     }
@@ -129,17 +134,26 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
         return toXRot;
     }
 
-    /** Send it here instead, facing the way it would have. {@link #getCarried()} follows. */
+    /**
+     * Send it exactly here instead, facing the way it would have, with no search for ground (a shulker still sits at
+     * the bottom centre of the block; {@link #getTo()} says so). {@link #getCarried()} follows.
+     */
     public void setTo(ServerLevel level, Vec3 position) {
         setTo(level, position, toYRot, toXRot);
     }
 
-    /** Send it here instead, facing {@code yRot} (yaw) and {@code xRot} (pitch). {@link #getCarried()} follows. */
+    /** As {@link #setTo(ServerLevel, Vec3)}, facing {@code yRot} (yaw) and {@code xRot} (pitch). */
     public void setTo(ServerLevel level, Vec3 position, float yRot, float xRot) {
         this.toLevel = Objects.requireNonNull(level, "level; use getToLevel() to stay in the same world");
-        this.to = Objects.requireNonNull(position, "position");
+        this.to = landing(level, Objects.requireNonNull(position, "position"));
         this.toYRot = yRot;
         this.toXRot = xRot;
+    }
+
+    /** Where it ends up placed at {@code at} in {@code level}: a rider stays on within a world, and gets off to leave it. */
+    private Vec3 landing(ServerLevel level, Vec3 at) {
+        Entity entity = getEntity();
+        return Landing.of(entity, at, entity.isPassenger() && level == entity.level());
     }
 
     public TeleportCause getCause() {
