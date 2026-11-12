@@ -252,8 +252,8 @@ public final class TeleportTests {
     }
 
     /**
-     * An enderman's random teleport tries a spot and steps back when it doesn't fit there. That is one attempt: the
-     * step back is never asked about, so refusing other teleports can't strand it at a spot it doesn't fit.
+     * An enderman's random teleport searches for room before anything moves: a spot without room is no teleport, so
+     * nothing is asked about, and refusing other teleports can't strand it at a spot it doesn't fit.
      */
     @HadronTest
     @Covers(EntityTeleportEvent.class)
@@ -269,7 +269,7 @@ public final class TeleportTests {
             void on(EntityTeleportEvent e) {
                 if (e.getEntity() != enderman) return;
                 causes.add(e.getCause());
-                if (e.getCause() != TeleportCause.RANDOM_TELEPORT) e.setCancelled(true);
+                e.setCancelled(true);
             }
         });
         // EnderMan.teleport(x, y, z) is private; it is what its AI and its dodging call.
@@ -278,7 +278,7 @@ public final class TeleportTests {
         teleport.setAccessible(true);
         Object moved = teleport.invoke(enderman, target.getX() + 0.5, (double) target.getY(), target.getZ() + 0.5);
         t.assertEquals(false, moved, "whether the enderman found room at the target");
-        t.assertEquals(List.of(TeleportCause.RANDOM_TELEPORT), causes, "the EntityTeleportEvents for one attempt");
+        t.assertEquals(List.of(), causes, "the EntityTeleportEvents for a spot with no room");
         assertAt(t, from, enderman, "the enderman");
     }
 
@@ -311,6 +311,7 @@ public final class TeleportTests {
         t.assertEquals(TeleportCause.ENDER_PEARL, events.get(0).getCause(), "the cause");
         t.assertTrue(alice.player().position().distanceTo(from) > 1, "alice should have moved to where the pearl "
                 + "landed, but is still at " + alice.player().position());
+        assertAt(t, events.get(0).getTo(), alice.player(), "alice, where the event said she lands");
     }
 
     @HadronTest

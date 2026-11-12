@@ -26,6 +26,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.monster.Shulker;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.animal.Animal;
@@ -197,9 +198,13 @@ public final class EntityEvents {
         if (!Hooks.listens(EntityDismountEvent.class)) return;
         boolean forced = rider.isRemoved() || !rider.isAlive() || vehicle.isRemoved() || !vehicle.isAlive()
                 || EntityTeleports.inProgress(rider, vehicle);
-        if (Hooks.post(new EntityDismountEvent(rider, vehicle, forced, actor)).isCancelled() && !forced) {
+        // Worked out before firing and applied exactly once it goes ahead, so the event states where it lands.
+        net.minecraft.world.phys.Vec3 to = EntityDismounts.setDown(rider, vehicle);
+        if (Hooks.post(new EntityDismountEvent(rider, vehicle, to, forced, actor)).isCancelled() && !forced) {
             event.setCanceled(true);
+            return;
         }
+        EntityDismounts.goesAhead(rider, vehicle);
     }
 
     private static void tame(AnimalTameEvent event) {
@@ -302,9 +307,12 @@ public final class EntityEvents {
     }
 
     /**
-     * NeoForge's own teleports. Same-level ones fire here, where cancelling also skips their side effects (an ender
-     * pearl's fall damage); the teleport method they then call won't ask again. Commands may cross dimensions, which
-     * NeoForge's event can't say, so for them we only note the cause and let the teleport method ask.
+     * NeoForge's own teleports. A command's and a random teleport's only note the cause, for the teleport that follows
+     * to ask with: a command may cross worlds, which NeoForge's event can't say, and a random teleport (chorus fruit,
+     * an enderman) asks once its search has found where it lands. An ender pearl's and a shulker's land exactly on the
+     * spot asked (a shulker at the bottom centre of its block, which the event states), so they fire here, where
+     * cancelling also skips their side effects (an ender pearl's fall damage); the teleport method they then call won't
+     * ask again.
      */
     private static void teleport(EntityTeleportEvent event) {
         Entity entity = event.getEntity();
@@ -317,11 +325,16 @@ public final class EntityEvents {
             case EntityTeleportEvent.EnderEntity c -> TeleportCause.RANDOM_TELEPORT;
             default -> TeleportCause.UNKNOWN;
         };
-        if (cause == TeleportCause.COMMAND) {
+        boolean landsAsAsked = cause == TeleportCause.ENDER_PEARL
+                || (cause == TeleportCause.RANDOM_TELEPORT && entity instanceof Shulker);
+        if (!landsAsAsked) {
             EntityTeleports.mark(entity, cause, false, null);
             return;
         }
-        if (!Hooks.listens(dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.class)) return;
+        if (!Hooks.listens(dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.class)) {
+            EntityTeleports.leave(entity);
+            return;
+        }
         var hadron = Hooks.post(new dev.iredsc.hadron.api.event.entity.EntityTeleportEvent(entity, level,
                 new net.minecraft.world.phys.Vec3(event.getTargetX(), event.getTargetY(), event.getTargetZ()), cause,
                 EntityTeleports.actor(entity, cause)));
@@ -329,10 +342,12 @@ public final class EntityEvents {
             event.setCanceled(true);
             return;
         }
+        // A thrower riding something gets off only now that the pearl's teleport goes ahead.
+        EntityTeleports.leave(entity);
         var to = hadron.getTo();
         if (hadron.getToLevel() != level && cause != TeleportCause.ENDER_PEARL) {
-            // Chorus fruit and endermen search this level for ground and may step back; another level can't be
-            // handed to that search, so the teleport is done here instead.
+            // A shulker attaches to a face of the block it picked in this level; another level can't be handed to
+            // that, so the teleport is done here instead.
             event.setCanceled(true);
             EntityTeleports.redirect(entity, new EntityTeleports.Destination(hadron.getToLevel(), to.x, to.y, to.z,
                     hadron.getToYRot(), hadron.getToXRot()));
