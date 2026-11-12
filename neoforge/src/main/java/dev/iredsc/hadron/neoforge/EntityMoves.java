@@ -416,10 +416,10 @@ public final class EntityMoves {
         boolean crosses = !sameBlock(going.x, going.y, going.z, was.x(), was.y(), was.z())
                 || riders.stream().anyMatch(r -> !sameBlock(r.x() + resolved.x, r.y() + resolved.y,
                         r.z() + resolved.z, r.x(), r.y(), r.z()));
+        Actor actor = Actors.currentOr(new Actor.Machine(level, push.pos, Attribution.none()));
         if (crosses) {
             Map<Entity, Vec3> to = new IdentityHashMap<>();
             for (Stood r : riders) to.put(r.entity(), r.position().add(resolved));
-            Actor actor = Actors.currentOr(new Actor.Machine(level, push.pos, Attribution.none()));
             EntityMoveEvent event = entity instanceof ServerPlayer player
                     ? new PlayerMoveEvent(player, was.position(), going, positions(riders), to, actor)
                     : new EntityMoveEvent(entity, was.position(), going, positions(riders), to, actor);
@@ -435,8 +435,34 @@ public final class EntityMoves {
         if (push.launched == entity) push.launchHeld();
         move.run();
         seat(entity);
+        // A backstop: the entity's own move can still put it somewhere the resolution didn't (a shulker snaps to a
+        // whole block). Where it or a rider landed in another block than the one asked about (or than where it stood,
+        // if nothing was asked), that observed outcome is asked about; refused, all of it goes back.
+        boolean elsewhere = !sameBlock(entity.getX(), entity.getY(), entity.getZ(), going.x, going.y, going.z)
+                || riders.stream().anyMatch(r -> !sameBlock(r.entity().getX(), r.entity().getY(), r.entity().getZ(),
+                        r.x() + resolved.x, r.y() + resolved.y, r.z() + resolved.z));
+        if (elsewhere && (was.crossed() || riders.stream().anyMatch(Stood::crossed))) {
+            EntityMoveEvent landed = entity instanceof ServerPlayer player
+                    ? new PlayerMoveEvent(player, was.position(), player.position(), positions(riders), actor)
+                    : new EntityMoveEvent(entity, was.position(), entity.position(), positions(riders), actor);
+            if (Hooks.post(landed).isCancelled()) {
+                if (entity instanceof ServerPlayer player) {
+                    player.connection.teleport(was.x(), was.y(), was.z(), was.yRot(), was.xRot());
+                } else {
+                    was.putBack();
+                }
+                riders.forEach(Stood::putBack);
+                ((EntityState) entity).hadron$pin(was.x(), was.y(), was.z());
+                return;
+            }
+        }
         // Its own check starts from where the piston left it, so the push isn't seen twice.
         if (((EntityState) entity).hadron$tracked()) trackRoot(entity);
+    }
+
+    /** Whether a server piston's push of {@code entity} is asked about at all: worth resolving its destination. */
+    public static boolean checksPush(Entity entity) {
+        return PUSH.get() != null && entity.level() instanceof ServerLevel && Hooks.listens(type(entity));
     }
 
     /** Seats every passenger of {@code vehicle} where it now puts them, riders of riders after the one they ride. */

@@ -50,7 +50,7 @@ abstract class PistonPushMixin {
     @WrapMethod(method = "moveEntityByPiston")
     private static void hadron$push(Direction noClip, Entity entity, double distance, Direction direction,
             Operation<Void> original) {
-        if (entity.level().isClientSide()) {
+        if (entity.level().isClientSide() || !EntityMoves.checksPush(entity)) {
             original.call(noClip, entity, distance, direction);
             return;
         }

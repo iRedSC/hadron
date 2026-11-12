@@ -346,4 +346,27 @@ public final class PistonPushTests {
         t.assertTrue(item.position().distanceTo(was) > 0.01, "back inside the stone after moving away, the item "
                 + "should be nudged out as vanilla does, but it is still at " + item.position());
     }
+
+    /**
+     * A shulker pushed up snaps its own height to a whole block as it moves, so it lands somewhere vanilla's collision
+     * didn't say: where it really lands is checked once it has, and refusing every push keeps it where it was.
+     */
+    @HadronTest
+    @Covers(EntityMoveEvent.class)
+    void anEntityThatLandsElsewhereThanAskedIsCheckedWhereItLands(TestContext t) {
+        t.player("alice");
+        BlockPos piston = t.pos(2, 0, 0);
+        Fixtures.awaitTicking(t, piston);
+        t.setBlock(piston, Blocks.PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.UP));
+        t.setBlock(piston.above(), Blocks.STONE);
+        net.minecraft.world.entity.monster.Shulker shulker = dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t,
+                EntityType.SHULKER, piston.above(2));
+        t.tick(2);
+        BlockPos was = shulker.blockPosition();
+        List<EntityMoveEvent> refused = hearAny(t, shulker);
+        t.setBlock(piston.west(), Blocks.REDSTONE_BLOCK);
+        t.tick(5);
+        t.assertTrue(!refused.isEmpty(), "the shulker's push should have been asked about");
+        t.assertEquals(was, shulker.blockPosition(), "the shulker's block, every push refused");
+    }
 }
