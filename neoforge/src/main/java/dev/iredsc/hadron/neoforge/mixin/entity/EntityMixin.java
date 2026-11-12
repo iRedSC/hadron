@@ -14,6 +14,7 @@ import dev.iredsc.hadron.neoforge.Hooks;
 import java.util.Set;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.RelativeMovement;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.portal.DimensionTransition;
@@ -45,6 +46,22 @@ abstract class EntityMixin implements EntityState {
     @Unique private double hadron$trackedX;
     @Unique private double hadron$trackedY;
     @Unique private double hadron$trackedZ;
+    @Unique private float hadron$trackedYRot;
+    @Unique private float hadron$trackedXRot;
+    @Unique private @Nullable Pose hadron$trackedPose;
+    @Unique private long hadron$trackedPoseTick;
+    @Unique private long hadron$trackedAt;
+    @Unique private int hadron$seatOf;
+    @Unique private long hadron$seatAt = -1;
+    @Unique private double hadron$seatX;
+    @Unique private double hadron$seatY;
+    @Unique private double hadron$seatZ;
+    @Unique private float hadron$seatYRot;
+    @Unique private float hadron$seatXRot;
+    @Unique private long hadron$checkAt = -1;
+    @Unique private double hadron$pinX = Double.NaN;
+    @Unique private double hadron$pinY = Double.NaN;
+    @Unique private double hadron$pinZ = Double.NaN;
     @Unique private boolean hadron$converted;
     @Unique private boolean hadron$dying;
     @Unique private LeashDrop hadron$leashDrop = LeashDrop.UNSAID;
@@ -98,6 +115,137 @@ abstract class EntityMixin implements EntityState {
     public void hadron$untrack() {
         hadron$tracked = false;
         hadron$trackedLevel = null;
+    }
+
+    @Override
+    public float hadron$trackedYRot() {
+        return hadron$trackedYRot;
+    }
+
+    @Override
+    public float hadron$trackedXRot() {
+        return hadron$trackedXRot;
+    }
+
+    @Override
+    public @Nullable Pose hadron$trackedPose() {
+        return hadron$trackedPose;
+    }
+
+    @Override
+    public long hadron$trackedPoseTick() {
+        return hadron$trackedPoseTick;
+    }
+
+    @Override
+    public long hadron$trackedAt() {
+        return hadron$trackedAt;
+    }
+
+    @Override
+    public void hadron$trackTurn(float yRot, float xRot, Pose pose, long poseTick, long at) {
+        hadron$trackedYRot = yRot;
+        hadron$trackedXRot = xRot;
+        hadron$trackedPose = pose;
+        hadron$trackedPoseTick = poseTick;
+        hadron$trackedAt = at;
+    }
+
+    @Override
+    public long hadron$checkAt() {
+        return hadron$checkAt;
+    }
+
+    @Override
+    public void hadron$setCheckAt(long at) {
+        hadron$checkAt = at;
+    }
+
+    @Override
+    public int hadron$seatOf() {
+        return hadron$seatOf;
+    }
+
+    @Override
+    public long hadron$seatAt() {
+        return hadron$seatAt;
+    }
+
+    @Override
+    public double hadron$seatX() {
+        return hadron$seatX;
+    }
+
+    @Override
+    public double hadron$seatY() {
+        return hadron$seatY;
+    }
+
+    @Override
+    public double hadron$seatZ() {
+        return hadron$seatZ;
+    }
+
+    @Override
+    public float hadron$seatYRot() {
+        return hadron$seatYRot;
+    }
+
+    @Override
+    public float hadron$seatXRot() {
+        return hadron$seatXRot;
+    }
+
+    @Override
+    public void hadron$seat(int vehicle, long at, double x, double y, double z, float yRot, float xRot) {
+        hadron$seatOf = vehicle;
+        hadron$seatAt = at;
+        hadron$seatX = x;
+        hadron$seatY = y;
+        hadron$seatZ = z;
+        hadron$seatYRot = yRot;
+        hadron$seatXRot = xRot;
+    }
+
+    @Override
+    public double hadron$pinX() {
+        return hadron$pinX;
+    }
+
+    @Override
+    public double hadron$pinY() {
+        return hadron$pinY;
+    }
+
+    @Override
+    public double hadron$pinZ() {
+        return hadron$pinZ;
+    }
+
+    @Override
+    public void hadron$pin(double x, double y, double z) {
+        hadron$pinX = x;
+        hadron$pinY = y;
+        hadron$pinZ = z;
+    }
+
+    /** Any other change of position lets go of a refused push's pin, so it can't catch the entity again later. */
+    @Inject(method = "setPosRaw", at = @At("HEAD"))
+    private void hadron$unpin(double x, double y, double z, CallbackInfo ci) {
+        if (!Double.isNaN(hadron$pinX) && (x != hadron$pinX || y != hadron$pinY || z != hadron$pinZ)) {
+            hadron$pinX = Double.NaN;
+        }
+    }
+
+    /**
+     * An entity a refused piston push left in place isn't nudged out of the block the piston put on it, while nothing
+     * else has moved it: the nearest open face can be the space it was refused.
+     */
+    @WrapMethod(method = "moveTowardsClosestSpace")
+    private void hadron$nudge(double x, double y, double z, Operation<Void> original) {
+        Entity self = (Entity) (Object) this;
+        if (self.getX() == hadron$pinX && self.getY() == hadron$pinY && self.getZ() == hadron$pinZ) return;
+        original.call(x, y, z);
     }
 
     @Override
@@ -158,7 +306,9 @@ abstract class EntityMixin implements EntityState {
     private boolean hadron$teleportTo(ServerLevel level, double x, double y, double z, Set<RelativeMovement> relative,
             float yRot, float xRot, Operation<Boolean> original) {
         Entity self = (Entity) (Object) this;
-        EntityTeleports.Destination to = EntityTeleports.ask(self, level, x, y, z, yRot, xRot);
+        // Vanilla's method ejects riders before changing world, so they stay unless a listener sends it elsewhere.
+        EntityTeleports.Destination to = EntityTeleports.ask(self, level, x, y, z, yRot, xRot,
+                dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.Riders.LEFT_BEHIND);
         if (to == null) return false;
         // Sent to another level than asked: this method would leave the passengers behind, so it isn't used.
         if (to.level() != level && to.crossesLevel(self)) return EntityTeleports.redirect(self, to);

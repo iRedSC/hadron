@@ -343,6 +343,7 @@ public final class EntityEvents {
         event.setTargetX(to.x);
         event.setTargetY(to.y);
         event.setTargetZ(to.z);
+        EntityTeleports.expect(entity, hadron);
         boolean turned = hadron.getToYRot() != entity.getYRot() || hadron.getToXRot() != entity.getXRot();
         EntityTeleports.mark(entity, cause, true, hadron.getToLevel() != level || turned
                 ? new EntityTeleports.Destination(hadron.getToLevel(), to.x, to.y, to.z, hadron.getToYRot(),

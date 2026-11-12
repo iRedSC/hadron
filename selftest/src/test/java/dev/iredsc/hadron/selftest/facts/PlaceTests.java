@@ -20,6 +20,7 @@ import dev.iredsc.hadron.api.event.entity.EntityLeashBreakEvent;
 import dev.iredsc.hadron.api.event.entity.EntityLeashEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTargetEvent;
+import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
@@ -157,6 +158,7 @@ public final class PlaceTests {
         return switch (value) {
             case Entity entity -> List.of(entity);
             case Optional<?> o -> o.map(PlaceTests::entities).orElse(List.of());
+            case Carried.Known k -> k.entities();
             case Collection<?> c -> c.stream().flatMap(v -> entities(v).stream()).toList();
             case null, default -> List.of();
         };

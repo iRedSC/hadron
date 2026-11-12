@@ -7,6 +7,7 @@ import static dev.iredsc.hadron.selftest.entities.Fixtures.center;
 import static dev.iredsc.hadron.selftest.entities.Fixtures.console;
 import static dev.iredsc.hadron.selftest.entities.Fixtures.spawn;
 
+import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
@@ -109,8 +110,8 @@ public final class TeleportTests {
             @EventHandler
             void on(EntityTeleportEvent e) {
                 if (e.getEntity() != pig) return;
-                passengers.add(e.getPassengers());
                 e.setTo(t.level(), instead);
+                passengers.add(carried(e));
             }
         });
         console(t, "tp " + pig.getStringUUID() + " " + coords(center(t.pos(5, 0, -5))));
@@ -122,6 +123,13 @@ public final class TeleportTests {
         t.assertEquals(pig, chicken.getVehicle(), "the chicken's vehicle");
         t.assertTrue(chicken.position().subtract(instead).horizontalDistance() < 0.5, "the chicken should have come along to "
                 + instead + ", but is at " + chicken.position());
+    }
+
+    private static List<Entity> carried(EntityTeleportEvent e) {
+        return switch (e.getCarried()) {
+            case Carried.Known k -> k.entities();
+            case Carried.Unknown u -> throw new AssertionError("a teleport always knows what it carries, but said " + u);
+        };
     }
 
     /** A spot in the overworld's spawn chunks, which stay loaded, high enough to be clear of the terrain. */
@@ -139,16 +147,20 @@ public final class TeleportTests {
         t.assertTrue(chicken.startRiding(pig, true), "the chicken should get on the pig");
         ServerLevel overworld = t.server().overworld();
         Vec3 instead = overworldSpot(t);
+        List<List<Entity>> carried = new ArrayList<>();
         t.registerEvents(new Listener() {
             @EventHandler
             void on(EntityTeleportEvent e) {
-                if (e.getEntity() == pig) e.setTo(overworld, instead);
+                if (e.getEntity() != pig) return;
+                e.setTo(overworld, instead);
+                carried.add(carried(e));
             }
         });
         console(t, "tp " + pig.getStringUUID() + " " + coords(center(t.pos(5, 0, -5))));
         t.tick();
         Entity arrived = overworld.getEntity(pig.getUUID());
         try {
+            t.assertEquals(List.of(List.of(chicken)), carried, "what the redirected teleport said it carries");
             t.assertTrue(arrived instanceof Pig, "the pig should be in the overworld, but found " + arrived);
             assertAt(t, instead, arrived, "the pig");
             t.assertEquals(1, arrived.getPassengers().size(), "the pig's passengers in the overworld");
@@ -162,6 +174,48 @@ public final class TeleportTests {
             }
             Entity rider = overworld.getEntity(chicken.getUUID());
             if (rider != null) rider.discard();
+        }
+    }
+
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aVehicleSentToAnotherWorldAsAskedLeavesItsPassengerAndSaysSo(TestContext t) {
+        t.player("alice");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        Chicken chicken = spawn(t, EntityType.CHICKEN, t.pos(2, 0, 0));
+        t.assertTrue(chicken.startRiding(pig, true), "the chicken should get on the pig");
+        ServerLevel overworld = t.server().overworld();
+        Vec3 there = overworldSpot(t);
+        List<List<Entity>> carried = new ArrayList<>();
+        List<List<Entity>> redirectedBack = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityTeleportEvent e) {
+                if (e.getEntity() != pig) return;
+                carried.add(carried(e));
+                // Asked, not done: where it would go instead changes what it would carry, then goes back.
+                ServerLevel asked = e.getToLevel();
+                Vec3 to = e.getTo();
+                e.setTo(e.getFromLevel(), e.getFrom());
+                redirectedBack.add(carried(e));
+                e.setTo(asked, to);
+            }
+        });
+        Entity arrived = null;
+        try {
+            t.assertTrue(pig.teleportTo(overworld, there.x, there.y, there.z, java.util.Set.of(), 0f, 0f),
+                    "the pig's teleport to the overworld");
+            t.tick();
+            arrived = overworld.getEntity(pig.getUUID());
+            t.assertEquals(List.of(List.<Entity>of()), carried, "what the teleport carries: vanilla's teleport to "
+                    + "another world leaves riders behind");
+            t.assertEquals(List.of(List.<Entity>of(chicken)), redirectedBack, "what it would carry, sent within its "
+                    + "own world instead");
+            t.assertTrue(arrived != null && arrived.getPassengers().isEmpty(), "the pig should arrive alone, but "
+                    + "carries " + (arrived == null ? "nothing, missing" : arrived.getPassengers()));
+            t.assertTrue(t.level().getEntity(chicken.getUUID()) != null, "the chicken should stay behind");
+        } finally {
+            if (arrived != null) arrived.discard();
         }
     }
 
@@ -296,5 +350,36 @@ public final class TeleportTests {
         });
         throwPearl(alice);
         t.await("alice to arrive", () -> alice.player().position().distanceTo(instead) < 0.01, 60);
+    }
+
+    /**
+     * Right after mounting, a rider hasn't been seated yet: its seat after a teleport is still somewhere in the bound
+     * its ride states, which is built from the vehicle and rider boxes, not from where the rider happens to stand.
+     */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aFreshlyMountedRidersTeleportBoundHoldsTheSeatItLandsIn(TestContext t) {
+        t.player("alice");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        Chicken chicken = spawn(t, EntityType.CHICKEN, t.pos(2, 0, 0));
+        t.assertTrue(chicken.startRiding(pig, true), "the chicken should get on the pig");
+        List<dev.iredsc.hadron.api.event.Place> bound = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityTeleportEvent e) {
+                if (e.getEntity() == pig && e.getCarried() instanceof Carried.Known k && !k.rides().isEmpty()) {
+                    bound.add(k.rides().get(0).to());
+                }
+            }
+        });
+        BlockPos at = t.pos(4, 0, 0);
+        pig.teleportTo(at.getX() + 0.5, at.getY() + 0.9, at.getZ() + 0.5);
+        t.tick();
+        t.assertEquals(1, bound.size(), "the pig's teleports, carrying the chicken");
+        net.minecraft.world.phys.AABB box = chicken.getBoundingBox();
+        t.assertTrue(bound.get(0) instanceof dev.iredsc.hadron.api.event.Place.Spot s
+                && s.box().isInside(BlockPos.containing(box.minX, box.minY, box.minZ))
+                && s.box().isInside(BlockPos.containing(box.maxX - 1.0E-7, box.maxY - 1.0E-7, box.maxZ - 1.0E-7)),
+                "the chicken's ride should bound where it lands, " + box + ", but said " + bound);
     }
 }

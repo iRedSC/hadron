@@ -404,7 +404,15 @@ public final class PlayerStateTests {
                 e.setCancelled(true);
             }
         });
-        alice.moveTo(t.pos(1, 0, 0));
+        // Refused where the server applies her movement packet, so the step never lands: moveTo says so.
+        AssertionError refused = null;
+        try {
+            alice.moveTo(t.pos(1, 0, 0));
+        } catch (AssertionError e) {
+            refused = e;
+        }
+        t.assertTrue(refused != null && refused.getMessage().contains("cancelled PlayerMoveEvents"),
+                "moveTo should report the step refused, but " + (refused == null ? "it went through" : refused));
         t.tick(3);
         ServerPlayer p = alice.player();
         t.assertEquals(t.pos(0, 0, 0), p.blockPosition(), "the block alice is in");

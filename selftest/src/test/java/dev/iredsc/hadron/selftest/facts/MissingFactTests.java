@@ -3,6 +3,7 @@ package dev.iredsc.hadron.selftest.facts;
 import static dev.iredsc.hadron.selftest.entities.Fixtures.spawn;
 
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
@@ -91,7 +92,7 @@ public final class MissingFactTests {
     }
 
     @HadronTest
-    @KnownGap("A vehicle's move doesn't name its riders, and riders get no move of their own")
+    @Covers(EntityMoveEvent.class)
     void aRiderIsNamedWhenTheirVehicleCarriesThemIntoANewBlock(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -105,9 +106,11 @@ public final class MissingFactTests {
         t.tick();
         BlockPos now = bob.player().blockPosition();
         require(moves.stream().anyMatch(e -> e.getEntity() == boat), "the boat's own move should fire");
-        t.assertTrue(moves.stream().anyMatch(e -> e.getEntity() == bob.player() && e.getToBlock().equals(now)),
-                "an event should state that bob, riding, moved to " + now + ", but only "
-                        + moves.stream().map(e -> e.getEntity().getName().getString()).toList() + " moved");
+        t.assertTrue(moves.stream().anyMatch(e -> e.getEntity() == boat
+                        && e.getCarried() instanceof Carried.Known k && k.entities().contains(bob.player())
+                        && e.getPlaces().contains(Place.Spot.at(t.level(), now))),
+                "the boat's move should name bob as carried, in " + now + ", but carried "
+                        + moves.stream().map(EntityMoveEvent::getCarried).toList());
     }
 
     @HadronTest
@@ -124,6 +127,68 @@ public final class MissingFactTests {
         BlockPos down = alice.player().blockPosition();
         t.assertTrue(heard.stream().anyMatch(e -> e.getEntity() == alice.player() && arrivesAt(e, down)),
                 "an event should state that alice was set down at " + down + ", but heard " + shown(heard));
+    }
+
+    @HadronTest
+    @KnownGap("A move refused after it happens (a client step, a boat packet, a piston landing an entity elsewhere than asked) keeps what it pressed, tripped or counted")
+    void aRefusedStepLeavesNoTrace(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos start = t.pos(2, 0, 0);
+        BlockPos plate = start.east(2);
+        t.setBlock(plate, Blocks.OAK_PRESSURE_PLATE);
+        alice.teleport(start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+        t.tick(3);
+        t.registerEvents(new dev.iredsc.hadron.api.event.Listener() {
+            @dev.iredsc.hadron.api.event.EventHandler
+            void on(EntityMoveEvent e) {
+                if (e.getEntity() == alice.player()) e.setCancelled(true);
+            }
+        });
+        net.minecraft.world.phys.Vec3 was = alice.player().position();
+        int walked = alice.player().getStats().getValue(net.minecraft.stats.Stats.CUSTOM.get(
+                net.minecraft.stats.Stats.WALK_ONE_CM));
+        alice.player().connection.handleMovePlayer(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket
+                .Pos(was.x + 2, was.y, was.z, true));
+        require(alice.player().position().distanceTo(was) < 1.0E-6, "alice's step should be refused");
+        t.assertTrue(!t.getBlock(plate).getValue(net.minecraft.world.level.block.PressurePlateBlock.POWERED),
+                "a refused step shouldn't press the plate it would have crossed");
+        t.assertEquals(walked, alice.player().getStats().getValue(net.minecraft.stats.Stats.CUSTOM.get(
+                net.minecraft.stats.Stats.WALK_ONE_CM)), "alice's walked distance after a refused step");
+    }
+
+    /** The same gap reached by a piston: a shulker snaps to a whole block, lands elsewhere than asked, is refused. */
+    @HadronTest
+    @KnownGap("A move refused after it happens (a client step, a boat packet, a piston landing an entity elsewhere than asked) keeps what it pressed, tripped or counted")
+    void aRefusedPistonLandingLeavesNoTrace(TestContext t) {
+        t.player("alice");
+        BlockPos piston = t.pos(2, 0, 0);
+        t.level().setChunkForced(piston.getX() >> 4, piston.getZ() >> 4, true);
+        t.awaitAsync("the test world's chunk to start ticking", () -> t.level().isPositionEntityTicking(piston), 300);
+        t.setBlock(piston, Blocks.PISTON.defaultBlockState().setValue(
+                net.minecraft.world.level.block.piston.PistonBaseBlock.FACING, Direction.UP));
+        t.setBlock(piston.above(), Blocks.STONE);
+        net.minecraft.world.entity.monster.Shulker shulker = spawn(t, EntityType.SHULKER, piston.above(2));
+        t.tick(2);
+        BlockPos was = shulker.blockPosition();
+        BlockPos wire = was.above();
+        t.setBlock(wire, Blocks.TRIPWIRE);
+        List<EntityMoveEvent> refused = new ArrayList<>();
+        t.registerEvents(new dev.iredsc.hadron.api.event.Listener() {
+            @dev.iredsc.hadron.api.event.EventHandler
+            void on(EntityMoveEvent e) {
+                if (e.getEntity() != shulker) return;
+                refused.add(e);
+                e.setCancelled(true);
+            }
+        });
+        require(!t.getBlock(wire).getValue(net.minecraft.world.level.block.TripWireBlock.POWERED),
+                "the wire should start unpressed");
+        t.setBlock(piston.west(), Blocks.REDSTONE_BLOCK);
+        t.tick(5);
+        require(!refused.isEmpty() && was.equals(shulker.blockPosition()), "the shulker's landing should be refused "
+                + "and it put back");
+        t.assertTrue(!t.getBlock(wire).getValue(net.minecraft.world.level.block.TripWireBlock.POWERED),
+                "a refused landing shouldn't power the wire it landed in");
     }
 
     private static boolean arrivesAt(EntityEvent e, BlockPos pos) {

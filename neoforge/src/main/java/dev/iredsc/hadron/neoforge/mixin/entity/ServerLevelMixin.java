@@ -14,7 +14,10 @@ import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
-/** Each ticking entity is the actor while it ticks; every fresh entity passes the spawn event. */
+/**
+ * Each ticking entity is the actor while it ticks; a root entity's move is observed around its tick (its passengers
+ * tick inside it); every fresh entity passes the spawn event.
+ */
 @Mixin(ServerLevel.class)
 abstract class ServerLevelMixin {
     @WrapMethod(method = "tickNonPassenger")
@@ -26,6 +29,8 @@ abstract class ServerLevelMixin {
         } finally {
             Actors.Port.exit(PortKey.KEY, scope);
         }
+        // It and every passenger have moved and been seated: the move, observed, is asked about here.
+        EntityMoves.afterTick(entity);
     }
 
     @WrapMethod(method = "tickPassenger")
