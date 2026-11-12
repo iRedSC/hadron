@@ -61,6 +61,14 @@ public interface EntityState {
 
     void hadron$seat(int vehicle, double x, double y, double z);
 
+    /**
+     * The id of the vehicle whose refused move holds this rider where it was: until that vehicle's next move check, its
+     * {@code positionRider} leaves this rider in place. 0 when nothing holds it.
+     */
+    int hadron$heldBy();
+
+    void hadron$holdBy(int vehicle);
+
     /** Set on the new entity of a conversion, so its arrival isn't a spawn. */
     boolean hadron$converted();
 

@@ -19,6 +19,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.camel.Camel;
+import net.minecraft.world.entity.animal.horse.Horse;
 import net.minecraft.world.entity.vehicle.Boat;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -185,11 +186,16 @@ public final class VehicleMoveTests {
                 "alice and bob should get on the camel");
         t.tick(2);
         t.assertTrue(camel.getControllingPassenger() == alice.player(), "alice should drive the camel");
+        // A world's first 52 ticks find every camel still standing up (its pose clock starts at 0): wait it out.
+        t.await("the camel to finish standing up", () -> !camel.isInPoseTransition(), 80);
+        t.tick();
         int seat = bob.player().blockPosition().getY();
         int[] refused = {0};
+        List<String> heard = new ArrayList<>();
         t.registerEvents(new Listener() {
             @EventHandler
             void on(EntityMoveEvent e) {
+                if (e.getEntity() == camel) heard.add("bob at " + bob.player().getY());
                 if (e.getEntity() != camel || !carried(e).contains(bob.player())) return;
                 if (bob.player().blockPosition().getY() < seat) {
                     refused[0]++;
@@ -203,8 +209,50 @@ public final class VehicleMoveTests {
             t.tick();
             lowest = Math.min(lowest, bob.player().blockPosition().getY());
         }
-        t.assertTrue(refused[0] > 0, "the camel sitting down should have carried bob into the block below");
+        t.assertTrue(refused[0] > 0, "the camel sitting down should have carried bob into the block below his seat "
+                + "(" + seat + "), but he is at " + bob.player().getY() + "; the camel's moves heard: " + heard);
         t.assertEquals(seat, lowest, "the lowest block bob was in after a tick");
         t.assertTrue(camel.isInPoseTransition(), "the camel should be held partway down, its sitting clock put back");
+    }
+
+    /**
+     * A horse rearing tips its rider back by most of a block on each tick of the animation, which a refusal can't undo
+     * by facing or pose: the rider is held where they were until the seat comes back, through the ticks that would
+     * seat them again.
+     */
+    @HadronTest
+    @Covers(EntityMoveEvent.class)
+    void aRearingHorseCancelledKeepsItsRiderOut(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos at = t.pos(2, 0, 0);
+        Horse horse = spawn(t, EntityType.HORSE, at);
+        horse.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.25, 0f, 0f);
+        horse.setTamed(true);
+        horse.equipSaddle(new ItemStack(Items.SADDLE), null);
+        t.assertTrue(alice.player().startRiding(horse, true), "alice should get on the horse");
+        t.tick(3);
+        t.assertTrue(horse.getControllingPassenger() == alice.player(), "alice should drive the horse");
+        t.assertTrue(alice.player().getZ() >= at.getZ(), "alice should start outside the refused block row, at "
+                + alice.player().position());
+        int[] refused = {0};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityMoveEvent e) {
+                if (e.getEntity() == horse && alice.player().getZ() < at.getZ()) {
+                    refused[0]++;
+                    e.setCancelled(true);
+                }
+            }
+        });
+        horse.setStanding(true);
+        double lowest = alice.player().getZ();
+        for (int i = 0; i < 10; i++) {
+            t.tick();
+            lowest = Math.min(lowest, alice.player().getZ());
+        }
+        t.assertTrue(refused[0] > 0, "the horse rearing should have tipped alice into the refused row");
+        t.assertTrue(lowest >= at.getZ(), "alice should be kept out of the refused row (z < " + at.getZ()
+                + "), but was at z = " + lowest + " after " + refused[0] + " refusals");
+        t.assertTrue(alice.player().getVehicle() == horse, "alice should still ride the horse");
     }
 }

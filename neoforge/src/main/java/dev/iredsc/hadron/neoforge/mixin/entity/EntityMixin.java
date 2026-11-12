@@ -9,6 +9,7 @@ import dev.iredsc.hadron.api.event.entity.EntityCombustEvent;
 import dev.iredsc.hadron.neoforge.EntityActors;
 import dev.iredsc.hadron.neoforge.EntityState;
 import dev.iredsc.hadron.neoforge.LeashDrop;
+import dev.iredsc.hadron.neoforge.EntityMoves;
 import dev.iredsc.hadron.neoforge.EntityTeleports;
 import dev.iredsc.hadron.neoforge.Hooks;
 import java.util.Set;
@@ -52,6 +53,7 @@ abstract class EntityMixin implements EntityState {
     @Unique private long hadron$trackedPoseTick;
     @Unique private long hadron$trackedAt;
     @Unique private int hadron$seatOf;
+    @Unique private int hadron$heldBy;
     @Unique private double hadron$seatX;
     @Unique private double hadron$seatY;
     @Unique private double hadron$seatZ;
@@ -170,6 +172,31 @@ abstract class EntityMixin implements EntityState {
         hadron$seatX = x;
         hadron$seatY = y;
         hadron$seatZ = z;
+    }
+
+    @Override
+    public int hadron$heldBy() {
+        return hadron$heldBy;
+    }
+
+    @Override
+    public void hadron$holdBy(int vehicle) {
+        hadron$heldBy = vehicle;
+    }
+
+    /**
+     * A rider a refused move held in place stays there: its own tick seats it again through here, which would carry it
+     * back into the refused block (a rearing horse's seat moves with the animation, not with anything put back). Any
+     * other seating is checked: one in another block than the last move check saw is asked about again.
+     */
+    @WrapMethod(method = "positionRider(Lnet/minecraft/world/entity/Entity;)V")
+    private void hadron$positionRider(Entity rider, Operation<Void> original) {
+        if (((EntityState) rider).hadron$heldBy() != 0
+                && ((EntityState) rider).hadron$heldBy() == ((Entity) (Object) this).getId()) {
+            return;
+        }
+        original.call(rider);
+        EntityMoves.seated((Entity) (Object) this, rider);
     }
 
     @Override

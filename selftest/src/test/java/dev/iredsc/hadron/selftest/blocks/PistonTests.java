@@ -3,6 +3,7 @@ package dev.iredsc.hadron.selftest.blocks;
 import static dev.iredsc.hadron.selftest.blocks.Fixtures.assertNature;
 
 import dev.iredsc.hadron.api.event.Carried;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
@@ -19,6 +20,7 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 /** Pistons pushing and pulling, powered by redstone with nobody behind it. */
 public final class PistonTests {
@@ -128,7 +130,8 @@ public final class PistonTests {
 
     /**
      * A piston picks up what it bumps into and what sticks to its slime as it travels, after the event: what it carries
-     * is unknown, never an empty list that reads as nothing, though a pig stands right on the block it pushes.
+     * is unknown, never an empty list that reads as nothing, though a pig stands right on the block it pushes, and
+     * bounded by what it moves and sweeps grown by a block, so protection fails closed only there.
      */
     @HadronTest
     @Covers(BlockPistonExtendEvent.class)
@@ -145,8 +148,13 @@ public final class PistonTests {
         t.assertEquals(2, seen.size(), "a push and a pull");
         for (BlockMoveEvent e : seen) {
             t.assertTrue(e instanceof BlockPistonEvent, "a piston's move, but was " + e.getEventName());
-            t.assertEquals(new Carried.Unknown(Carried.Unknown.Reason.DECIDED_AS_IT_MOVES), e.getCarried(),
-                    e.getEventName() + "'s carriage");
+            // Everything it moves or sweeps, from the piston's head to where the slime lands, grown by a block.
+            BoundingBox reach = BoundingBox.fromCorners(piston.east(), piston.east(2)).inflatedBy(1);
+            t.assertEquals(Carried.unknown(new Place.Spot(t.level(), reach), Carried.Unknown.Reason.DECIDED_AS_IT_MOVES),
+                    e.getCarried(), e.getEventName() + "'s carriage");
+            t.assertTrue(e.getPlaces().contains(new Place.Unknown(new Place.Spot(t.level(), reach),
+                    Place.Unknown.Reason.UNKNOWN_CARRIAGE)), e.getEventName() + "'s places should hold its bounded "
+                    + "carriage: " + e.getPlaces());
         }
     }
 }

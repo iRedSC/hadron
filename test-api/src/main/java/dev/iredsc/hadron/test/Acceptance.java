@@ -70,7 +70,8 @@ import net.minecraft.core.BlockPos;
  * <p><b>What a structure carries:</b> a block move in the area is read with the entities touching its blocks as it
  * fired, players too. If it was refused and one of them moved anyway, {@link #assertUnchanged} fails ({@link
  * Part#ENTITIES}), even within the area; if a bridge's move went through, {@link #assertActingFor} fails for each of
- * them that moved but isn't in its {@code getCarried()}, and for a {@code getCarried()} that is {@code Unknown}. A
+ * them that moved before the next move but isn't in that move's own {@code getCarried()}, and for a
+ * {@code getCarried()} that is {@code Unknown}. A
  * piston's carriage is unknown by design, so pistons are left out of the second.
  *
  * <p>Get one with {@link TestContext#acceptance}, after the area is built and every player the test needs has joined:

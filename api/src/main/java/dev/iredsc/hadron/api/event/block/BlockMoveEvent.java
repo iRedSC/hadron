@@ -48,8 +48,9 @@ public class BlockMoveEvent extends BlockEvent implements Cancellable {
      * @param moves each block's source and target
      * @param swept every space passed through or landed in
      * @param blocks every space whose contents change, with before and after
-     * @param carried every entity that moves along with the blocks ({@link Carried#of}, or {@link Carried#none()});
-     *     {@link Carried#unknown} when the mod decides that only as it moves
+     * @param carried every entity that moves along with the blocks and where it ends up ({@link Carried#of} with a
+     *     {@link Carried#ride} each, or {@link Carried#none()}); {@link Carried#unknown}, with a bound, when the mod
+     *     decides that only as it moves
      */
     public BlockMoveEvent(ServerLevel level, BlockPos pos, BlockState state, List<Move> moves, List<BlockPos> swept,
             List<BlockChange> blocks, Carried carried, Actor actor) {
@@ -82,7 +83,10 @@ public class BlockMoveEvent extends BlockEvent implements Cancellable {
         this.cancelled = cancel;
     }
 
-    /** Its own places, each move's source and target, every space swept, then where each carried entity is. */
+    /**
+     * Its own places, each move's source and target, every space swept, then where each carried entity is and ends up
+     * (or, unknown, the bound it is within).
+     */
     @Override
     public Places getPlaces() {
         List<Place> more = new ArrayList<>();

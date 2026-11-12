@@ -3,6 +3,7 @@ package dev.iredsc.hadron.selftest.bridges;
 import dev.iredsc.hadron.api.Hadron;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Carried;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.block.StructureMoveEvent;
@@ -12,6 +13,7 @@ import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.level.block.Blocks;
@@ -55,14 +57,31 @@ public final class AcceptanceCarryTests {
         return pig(t, t.pos(2, 1, 0));
     }
 
-    /** bob's ship moving its planks one block east, saying it carries {@code carried}; whether it was cancelled. */
-    private static boolean sail(TestContext t, TestPlayer bob, Carried carried) {
+    /** bob's ship moving its planks one block east, carrying {@code crew}; whether it was cancelled. */
+    private static boolean sail(TestContext t, TestPlayer bob, List<Entity> crew) {
+        return Hadron.getPluginManager().callEvent(ship(t, bob, (from, to, moves, blocks) -> new StructureMoveEvent(
+                t.level(), from, Blocks.OAK_PLANKS.defaultBlockState(), StructureMoveEvent.Phase.MOVE, new Matrix4d(),
+                new Matrix4d().translation(1, 0, 0), moves, List.of(to), blocks, crew, new Actor.Player(bob.player()))));
+    }
+
+    /** The same, by a bridge that can't see its crew: unknown, somewhere around the deck. */
+    private static boolean sailUntraced(TestContext t, TestPlayer bob) {
+        return Hadron.getPluginManager().callEvent(ship(t, bob, (from, to, moves, blocks) -> new StructureMoveEvent(
+                t.level(), from, Blocks.OAK_PLANKS.defaultBlockState(), StructureMoveEvent.Phase.MOVE, new Matrix4d(),
+                new Matrix4d().translation(1, 0, 0), moves, List.of(to), blocks,
+                Carried.unknown(new Place.Spot(t.level(), BoundingBox.fromCorners(from.above(), to.above(2))),
+                        Carried.Unknown.Reason.UNTRACED), new Actor.Player(bob.player()))));
+    }
+
+    private interface Ship {
+        StructureMoveEvent build(BlockPos from, BlockPos to, List<BlockMoveEvent.Move> moves, List<BlockChange> blocks);
+    }
+
+    private static StructureMoveEvent ship(TestContext t, TestPlayer bob, Ship ship) {
         BlockPos from = t.pos(2, 0, 0), to = t.pos(3, 0, 0);
         BlockState planks = Blocks.OAK_PLANKS.defaultBlockState();
-        return Hadron.getPluginManager().callEvent(new StructureMoveEvent(t.level(), from, planks,
-                StructureMoveEvent.Phase.MOVE, new Matrix4d(), new Matrix4d().translation(1, 0, 0),
-                List.of(new BlockMoveEvent.Move(from, to, planks)), List.of(to),
-                List.of(BlockChange.unchanged(t.level(), from, planks)), carried, new Actor.Player(bob.player())));
+        return ship.build(from, to, List.of(new BlockMoveEvent.Move(from, to, planks)),
+                List.of(BlockChange.unchanged(t.level(), from, planks)));
     }
 
     /** A bridge that moves its crew though protection refused the ship's move. */
@@ -71,7 +90,7 @@ public final class AcceptanceCarryTests {
         TestPlayer bob = t.player("bob");
         Pig pig = crew(t);
         Acceptance area = t.acceptance(around(t));
-        t.assertTrue(sail(t, bob, Carried.of(List.of(pig))), "bob's ship, bob not trusted, should be refused");
+        t.assertTrue(sail(t, bob, List.of(pig)), "bob's ship, bob not trusted, should be refused");
         pig.setPos(pig.getX() + 1, pig.getY(), pig.getZ()); // the bridge moves its crew anyway
         String why = failure(t, () -> area.assertUnchanged("bob's ship where he isn't trusted"));
         t.assertTrue(why.contains("though the move was refused") && why.contains("Pig"), why);
@@ -83,7 +102,7 @@ public final class AcceptanceCarryTests {
         Pig pig = crew(t);
         Acceptance area = t.acceptance(around(t));
         area.trust(bob).mark();
-        t.assertFalse(sail(t, bob, Carried.none()), "bob's ship, bob trusted, should go");
+        t.assertFalse(sail(t, bob, List.of()), "bob's ship, bob trusted, should go");
         pig.setPos(pig.getX() + 1, pig.getY(), pig.getZ());
         String why = failure(t, () -> area.assertActingFor(bob, "bob's ship"));
         t.assertTrue(why.contains("getCarried() doesn't name it") && why.contains("Pig"), why);
@@ -95,7 +114,7 @@ public final class AcceptanceCarryTests {
         Pig pig = crew(t);
         Acceptance area = t.acceptance(around(t));
         area.trust(bob).mark();
-        t.assertFalse(sail(t, bob, Carried.of(List.of(pig))), "bob's ship, bob trusted, should go");
+        t.assertFalse(sail(t, bob, List.of(pig)), "bob's ship, bob trusted, should go");
         pig.setPos(pig.getX() + 1, pig.getY(), pig.getZ());
         area.assertActingFor(bob, "bob's ship carrying its pig");
     }
@@ -106,7 +125,7 @@ public final class AcceptanceCarryTests {
         crew(t);
         Acceptance area = t.acceptance(around(t));
         area.trust(bob).mark();
-        sail(t, bob, Carried.unknown(Carried.Unknown.Reason.UNTRACED));
+        sailUntraced(t, bob);
         String why = failure(t, () -> area.assertActingFor(bob, "bob's ship"));
         t.assertTrue(why.contains("getCarried() is Unknown (UNTRACED)"), why);
     }
@@ -122,8 +141,33 @@ public final class AcceptanceCarryTests {
         boolean cancelled = Hadron.getPluginManager().callEvent(new StructureMoveEvent(t.level(), from, planks,
                 StructureMoveEvent.Phase.MOVE, new Matrix4d(), new Matrix4d(),
                 List.of(new BlockMoveEvent.Move(from, to, planks)), List.of(to),
-                List.of(BlockChange.unchanged(t.level(), from, planks)), Carried.of(List.of(pig)),
+                List.of(BlockChange.unchanged(t.level(), from, planks)), List.<Entity>of(pig),
                 new Actor.Player(bob.player())));
         t.assertTrue(cancelled, "a ship carrying a pig out of the area should be refused: " + area.events());
+    }
+
+    /** A ship whose deck stays out of the area carries its crew up into it: refused for where the crew ends up. */
+    @HadronTest
+    void aShipCarryingItsCrewIntoTheAreaIsRefused(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Pig pig = crew(t);
+        Acceptance area = t.acceptance(BoundingBox.fromCorners(t.pos(3, 1, 0), t.pos(3, 2, 0)));
+        t.assertTrue(sail(t, bob, List.of(pig)), "bob's ship carrying its pig into the area should be "
+                + "refused: " + area.events());
+    }
+
+    /** Each move answers for what it moved: an earlier move naming the pig doesn't cover a later one that doesn't. */
+    @HadronTest
+    void eachMoveIsCheckedAgainstItsOwnCarriage(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Pig pig = crew(t);
+        Acceptance area = t.acceptance(around(t));
+        area.trust(bob).mark();
+        t.assertFalse(sail(t, bob, List.of(pig)), "the first move, naming its pig, should go");
+        pig.setPos(pig.getX() + 0.1, pig.getY(), pig.getZ());
+        t.assertFalse(sail(t, bob, List.of()), "the second move, naming nothing, should go");
+        pig.setPos(pig.getX() + 0.1, pig.getY(), pig.getZ());
+        String why = failure(t, () -> area.assertActingFor(bob, "two moves, the second leaving its pig out"));
+        t.assertTrue(why.contains("getCarried() doesn't name it") && why.contains("Pig"), why);
     }
 }

@@ -9,9 +9,11 @@ import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Objects;
+import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import net.minecraft.world.phys.Vec3;
 
 import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
@@ -146,15 +148,35 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
 
     /**
      * Everything riding it that goes along, riders of riders included, worked out for where it is going now: a
-     * listener's {@link #setTo} changes it. Always {@link Carried.Known}; empty when riders are left behind.
+     * listener's {@link #setTo} changes it. Each ride ends up in the blocks its seat can be in around the destination
+     * (as far from it as the rider now sits from its vehicle, whichever way the vehicle faces). Always
+     * {@link Carried.Known}; empty when riders are left behind.
      */
     public Carried getCarried() {
         Entity entity = getEntity();
-        if (toLevel == getFromLevel()) return Carried.ridersOf(entity);
-        if (toLevel == askedLevel && riders == Riders.LEFT_BEHIND) return Carried.none();
         List<Entity> going = new ArrayList<>();
-        changingWorld(entity, going);
-        return Carried.of(going);
+        if (toLevel == getFromLevel()) {
+            entity.getIndirectPassengers().forEach(going::add);
+        } else if (toLevel != askedLevel || riders == Riders.GO_ALONG) {
+            // Another world: riders go unless it is the one first asked for and that way leaves them behind.
+            changingWorld(entity, going);
+        }
+        List<Carried.Ride> rides = new ArrayList<>();
+        for (Entity rider : going) rides.add(new Carried.Ride(rider, seatAround(entity, rider)));
+        return Carried.of(rides);
+    }
+
+    /**
+     * Where {@code rider} ends up: the blocks its seat can be in around {@link #getTo()}, whichever way the vehicle
+     * faces on arrival, since seats turn with it: as far from the destination as it now sits from {@code vehicle}.
+     */
+    private Place.Spot seatAround(Entity vehicle, Entity rider) {
+        Vec3 offset = rider.position().subtract(vehicle.position());
+        double reach = Math.sqrt(offset.x * offset.x + offset.z * offset.z);
+        Vec3 to = getTo();
+        double y = to.y + offset.y;
+        return new Place.Spot(getToLevel(), BoundingBox.fromCorners(
+                BlockPos.containing(to.x - reach, y, to.z - reach), BlockPos.containing(to.x + reach, y, to.z + reach)));
     }
 
     /**

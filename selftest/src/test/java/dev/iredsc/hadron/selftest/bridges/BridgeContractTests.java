@@ -341,7 +341,7 @@ public final class BridgeContractTests {
         Matrix4d end = new Matrix4d().translation(0, 0, 3);
         fire(t, machine(t, alice), a -> new StructureMoveEvent(t.level(), from, planks, StructureMoveEvent.Phase.MOVE,
                 start, end, List.of(new BlockMoveEvent.Move(from, to, planks)), List.of(t.pos(1, 0, 1), t.pos(1, 0, 2), to),
-                moveChanges(t, from, to, planks), Carried.none(), a), () -> {
+                moveChanges(t, from, to, planks), List.of(), a), () -> {
                     t.setBlock(to, planks);
                     t.setBlock(from, Blocks.AIR);
                 });
@@ -367,11 +367,14 @@ public final class BridgeContractTests {
         fire(t, machine(t, alice), a -> new StructureMoveEvent(t.level(), from, planks, StructureMoveEvent.Phase.MOVE,
                 new Matrix4d(), new Matrix4d().translation(0, 0, 3), List.of(new BlockMoveEvent.Move(from, to, planks)),
                 List.of(t.pos(1, 0, 1), t.pos(1, 0, 2), to), moveChanges(t, from, to, planks),
-                Carried.of(List.of(crew)), a), () -> {});
+                List.<net.minecraft.world.entity.Entity>of(crew), a), () -> {});
         BlockMoveEvent heard = only(t, seen, "BlockMoveEvent");
-        t.assertEquals(Carried.of(List.of(crew)), heard.getCarried(), "what the ship carries");
-        t.assertTrue(heard.getPlaces().contains(dev.iredsc.hadron.api.event.Place.of(crew)), "the crew's place "
-                + "should be one of the move's places: " + heard.getPlaces());
+        // The deck moves 3 south; the pig standing on it ends up 3 south of where it stands.
+        Carried.Ride ride = Carried.ride(crew, t.level(), crew.position().add(0, 0, 3));
+        t.assertEquals(Carried.of(ride), heard.getCarried(), "what the ship carries, and where to");
+        t.assertTrue(heard.getPlaces().contains(dev.iredsc.hadron.api.event.Place.of(crew))
+                && heard.getPlaces().contains(ride.to()), "the crew's place, and where it ends up, should be among the "
+                + "move's places: " + heard.getPlaces());
     }
 
     // ---- Entities
