@@ -12,6 +12,7 @@ import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
+import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityBreedEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
@@ -964,7 +965,8 @@ public final class AcceptanceKitTests {
         // A ship flying across the area: it leaves from outside and lands outside, sweeping through.
         boolean cancelled = Hadron.getPluginManager().callEvent(new BlockMoveEvent(t.level(), from, stone,
                 List.of(new BlockMoveEvent.Move(from, to, stone)), List.of(t.pos(2, 0, 0)),
-                List.of(BlockChange.unchanged(t.level(), from, stone)), new Actor.Player(bob.player())));
+                List.of(BlockChange.unchanged(t.level(), from, stone)), Carried.none(),
+                new Actor.Player(bob.player())));
         t.assertTrue(cancelled, "a structure sweeping through the area was refused: " + area.events());
     }
 

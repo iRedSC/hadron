@@ -1,15 +1,16 @@
 package dev.iredsc.hadron.api.event.entity;
 
 import java.util.ArrayList;
+import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.Places;
 import dev.iredsc.hadron.api.event.Place;
-import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.phys.Vec3;
 
@@ -17,12 +18,16 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
  * An entity is about to move other than by walking: a command, an ender pearl, chorus fruit, an enderman, a portal,
- * a mod's waystone or teleporter. Its passengers are listed here rather than getting their own events, and go wherever
- * it goes within a world. A move to another world that no listener redirected keeps vanilla's rule, which leaves riders
- * behind (a ridden pig sent with {@code /execute in ... run tp}); a redirect with {@link #setTo} always takes them. Cancel it and nothing moves; an ender pearl's fall damage is not dealt.
+ * a mod's waystone or teleporter. Cancel it and nothing moves; an ender pearl's fall damage is not dealt.
  *
- * <p>{@link #setTo} sends it somewhere else instead, in this world or another, with its passengers. A redirected ender
- * pearl still deals its fall damage. Chorus fruit and endermen sent elsewhere in the same world still settle on the
+ * <p>Whatever rides it and goes along is {@link #getCarried()}, rather than getting events of its own. Riders go
+ * wherever it goes within a world. To another world, it depends on how it is sent, and {@link #getCarried()} says which
+ * for the destination as it stands: through a portal riders go along; vanilla's teleport to another world (a ridden
+ * pig sent with {@code /execute in ... run tp}) leaves them behind ({@link Riders#LEFT_BEHIND}), unless a listener
+ * sends it to yet another world, which takes them; a player's own riders never change world with them.
+ *
+ * <p>{@link #setTo} sends it somewhere else instead, in this world or another. A redirected ender pearl still deals its
+ * fall damage. Chorus fruit and endermen sent elsewhere in the same world still settle on the
  * ground below the new spot, and stay put if there is none, as they do in vanilla; sent to another world, they go to
  * exactly the position given.
  */
@@ -45,25 +50,51 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
     private Vec3 to;
     private float toYRot;
     private float toXRot;
+    /**
+     * What happens to its riders when it goes to another world, the one it was first sent to: the way it is sent
+     * decides. Sent to any other world by a listener, riders go along whatever this says.
+     */
+    public enum Riders {
+        /** They go along: a portal, {@code changeDimension}, a mod's teleporter built on it. */
+        GO_ALONG,
+        /** They are left behind: vanilla's {@code teleportTo} with a level, which ejects them first. */
+        LEFT_BEHIND
+    }
+
     private final TeleportCause cause;
-    private final List<Entity> passengers;
+    /** The world it was first sent to, before any listener's {@link #setTo}. */
+    private final ServerLevel askedLevel;
+    private final Riders riders;
     private boolean cancelled;
 
-    /** A teleport that keeps the entity's current facing. */
+    /** A teleport that keeps the entity's current facing, whose riders go along to another world. */
     public EntityTeleportEvent(Entity entity, ServerLevel toLevel, Vec3 to, TeleportCause cause, Actor actor) {
         this(entity, toLevel, to, entity.getYRot(), entity.getXRot(), cause, actor);
     }
 
-    /** A teleport that also turns the entity to face {@code yRot} (yaw) and {@code xRot} (pitch). */
+    /**
+     * A teleport that also turns the entity to face {@code yRot} (yaw) and {@code xRot} (pitch), whose riders go along
+     * to another world.
+     */
     public EntityTeleportEvent(Entity entity, ServerLevel toLevel, Vec3 to, float yRot, float xRot,
             TeleportCause cause, Actor actor) {
+        this(entity, toLevel, to, yRot, xRot, cause, Riders.GO_ALONG, actor);
+    }
+
+    /**
+     * A teleport that turns the entity to face {@code yRot} and {@code xRot}, and says what happens to its riders when
+     * it goes to {@code toLevel} and that is another world.
+     */
+    public EntityTeleportEvent(Entity entity, ServerLevel toLevel, Vec3 to, float yRot, float xRot,
+            TeleportCause cause, Riders riders, Actor actor) {
         super(entity, actor);
         this.toLevel = Objects.requireNonNull(toLevel, "toLevel");
+        this.askedLevel = toLevel;
         this.to = Objects.requireNonNull(to, "to");
         this.toYRot = yRot;
         this.toXRot = xRot;
         this.cause = Objects.requireNonNull(cause, "cause; use TeleportCause.UNKNOWN when no other fits");
-        this.passengers = List.copyOf(entity.getPassengers());
+        this.riders = Objects.requireNonNull(riders, "riders; Riders.GO_ALONG when they change world with it");
     }
 
     /** Where it was. Same as {@link #getPosition()}. */
@@ -96,12 +127,12 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
         return toXRot;
     }
 
-    /** Send it here instead, facing the way it would have. Its passengers go with it. */
+    /** Send it here instead, facing the way it would have. {@link #getCarried()} follows. */
     public void setTo(ServerLevel level, Vec3 position) {
         setTo(level, position, toYRot, toXRot);
     }
 
-    /** Send it here instead, facing {@code yRot} (yaw) and {@code xRot} (pitch). Its passengers go with it. */
+    /** Send it here instead, facing {@code yRot} (yaw) and {@code xRot} (pitch). {@link #getCarried()} follows. */
     public void setTo(ServerLevel level, Vec3 position, float yRot, float xRot) {
         this.toLevel = Objects.requireNonNull(level, "level; use getToLevel() to stay in the same world");
         this.to = Objects.requireNonNull(position, "position");
@@ -113,9 +144,29 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
         return cause;
     }
 
-    /** Everything riding it, which travels with it. */
-    public List<Entity> getPassengers() {
-        return passengers;
+    /**
+     * Everything riding it that goes along, riders of riders included, worked out for where it is going now: a
+     * listener's {@link #setTo} changes it. Always {@link Carried.Known}; empty when riders are left behind.
+     */
+    public Carried getCarried() {
+        Entity entity = getEntity();
+        if (toLevel == getFromLevel()) return Carried.ridersOf(entity);
+        if (toLevel == askedLevel && riders == Riders.LEFT_BEHIND) return Carried.none();
+        List<Entity> going = new ArrayList<>();
+        changingWorld(entity, going);
+        return Carried.of(going);
+    }
+
+    /**
+     * Who changes world with {@code vehicle}: each rider, then theirs, as {@code changeDimension} takes them; a player
+     * changes world alone, so their own riders stay.
+     */
+    private static void changingWorld(Entity vehicle, List<Entity> out) {
+        if (vehicle instanceof ServerPlayer) return;
+        for (Entity rider : vehicle.getPassengers()) {
+            out.add(rider);
+            changingWorld(rider, out);
+        }
     }
 
     @Override
@@ -128,12 +179,15 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
         this.cancelled = cancel;
     }
 
-    /** Where it leaves from, where it goes ({@link #getTo()}, as it stands now), then where each passenger is. */
+    /**
+     * Where it leaves from, where it goes ({@link #getTo()}, as it stands now), then where each entity it carries is
+     * ({@link #getCarried()}, as it stands now).
+     */
     @Override
     public Places getPlaces() {
         List<Place> more = new ArrayList<>();
         more.add(Place.Spot.at(getToLevel(), getTo()));
-        for (Entity passenger : getPassengers()) more.add(Place.of(passenger));
+        more.addAll(getCarried().places());
         return Places.of(Place.Spot.at(getFromLevel(), getFrom()), more);
     }
 }

@@ -14,6 +14,7 @@ import dev.iredsc.hadron.neoforge.Hooks;
 import java.util.Set;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.RelativeMovement;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.portal.DimensionTransition;
@@ -45,6 +46,15 @@ abstract class EntityMixin implements EntityState {
     @Unique private double hadron$trackedX;
     @Unique private double hadron$trackedY;
     @Unique private double hadron$trackedZ;
+    @Unique private float hadron$trackedYRot;
+    @Unique private float hadron$trackedXRot;
+    @Unique private @Nullable Pose hadron$trackedPose;
+    @Unique private long hadron$trackedPoseTick;
+    @Unique private long hadron$trackedAt;
+    @Unique private int hadron$seatOf;
+    @Unique private double hadron$seatX;
+    @Unique private double hadron$seatY;
+    @Unique private double hadron$seatZ;
     @Unique private boolean hadron$converted;
     @Unique private boolean hadron$dying;
     @Unique private LeashDrop hadron$leashDrop = LeashDrop.UNSAID;
@@ -98,6 +108,68 @@ abstract class EntityMixin implements EntityState {
     public void hadron$untrack() {
         hadron$tracked = false;
         hadron$trackedLevel = null;
+    }
+
+    @Override
+    public float hadron$trackedYRot() {
+        return hadron$trackedYRot;
+    }
+
+    @Override
+    public float hadron$trackedXRot() {
+        return hadron$trackedXRot;
+    }
+
+    @Override
+    public @Nullable Pose hadron$trackedPose() {
+        return hadron$trackedPose;
+    }
+
+    @Override
+    public long hadron$trackedPoseTick() {
+        return hadron$trackedPoseTick;
+    }
+
+    @Override
+    public long hadron$trackedAt() {
+        return hadron$trackedAt;
+    }
+
+    @Override
+    public void hadron$trackTurn(float yRot, float xRot, Pose pose, long poseTick, long at) {
+        hadron$trackedYRot = yRot;
+        hadron$trackedXRot = xRot;
+        hadron$trackedPose = pose;
+        hadron$trackedPoseTick = poseTick;
+        hadron$trackedAt = at;
+    }
+
+    @Override
+    public int hadron$seatOf() {
+        return hadron$seatOf;
+    }
+
+    @Override
+    public double hadron$seatX() {
+        return hadron$seatX;
+    }
+
+    @Override
+    public double hadron$seatY() {
+        return hadron$seatY;
+    }
+
+    @Override
+    public double hadron$seatZ() {
+        return hadron$seatZ;
+    }
+
+    @Override
+    public void hadron$seat(int vehicle, double x, double y, double z) {
+        hadron$seatOf = vehicle;
+        hadron$seatX = x;
+        hadron$seatY = y;
+        hadron$seatZ = z;
     }
 
     @Override
@@ -158,7 +230,9 @@ abstract class EntityMixin implements EntityState {
     private boolean hadron$teleportTo(ServerLevel level, double x, double y, double z, Set<RelativeMovement> relative,
             float yRot, float xRot, Operation<Boolean> original) {
         Entity self = (Entity) (Object) this;
-        EntityTeleports.Destination to = EntityTeleports.ask(self, level, x, y, z, yRot, xRot);
+        // Vanilla's method ejects riders before changing world, so they stay unless a listener sends it elsewhere.
+        EntityTeleports.Destination to = EntityTeleports.ask(self, level, x, y, z, yRot, xRot,
+                dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.Riders.LEFT_BEHIND);
         if (to == null) return false;
         // Sent to another level than asked: this method would leave the passengers behind, so it isn't used.
         if (to.level() != level && to.crossesLevel(self)) return EntityTeleports.redirect(self, to);

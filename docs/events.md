@@ -72,8 +72,8 @@ What each family states:
 
 | Family | Places |
 |---|---|
-| `BlockEvent` | `getPos()`, then each space in `getBlocks()`; a move adds each block's source and target and its swept space; a flow both ends, a spread its source, a burn its fire, a drop where its items lie |
-| `EntityEvent` | the block the entity was in, then each other entity it names: a mount, a lead's holder, a breeding's parents (not the breeder), a target, a projectile's hit (point, block, entity; a hitscan shot, whose entity is its shooter, only these), a teleport's destination and passengers, a capture's block or carrier, a fishing hook's player and catch. Whoever did it (a damager, a shooter, a tamer) is not a place |
+| `BlockEvent` | `getPos()`, then each space in `getBlocks()`; a move adds each block's source and target, its swept space and each entity it carries; a flow both ends, a spread its source, a burn its fire, a drop where its items lie |
+| `EntityEvent` | the block the entity was in, then each other entity it names: a mount, a lead's holder, a breeding's parents (not the breeder), a target, a projectile's hit (point, block, entity; a hitscan shot, whose entity is its shooter, only these), a teleport's destination, each entity a move or teleport carries, a capture's block or carrier, a fishing hook's player and catch. Whoever did it (a damager, a shooter, a tamer) is not a place |
 | `ItemEvent` | where the stack is: the inventory holding it (crafting, smelting, an anvil, a trade, a change in place), the entity using, eating, holding or wearing it, where it lies (a merge, a despawn), where a drop lands, a pickup's item and destination. A leaf naming none is `Unknown` within its level |
 | `InventoryEvent` | `getHolder()`; a change adds every inventory it touches; a click, an open and a close add every inventory behind the menu's slots (both halves of a double chest), and a slot that is the menu's own (a crafting grid) is where the menu says it is open (`getMenuHolder()`), `Unknown` for a menu nothing describes; an inventory nothing identifies (a double chest's half that isn't a chest) is its own `Unknown`, never another's place |
 | `ResourceEvent` | each holder: a block, a chunk (its full height), an entity, an item where the inventory it is in is (`ResourceHolder.Item(stack, heldIn)`; `Unknown` when nothing says), an account (`Nowhere`) |
@@ -89,7 +89,7 @@ Not stated yet: a drop doesn't say what it leaves; a respawn doesn't name the an
 
 Where an action ends somewhere other than where it set out to (a teleport settling on the ground, a dismount setting the rider down), core works out the real outcome first, fires with it, and then does exactly that. Where it can't yet, the event says `Unknown` for that part rather than stating the requested outcome.
 
-**Carrying has one shape.** An event that moves entities along with it lists them in `getCarried()`, each with where it was and where it ends up, and its places include each. What it can't know it carries is marked unknown, not left out.
+**Carrying has one shape.** An event that moves entities along with it states them in `getCarried()`: `EntityMoveEvent` (and so `PlayerMoveEvent`), `EntityTeleportEvent`, `BlockMoveEvent` and `StructureMoveEvent`. It returns a sealed `Carried`: `Known(entities)`, riders of riders included and empty only when nothing goes along, or `Unknown(reason)` when nothing can say before the move (a piston picks entities up on each tick of its travel, after the event), never an empty list standing for unknown, so protection fails closed on it. Its places include where each carried entity is: for a vehicle's move, the seat the move leaves it in, since core seats each rider before firing. A teleport's is worked out for the destination as it stands on each call, so a listener's `setTo` changes it: riders go along within a world and through a portal, vanilla's teleport to another world leaves them (`Riders.LEFT_BEHIND`) unless a listener sends it to yet another world, and a player's own riders never change world with them. A vehicle fires when it or any rider changes block, so a boat turning in place can't swing its back seat into a region unasked.
 
 **The actor is who caused it.** An entity moved by something else (pushed by a piston, carried by water, knocked back) acts for what moved it, not for itself.
 
@@ -104,7 +104,7 @@ An effect and an entity's fire keep the actor that caused them and where it was 
 | Gap | Closed by |
 |---|---|
 | A teleport states where it settles | the outcome worked out before firing |
-| A rider is named when their vehicle carries them | `getCarried()` |
+| ~~A rider is named when their vehicle carries them~~ | `getCarried()` (closed) |
 | A dismount states where the rider is set down | the outcome worked out before firing |
 | ~~A shift-click names the inventory items move into~~ | the click's places (closed) |
 | ~~Opening a double chest names both halves~~ | the inventory's places (closed) |
@@ -136,9 +136,9 @@ An effect and an entity's fire keep the actor that caused them and where it was 
 | ├ `BlockSpreadEvent`, `BlockFormEvent`, `BlockFadeEvent`, `BlockGrowEvent`, `LeavesDecayEvent` | natural changes | the vanilla block's tick |
 | ├ `BlockFertilizeEvent` | bonemeal or a growth accelerator | `BoneMealItem` |
 | └ `StructureGrowEvent` | a tree or structure grows from one block | `TreeGrower` |
-| `BlockMoveEvent` | blocks relocate with their data and scheduled ticks; source to target mapping, and the space swept through | `PistonBaseBlock`, through its leaves |
-| ├ `BlockPistonExtendEvent`, `BlockPistonRetractEvent` | | `PistonBaseBlock` |
-| └ `StructureMoveEvent` | a contraption or ship assembles, moves, rotates or disassembles within one level; old and new transforms | bridge (Create, Valkyrien Skies) |
+| `BlockMoveEvent` | blocks relocate with their data and scheduled ticks; source to target mapping, the space swept through, and every entity carried along (`getCarried()`, unknown for a piston) | `PistonBaseBlock`, through its leaves |
+| ├ `BlockPistonExtendEvent`, `BlockPistonRetractEvent` | what a piston carries is decided per tick of travel, after the event, so `getCarried()` is `Unknown` | `PistonBaseBlock` |
+| └ `StructureMoveEvent` | a contraption or ship assembles, moves, rotates or disassembles within one level; old and new transforms; every entity riding along, which the bridge names | bridge (Create, Valkyrien Skies) |
 | `BlockDropItemEvent` | a broken block's drops are about to appear; the item entities and experience are editable, and a cancel drops nothing | `Block.dropResources` (NeoForge's `BlockDropsEvent`), so player mining, `destroyBlock` and blocks losing their support |
 | `BlockUseEvent` | an actor right-clicks or activates a block, including remotely through a linked terminal | `useItemOn`, `useWithoutItem` |
 | `BlockRedstoneEvent` | an actor changes the signal a block emits without changing its state | bridge (Integrated Dynamics, LaserIO) |
@@ -171,9 +171,9 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | `EntityAttributeChangeEvent` | an attribute's base value or modifiers change; source of the modifier | not shipped yet: see "Not shipped yet" |
 | `EntityVelocityEvent` | an actor pushes, pulls or launches an entity; old and new velocity | `setDeltaMovement` while something other than the entity acts |
 | └ `EntityKnockbackEvent` | knockback from a hit or blast | `LivingEntity.knockback` |
-| `EntityMoveEvent` | an entity with an actor or controller (a player, a vehicle) crosses into another block | movement ticks, only when a listener's area is involved |
+| `EntityMoveEvent` | an entity with an actor or controller (a player, a vehicle) crosses into another block, or carries a rider into one (a turning boat, a camel sitting down); names every rider where the move leaves it; a cancel puts back position, facing and pose (a camel's sitting clock too) | movement ticks, only when a listener's area is involved |
 | └ `PlayerMoveEvent` | | movement ticks |
-| `EntityTeleportEvent` | an entity moves other than by walking; cause, and everything travelling with it (passengers, pets, leashed mobs); the destination (world, position, facing) is editable | `teleportTo`, `changeDimension` |
+| `EntityTeleportEvent` | an entity moves other than by walking; cause, and every rider going along (`getCarried()`, worked out for the destination as it stands); the destination (world, position, facing) is editable | `teleportTo`, `changeDimension` |
 | `EntityTargetEvent` | a mob or turret picks a target | `setTarget` |
 | `EntityControlChangeEvent` | who controls an entity changes without mounting: charmed, enthralled, a drone linked to a monitor, a guard assigned; expiry is *(after)* | bridge |
 | `EntityControlExpireEvent` *(after)* | control ran out: a charm wore off, a drone's link timed out | bridge |

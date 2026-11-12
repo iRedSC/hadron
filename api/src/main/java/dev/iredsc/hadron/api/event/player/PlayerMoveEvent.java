@@ -9,9 +9,9 @@ import net.minecraft.world.phys.Vec3;
 import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
- * A player has walked, swum, flown or fallen into another block. Fired at most once per tick, only when the block
- * changes. Cancel it and the player is put back where they were. A player riding something fires the vehicle's
- * {@link EntityMoveEvent} instead.
+ * A player has walked, swum, flown or fallen into another block, or something riding them (an entity a mod lets them
+ * carry) has. Fired at most once per tick, only when a block changes. Cancel it and the player is put back where they
+ * were. A player riding something fires the vehicle's {@link EntityMoveEvent} instead.
  */
 @FiredBy(core = FULL)
 public class PlayerMoveEvent extends EntityMoveEvent {

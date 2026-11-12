@@ -3,6 +3,7 @@ package dev.iredsc.hadron.harness;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.EventPriority;
@@ -10,6 +11,8 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.Placed;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
+import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
+import dev.iredsc.hadron.api.event.block.BlockPistonEvent;
 import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
@@ -56,6 +59,8 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.phys.AABB;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
@@ -112,6 +117,14 @@ final class TestAcceptance implements Acceptance, Listener {
      */
     private final Map<UUID, Optional<AcceptanceDiff.Thing>> arrived = new LinkedHashMap<>();
     private final java.util.function.Consumer<EntityJoinLevelEvent> joins = this::joined;
+    /**
+     * Each block move heard in the box this step, with where every entity beside its blocks stood as it fired, by id:
+     * what it could carry, compared once the step is done.
+     */
+    private final List<Beside> beside = new ArrayList<>();
+
+    /** A block move and where each entity touching its blocks stood when it fired. */
+    private record Beside(BlockMoveEvent event, Map<UUID, Vec3> stood) {}
 
     private void joined(EntityJoinLevelEvent event) {
         Entity e = event.getEntity();
@@ -213,6 +226,7 @@ final class TestAcceptance implements Acceptance, Listener {
         elsewhere.clear();
         denied.clear();
         arrived.clear();
+        beside.clear();
     }
 
     @Override
@@ -252,6 +266,7 @@ final class TestAcceptance implements Acceptance, Listener {
         Set<Part> which = parts.length == 0 ? EnumSet.allOf(Part.class) : EnumSet.copyOf(List.of(parts));
         List<String> problems = new ArrayList<>(AcceptanceDiff.changes(before, after, which, seen, elsewhere, touched,
                 arrived));
+        if (which.contains(Part.ENTITIES)) problems.addAll(movedDespiteRefusal());
         if (which.contains(Part.BLOCKS)) {
             // A vibration in the box is what a sculk sensor there would turn into a redstone signal. Walking through
             // is allowed, so motion doesn't count, and a test player's events in another world are elsewhere.
@@ -274,6 +289,7 @@ final class TestAcceptance implements Acceptance, Listener {
         // Protection fails closed on nature's unplaceable events too, but they are nobody's to attribute.
         List<String> problems = new ArrayList<>(unplaced.stream().filter(u -> !AcceptanceDiff.nobodys(u.seen().actor()))
                 .map(Unplaced::toString).toList());
+        problems.addAll(carriedUnnamed());
         for (Seen s : seen) {
             if (AcceptanceDiff.nobodys(s.actor())) continue;
             Optional<UUID> who = s.actor().actingFor();
@@ -321,6 +337,7 @@ final class TestAcceptance implements Acceptance, Listener {
         switch (place(event)) {
             case Where.In in -> {
                 seen.add(new Seen(event, a.getActor(), event instanceof Cancellable c && c.isCancelled(), in.pos()));
+                if (event instanceof BlockMoveEvent move) beside.add(new Beside(move, standingBeside(move)));
                 for (Entity e : named(event)) {
                     touched.add(e.getUUID());
                     followed.putIfAbsent(e.getUUID(), e);
@@ -351,6 +368,100 @@ final class TestAcceptance implements Acceptance, Listener {
                 }
             }
         }
+    }
+
+    // ---- Carrying ---------------------------------------------------------------------------------------------------
+
+    /**
+     * Where every entity touching a move's blocks stands now, by id: one riding it, standing on it, or stuck to its
+     * side. Players too, since a ship's crew is often a player.
+     */
+    private static Map<UUID, Vec3> standingBeside(BlockMoveEvent move) {
+        List<AABB> blocks = new ArrayList<>();
+        for (BlockMoveEvent.Move m : move.getMoves()) {
+            blocks.add(new AABB(m.from()).inflate(0.5));
+            blocks.add(new AABB(m.to()).inflate(0.5));
+        }
+        for (BlockPos swept : move.getSweptSpace()) blocks.add(new AABB(swept).inflate(0.5));
+        Map<UUID, Vec3> stood = new LinkedHashMap<>();
+        if (blocks.isEmpty()) return stood;
+        AABB all = blocks.get(0);
+        for (AABB b : blocks) all = all.minmax(b);
+        for (Entity e : move.getLevel().getEntities((Entity) null, all,
+                e -> blocks.stream().anyMatch(b -> b.intersects(e.getBoundingBox())))) {
+            stood.put(e.getUUID(), e.position());
+        }
+        return stood;
+    }
+
+    /** The entity with this id now, wherever it is, or null when it is gone. */
+    private @Nullable Entity live(UUID id) {
+        Entity known = followed.get(id);
+        if (known != null && !known.isRemoved()) return known;
+        for (ServerLevel l : level.getServer().getAllLevels()) {
+            Entity e = l.getEntity(id);
+            if (e != null && !e.isRemoved()) return e;
+        }
+        return null;
+    }
+
+    /** Whether it no longer stands where it did, or has gone to another world. */
+    private static boolean moved(Entity now, Vec3 was, ServerLevel wasIn) {
+        return now.level() != wasIn || now.position().distanceToSqr(was) > 1.0E-6;
+    }
+
+    /** Every entity beside a refused block move that moved anyway: the move carried it though it was refused. */
+    private List<String> movedDespiteRefusal() {
+        List<String> out = new ArrayList<>();
+        for (Beside b : beside) {
+            if (!b.event().isCancelled()) continue;
+            for (Map.Entry<UUID, Vec3> stood : b.stood().entrySet()) {
+                Entity now = live(stood.getKey());
+                if (now == null || !moved(now, stood.getValue(), b.event().getLevel())) continue;
+                out.add("the " + now.getName().getString() + " beside " + b.event().getEventName() + "'s blocks moved "
+                        + "from " + BlockPos.containing(stood.getValue()).toShortString() + " to "
+                        + now.blockPosition().toShortString() + ", though the move was refused: whatever moves the "
+                        + "structure must leave what rides it where it was when the event comes back cancelled");
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Each bridge's block move in the box that doesn't name what it carried: {@link Carried.Unknown}, which protection
+     * denies, or, let through, an entity beside its blocks that moved but isn't in its {@code getCarried()}. A piston's
+     * carriage is unknown by design (it picks entities up as it travels), so it is left out.
+     */
+    private List<String> carriedUnnamed() {
+        List<String> out = new ArrayList<>();
+        Set<UUID> named = new HashSet<>();
+        for (Beside b : beside) {
+            if (b.event().getCarried() instanceof Carried.Known k) k.entities().forEach(e -> named.add(e.getUUID()));
+        }
+        for (Beside b : beside) {
+            BlockMoveEvent move = b.event();
+            if (move instanceof BlockPistonEvent) continue;
+            switch (move.getCarried()) {
+                case Carried.Unknown u -> out.add(move.getEventName() + ": getCarried() is Unknown (" + u.reason()
+                        + "), so protection denies it wherever an outsider is denied. Name every entity riding along "
+                        + "with Carried.of(...), or Carried.none() when nothing is");
+                case Carried.Known k -> {
+                    if (move.isCancelled()) continue;
+                    for (Map.Entry<UUID, Vec3> stood : b.stood().entrySet()) {
+                        Entity now = live(stood.getKey());
+                        if (now == null || named.contains(stood.getKey())
+                                || !moved(now, stood.getValue(), move.getLevel())) {
+                            continue;
+                        }
+                        out.add(move.getEventName() + " moved the " + now.getName().getString() + " from "
+                                + BlockPos.containing(stood.getValue()).toShortString() + " to "
+                                + now.blockPosition().toShortString() + ", but its getCarried() doesn't name it: "
+                                + "pass every entity riding along to the event");
+                    }
+                }
+            }
+        }
+        return out;
     }
 
     private boolean allowed(Actor actor, Event event) {
@@ -470,6 +581,7 @@ final class TestAcceptance implements Acceptance, Listener {
             case null -> {}
             case Entity e -> out.add(e);
             case Optional<?> o -> o.ifPresent(v -> collect(v, out));
+            case Carried.Known k -> out.addAll(k.entities());
             case java.util.Collection<?> c -> c.forEach(v -> collect(v, out));
             case InventoryHolder h -> holderEntity(h).ifPresent(out::add);
             case ResourceHolder.Entity r -> out.add(r.entity());

@@ -2,10 +2,12 @@ package dev.iredsc.hadron.selftest.blocks;
 
 import static dev.iredsc.hadron.selftest.blocks.Fixtures.assertNature;
 
+import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.block.BlockPistonExtendEvent;
+import dev.iredsc.hadron.api.event.block.BlockPistonEvent;
 import dev.iredsc.hadron.api.event.block.BlockPistonRetractEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
@@ -122,5 +124,29 @@ public final class PistonTests {
         t.assertFalse(seen.isEmpty(), "the piston should have tried to pull");
         t.assertBlock(piston.east(2), Blocks.STONE);
         t.assertBlock(piston.east(), Blocks.PISTON_HEAD);
+    }
+
+    /**
+     * A piston picks up what it bumps into and what sticks to its slime as it travels, after the event: what it carries
+     * is unknown, never an empty list that reads as nothing, though a pig stands right on the block it pushes.
+     */
+    @HadronTest
+    @Covers(BlockPistonExtendEvent.class)
+    @Covers(BlockPistonRetractEvent.class)
+    void whatAPistonCarriesIsUnknownNeverNothing(TestContext t) {
+        t.player("alice"); // the pig only ticks near a player
+        BlockPos piston = piston(t, Blocks.STICKY_PISTON);
+        t.setBlock(piston.east(), Blocks.SLIME_BLOCK);
+        dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t, net.minecraft.world.entity.EntityType.PIG,
+                piston.east().above());
+        List<BlockMoveEvent> seen = recordMoves(t);
+        power(t, piston, true);
+        power(t, piston, false);
+        t.assertEquals(2, seen.size(), "a push and a pull");
+        for (BlockMoveEvent e : seen) {
+            t.assertTrue(e instanceof BlockPistonEvent, "a piston's move, but was " + e.getEventName());
+            t.assertEquals(new Carried.Unknown(Carried.Unknown.Reason.DECIDED_AS_IT_MOVES), e.getCarried(),
+                    e.getEventName() + "'s carriage");
+        }
     }
 }

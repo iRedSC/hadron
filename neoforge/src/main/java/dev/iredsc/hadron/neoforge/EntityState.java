@@ -2,6 +2,7 @@ package dev.iredsc.hadron.neoforge;
 
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
+import net.minecraft.world.entity.Pose;
 import net.minecraft.world.level.Level;
 
 /**
@@ -28,6 +29,37 @@ public interface EntityState {
     void hadron$track(Level level, double x, double y, double z);
 
     void hadron$untrack();
+
+    /** The facing and pose it had when the move check last saw it, to put back with its position. */
+    float hadron$trackedYRot();
+
+    float hadron$trackedXRot();
+
+    @Nullable Pose hadron$trackedPose();
+
+    /**
+     * A camel's pose clock ({@code Camel.LAST_POSE_CHANGE_TICK}) when the move check last saw it, and the game time it
+     * was read: its seat height moves with that clock while it sits down or stands up. 0 for anything else.
+     */
+    long hadron$trackedPoseTick();
+
+    long hadron$trackedAt();
+
+    void hadron$trackTurn(float yRot, float xRot, Pose pose, long poseTick, long at);
+
+    /**
+     * The id of the vehicle whose move check last saw this entity riding it, directly or on another rider, and where
+     * this entity was then; 0 when none has (entity ids start at 1). An id, so a rider never keeps a vehicle alive.
+     */
+    int hadron$seatOf();
+
+    double hadron$seatX();
+
+    double hadron$seatY();
+
+    double hadron$seatZ();
+
+    void hadron$seat(int vehicle, double x, double y, double z);
 
     /** Set on the new entity of a conversion, so its arrival isn't a spawn. */
     boolean hadron$converted();

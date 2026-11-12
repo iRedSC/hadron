@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.event.block;
 
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
 import java.util.Objects;
@@ -20,11 +21,13 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
  * <p><b>Fired by bridges</b>: vanilla has nothing that moves a group of blocks this way, so core doesn't fire it. A
  * bridge fires it before its mod changes anything, with the transforms before and after, the blocks leaving or
  * entering the world as {@link #getMoves()}, and every space the structure passes through or lands in as
- * {@link #getSweptSpace()}; while it only moves, with no blocks entering or leaving, moves may be empty.
+ * {@link #getSweptSpace()}; while it only moves, with no blocks entering or leaving, moves may be empty. It names
+ * every entity riding along (standing on it, seated in it, riders of those) as {@link #getCarried()}, so a protection
+ * plugin sees the crew a ship carries into a region.
  */
 @FiredBy(core = NONE,
         bridges = "assembles, moves, rotates or disassembles a contraption or ship within one level",
-        fillIn = "source to target mapping, swept space, old and new transforms")
+        fillIn = "source to target mapping, swept space, old and new transforms, every entity riding along")
 public class StructureMoveEvent extends BlockMoveEvent {
     /** Which step of the structure's life this is. */
     public enum Phase {
@@ -43,10 +46,12 @@ public class StructureMoveEvent extends BlockMoveEvent {
     /**
      * @param from the structure's transform from its own block grid into the world, before this step
      * @param to the same transform after this step
+     * @param carried every entity riding along ({@link Carried#of}, or {@link Carried#none()} for an empty ship)
      */
     public StructureMoveEvent(ServerLevel level, BlockPos pos, BlockState state, Phase phase, Matrix4dc from,
-            Matrix4dc to, List<Move> moves, List<BlockPos> swept, List<BlockChange> blocks, Actor actor) {
-        super(level, pos, state, moves, swept, blocks, actor);
+            Matrix4dc to, List<Move> moves, List<BlockPos> swept, List<BlockChange> blocks, Carried carried,
+            Actor actor) {
+        super(level, pos, state, moves, swept, blocks, carried, actor);
         this.phase = Objects.requireNonNull(phase, "phase");
         this.from = new Matrix4d(Objects.requireNonNull(from, "from; use new Matrix4d() for the identity"));
         this.to = new Matrix4d(Objects.requireNonNull(to, "to; use new Matrix4d() for the identity"));

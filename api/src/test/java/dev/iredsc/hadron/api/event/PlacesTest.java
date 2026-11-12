@@ -112,7 +112,8 @@ class PlacesTest {
     }
 
     private static boolean namesEntities(Type type) {
-        if (type instanceof Class<?> c) return Entity.class.isAssignableFrom(c);
+        // What a move carries names entities too.
+        if (type instanceof Class<?> c) return Entity.class.isAssignableFrom(c) || c == Carried.class;
         if (type instanceof ParameterizedType p && p.getRawType() instanceof Class<?> raw
                 && (raw == Optional.class || Collection.class.isAssignableFrom(raw))) {
             Type arg = p.getActualTypeArguments()[0];

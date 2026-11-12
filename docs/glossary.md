@@ -45,6 +45,7 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **Place**: one place an action happens: a `Spot` (blocks in a level), a whole `Level`, `Nowhere` or `Unknown`. `Places` is a list of them that can't be empty. `Place.of(...)` gives the places of an inventory or a resource holder (both halves of a double chest) and the place of an entity.
 - **Nowhere**: `Place.Nowhere`, known to have no place in any world: linked storage, an account, a player logging in. Its kind, id and owner say whose it is, which is how protection decides it.
 - **Unknown place**: `Place.Unknown`, where core or a bridge can't say exactly where, with a reason from a closed set and a bound holding every place it could be. Protection fails closed on it wherever the bound reaches. Not `Actor.Unknown`, which is about who did it, not where.
+- **Carried**: `getCarried()`, the entities that move along with a move, teleport, block move or structure move: `Carried.Known` (riders of riders included; empty only when nothing goes along) or `Carried.Unknown` with a reason when nothing can say before it moves (a piston). Protection fails closed on unknown. ([events](events.md#true-outcomes))
 - **Data kind**: the id on `EntityDataChangeEvent` saying whose data changed, in the mod's namespace, such as `minecolonies:job`.
 
 ## Gaps and coverage

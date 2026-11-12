@@ -3,6 +3,7 @@ package dev.iredsc.hadron.selftest.facts;
 import static dev.iredsc.hadron.selftest.entities.Fixtures.spawn;
 
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
@@ -91,7 +92,7 @@ public final class MissingFactTests {
     }
 
     @HadronTest
-    @KnownGap("A vehicle's move doesn't name its riders, and riders get no move of their own")
+    @Covers(EntityMoveEvent.class)
     void aRiderIsNamedWhenTheirVehicleCarriesThemIntoANewBlock(TestContext t) {
         TestPlayer alice = t.player("alice");
         TestPlayer bob = t.player("bob");
@@ -105,9 +106,11 @@ public final class MissingFactTests {
         t.tick();
         BlockPos now = bob.player().blockPosition();
         require(moves.stream().anyMatch(e -> e.getEntity() == boat), "the boat's own move should fire");
-        t.assertTrue(moves.stream().anyMatch(e -> e.getEntity() == bob.player() && e.getToBlock().equals(now)),
-                "an event should state that bob, riding, moved to " + now + ", but only "
-                        + moves.stream().map(e -> e.getEntity().getName().getString()).toList() + " moved");
+        t.assertTrue(moves.stream().anyMatch(e -> e.getEntity() == boat
+                        && e.getCarried() instanceof Carried.Known k && k.entities().contains(bob.player())
+                        && e.getPlaces().contains(Place.Spot.at(t.level(), now))),
+                "the boat's move should name bob as carried, in " + now + ", but carried "
+                        + moves.stream().map(EntityMoveEvent::getCarried).toList());
     }
 
     @HadronTest

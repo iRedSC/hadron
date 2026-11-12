@@ -93,6 +93,12 @@ public final class EntityTeleports {
      */
     public static @Nullable Destination ask(Entity entity, @Nullable ServerLevel toLevel, double x, double y, double z, float yRot,
             float xRot) {
+        return ask(entity, toLevel, x, y, z, yRot, xRot, EntityTeleportEvent.Riders.GO_ALONG);
+    }
+
+    /** As above, for a teleport method that does {@code riders} to riders when it changes world as asked. */
+    public static @Nullable Destination ask(Entity entity, @Nullable ServerLevel toLevel, double x, double y, double z,
+            float yRot, float xRot, EntityTeleportEvent.Riders riders) {
         Destination requested = new Destination(toLevel != null ? toLevel
                 : entity.level() instanceof ServerLevel own ? own : null, x, y, z, yRot, xRot);
         if (!(entity.level() instanceof ServerLevel from) || suppressed(entity)) return requested;
@@ -112,7 +118,7 @@ public final class EntityTeleports {
         }
         if (!Hooks.listens(EntityTeleportEvent.class)) return requested;
         EntityTeleportEvent event = Hooks.post(new EntityTeleportEvent(entity, toLevel != null ? toLevel : from,
-                new Vec3(x, y, z), yRot, xRot, cause, actor(entity, cause)));
+                new Vec3(x, y, z), yRot, xRot, cause, riders, actor(entity, cause)));
         if (event.isCancelled()) return null;
         Vec3 to = event.getTo();
         return new Destination(event.getToLevel(), to.x, to.y, to.z, event.getToYRot(), event.getToXRot());
