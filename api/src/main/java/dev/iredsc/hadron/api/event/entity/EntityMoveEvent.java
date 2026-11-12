@@ -18,17 +18,18 @@ import net.minecraft.world.phys.Vec3;
 import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
- * A player, or a vehicle someone is driving, has moved into another block, or carried something riding it into
- * another block: a turning boat swings its back seat across a block edge while the boat stays in its own. Fired only
- * when a block changes, so it is cheap to listen to: once per tick before the entity moves on, and again when a
- * rider's own tick seats it in another block (a rearing horse tips its rider back during the horse's tick). Cancel it
- * and the entity is put back where it was, a vehicle also facing and posed as it was (a camel sitting down is held
- * where its sitting had got to); a rider whose seat still moves on its own is held where it was until the next check,
- * so no rider ends up in a refused block.
+ * An entity has moved into another block, or carried something riding it into another block: a player walking, a
+ * vehicle someone drives (a turning boat swings its back seat across a block edge while the boat stays in its own), or
+ * any entity a piston pushes. Observed, never predicted: core fires it once the move has happened (for a vehicle, once
+ * vanilla has moved it and seated every passenger that tick), before any client is shown it, and only when a block
+ * changes, so it is cheap to listen to.
+ *
+ * <p>The actor is who moved it: the player for their own move, the player driving a vehicle, the piston for a push.
+ * Cancel it and all of it is put back where it was: the entity, facing and posed as it was (a camel sitting down is
+ * held where its sitting had got to), and every rider.
  *
  * <p>A player riding something is covered by the vehicle's event, not their own: the vehicle's {@link #getCarried()}
- * names them, and its places include where each rider is, which, when the event fires, is the seat the move leaves
- * them in.
+ * names them, each with the block it set out from and the one it ended up in, both among its places.
  */
 @FiredBy(core = FULL)
 public class EntityMoveEvent extends EntityEvent implements Cancellable {
@@ -58,7 +59,7 @@ public class EntityMoveEvent extends EntityEvent implements Cancellable {
         this.ridersFrom = copy;
     }
 
-    /** Where it was at the last check; in the block it left, unless only a rider changed block. */
+    /** Where it was before the move; in the block it left, unless only a rider changed block. */
     public Vec3 getFrom() {
         return from;
     }
@@ -77,9 +78,9 @@ public class EntityMoveEvent extends EntityEvent implements Cancellable {
     }
 
     /**
-     * Everything riding it, riders of riders included, which moves with it, each already in the seat the move leaves it
-     * in, which is where each ride ends up; each sets out from where it was before the move seated it: read from the
-     * entity on each call, so a rider a listener takes off is no longer named. Always {@link Carried.Known}.
+     * Everything riding it, riders of riders included, which moved with it: each ride sets out from where the rider
+     * was before the move and ends where the move seated it, both observed. Read from the entity on each call, so a
+     * rider a listener takes off is no longer named. Always {@link Carried.Known}.
      */
     public Carried getCarried() {
         List<Carried.Ride> rides = new ArrayList<>();

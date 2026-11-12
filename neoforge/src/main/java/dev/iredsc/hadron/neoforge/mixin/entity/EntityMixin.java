@@ -9,7 +9,6 @@ import dev.iredsc.hadron.api.event.entity.EntityCombustEvent;
 import dev.iredsc.hadron.neoforge.EntityActors;
 import dev.iredsc.hadron.neoforge.EntityState;
 import dev.iredsc.hadron.neoforge.LeashDrop;
-import dev.iredsc.hadron.neoforge.EntityMoves;
 import dev.iredsc.hadron.neoforge.EntityTeleports;
 import dev.iredsc.hadron.neoforge.Hooks;
 import java.util.Set;
@@ -53,15 +52,13 @@ abstract class EntityMixin implements EntityState {
     @Unique private long hadron$trackedPoseTick;
     @Unique private long hadron$trackedAt;
     @Unique private int hadron$seatOf;
-    @Unique private int hadron$heldBy;
-    @Unique private boolean hadron$watched;
-    @Unique private double hadron$beforeX;
-    @Unique private double hadron$beforeY;
-    @Unique private double hadron$beforeZ;
-    @Unique private long hadron$beforeAt = -1;
+    @Unique private long hadron$seatAt = -1;
     @Unique private double hadron$seatX;
     @Unique private double hadron$seatY;
     @Unique private double hadron$seatZ;
+    @Unique private float hadron$seatYRot;
+    @Unique private float hadron$seatXRot;
+    @Unique private long hadron$checkAt = -1;
     @Unique private boolean hadron$converted;
     @Unique private boolean hadron$dying;
     @Unique private LeashDrop hadron$leashDrop = LeashDrop.UNSAID;
@@ -152,8 +149,23 @@ abstract class EntityMixin implements EntityState {
     }
 
     @Override
+    public long hadron$checkAt() {
+        return hadron$checkAt;
+    }
+
+    @Override
+    public void hadron$setCheckAt(long at) {
+        hadron$checkAt = at;
+    }
+
+    @Override
     public int hadron$seatOf() {
         return hadron$seatOf;
+    }
+
+    @Override
+    public long hadron$seatAt() {
+        return hadron$seatAt;
     }
 
     @Override
@@ -172,80 +184,24 @@ abstract class EntityMixin implements EntityState {
     }
 
     @Override
-    public void hadron$seat(int vehicle, double x, double y, double z) {
+    public float hadron$seatYRot() {
+        return hadron$seatYRot;
+    }
+
+    @Override
+    public float hadron$seatXRot() {
+        return hadron$seatXRot;
+    }
+
+    @Override
+    public void hadron$seat(int vehicle, long at, double x, double y, double z, float yRot, float xRot) {
         hadron$seatOf = vehicle;
+        hadron$seatAt = at;
         hadron$seatX = x;
         hadron$seatY = y;
         hadron$seatZ = z;
-    }
-
-    @Override
-    public double hadron$beforeX() {
-        return hadron$beforeX;
-    }
-
-    @Override
-    public double hadron$beforeY() {
-        return hadron$beforeY;
-    }
-
-    @Override
-    public double hadron$beforeZ() {
-        return hadron$beforeZ;
-    }
-
-    @Override
-    public long hadron$beforeAt() {
-        return hadron$beforeAt;
-    }
-
-    @Override
-    public void hadron$before(double x, double y, double z, long at) {
-        hadron$beforeX = x;
-        hadron$beforeY = y;
-        hadron$beforeZ = z;
-        hadron$beforeAt = at;
-    }
-
-    @Override
-    public boolean hadron$watched() {
-        return hadron$watched;
-    }
-
-    @Override
-    public void hadron$setWatched(boolean watched) {
-        hadron$watched = watched;
-    }
-
-    @Override
-    public int hadron$heldBy() {
-        return hadron$heldBy;
-    }
-
-    @Override
-    public void hadron$holdBy(int vehicle) {
-        hadron$heldBy = vehicle;
-    }
-
-    /**
-     * A rider a refused move held in place stays there: its own tick seats it again through here, which would carry it
-     * back into the refused block (a rearing horse's seat moves with the animation, not with anything put back). Any
-     * other seating is checked: one in another block than the last move check saw is asked about again.
-     */
-    @WrapMethod(method = "positionRider(Lnet/minecraft/world/entity/Entity;)V")
-    private void hadron$positionRider(Entity rider, Operation<Void> original) {
-        if (((EntityState) rider).hadron$heldBy() != 0
-                && ((EntityState) rider).hadron$heldBy() == ((Entity) (Object) this).getId()) {
-            return;
-        }
-        EntityState seat = (EntityState) rider;
-        if (seat.hadron$seatOf() == 0) { // no move check watches this rider: nothing more to do
-            original.call(rider);
-            return;
-        }
-        seat.hadron$before(rider.getX(), rider.getY(), rider.getZ(), rider.level().getGameTime());
-        original.call(rider);
-        EntityMoves.seated((Entity) (Object) this, rider);
+        hadron$seatYRot = yRot;
+        hadron$seatXRot = xRot;
     }
 
     @Override

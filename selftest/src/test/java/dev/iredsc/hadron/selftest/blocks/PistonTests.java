@@ -3,6 +3,8 @@ package dev.iredsc.hadron.selftest.blocks;
 import static dev.iredsc.hadron.selftest.blocks.Fixtures.assertNature;
 
 import dev.iredsc.hadron.api.event.Carried;
+import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
+import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
@@ -16,11 +18,12 @@ import dev.iredsc.hadron.test.TestContext;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.piston.PistonBaseBlock;
-import net.minecraft.world.level.levelgen.structure.BoundingBox;
 
 /** Pistons pushing and pulling, powered by redstone with nobody behind it. */
 public final class PistonTests {
@@ -128,68 +131,70 @@ public final class PistonTests {
         t.assertBlock(piston.east(), Blocks.PISTON_HEAD);
     }
 
+    /** Every EntityMoveEvent heard from now on; refusing the ones {@code refuse} picks. */
+    private static List<EntityMoveEvent> recordPushes(TestContext t, java.util.function.Predicate<EntityMoveEvent> refuse) {
+        List<EntityMoveEvent> seen = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityMoveEvent e) {
+                seen.add(e);
+                if (refuse.test(e)) e.setCancelled(true);
+            }
+        });
+        return seen;
+    }
+
+    private static boolean byPiston(EntityMoveEvent e, BlockPos movingBlock) {
+        return e.getActor() instanceof Actor.Machine m && m.pos().equals(movingBlock);
+    }
+
     /**
-     * A piston picks up what it bumps into and what sticks to its slime as it travels, after the event: what it carries
-     * is unknown, never an empty list that reads as nothing, though a pig stands right on the block it pushes, and
-     * bounded by what it moves and sweeps grown by a block, so protection fails closed only there.
+     * A piston picks up what it bumps into and what sticks to its honey as it travels, after its block move: that
+     * event's carriage is unknown, never an empty list that reads as nothing, and has no bound; each entity it moves
+     * into another block is asked about as it moves, in its own move naming the piston.
      */
     @HadronTest
     @Covers(BlockPistonExtendEvent.class)
     @Covers(BlockPistonRetractEvent.class)
-    void whatAPistonCarriesIsUnknownNeverNothing(TestContext t) {
+    @Covers(EntityMoveEvent.class)
+    void whatAPistonCarriesIsUnknownAndEachEntityItMovesIsAsked(TestContext t) {
         t.player("alice"); // the pig only ticks near a player
         BlockPos piston = piston(t, Blocks.STICKY_PISTON);
-        t.setBlock(piston.east(), Blocks.SLIME_BLOCK);
-        net.minecraft.world.entity.animal.Pig pig = dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t,
-                net.minecraft.world.entity.EntityType.PIG, piston.east().above());
+        t.setBlock(piston.east(), Blocks.HONEY_BLOCK);
+        Pig pig = dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t, EntityType.PIG, piston.east().above());
+        pig.setOnGround(true); // a still pig never settles itself; honey carries only what stands on it
         List<BlockMoveEvent> seen = recordMoves(t);
+        List<EntityMoveEvent> pushes = recordPushes(t, e -> false);
         power(t, piston, true);
         power(t, piston, false);
-        t.assertEquals(2, seen.size(), "a push and a pull");
+        t.assertEquals(2, seen.size(), "the push, then the pull");
         for (BlockMoveEvent e : seen) {
             t.assertTrue(e instanceof BlockPistonEvent, "a piston's move, but was " + e.getEventName());
-            // At least everything it moves or sweeps, from the piston's head to where the slime lands, grown by a
-            // block, and the pig standing on it, whole.
-            BoundingBox reach = BoundingBox.fromCorners(piston.east(), piston.east(2)).inflatedBy(1);
-            t.assertTrue(e.getCarried() instanceof Carried.Unknown u
-                    && u.reason() == Carried.Unknown.Reason.DECIDED_AS_IT_MOVES && u.bound() instanceof Place.Spot b
-                    && b.box().isInside(reach.minX(), reach.minY(), reach.minZ())
-                    && b.box().isInside(reach.maxX(), reach.maxY(), reach.maxZ())
-                    && b.box().isInside(pig.blockPosition()) && b.box().isInside(pig.blockPosition().above()),
-                    e.getEventName() + "'s carriage should be unknown, decided as it moves, within " + reach
-                            + " and the pig at " + pig.blockPosition() + ", but was " + e.getCarried());
-            t.assertTrue(e.getPlaces().contains(new Place.Unknown(((Carried.Unknown) e.getCarried()).bound(),
-                    Place.Unknown.Reason.UNKNOWN_CARRIAGE)), e.getEventName() + "'s places should hold its bounded "
-                    + "carriage: " + e.getPlaces());
+            t.assertEquals(Carried.unknown(Carried.Unknown.Reason.DECIDED_AS_IT_MOVES), e.getCarried(),
+                    e.getEventName() + "'s carriage");
+            t.assertTrue(e.getPlaces().stream().noneMatch(p -> p instanceof Place.Unknown),
+                    e.getEventName() + "'s places should name only its blocks: " + e.getPlaces());
         }
+        t.assertTrue(pushes.stream().anyMatch(e -> e.getEntity() == pig && byPiston(e, piston.east(2))),
+                "the pig carried on the honey should be asked about, by the piston, but heard " + pushes);
     }
 
-    /**
-     * A piston pushing at head height moves a tall mob whose feet are two blocks below: its carriage bound holds the
-     * mob's whole box, before and after, not only the blocks beside the push.
-     */
+    /** A pushed pig refused: the piston's blocks finish moving, the pig stays where it stood. */
     @HadronTest
-    @Covers(BlockPistonExtendEvent.class)
-    void aPistonsCarriageBoundHoldsATallMobItPushes(TestContext t) {
-        t.player("alice"); // the golem only ticks near a player
-        BlockPos piston = t.pos(2, 2, 0);
-        Fixtures.awaitTicking(t, piston);
-        t.setBlock(piston, Blocks.PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST));
-        t.setBlock(piston.east(), Blocks.STONE);
-        net.minecraft.world.entity.animal.IronGolem golem = dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t,
-                net.minecraft.world.entity.EntityType.IRON_GOLEM, t.pos(4, 0, 0));
-        golem.setPos(t.pos(4, 0, 0).getX() + 0.8, t.pos(4, 0, 0).getY(), t.pos(4, 0, 0).getZ() + 0.5);
-        golem.setNoGravity(true);
+    @Covers(EntityMoveEvent.class)
+    void aRefusedPushLeavesTheEntityWhereItStood(TestContext t) {
+        t.player("alice");
+        BlockPos piston = piston(t, Blocks.STICKY_PISTON);
+        t.setBlock(piston.east(), Blocks.HONEY_BLOCK);
+        Pig pig = dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t, EntityType.PIG, piston.east().above());
+        pig.setOnGround(true); // a still pig never settles itself; honey carries only what stands on it
         t.tick();
-        BlockPos fromFeet = golem.blockPosition();
-        List<BlockMoveEvent> seen = recordMoves(t);
-        t.setBlock(piston.west(), Blocks.REDSTONE_BLOCK);
-        t.tick(5);
-        t.assertTrue(!golem.blockPosition().equals(fromFeet), "the piston should have pushed the golem on");
-        t.assertEquals(1, seen.size(), "the push");
-        t.assertTrue(seen.get(0).getCarried() instanceof Carried.Unknown u && u.bound() instanceof Place.Spot b
-                && b.box().isInside(fromFeet) && b.box().isInside(golem.blockPosition()),
-                "the push's carriage bound should hold the golem's feet before (" + fromFeet + ") and after ("
-                        + golem.blockPosition() + "), but was " + seen.get(0).getCarried());
+        BlockPos stood = pig.blockPosition();
+        List<EntityMoveEvent> refused = recordPushes(t, e -> e.getEntity() == pig);
+        power(t, piston, true);
+        t.assertTrue(!refused.isEmpty(), "the pig's push should have been asked about; it stood at " + stood
+                + " and is at " + pig.position() + ", on the ground: " + pig.onGround());
+        t.assertEquals(stood, pig.blockPosition(), "the pig's block, its push refused");
+        t.assertBlock(piston.east(2), Blocks.HONEY_BLOCK);
     }
 }

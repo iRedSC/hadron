@@ -21,7 +21,6 @@ import dev.iredsc.hadron.api.event.entity.EntityLeashEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTargetEvent;
 import dev.iredsc.hadron.api.event.Carried;
-import dev.iredsc.hadron.api.event.block.BlockPistonEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
@@ -101,8 +100,8 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * Every action says where it happens, as a fact core states (docs/events.md, "Places"): a broad vanilla run in which
- * no event is placed nowhere and none says {@code Unknown} but a command and a piston's carriage (decided as it
- * travels, bounded by what it sweeps), then each family's places checked against its payload.
+ * no event is placed nowhere and none says {@code Unknown} but a command, then each family's places checked against
+ * its payload.
  */
 public final class PlaceTests {
     private static void require(boolean ok, String what) {
@@ -279,11 +278,8 @@ public final class PlaceTests {
         List<Heard> heard = hear(t);
         TestPlayer alice = joined(t);
         vanillaRun(t, alice);
-        // A piston's carriage is unknown by design, but bounded: never Anywhere.
         List<Heard> unknown = heard.stream().filter(h -> h.places().stream().anyMatch(p -> p instanceof Place.Unknown u
-                && u.reason() != Place.Unknown.Reason.COMMAND
-                && !(u.reason() == Place.Unknown.Reason.UNKNOWN_CARRIAGE && h.event() instanceof BlockPistonEvent
-                        && u.bound() instanceof Place.Spot))).toList();
+                && u.reason() != Place.Unknown.Reason.COMMAND)).toList();
         t.assertTrue(unknown.isEmpty(), "vanilla knows where all of these happen, but " + unknown.size()
                 + " said Unknown:\n  " + String.join("\n  ", unknown.stream().map(Heard::toString).toList()));
         t.assertTrue(heard.stream().anyMatch(h -> h.event() instanceof CommandExecuteEvent

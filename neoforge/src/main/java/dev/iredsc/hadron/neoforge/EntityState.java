@@ -48,10 +48,20 @@ public interface EntityState {
     void hadron$trackTurn(float yRot, float xRot, Pose pose, long poseTick, long at);
 
     /**
-     * The id of the vehicle whose move check last saw this entity riding it, directly or on another rider, and where
-     * this entity was then; 0 when none has (entity ids start at 1). An id, so a rider never keeps a vehicle alive.
+     * The game time the move check snapshotted this root vehicle's riders, at the start of its tick: its check after
+     * the tick runs only when that is the current tick. -1 when never.
+     */
+    long hadron$checkAt();
+
+    void hadron$setCheckAt(long at);
+
+    /**
+     * A rider's place in its root vehicle's snapshot: the root's id, the game time it was taken, and where and how it
+     * faced then. 0 for the vehicle when no snapshot holds it. An id, so a rider never keeps a vehicle alive.
      */
     int hadron$seatOf();
+
+    long hadron$seatAt();
 
     double hadron$seatX();
 
@@ -59,34 +69,11 @@ public interface EntityState {
 
     double hadron$seatZ();
 
-    void hadron$seat(int vehicle, double x, double y, double z);
+    float hadron$seatYRot();
 
-    /**
-     * The id of the vehicle whose refused move holds this rider where it was: until that vehicle's next move check, its
-     * {@code positionRider} leaves this rider in place. 0 when nothing holds it.
-     */
-    int hadron$heldBy();
+    float hadron$seatXRot();
 
-    /** Whether the move check watches this vehicle's riders: true while someone listened at its last check. */
-    boolean hadron$watched();
-
-    void hadron$setWatched(boolean watched);
-
-    /**
-     * Where this rider was just before it was last seated, and the game time that was: where a move that seats it in
-     * another block says it set out from.
-     */
-    double hadron$beforeX();
-
-    double hadron$beforeY();
-
-    double hadron$beforeZ();
-
-    long hadron$beforeAt();
-
-    void hadron$before(double x, double y, double z, long at);
-
-    void hadron$holdBy(int vehicle);
+    void hadron$seat(int vehicle, long at, double x, double y, double z, float yRot, float xRot);
 
     /** Set on the new entity of a conversion, so its arrival isn't a spawn. */
     boolean hadron$converted();

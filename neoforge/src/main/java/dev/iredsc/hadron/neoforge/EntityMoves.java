@@ -1,10 +1,18 @@
 package dev.iredsc.hadron.neoforge;
 
-import dev.iredsc.hadron.checks.StaticState;
-import org.jspecify.annotations.Nullable;
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Actors;
+import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.player.PlayerMoveEvent;
+import dev.iredsc.hadron.checks.StaticState;
+import java.util.ArrayList;
+import java.util.IdentityHashMap;
+import java.util.List;
+import java.util.Map;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.game.ClientboundMoveVehiclePacket;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
@@ -13,209 +21,164 @@ import net.minecraft.world.entity.Pose;
 import net.minecraft.world.entity.animal.camel.Camel;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.Vec3;
-import java.util.IdentityHashMap;
-import java.util.List;
-import java.util.Map;
+import org.jspecify.annotations.Nullable;
 
 /**
- * The block-crossing check behind {@link EntityMoveEvent} and {@link PlayerMoveEvent}, run before each entity's tick.
- * Only players (not riding anything) and vehicles a player drives are checked. It fires when the entity, or anything
- * riding it, is in another block than at the last check: a turning boat swings its back seat into the next block
- * without the boat leaving its own. The last position, facing and pose live in fields on the entity, and each rider's
- * last position in fields on the rider, so nothing is allocated unless something changed block and someone listens.
- * While someone listens, each rider of a checked vehicle is seated before the vehicle ticks, as its own tick is about
- * to, so the event states where the move leaves it.
+ * The block-crossing check behind {@link EntityMoveEvent} and {@link PlayerMoveEvent}: observe, then ask, then undo.
+ * Nothing is predicted. Checked are players riding nothing and vehicles a player drives (a root entity); a piston
+ * moving any entity is checked where it moves it ({@link #pushed}).
+ *
+ * <p>A root's own position, facing and pose are remembered at the end of each of its ticks (a few field writes, with
+ * nobody listening too): moves that arrive between ticks (a client steering its boat, a player walking) are measured
+ * from there. When someone listens, each rider's position and facing is snapshotted at the start of the root's tick
+ * ({@code ServerLevel.tickNonPassenger}); at its end, once vanilla has moved the root and seated every passenger, the
+ * root's move is fired once if it or any rider is in another block, each rider's observed start and end as a ride.
+ * Refused, the whole snapshot is put back, the root and every rider, before any client is sent the move.
  */
 public final class EntityMoves {
-    /** True while the move check itself seats riders, so their seating isn't checked again. */
-    @StaticState(reason = "set only while the move check seats riders on the server thread, cleared in finally")
-    private static boolean checking;
+    /** The moving piston block a piston tick is moving entities for, so each names it; null outside one. */
+    @StaticState(reason = "set only while a piston block entity ticks on the server thread, cleared in finally")
+    private static @Nullable BlockPos pushing;
 
     private EntityMoves() {}
 
-    /** Called from the server tick, before the entity ticks. */
+    /** Whether the move check watches {@code entity} itself: a player riding nothing, or a vehicle a player drives. */
+    private static boolean checked(Entity entity) {
+        if (entity instanceof ServerPlayer) return !entity.isPassenger();
+        return !entity.isPassenger() && entity.getControllingPassenger() instanceof Player;
+    }
+
+    private static Class<? extends EntityMoveEvent> type(Entity entity) {
+        return entity instanceof ServerPlayer ? PlayerMoveEvent.class : EntityMoveEvent.class;
+    }
+
+    /** At the start of a root entity's tick: a baseline the first time, and, when someone listens, its riders. */
     public static void beforeTick(Entity entity) {
         EntityState state = (EntityState) entity;
-        boolean player = entity instanceof ServerPlayer;
-        LivingEntity driver = player ? null : entity.getControllingPassenger();
-        boolean checked = player ? !entity.isPassenger() : driver instanceof Player;
-        if (!checked) {
+        if (!checked(entity)) {
+            // A rider is checked with its root; one that was a root (a player who got on) starts afresh when it gets off.
             if (state.hadron$tracked()) state.hadron$untrack();
-            unwatch(entity);
             return;
         }
-        if (!Hooks.listens(player ? PlayerMoveEvent.class : EntityMoveEvent.class)) {
-            // Nobody listens: only the entity itself is tracked, a few field writes and no walk over its riders, so a
-            // listener that arrives has where it was to start from.
-            unwatch(entity);
-            trackVehicle(entity);
+        if (!state.hadron$tracked() || state.hadron$trackedLevel() != entity.level()) trackRoot(entity);
+        if (!entity.isVehicle() || !Hooks.listens(type(entity))) return;
+        long now = entity.level().getGameTime();
+        snapshotRiders(entity.getId(), now, entity);
+        state.hadron$setCheckAt(now);
+    }
+
+    /**
+     * At the end of a root entity's tick, once vanilla has moved it and seated every passenger: if it or a rider is in
+     * another block, its move is asked about, and refused, all of it is put back.
+     */
+    public static void afterTick(Entity entity) {
+        EntityState state = (EntityState) entity;
+        if (!state.hadron$tracked()) return;
+        if (entity.isRemoved() || !checked(entity) || state.hadron$trackedLevel() != entity.level()) {
+            state.hadron$untrack();
             return;
         }
-        if (!state.hadron$tracked() || state.hadron$trackedLevel() != entity.level()) {
-            track(entity);
+        if (!Hooks.listens(type(entity))) {
+            trackRoot(entity);
             return;
         }
+        long now = entity.level().getGameTime();
+        boolean riders = state.hadron$checkAt() == now;
         boolean crossed = !sameBlock(entity.getX(), entity.getY(), entity.getZ(), state.hadron$trackedX(),
                 state.hadron$trackedY(), state.hadron$trackedZ());
-        if (!crossed && !entity.isVehicle()) {
-            track(entity);
-            return;
-        }
-        // Where the vehicle as it stands now seats each rider, as its tick is about to: where the move leaves them.
-        boolean riderCrossed = seatRiders(entity);
-        if (!crossed && !riderCrossed) {
-            track(entity);
+        if (!crossed && riders) crossed = riderCrossed(entity.getId(), now, entity);
+        if (!crossed) {
+            trackRoot(entity);
             return;
         }
         Vec3 from = new Vec3(state.hadron$trackedX(), state.hadron$trackedY(), state.hadron$trackedZ());
-        if (!refused(entity, driver, from)) {
-            track(entity);
+        Map<Entity, Vec3> starts = riders ? starts(entity.getId(), now, entity) : Map.of();
+        LivingEntity driver = entity instanceof ServerPlayer ? null : entity.getControllingPassenger();
+        Actor actor = entity instanceof ServerPlayer player ? new Actor.Player(player)
+                : EntityActors.of(java.util.Objects.requireNonNull(driver, "a checked vehicle has a player driving it"));
+        if (!refused(entity, from, starts, actor)) {
+            trackRoot(entity);
             return;
         }
-        putBack(entity, driver, from);
-        track(entity);
+        putBack(entity, from, riders ? now : -1);
+        if (driver instanceof ServerPlayer player) player.connection.send(new ClientboundMoveVehiclePacket(entity));
+        trackRoot(entity);
     }
 
-    /**
-     * Fires the move of {@code entity} from {@code from} to where it is now, each rider setting out from where it was
-     * before it was seated this tick; whether a listener refused it.
-     */
-    private static boolean refused(Entity entity, @Nullable LivingEntity driver, Vec3 from) {
+    /** Fires the move of {@code entity} from {@code from} to where it is now; whether a listener refused it. */
+    private static boolean refused(Entity entity, Vec3 from, Map<Entity, Vec3> starts, Actor actor) {
         Vec3 to = entity.position();
-        Map<Entity, Vec3> starts = new IdentityHashMap<>();
-        long now = entity.level().getGameTime();
-        for (Entity rider : entity.getIndirectPassengers()) {
-            EntityState seat = (EntityState) rider;
-            starts.put(rider, seat.hadron$beforeAt() == now
-                    ? new Vec3(seat.hadron$beforeX(), seat.hadron$beforeY(), seat.hadron$beforeZ())
-                    : rider.position());
-        }
         EntityMoveEvent event = entity instanceof ServerPlayer player
-                ? new PlayerMoveEvent(player, from, to, starts)
-                : new EntityMoveEvent(entity, from, to, starts, EntityActors.of(java.util.Objects.requireNonNull(driver,
-                        "a checked vehicle has a player driving it")));
+                ? new PlayerMoveEvent(player, from, to, starts, actor)
+                : new EntityMoveEvent(entity, from, to, starts, actor);
         return Hooks.post(event).isCancelled();
-    }
-
-    /**
-     * Called after {@code vehicle} seated {@code rider} (its own tick does, after the vehicle ticked). A seat that moved
-     * during the vehicle's tick (a rearing horse tips its rider back, a mount lunges) can be in another block than the
-     * last check saw, after that check let the move through: the vehicle's move is asked about again, and a refusal
-     * puts the whole move back, the vehicle and every rider, as a refusal before the tick does.
-     */
-    public static void seated(Entity vehicle, Entity rider) {
-        if (checking) return;
-        EntityState seat = (EntityState) rider;
-        int root = seat.hadron$seatOf();
-        if (root == 0 || sameBlock(rider.getX(), rider.getY(), rider.getZ(), seat.hadron$seatX(), seat.hadron$seatY(),
-                seat.hadron$seatZ())) {
-            return;
-        }
-        Entity top = vehicle.getRootVehicle();
-        EntityState state = (EntityState) top;
-        if (top.getId() != root || !state.hadron$tracked() || state.hadron$trackedLevel() != top.level()) return;
-        boolean player = top instanceof ServerPlayer;
-        LivingEntity driver = player ? null : top.getControllingPassenger();
-        if (!player && !(driver instanceof Player)) return;
-        if (!Hooks.listens(player ? PlayerMoveEvent.class : EntityMoveEvent.class)) return;
-        Vec3 from = new Vec3(state.hadron$trackedX(), state.hadron$trackedY(), state.hadron$trackedZ());
-        if (!refused(top, driver, from)) {
-            // Let through: the vehicle as it now is, and this rider; others not yet seated this tick are asked about
-            // when they are.
-            trackVehicle(top);
-            seat.hadron$seat(root, rider.getX(), rider.getY(), rider.getZ());
-            return;
-        }
-        putBack(top, driver, from);
-        track(top);
     }
 
     private static boolean sameBlock(double x, double y, double z, double x2, double y2, double z2) {
         return Mth.floor(x) == Mth.floor(x2) && Mth.floor(y) == Mth.floor(y2) && Mth.floor(z) == Mth.floor(z2);
     }
 
-    /**
-     * Seats every rider of {@code vehicle}, riders of riders after the one they ride, and says whether any the last
-     * check saw on it is now in another block than then.
-     */
-    private static boolean seatRiders(Entity vehicle) {
-        checking = true;
-        try {
-            return seatRiders(vehicle, vehicle);
-        } finally {
-            checking = false;
-        }
-    }
-
-    private static boolean seatRiders(Entity root, Entity vehicle) {
-        boolean crossed = false;
+    /** Snapshots where every rider of {@code vehicle} is and how it faces, riders of riders too, for root {@code id}. */
+    private static void snapshotRiders(int id, long now, Entity vehicle) {
         List<Entity> riders = vehicle.getPassengers();
         for (int i = 0; i < riders.size(); i++) {
-            Entity rider = riders.get(i);
-            EntityState seat = (EntityState) rider;
-            seat.hadron$holdBy(0); // a hold lasts until this check
-            seat.hadron$before(rider.getX(), rider.getY(), rider.getZ(), rider.level().getGameTime());
-            vehicle.positionRider(rider);
-            crossed |= leftSeat(root, rider);
-            crossed |= seatRiders(root, rider);
+            Entity r = riders.get(i);
+            ((EntityState) r).hadron$seat(id, now, r.getX(), r.getY(), r.getZ(), r.getYRot(), r.getXRot());
+            snapshotRiders(id, now, r);
         }
-        return crossed;
     }
 
-    /**
-     * Where {@code rider} was for the check of {@code vehicle}: where the last check saw it on this vehicle, or, for one
-     * no check has seen (riders aren't watched while nobody listens), where it was just before it was seated this tick.
-     * Null when neither is known.
-     */
-    private static @Nullable Vec3 wasAt(Entity vehicle, Entity rider) {
-        EntityState seat = (EntityState) rider;
-        if (seat.hadron$seatOf() == vehicle.getId()) {
-            return new Vec3(seat.hadron$seatX(), seat.hadron$seatY(), seat.hadron$seatZ());
-        }
-        if (seat.hadron$beforeAt() == rider.level().getGameTime()) {
-            return new Vec3(seat.hadron$beforeX(), seat.hadron$beforeY(), seat.hadron$beforeZ());
-        }
-        return null;
-    }
-
-    /** Whether {@code rider} is in another block than it was for the check of {@code vehicle}. */
-    private static boolean leftSeat(Entity vehicle, Entity rider) {
-        Vec3 was = wasAt(vehicle, rider);
-        return was != null && !sameBlock(rider.getX(), rider.getY(), rider.getZ(), was.x, was.y, was.z);
-    }
-
-    /**
-     * Lets every rider of {@code vehicle} go: one a refused move held is seated again, and none is watched any more, so
-     * seating it costs one field read.
-     */
-    private static void release(Entity vehicle) {
+    /** Whether a rider snapshotted for root {@code id} this tick is in another block than then. */
+    private static boolean riderCrossed(int id, long now, Entity vehicle) {
         List<Entity> riders = vehicle.getPassengers();
         for (int i = 0; i < riders.size(); i++) {
-            Entity rider = riders.get(i);
-            EntityState seat = (EntityState) rider;
-            seat.hadron$holdBy(0);
-            seat.hadron$seat(0, 0, 0, 0);
-            release(rider);
+            Entity r = riders.get(i);
+            EntityState seat = (EntityState) r;
+            if (seat.hadron$seatOf() == id && seat.hadron$seatAt() == now && !sameBlock(r.getX(), r.getY(), r.getZ(),
+                    seat.hadron$seatX(), seat.hadron$seatY(), seat.hadron$seatZ())) {
+                return true;
+            }
+            if (riderCrossed(id, now, r)) return true;
+        }
+        return false;
+    }
+
+    /** Where each rider snapshotted this tick set out from; a rider that got on since sets out from where it is. */
+    private static Map<Entity, Vec3> starts(int id, long now, Entity root) {
+        Map<Entity, Vec3> out = new IdentityHashMap<>();
+        for (Entity r : root.getIndirectPassengers()) {
+            EntityState seat = (EntityState) r;
+            if (seat.hadron$seatOf() == id && seat.hadron$seatAt() == now) {
+                out.put(r, new Vec3(seat.hadron$seatX(), seat.hadron$seatY(), seat.hadron$seatZ()));
+            }
+        }
+        return out;
+    }
+
+    /**
+     * Puts a refused move back: the root where it was, facing and posed as it was, and, when its riders were
+     * snapshotted at {@code now}, each exactly where and how it was at the start of the tick.
+     */
+    private static void putBack(Entity entity, Vec3 from, long now) {
+        if (entity instanceof ServerPlayer player) {
+            player.connection.teleport(from.x, from.y, from.z, player.getYRot(), player.getXRot());
+        } else {
+            turnBack(entity);
+            EntityTeleports.quietly(entity, () -> entity.teleportTo(from.x, from.y, from.z));
+            entity.setDeltaMovement(Vec3.ZERO);
+        }
+        if (now < 0) return;
+        for (Entity r : entity.getIndirectPassengers()) {
+            EntityState seat = (EntityState) r;
+            if (seat.hadron$seatOf() != entity.getId() || seat.hadron$seatAt() != now) continue;
+            r.setPos(seat.hadron$seatX(), seat.hadron$seatY(), seat.hadron$seatZ());
+            r.setYRot(seat.hadron$seatYRot());
+            r.setXRot(seat.hadron$seatXRot());
         }
     }
 
-    /** Remembers where the entity is, how it faces and its pose, and where each of its riders is. */
-    private static void track(Entity entity) {
-        trackVehicle(entity);
-        trackRiders(entity.getId(), entity);
-        ((EntityState) entity).hadron$setWatched(true);
-    }
-
-    /** Stops watching the riders of a vehicle that was watched: the one tick that walks them, to let them go. */
-    private static void unwatch(Entity entity) {
-        EntityState state = (EntityState) entity;
-        if (!state.hadron$watched()) return;
-        state.hadron$setWatched(false);
-        release(entity);
-    }
-
-    /** Remembers where the entity is, how it faces and its pose. */
-    private static void trackVehicle(Entity entity) {
+    /** Remembers where a root entity is, how it faces and its pose: what a move is measured from and put back to. */
+    private static void trackRoot(Entity entity) {
         EntityState state = (EntityState) entity;
         state.hadron$track(entity.level(), entity.getX(), entity.getY(), entity.getZ());
         state.hadron$trackTurn(entity.getYRot(), entity.getXRot(), entity.getPose(),
@@ -223,46 +186,7 @@ public final class EntityMoves {
                 entity.level().getGameTime());
     }
 
-    /** Remembers where each rider of {@code vehicle} is, riders of riders too, as seen by the vehicle {@code root}. */
-    private static void trackRiders(int root, Entity vehicle) {
-        List<Entity> riders = vehicle.getPassengers();
-        for (int i = 0; i < riders.size(); i++) {
-            Entity rider = riders.get(i);
-            ((EntityState) rider).hadron$seat(root, rider.getX(), rider.getY(), rider.getZ());
-            trackRiders(root, rider);
-        }
-    }
-
-    /**
-     * Puts a refused move back: the entity where it was, and a vehicle also facing and posed as it was, so each rider's
-     * seat is back where it was too.
-     */
-    private static void putBack(Entity entity, @Nullable LivingEntity driver, Vec3 from) {
-        if (entity instanceof ServerPlayer player) {
-            player.connection.teleport(from.x, from.y, from.z, player.getYRot(), player.getXRot());
-            seatRiders(player);
-        } else {
-            turnBack(entity);
-            // Teleporting seats its riders again, with the facing and pose just put back.
-            EntityTeleports.quietly(entity, () -> entity.teleportTo(from.x, from.y, from.z));
-            entity.setDeltaMovement(Vec3.ZERO);
-            // The driver's client moves the vehicle itself; tell it where the vehicle really is, and its facing.
-            if (driver instanceof ServerPlayer player) player.connection.send(new ClientboundMoveVehiclePacket(entity));
-        }
-        // A seat that moves on its own (a rearing horse, a mod's animated vehicle) may still be in the refused block:
-        // its rider is held where it was, through its own tick's seating too, until the next check asks again.
-        for (Entity rider : entity.getIndirectPassengers()) {
-            Vec3 was = wasAt(entity, rider);
-            if (was != null && !sameBlock(rider.getX(), rider.getY(), rider.getZ(), was.x, was.y, was.z)) {
-                rider.setPos(was.x, was.y, was.z);
-                Entity on = rider.getVehicle();
-                // What seats it, which is what must leave it be.
-                if (on != null) ((EntityState) rider).hadron$holdBy(on.getId());
-            }
-        }
-    }
-
-    /** The vehicle's facing and pose as the last check saw them; a camel's sitting or standing clock too. */
+    /** The vehicle's facing and pose as remembered; a camel's sitting or standing clock too. */
     private static void turnBack(Entity entity) {
         EntityState state = (EntityState) entity;
         float yRot = state.hadron$trackedYRot();
@@ -276,7 +200,7 @@ public final class EntityMoves {
         if (pose != null && entity.getPose() != pose) entity.setPose(pose);
         if (entity instanceof Camel camel) {
             // Its seat height follows how long it has been sitting down or standing up (game time minus the clock's
-            // size; negative while sitting): set the clock so that is as long as it was at the last check.
+            // size; negative while sitting): set the clock so that is as long as it was when remembered.
             long was = state.hadron$trackedPoseTick();
             long poseTime = state.hadron$trackedAt() - Math.abs(was);
             long clock = camel.level().getGameTime() - poseTime;
@@ -287,6 +211,83 @@ public final class EntityMoves {
     /** After a teleport, start from where the entity landed rather than seeing the jump as a move. */
     static void retrack(Entity entity) {
         EntityState state = (EntityState) entity;
-        if (state.hadron$tracked()) track(entity);
+        if (!state.hadron$tracked()) return;
+        trackRoot(entity);
+        long now = entity.level().getGameTime();
+        if (state.hadron$checkAt() == now) snapshotRiders(entity.getId(), now, entity);
+    }
+
+    // ---- Pistons ------------------------------------------------------------------------------------------------
+
+    /** Runs a piston block's entity moves for this tick, each naming the moving block at {@code pos}. */
+    public static void pushing(BlockPos pos, Runnable moves) {
+        BlockPos was = pushing;
+        pushing = pos.immutable();
+        try {
+            moves.run();
+        } finally {
+            pushing = was;
+        }
+    }
+
+    /** One entity and where it stood, and how it faced, before a piston moved it or what it rides. */
+    private record Stood(Entity entity, double x, double y, double z, float yRot, float xRot) {
+        static Stood of(Entity e) {
+            return new Stood(e, e.getX(), e.getY(), e.getZ(), e.getYRot(), e.getXRot());
+        }
+
+        boolean crossed() {
+            return !sameBlock(entity.getX(), entity.getY(), entity.getZ(), x, y, z);
+        }
+
+        void putBack() {
+            if (entity instanceof ServerPlayer player) {
+                player.connection.teleport(x, y, z, yRot, xRot);
+            } else {
+                entity.setPos(x, y, z);
+                entity.setYRot(yRot);
+                entity.setXRot(xRot);
+            }
+        }
+    }
+
+    /**
+     * A piston moving {@code entity} (vanilla's {@code moveEntityByPiston}, on each tick of its travel): moved, its
+     * passengers seated as they will be, and, if it or one of them is in another block, the move is asked about,
+     * naming the piston as its actor. Refused, it and its passengers are put back; the piston's blocks finish moving.
+     */
+    public static void pushed(Entity entity, Runnable move) {
+        BlockPos piston = pushing;
+        if (piston == null || !(entity.level() instanceof ServerLevel level) || !Hooks.listens(type(entity))) {
+            move.run();
+            return;
+        }
+        List<Stood> stood = new ArrayList<>();
+        stood.add(Stood.of(entity));
+        for (Entity r : entity.getIndirectPassengers()) stood.add(Stood.of(r));
+        move.run();
+        seat(entity);
+        if (stood.stream().noneMatch(Stood::crossed)) return;
+        Map<Entity, Vec3> starts = new IdentityHashMap<>();
+        for (Stood s : stood.subList(1, stood.size())) starts.put(s.entity(), new Vec3(s.x(), s.y(), s.z()));
+        Stood root = stood.get(0);
+        Actor actor = Actors.currentOr(new Actor.Machine(level, piston, Attribution.none()));
+        if (refused(entity, new Vec3(root.x(), root.y(), root.z()), starts, actor)) {
+            stood.forEach(Stood::putBack);
+            return;
+        }
+        // Its own check starts from where the piston left it, so the push isn't seen twice.
+        EntityState state = (EntityState) entity;
+        if (state.hadron$tracked()) trackRoot(entity);
+    }
+
+    /** Seats every passenger of {@code vehicle} where it now puts them, riders of riders after the one they ride. */
+    private static void seat(Entity vehicle) {
+        List<Entity> riders = vehicle.getPassengers();
+        for (int i = 0; i < riders.size(); i++) {
+            Entity r = riders.get(i);
+            vehicle.positionRider(r);
+            seat(r);
+        }
     }
 }

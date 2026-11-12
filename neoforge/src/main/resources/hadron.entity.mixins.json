@@ -25,6 +25,7 @@
     "LivingEntityMixin",
     "MinecartTNTMixin",
     "MobMixin",
+    "PistonPushMixin",
     "PlayerInteractMixin",
     "ProjectileMixin",
     "ServerLevelMixin",

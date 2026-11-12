@@ -149,8 +149,10 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
     /**
      * Everything riding it that goes along, riders of riders included, worked out for where it is going now: a
      * listener's {@link #setTo} changes it. Each ride ends up somewhere in one area around the destination, built from
-     * the vehicle's and riders' boxes (see the event's places), whichever way the vehicle faces and whether or not a
-     * rider has been seated yet. Always {@link Carried.Known}; empty when riders are left behind.
+     * each vehicle's seating and the riders' boxes through the whole passenger tree, whichever way the vehicle faces.
+     * Within a world, where the riders really land is checked once they have: one in a block this event's places
+     * don't hold is asked about again as the vehicle's {@code EntityMoveEvent}, and refusing that puts the whole
+     * teleport back. Always {@link Carried.Known}; empty when riders are left behind.
      */
     public Carried getCarried() {
         Entity entity = getEntity();
@@ -162,35 +164,43 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
             changingWorld(entity, going);
         }
         if (going.isEmpty()) return Carried.none();
-        Place.Spot seats = seats(entity, going);
+        Place.Spot seats = seats(entity);
         List<Carried.Ride> rides = new ArrayList<>();
         for (Entity rider : going) rides.add(new Carried.Ride(rider, Place.of(rider), seats));
         return Carried.of(rides);
     }
 
     /**
-     * Every block any rider's box can be in around {@link #getTo()}: the vehicle's box there, grown up by every
-     * rider's height stacked (a rider of a rider sits on top), out by the widest rider, and as far as any rider now
-     * sits from it. Built from boxes, not seats, so a rider not yet seated (just mounted) or turned another way on
-     * arrival is still inside: wide is safe, narrow would be a hole.
+     * Every block any rider's box can be in around {@link #getTo()}, built level by level through the passenger tree:
+     * each rider sits where its vehicle's seating puts it ({@code getPassengerRidingPosition} less the rider's own
+     * attachment), or where it is now if that is further, turned any way on arrival, so the reach adds up from the
+     * root to the top rider. Grown by the riders' boxes and half a block. Wide is safe; narrow would be a hole.
      */
-    private Place.Spot seats(Entity vehicle, List<Entity> riders) {
-        double reach = vehicle.getBbWidth() / 2;
-        double below = 0;
-        double above = vehicle.getBbHeight();
-        double widest = 0;
-        for (Entity rider : riders) {
-            Vec3 offset = rider.position().subtract(vehicle.position());
-            reach = Math.max(reach, Math.sqrt(offset.x * offset.x + offset.z * offset.z));
-            below = Math.min(below, offset.y);
-            above += rider.getBbHeight();
-            above = Math.max(above, offset.y + rider.getBbHeight());
-            widest = Math.max(widest, rider.getBbWidth() / 2);
-        }
+    private Place.Spot seats(Entity root) {
+        double[] box = {0, 0, 0}; // horizontal reach, lowest feet, highest head, from the destination
+        reach(root, 0, 0, 0, box);
         Vec3 to = getTo();
-        double r = reach + widest;
-        return new Place.Spot(getToLevel(), BoundingBox.fromCorners(BlockPos.containing(to.x - r, to.y + below, to.z - r),
-                BlockPos.containing(to.x + r, to.y + above, to.z + r)));
+        double r = box[0] + 0.5;
+        return new Place.Spot(getToLevel(), BoundingBox.fromCorners(
+                BlockPos.containing(to.x - r, to.y + box[1] - 0.5, to.z - r),
+                BlockPos.containing(to.x + r, to.y + box[2] + 0.5, to.z + r)));
+    }
+
+    /** Adds {@code vehicle}'s riders, sitting {@code h} out and between {@code lo} and {@code hi} up, to {@code box}. */
+    private static void reach(Entity vehicle, double h, double lo, double hi, double[] box) {
+        for (Entity rider : vehicle.getPassengers()) {
+            Vec3 seat = vehicle.getPassengerRidingPosition(rider).subtract(vehicle.position())
+                    .subtract(rider.getVehicleAttachmentPoint(vehicle));
+            Vec3 now = rider.position().subtract(vehicle.position());
+            double out = h + Math.max(vehicle.getBbWidth() / 2,
+                    Math.max(Math.hypot(seat.x, seat.z), Math.hypot(now.x, now.z)));
+            double low = lo + Math.min(0, Math.min(seat.y, now.y));
+            double high = hi + Math.max(0, Math.max(seat.y, now.y));
+            box[0] = Math.max(box[0], out + rider.getBbWidth() / 2);
+            box[1] = Math.min(box[1], low);
+            box[2] = Math.max(box[2], high + rider.getBbHeight());
+            reach(rider, out, low, high, box);
+        }
     }
 
     /**

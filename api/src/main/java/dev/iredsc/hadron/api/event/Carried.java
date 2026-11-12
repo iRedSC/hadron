@@ -5,6 +5,7 @@ import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
@@ -67,16 +68,17 @@ public sealed interface Carried {
     }
 
     /**
-     * Which entities move along with it can't be known when the event fires: {@link #reason()} says why, and
-     * {@link #bound()} holds every place any of them could be, before and after. Protection should deny it wherever its
-     * bound reaches somewhere it would deny an outsider.
+     * Which entities move along with it can't be known when the event fires: {@link #reason()} says why. When
+     * {@link #bound()} is present it holds every place any of them could be, before and after, and protection should
+     * deny it wherever that reaches somewhere it would deny an outsider. A piston's has none: each entity it moves into
+     * another block is asked about as it moves, in an {@code EntityMoveEvent} naming the piston.
      */
-    record Unknown(Place.Bound bound, Reason reason) implements Carried {
+    record Unknown(Optional<Place.Bound> bound, Reason reason) implements Carried {
         /** Why what a move carries is unknown. Closed: a new reason is a change to this list. */
         public enum Reason {
             /**
              * What it carries is decided on each tick of travel, after the event: a piston picks up what it bumps into
-             * and what sticks to its slime or honey as it goes.
+             * and what sticks to its slime or honey as it goes, and asks about each as it moves it.
              */
             DECIDED_AS_IT_MOVES,
             /** A mod moves entities in a way its bridge can't see before it happens. */
@@ -84,7 +86,7 @@ public sealed interface Carried {
         }
 
         public Unknown {
-            Objects.requireNonNull(bound, "bound; Place.Anywhere.INSTANCE when nothing narrows it");
+            Objects.requireNonNull(bound, "bound; Optional.empty() when each entity is asked about as it moves");
             Objects.requireNonNull(reason, "reason");
         }
     }
@@ -111,7 +113,12 @@ public sealed interface Carried {
 
     /** Nobody can say what goes along; whatever does is within {@code bound}. */
     static Unknown unknown(Place.Bound bound, Unknown.Reason reason) {
-        return new Unknown(bound, reason);
+        return new Unknown(Optional.of(bound), reason);
+    }
+
+    /** Nobody can say what goes along before it moves; each entity is asked about as it moves (a piston). */
+    static Unknown unknown(Unknown.Reason reason) {
+        return new Unknown(Optional.empty(), reason);
     }
 
     /**
@@ -128,7 +135,8 @@ public sealed interface Carried {
                 }
                 yield out;
             }
-            case Unknown u -> List.of(new Place.Unknown(u.bound(), Place.Unknown.Reason.UNKNOWN_CARRIAGE));
+            case Unknown u -> u.bound().map(b -> List.<Place>of(new Place.Unknown(b, Place.Unknown.Reason.UNKNOWN_CARRIAGE)))
+                    .orElse(List.of());
         };
     }
 }
