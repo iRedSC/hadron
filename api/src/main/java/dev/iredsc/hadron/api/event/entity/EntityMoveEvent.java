@@ -28,7 +28,9 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  *   <li>a move a vehicle makes in its own tick (a mount rearing, a camel sitting down) is asked about at the end of
  *       that tick, once vanilla has seated every passenger, before any client is sent it;</li>
  *   <li>a piston's push is asked about before it is made, with where vanilla's own limit and collision (a wall, a
- *       step up) will take the entity and its riders; refused, nothing moves and nothing is stepped on;</li>
+ *       step up) will take the entity and its riders; refused, nothing moves and nothing is stepped on. If the entity
+ *       still lands in another block than asked (a shulker snaps to a whole block), that landing is asked about after;
+ *       refused, it goes back, but what it tripped there stays: a known gap;</li>
  *   <li>a move something else makes between ticks (a mod or plugin setting a vehicle's or player's position) is asked
  *       about at the end of its next tick: the server may already have sent that move to watching clients, who then
  *       see it put back if refused.</li>

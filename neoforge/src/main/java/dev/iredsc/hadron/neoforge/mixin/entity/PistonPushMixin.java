@@ -30,7 +30,7 @@ abstract class PistonPushMixin {
     @WrapMethod(method = "moveCollidedEntities")
     private static void hadron$collided(Level level, BlockPos pos, float progress, PistonMovingBlockEntity piston,
             Operation<Void> original) {
-        if (level.isClientSide()) {
+        if (level.isClientSide() || !EntityMoves.watchesPushes()) {
             original.call(level, pos, progress, piston);
             return;
         }
@@ -40,7 +40,7 @@ abstract class PistonPushMixin {
     @WrapMethod(method = "moveStuckEntities")
     private static void hadron$stuck(Level level, BlockPos pos, float progress, PistonMovingBlockEntity piston,
             Operation<Void> original) {
-        if (level.isClientSide()) {
+        if (level.isClientSide() || !EntityMoves.watchesPushes()) {
             original.call(level, pos, progress, piston);
             return;
         }

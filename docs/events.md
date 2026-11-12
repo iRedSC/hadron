@@ -115,7 +115,7 @@ An effect and an entity's fire keep the actor that caused them and where it was 
 | ~~A shift-click names the inventory items move into~~ | the click's places (closed) |
 | ~~Opening a double chest names both halves~~ | the inventory's places (closed) |
 | Poison and burning act for whoever caused them | attribution on effects and fire |
-| A refused move still presses pressure plates and counts travel stats | the movement packet handler checked before it applies the move, not after (pre-existing; the handler runs whole before the refusal) |
+| A move refused after it happens (a client step, a boat packet, a piston landing an entity elsewhere than asked) keeps what it pressed, tripped or counted | asking before vanilla applies it (the packet handlers run whole before the refusal, and a piston's landing check runs after vanilla placed the entity); one follow-up PR |
 | ~~Starting to mine fires an event~~ | Bukkit's `BlockDamageEvent` (closed); lasting damage became `BlockCrackEvent` |
 
 1. ~~`Placed`, `Place` and `getPlaces()` for every family, with the self-tests above; the acceptance kit places events by `getPlaces()` and its own placement rules go.~~ Done.

@@ -460,6 +460,11 @@ public final class EntityMoves {
         if (((EntityState) entity).hadron$tracked()) trackRoot(entity);
     }
 
+    /** Whether anyone listens to moves a piston could make: otherwise a piston's travel tick is left to vanilla. */
+    public static boolean watchesPushes() {
+        return Hooks.listens(EntityMoveEvent.class) || Hooks.listens(PlayerMoveEvent.class);
+    }
+
     /** Whether a server piston's push of {@code entity} is asked about at all: worth resolving its destination. */
     public static boolean checksPush(Entity entity) {
         return PUSH.get() != null && entity.level() instanceof ServerLevel && Hooks.listens(type(entity));
