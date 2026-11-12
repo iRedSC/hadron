@@ -140,21 +140,56 @@ public final class PistonTests {
         t.player("alice"); // the pig only ticks near a player
         BlockPos piston = piston(t, Blocks.STICKY_PISTON);
         t.setBlock(piston.east(), Blocks.SLIME_BLOCK);
-        dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t, net.minecraft.world.entity.EntityType.PIG,
-                piston.east().above());
+        net.minecraft.world.entity.animal.Pig pig = dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t,
+                net.minecraft.world.entity.EntityType.PIG, piston.east().above());
         List<BlockMoveEvent> seen = recordMoves(t);
         power(t, piston, true);
         power(t, piston, false);
         t.assertEquals(2, seen.size(), "a push and a pull");
         for (BlockMoveEvent e : seen) {
             t.assertTrue(e instanceof BlockPistonEvent, "a piston's move, but was " + e.getEventName());
-            // Everything it moves or sweeps, from the piston's head to where the slime lands, grown by a block.
+            // At least everything it moves or sweeps, from the piston's head to where the slime lands, grown by a
+            // block, and the pig standing on it, whole.
             BoundingBox reach = BoundingBox.fromCorners(piston.east(), piston.east(2)).inflatedBy(1);
-            t.assertEquals(Carried.unknown(new Place.Spot(t.level(), reach), Carried.Unknown.Reason.DECIDED_AS_IT_MOVES),
-                    e.getCarried(), e.getEventName() + "'s carriage");
-            t.assertTrue(e.getPlaces().contains(new Place.Unknown(new Place.Spot(t.level(), reach),
+            t.assertTrue(e.getCarried() instanceof Carried.Unknown u
+                    && u.reason() == Carried.Unknown.Reason.DECIDED_AS_IT_MOVES && u.bound() instanceof Place.Spot b
+                    && b.box().isInside(reach.minX(), reach.minY(), reach.minZ())
+                    && b.box().isInside(reach.maxX(), reach.maxY(), reach.maxZ())
+                    && b.box().isInside(pig.blockPosition()) && b.box().isInside(pig.blockPosition().above()),
+                    e.getEventName() + "'s carriage should be unknown, decided as it moves, within " + reach
+                            + " and the pig at " + pig.blockPosition() + ", but was " + e.getCarried());
+            t.assertTrue(e.getPlaces().contains(new Place.Unknown(((Carried.Unknown) e.getCarried()).bound(),
                     Place.Unknown.Reason.UNKNOWN_CARRIAGE)), e.getEventName() + "'s places should hold its bounded "
                     + "carriage: " + e.getPlaces());
         }
+    }
+
+    /**
+     * A piston pushing at head height moves a tall mob whose feet are two blocks below: its carriage bound holds the
+     * mob's whole box, before and after, not only the blocks beside the push.
+     */
+    @HadronTest
+    @Covers(BlockPistonExtendEvent.class)
+    void aPistonsCarriageBoundHoldsATallMobItPushes(TestContext t) {
+        t.player("alice"); // the golem only ticks near a player
+        BlockPos piston = t.pos(2, 2, 0);
+        Fixtures.awaitTicking(t, piston);
+        t.setBlock(piston, Blocks.PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST));
+        t.setBlock(piston.east(), Blocks.STONE);
+        net.minecraft.world.entity.animal.IronGolem golem = dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t,
+                net.minecraft.world.entity.EntityType.IRON_GOLEM, t.pos(4, 0, 0));
+        golem.setPos(t.pos(4, 0, 0).getX() + 0.8, t.pos(4, 0, 0).getY(), t.pos(4, 0, 0).getZ() + 0.5);
+        golem.setNoGravity(true);
+        t.tick();
+        BlockPos fromFeet = golem.blockPosition();
+        List<BlockMoveEvent> seen = recordMoves(t);
+        t.setBlock(piston.west(), Blocks.REDSTONE_BLOCK);
+        t.tick(5);
+        t.assertTrue(!golem.blockPosition().equals(fromFeet), "the piston should have pushed the golem on");
+        t.assertEquals(1, seen.size(), "the push");
+        t.assertTrue(seen.get(0).getCarried() instanceof Carried.Unknown u && u.bound() instanceof Place.Spot b
+                && b.box().isInside(fromFeet) && b.box().isInside(golem.blockPosition()),
+                "the push's carriage bound should hold the golem's feet before (" + fromFeet + ") and after ("
+                        + golem.blockPosition() + "), but was " + seen.get(0).getCarried());
     }
 }

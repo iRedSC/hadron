@@ -19,6 +19,12 @@ public class PlayerMoveEvent extends EntityMoveEvent {
         super(player, from, to, new Actor.Player(player));
     }
 
+    /** A move whose riders set out from {@code ridersFrom}, as on {@link EntityMoveEvent}. */
+    public PlayerMoveEvent(ServerPlayer player, Vec3 from, Vec3 to, java.util.Map<net.minecraft.world.entity.Entity,
+            Vec3> ridersFrom) {
+        super(player, from, to, ridersFrom, new Actor.Player(player));
+    }
+
     /** The player who moved. */
     public ServerPlayer getPlayer() {
         return (ServerPlayer) getEntity();

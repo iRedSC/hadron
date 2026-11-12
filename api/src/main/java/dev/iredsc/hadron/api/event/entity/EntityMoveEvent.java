@@ -7,7 +7,9 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.ArrayList;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.Entity;
@@ -32,12 +34,28 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 public class EntityMoveEvent extends EntityEvent implements Cancellable {
     private final Vec3 from;
     private final Vec3 to;
+    /** Where each rider was before the move, by identity; a rider missing from it sets out from where it is. */
+    private final Map<Entity, Vec3> ridersFrom;
     private boolean cancelled;
 
+    /** A move whose riders set out from where they are when the event is read. */
     public EntityMoveEvent(Entity entity, Vec3 from, Vec3 to, Actor actor) {
+        this(entity, from, to, Map.of(), actor);
+    }
+
+    /**
+     * A move whose riders set out from {@code ridersFrom}: where each was before the move seated it again, so a rider
+     * swung out of a block is placed in the block it left as well as the one it ends up in.
+     */
+    public EntityMoveEvent(Entity entity, Vec3 from, Vec3 to, Map<Entity, Vec3> ridersFrom, Actor actor) {
         super(entity, actor);
         this.from = Objects.requireNonNull(from, "from");
         this.to = Objects.requireNonNull(to, "to");
+        Map<Entity, Vec3> copy = new IdentityHashMap<>();
+        Objects.requireNonNull(ridersFrom, "ridersFrom; Map.of() when riders set out from where they are")
+                .forEach((rider, at) -> copy.put(Objects.requireNonNull(rider, "a rider"), Objects.requireNonNull(at,
+                        "where a rider was")));
+        this.ridersFrom = copy;
     }
 
     /** Where it was at the last check; in the block it left, unless only a rider changed block. */
@@ -60,12 +78,17 @@ public class EntityMoveEvent extends EntityEvent implements Cancellable {
 
     /**
      * Everything riding it, riders of riders included, which moves with it, each already in the seat the move leaves it
-     * in, which is where each ride ends up: read from the entity on each call, so a rider a listener takes off is no
-     * longer named. Always {@link Carried.Known}.
+     * in, which is where each ride ends up; each sets out from where it was before the move seated it: read from the
+     * entity on each call, so a rider a listener takes off is no longer named. Always {@link Carried.Known}.
      */
     public Carried getCarried() {
         List<Carried.Ride> rides = new ArrayList<>();
-        for (Entity rider : getEntity().getIndirectPassengers()) rides.add(new Carried.Ride(rider, Place.of(rider)));
+        for (Entity rider : getEntity().getIndirectPassengers()) {
+            Vec3 was = ridersFrom.get(rider);
+            Place to = Place.of(rider);
+            Place from = was != null && to instanceof Place.Spot s ? Place.Spot.at(s.level(), was) : to;
+            rides.add(new Carried.Ride(rider, from, to));
+        }
         return Carried.of(rides);
     }
 

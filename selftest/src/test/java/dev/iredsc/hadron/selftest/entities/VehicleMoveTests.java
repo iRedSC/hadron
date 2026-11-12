@@ -255,4 +255,104 @@ public final class VehicleMoveTests {
                 + "), but was at z = " + lowest + " after " + refused[0] + " refusals");
         t.assertTrue(alice.player().getVehicle() == horse, "alice should still ride the horse");
     }
+
+    /** Alice drives a boat at pos(1, 0, 0) + 0.75 facing east, bob behind her across the edge in pos(2, 0, 0). */
+    private static Boat boatFacingEast(TestContext t, TestPlayer alice, TestPlayer bob) {
+        BlockPos at = t.pos(1, 0, 0);
+        Boat boat = spawn(t, EntityType.BOAT, at);
+        boat.moveTo(at.getX() + 0.75, at.getY(), at.getZ() + 0.5, 90f, 0f);
+        t.assertTrue(alice.player().startRiding(boat, true) && bob.player().startRiding(boat, true),
+                "alice and bob should get in the boat");
+        t.tick(3);
+        return boat;
+    }
+
+    /** A rider swung out of a block is placed where they set out from, not only where they end up. */
+    @HadronTest
+    @Covers(EntityMoveEvent.class)
+    void aTurningBoatNamesTheBlockEachRiderLeaves(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        Boat boat = boatFacingEast(t, alice, bob);
+        BlockPos left = bob.player().blockPosition();
+        List<List<Place>> places = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityMoveEvent e) {
+                if (e.getEntity() == boat) places.add(List.copyOf(e.getPlaces()));
+            }
+        });
+        boat.setYRot(-90f);
+        t.tick();
+        t.assertTrue(!left.equals(bob.player().blockPosition()), "bob should have been swung out of " + left);
+        t.assertTrue(places.stream().anyMatch(ps -> ps.contains(Place.Spot.at(t.level(), left))),
+                "the boat's move should place bob where he set out, " + left + ", but placed " + places);
+    }
+
+    /** A region bob may not leave refuses the turn that would swing him out, so he stays. */
+    @HadronTest
+    @Covers(EntityMoveEvent.class)
+    void aTurnThatWouldSwingARiderOutOfARefusedExitIsPutBack(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        Boat boat = boatFacingEast(t, alice, bob);
+        BlockPos stay = bob.player().blockPosition();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityMoveEvent e) {
+                if (e.getEntity() == boat && e.getPlaces().contains(Place.Spot.at(t.level(), stay))) {
+                    e.setCancelled(true);
+                }
+            }
+        });
+        boat.setYRot(-90f);
+        t.tick(2);
+        t.assertEquals(stay, bob.player().blockPosition(), "bob's block, which he may not leave");
+        t.assertEquals(90f, boat.getYRot(), "the boat's facing, put back");
+    }
+
+    /**
+     * A vehicle that moves itself two blocks in its own tick (as a mod's mount may) is seen when its rider is seated;
+     * refused, the whole move is put back, the vehicle with its rider.
+     */
+    @HadronTest
+    @Covers(EntityMoveEvent.class)
+    void aVehicleThatMovesDuringItsOwnTickIsPutBackWhenRefused(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Fixtures.ready(t);
+        boolean[] lunge = {false};
+        Horse horse = new Horse(EntityType.HORSE, t.level()) {
+            @Override
+            public void tick() {
+                super.tick();
+                if (lunge[0]) {
+                    lunge[0] = false;
+                    setPos(getX() + 2, getY(), getZ());
+                }
+            }
+        };
+        BlockPos at = t.pos(2, 0, 0);
+        horse.setNoAi(true);
+        horse.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0f, 0f);
+        t.level().addFreshEntity(horse);
+        horse.setTamed(true);
+        horse.equipSaddle(new ItemStack(Items.SADDLE), null);
+        t.assertTrue(alice.player().startRiding(horse, true), "alice should get on the horse");
+        t.tick(3);
+        int[] refused = {0};
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityMoveEvent e) {
+                if (e.getEntity() == horse) {
+                    refused[0]++;
+                    e.setCancelled(true);
+                }
+            }
+        });
+        lunge[0] = true;
+        t.tick();
+        t.assertTrue(refused[0] > 0, "the horse's lunge should have been asked about");
+        t.assertEquals(at, horse.blockPosition(), "the horse's block, its refused lunge put back");
+        t.assertEquals(at, alice.player().blockPosition().atY(at.getY()), "alice, still above where the horse is");
+    }
 }

@@ -54,6 +54,11 @@ abstract class EntityMixin implements EntityState {
     @Unique private long hadron$trackedAt;
     @Unique private int hadron$seatOf;
     @Unique private int hadron$heldBy;
+    @Unique private boolean hadron$watched;
+    @Unique private double hadron$beforeX;
+    @Unique private double hadron$beforeY;
+    @Unique private double hadron$beforeZ;
+    @Unique private long hadron$beforeAt = -1;
     @Unique private double hadron$seatX;
     @Unique private double hadron$seatY;
     @Unique private double hadron$seatZ;
@@ -175,6 +180,44 @@ abstract class EntityMixin implements EntityState {
     }
 
     @Override
+    public double hadron$beforeX() {
+        return hadron$beforeX;
+    }
+
+    @Override
+    public double hadron$beforeY() {
+        return hadron$beforeY;
+    }
+
+    @Override
+    public double hadron$beforeZ() {
+        return hadron$beforeZ;
+    }
+
+    @Override
+    public long hadron$beforeAt() {
+        return hadron$beforeAt;
+    }
+
+    @Override
+    public void hadron$before(double x, double y, double z, long at) {
+        hadron$beforeX = x;
+        hadron$beforeY = y;
+        hadron$beforeZ = z;
+        hadron$beforeAt = at;
+    }
+
+    @Override
+    public boolean hadron$watched() {
+        return hadron$watched;
+    }
+
+    @Override
+    public void hadron$setWatched(boolean watched) {
+        hadron$watched = watched;
+    }
+
+    @Override
     public int hadron$heldBy() {
         return hadron$heldBy;
     }
@@ -195,6 +238,12 @@ abstract class EntityMixin implements EntityState {
                 && ((EntityState) rider).hadron$heldBy() == ((Entity) (Object) this).getId()) {
             return;
         }
+        EntityState seat = (EntityState) rider;
+        if (seat.hadron$seatOf() == 0) { // no move check watches this rider: nothing more to do
+            original.call(rider);
+            return;
+        }
+        seat.hadron$before(rider.getX(), rider.getY(), rider.getZ(), rider.level().getGameTime());
         original.call(rider);
         EntityMoves.seated((Entity) (Object) this, rider);
     }

@@ -67,6 +67,25 @@ public interface EntityState {
      */
     int hadron$heldBy();
 
+    /** Whether the move check watches this vehicle's riders: true while someone listened at its last check. */
+    boolean hadron$watched();
+
+    void hadron$setWatched(boolean watched);
+
+    /**
+     * Where this rider was just before it was last seated, and the game time that was: where a move that seats it in
+     * another block says it set out from.
+     */
+    double hadron$beforeX();
+
+    double hadron$beforeY();
+
+    double hadron$beforeZ();
+
+    long hadron$beforeAt();
+
+    void hadron$before(double x, double y, double z, long at);
+
     void hadron$holdBy(int vehicle);
 
     /** Set on the new entity of a conversion, so its arrival isn't a spawn. */

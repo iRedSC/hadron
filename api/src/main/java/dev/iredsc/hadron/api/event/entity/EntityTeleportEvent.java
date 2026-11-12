@@ -148,9 +148,9 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
 
     /**
      * Everything riding it that goes along, riders of riders included, worked out for where it is going now: a
-     * listener's {@link #setTo} changes it. Each ride ends up in the blocks its seat can be in around the destination
-     * (as far from it as the rider now sits from its vehicle, whichever way the vehicle faces). Always
-     * {@link Carried.Known}; empty when riders are left behind.
+     * listener's {@link #setTo} changes it. Each ride ends up somewhere in one area around the destination, built from
+     * the vehicle's and riders' boxes (see the event's places), whichever way the vehicle faces and whether or not a
+     * rider has been seated yet. Always {@link Carried.Known}; empty when riders are left behind.
      */
     public Carried getCarried() {
         Entity entity = getEntity();
@@ -161,22 +161,36 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
             // Another world: riders go unless it is the one first asked for and that way leaves them behind.
             changingWorld(entity, going);
         }
+        if (going.isEmpty()) return Carried.none();
+        Place.Spot seats = seats(entity, going);
         List<Carried.Ride> rides = new ArrayList<>();
-        for (Entity rider : going) rides.add(new Carried.Ride(rider, seatAround(entity, rider)));
+        for (Entity rider : going) rides.add(new Carried.Ride(rider, Place.of(rider), seats));
         return Carried.of(rides);
     }
 
     /**
-     * Where {@code rider} ends up: the blocks its seat can be in around {@link #getTo()}, whichever way the vehicle
-     * faces on arrival, since seats turn with it: as far from the destination as it now sits from {@code vehicle}.
+     * Every block any rider's box can be in around {@link #getTo()}: the vehicle's box there, grown up by every
+     * rider's height stacked (a rider of a rider sits on top), out by the widest rider, and as far as any rider now
+     * sits from it. Built from boxes, not seats, so a rider not yet seated (just mounted) or turned another way on
+     * arrival is still inside: wide is safe, narrow would be a hole.
      */
-    private Place.Spot seatAround(Entity vehicle, Entity rider) {
-        Vec3 offset = rider.position().subtract(vehicle.position());
-        double reach = Math.sqrt(offset.x * offset.x + offset.z * offset.z);
+    private Place.Spot seats(Entity vehicle, List<Entity> riders) {
+        double reach = vehicle.getBbWidth() / 2;
+        double below = 0;
+        double above = vehicle.getBbHeight();
+        double widest = 0;
+        for (Entity rider : riders) {
+            Vec3 offset = rider.position().subtract(vehicle.position());
+            reach = Math.max(reach, Math.sqrt(offset.x * offset.x + offset.z * offset.z));
+            below = Math.min(below, offset.y);
+            above += rider.getBbHeight();
+            above = Math.max(above, offset.y + rider.getBbHeight());
+            widest = Math.max(widest, rider.getBbWidth() / 2);
+        }
         Vec3 to = getTo();
-        double y = to.y + offset.y;
-        return new Place.Spot(getToLevel(), BoundingBox.fromCorners(
-                BlockPos.containing(to.x - reach, y, to.z - reach), BlockPos.containing(to.x + reach, y, to.z + reach)));
+        double r = reach + widest;
+        return new Place.Spot(getToLevel(), BoundingBox.fromCorners(BlockPos.containing(to.x - r, to.y + below, to.z - r),
+                BlockPos.containing(to.x + r, to.y + above, to.z + r)));
     }
 
     /**

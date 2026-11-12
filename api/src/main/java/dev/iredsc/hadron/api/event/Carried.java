@@ -28,16 +28,20 @@ import net.minecraft.world.phys.Vec3;
  */
 public sealed interface Carried {
     /**
-     * One entity going along, and where it ends up: a {@link Place.Spot} (a block, or an area it lands somewhere in)
-     * or a {@link Place.Unknown} with a bound. Built with {@link Carried#ride}, which takes the position it ends up at.
+     * One entity going along, where it sets out from and where it ends up: each a {@link Place.Spot} (a block, or an
+     * area it is somewhere in) or a {@link Place.Unknown} with a bound. Built with {@link Carried#ride}, which takes
+     * the position it ends up at and sets out from where the entity is.
      */
-    record Ride(Entity entity, Place to) {
+    record Ride(Entity entity, Place from, Place to) {
         public Ride {
             Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(from, "from; where it sets out, such as Place.of(entity)");
             Objects.requireNonNull(to, "to; where it ends up, such as Place.Spot.at(level, position)");
-            if (!(to instanceof Place.Spot || to instanceof Place.Unknown)) {
-                throw new IllegalArgumentException("A ride ends up at a Place.Spot, or a Place.Unknown when nothing "
-                        + "can say where within its bound, not " + to);
+            for (Place p : List.of(from, to)) {
+                if (!(p instanceof Place.Spot || p instanceof Place.Unknown)) {
+                    throw new IllegalArgumentException("A ride sets out from and ends up at a Place.Spot, or a "
+                            + "Place.Unknown when nothing can say where within its bound, not " + p);
+                }
             }
         }
     }
@@ -85,9 +89,9 @@ public sealed interface Carried {
         }
     }
 
-    /** {@code entity} goes along and ends up at {@code position} in {@code level}. */
+    /** {@code entity} goes along from where it is now and ends up at {@code position} in {@code level}. */
     static Ride ride(Entity entity, ServerLevel level, Vec3 position) {
-        return new Ride(entity, Place.Spot.at(level, Objects.requireNonNull(position, "position")));
+        return new Ride(entity, Place.of(entity), Place.Spot.at(level, Objects.requireNonNull(position, "position")));
     }
 
     /** Exactly these rides. */
@@ -111,15 +115,15 @@ public sealed interface Carried {
     }
 
     /**
-     * Where each carried entity is now and where it ends up; for {@link Unknown}, one {@link Place.Unknown} over its
-     * bound.
+     * Where each carried entity sets out from and where it ends up; for {@link Unknown}, one {@link Place.Unknown}
+     * over its bound.
      */
     default List<Place> places() {
         return switch (this) {
             case Known k -> {
                 List<Place> out = new ArrayList<>();
                 for (Ride r : k.rides()) {
-                    out.add(Place.of(r.entity()));
+                    out.add(r.from());
                     out.add(r.to());
                 }
                 yield out;

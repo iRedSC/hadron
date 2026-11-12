@@ -351,4 +351,35 @@ public final class TeleportTests {
         throwPearl(alice);
         t.await("alice to arrive", () -> alice.player().position().distanceTo(instead) < 0.01, 60);
     }
+
+    /**
+     * Right after mounting, a rider hasn't been seated yet: its seat after a teleport is still somewhere in the bound
+     * its ride states, which is built from the vehicle and rider boxes, not from where the rider happens to stand.
+     */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aFreshlyMountedRidersTeleportBoundHoldsTheSeatItLandsIn(TestContext t) {
+        t.player("alice");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        Chicken chicken = spawn(t, EntityType.CHICKEN, t.pos(2, 0, 0));
+        t.assertTrue(chicken.startRiding(pig, true), "the chicken should get on the pig");
+        List<dev.iredsc.hadron.api.event.Place> bound = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityTeleportEvent e) {
+                if (e.getEntity() == pig && e.getCarried() instanceof Carried.Known k && !k.rides().isEmpty()) {
+                    bound.add(k.rides().get(0).to());
+                }
+            }
+        });
+        BlockPos at = t.pos(4, 0, 0);
+        pig.teleportTo(at.getX() + 0.5, at.getY() + 0.9, at.getZ() + 0.5);
+        t.tick();
+        t.assertEquals(1, bound.size(), "the pig's teleports, carrying the chicken");
+        net.minecraft.world.phys.AABB box = chicken.getBoundingBox();
+        t.assertTrue(bound.get(0) instanceof dev.iredsc.hadron.api.event.Place.Spot s
+                && s.box().isInside(BlockPos.containing(box.minX, box.minY, box.minZ))
+                && s.box().isInside(BlockPos.containing(box.maxX - 1.0E-7, box.maxY - 1.0E-7, box.maxZ - 1.0E-7)),
+                "the chicken's ride should bound where it lands, " + box + ", but said " + bound);
+    }
 }
