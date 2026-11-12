@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.entity.EntityBreedEvent;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDismountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
@@ -24,6 +25,7 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
+import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
@@ -92,8 +94,7 @@ public final class EntityEvents {
         LivingEntity entity = event.getEntity();
         if (!server(entity) || !Hooks.listens(EntityDamageEvent.class)) return;
         float amount = event.getAmount();
-        EntityDamageEvent hadron = Hooks.post(new EntityDamageEvent(entity, event.getSource(), reportedDamage(amount),
-                EntityActors.damage(event.getSource(), entity)));
+        EntityDamageEvent hadron = Hooks.post(damageEvent(entity, event.getSource(), amount));
         if (hadron.isCancelled()) {
             event.setCanceled(true);
             return;
@@ -101,6 +102,25 @@ public final class EntityEvents {
         // Whatever the event says now, unless it is exactly what Minecraft already has: compared with the raw amount,
         // not the report, so a report that replaced NaN or infinity is applied even when no listener changed it.
         if (Float.compare(hadron.getDamage(), amount) != 0) event.setAmount(hadron.getDamage());
+    }
+
+    /**
+     * The one way core builds {@link EntityDamageEvent}, for every living entity, armor stands included: who dealt it,
+     * and where, when an effect or fire acting on the entity deals it ({@link Lasting#appliedAt}).
+     */
+    public static EntityDamageEvent damageEvent(LivingEntity entity, DamageSource source, float amount) {
+        Actor actor = EntityActors.damage(source, entity);
+        Place appliedAt = Lasting.appliedAt(entity);
+        return appliedAt == null ? new EntityDamageEvent(entity, source, reportedDamage(amount), actor)
+                : new EntityDamageEvent(entity, source, reportedDamage(amount), actor, appliedAt);
+    }
+
+    /** The one way core builds {@link EntityRegainHealthEvent}: who heals it, and where an effect healing it was applied. */
+    public static EntityRegainHealthEvent healEvent(LivingEntity entity, float amount) {
+        Actor actor = EntityActors.fromStack(entity, Actor.Nature.INSTANCE);
+        Place appliedAt = Lasting.appliedAt(entity);
+        return appliedAt == null ? new EntityRegainHealthEvent(entity, amount, actor)
+                : new EntityRegainHealthEvent(entity, amount, actor, appliedAt);
     }
 
     /**
@@ -116,8 +136,7 @@ public final class EntityEvents {
     private static void heal(LivingHealEvent event) {
         LivingEntity entity = event.getEntity();
         if (!server(entity) || event.getAmount() <= 0 || !Hooks.listens(EntityRegainHealthEvent.class)) return;
-        EntityRegainHealthEvent hadron = Hooks.post(new EntityRegainHealthEvent(entity, event.getAmount(),
-                EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
+        EntityRegainHealthEvent hadron = Hooks.post(healEvent(entity, event.getAmount()));
         if (hadron.isCancelled()) {
             event.setCanceled(true);
         } else {

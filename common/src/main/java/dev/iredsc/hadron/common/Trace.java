@@ -526,6 +526,7 @@ final class Trace {
             case Actor.FakePlayer f -> at(f.fake().serverLevel(), f.fake().position());
             case Actor.Machine m -> at(m.level(), Vec3.atLowerCornerOf(m.pos()));
             case Actor.EntityActor e -> e.entity().level() instanceof ServerLevel l ? at(l, e.entity().position()) : null;
+            case Actor.Remembered r -> null;
             case Actor.Server s -> null;
             case Actor.Nature n -> null;
             case Actor.Unknown u -> null;
@@ -550,6 +551,7 @@ final class Trace {
             case Actor.FakePlayer f -> "fakeplayer";
             case Actor.Machine m -> "machine";
             case Actor.EntityActor e -> "entity";
+            case Actor.Remembered r -> "remembered";
             case Actor.Server s -> "server";
             case Actor.Nature n -> "nature";
             case Actor.Unknown u -> "unknown";
@@ -563,6 +565,8 @@ final class Trace {
             case Actor.Machine m -> "Machine " + machine(m) + owner(actor);
             case Actor.EntityActor e -> "Entity " + BuiltInRegistries.ENTITY_TYPE.getKey(e.entity().getType())
                     .getPath() + owner(actor);
+            case Actor.Remembered r -> "Remembered " + r.kind().getPath()
+                    + r.id().map(id -> " " + id.toString().substring(0, 8)).orElse("") + owner(actor);
             case Actor.Server s -> "Server " + s.name();
             case Actor.Nature n -> "Nature";
             case Actor.Unknown u -> "Unknown";

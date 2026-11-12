@@ -42,6 +42,19 @@ public final class EntityActors {
         return new Actor.EntityActor(entity, Actors.remembered(entity));
     }
 
+    /**
+     * The entity as an actor for {@code attribution}, the people a cause had when it acted (a bridge's turret firing
+     * for its owner): its own actor when that already says them, so nothing is allocated, otherwise one that does. A
+     * real player always answers for themselves.
+     */
+    public static Actor as(Entity entity, Attribution attribution) {
+        Actor own = of(entity);
+        if (own.attribution().equals(attribution)) return own;
+        if (entity instanceof FakePlayer fake) return new Actor.FakePlayer(fake, attribution);
+        if (entity instanceof ServerPlayer) return own;
+        return new Actor.EntityActor(entity, attribution);
+    }
+
     /** The people behind an entity, to pass on to what it causes: a real player answers for themselves. */
     public static Attribution attributionOf(Entity cause) {
         if (cause instanceof ServerPlayer player && !(cause instanceof FakePlayer)) {
@@ -60,10 +73,15 @@ public final class EntityActors {
         };
     }
 
-    /** The actor on the stack, unless it is the subject itself or nothing: then the fallback. */
+    /**
+     * The actor on the stack, unless it is nothing, or the subject itself (an entity walking into lava hurts nobody's
+     * interest but nature's): then the fallback. The subject is kept where an effect or fire acting on it put it there
+     * as its cause (a player's own poison, see {@link Lasting}).
+     */
     public static Actor fromStack(Entity subject, Actor fallback) {
         Optional<Actor> current = Actors.current();
-        if (current.isEmpty() || isSelf(current.get(), subject)) return fallback;
+        if (current.isEmpty()) return fallback;
+        if (isSelf(current.get(), subject) && !Lasting.isExplicitCause(subject, current.get())) return fallback;
         return current.get();
     }
 

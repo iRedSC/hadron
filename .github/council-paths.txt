@@ -27,6 +27,9 @@ api/src/main/java/dev/iredsc/hadron/api/data/**
 common/src/main/java/dev/iredsc/hadron/common/economy/JsonEconomyProvider.java
 neoforge/src/main/java/dev/iredsc/hadron/neoforge/Data*.java
 neoforge/src/main/java/dev/iredsc/hadron/neoforge/WorldsLevelData.java
+# Remembered attribution and effect and fire causes, saved on every entity.
+neoforge/src/main/java/dev/iredsc/hadron/neoforge/AttributionMemory.java
+neoforge/src/main/java/dev/iredsc/hadron/neoforge/LastingCause.java
 neoforge/src/main/java/dev/iredsc/hadron/neoforge/mixin/data/**
 
 # Hot paths: these run millions of times a second, so a slow change slows every server.

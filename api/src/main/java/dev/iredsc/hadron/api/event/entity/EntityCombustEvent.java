@@ -10,6 +10,10 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 /**
  * An entity that isn't burning is being set on fire: lava, fire, a flaming arrow, fire aspect, a spell. Fired once
  * when it catches, not again while fire keeps it burning. Cancel it and it doesn't catch.
+ *
+ * <p>The entity's burning acts for this event's actor, on every tick it burns ({@link EntityDamageEvent}), until an
+ * ignition that leaves more burning time takes the credit. A fire block or lava has nowhere to keep who placed it, so
+ * catching fire from one is {@link Actor.Nature}'s, whoever lit the fire or poured the lava.
  */
 @FiredBy(core = FULL)
 public class EntityCombustEvent extends EntityEvent implements Cancellable {

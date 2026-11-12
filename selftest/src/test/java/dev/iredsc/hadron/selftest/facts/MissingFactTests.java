@@ -185,7 +185,7 @@ public final class MissingFactTests {
     }
 
     @HadronTest
-    @KnownGap("Poison's damage comes from nobody, though someone poisoned the victim")
+    @Covers(EntityDamageEvent.class)
     void poisonActsForWhoeverPoisoned(TestContext t) {
         TestPlayer bob = t.player("bob");
         TestPlayer carol = t.player("carol");
@@ -197,7 +197,7 @@ public final class MissingFactTests {
     }
 
     @HadronTest
-    @KnownGap("Burning's damage comes from nobody, though someone set the victim alight")
+    @Covers(EntityDamageEvent.class)
     void burningActsForWhoeverSetItAlight(TestContext t) {
         TestPlayer bob = t.player("bob");
         Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
