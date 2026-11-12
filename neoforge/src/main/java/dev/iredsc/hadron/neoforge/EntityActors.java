@@ -60,10 +60,15 @@ public final class EntityActors {
         };
     }
 
-    /** The actor on the stack, unless it is the subject itself or nothing: then the fallback. */
+    /**
+     * The actor on the stack, unless it is nothing, or the subject itself (an entity walking into lava hurts nobody's
+     * interest but nature's): then the fallback. The subject is kept where an effect or fire acting on it put it there
+     * as its cause (a player's own poison, see {@link Lasting}).
+     */
     public static Actor fromStack(Entity subject, Actor fallback) {
         Optional<Actor> current = Actors.current();
-        if (current.isEmpty() || isSelf(current.get(), subject)) return fallback;
+        if (current.isEmpty()) return fallback;
+        if (isSelf(current.get(), subject) && !Lasting.isExplicitCause(subject, current.get())) return fallback;
         return current.get();
     }
 

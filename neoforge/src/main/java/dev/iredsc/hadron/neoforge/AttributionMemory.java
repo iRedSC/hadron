@@ -7,6 +7,7 @@ import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Supplier;
 import net.minecraft.core.UUIDUtil;
 import net.minecraft.world.entity.Entity;
@@ -19,7 +20,8 @@ import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
 /**
  * Remembered attribution, saved with each entity and block entity as a NeoForge data attachment, so a shell landing
- * after a restart still knows who fired it. Also holds the items a dead player keeps until they respawn.
+ * after a restart still knows who fired it. Also holds who set a burning entity alight, and the items a dead player
+ * keeps until they respawn.
  */
 final class AttributionMemory implements Actors.Memory {
     static final Codec<Attribution> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -34,6 +36,15 @@ final class AttributionMemory implements Actors.Memory {
 
     static final Supplier<AttachmentType<Attribution>> ATTRIBUTION = ATTACHMENTS.register("attribution",
             () -> AttachmentType.builder(Attribution::none).serialize(CODEC, a -> !a.isEmpty()).build());
+
+    /**
+     * Who set a burning entity alight, and where, while it burns ({@link Lasting#fireSet}). An entity saved before
+     * Hadron kept it has none, and burns on with an unrecorded cause.
+     */
+    static final Supplier<AttachmentType<Optional<LastingCause>>> FIRE_CAUSE = ATTACHMENTS.register("fire_cause",
+            () -> AttachmentType.<Optional<LastingCause>>builder(Optional::empty)
+                    .serialize(LastingCause.CODEC.xmap(Optional::of, Optional::orElseThrow), Optional::isPresent)
+                    .build());
 
     /** Items a dead player keeps; copied to the respawned player and handed back then. */
     static final Supplier<AttachmentType<List<ItemStack>>> KEPT_ITEMS = ATTACHMENTS.register("kept_items",

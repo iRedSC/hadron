@@ -5,6 +5,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -72,6 +73,26 @@ public sealed interface Actor {
     record EntityActor(Entity entity, Attribution attribution) implements Actor {
         public EntityActor {
             Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(attribution, "attribution; use Attribution.none() for nobody");
+        }
+    }
+
+    /**
+     * An actor that caused something and has since gone, kept by what it was rather than by the thing itself: a player
+     * who logged off before their poison wore off, a spent area-effect cloud, a removed entity, a broken machine. Core
+     * hands it out where it kept a cause across ticks (an effect, an entity's fire) and that cause is no longer
+     * there; a bridge carrying an actor into later ticks (a ritual, a turret's lingering cloud) uses it the same way.
+     * Protection treats it like any other actor: it acts for whoever {@link #actingFor()} says.
+     *
+     * @param kind what it was, namespaced: an entity type's id ({@code minecraft:player},
+     *     {@code minecraft:area_effect_cloud}), or a block entity type's for a machine
+     * @param id which one: the entity's UUID (a player's is their account's); empty for a machine, which has none
+     * @param attribution the people who were behind it; {@link Attribution#none()} for nobody
+     */
+    record Remembered(ResourceLocation kind, Optional<UUID> id, Attribution attribution) implements Actor {
+        public Remembered {
+            Objects.requireNonNull(kind, "kind; such as the entity type's id, minecraft:player");
+            Objects.requireNonNull(id, "id; use Optional.empty() for a machine, which has none");
             Objects.requireNonNull(attribution, "attribution; use Attribution.none() for nobody");
         }
     }

@@ -6,6 +6,7 @@ import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.entity.EntityBreedEvent;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDismountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
@@ -92,8 +93,11 @@ public final class EntityEvents {
         LivingEntity entity = event.getEntity();
         if (!server(entity) || !Hooks.listens(EntityDamageEvent.class)) return;
         float amount = event.getAmount();
-        EntityDamageEvent hadron = Hooks.post(new EntityDamageEvent(entity, event.getSource(), reportedDamage(amount),
-                EntityActors.damage(event.getSource(), entity)));
+        Actor actor = EntityActors.damage(event.getSource(), entity);
+        Place appliedAt = Lasting.appliedAt(entity);
+        EntityDamageEvent hadron = Hooks.post(appliedAt == null
+                ? new EntityDamageEvent(entity, event.getSource(), reportedDamage(amount), actor)
+                : new EntityDamageEvent(entity, event.getSource(), reportedDamage(amount), actor, appliedAt));
         if (hadron.isCancelled()) {
             event.setCanceled(true);
             return;
@@ -116,8 +120,11 @@ public final class EntityEvents {
     private static void heal(LivingHealEvent event) {
         LivingEntity entity = event.getEntity();
         if (!server(entity) || event.getAmount() <= 0 || !Hooks.listens(EntityRegainHealthEvent.class)) return;
-        EntityRegainHealthEvent hadron = Hooks.post(new EntityRegainHealthEvent(entity, event.getAmount(),
-                EntityActors.fromStack(entity, Actor.Nature.INSTANCE)));
+        Actor actor = EntityActors.fromStack(entity, Actor.Nature.INSTANCE);
+        Place appliedAt = Lasting.appliedAt(entity);
+        EntityRegainHealthEvent hadron = Hooks.post(appliedAt == null
+                ? new EntityRegainHealthEvent(entity, event.getAmount(), actor)
+                : new EntityRegainHealthEvent(entity, event.getAmount(), actor, appliedAt));
         if (hadron.isCancelled()) {
             event.setCanceled(true);
         } else {

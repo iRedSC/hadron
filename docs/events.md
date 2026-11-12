@@ -35,6 +35,7 @@ Many effects are one action with many parts: a spell hits ten entities, a gadget
 | `FakePlayer` | a fake player | Mekanism's digital miner, a deployer |
 | `Machine` | a block entity at a position | a quarry, a turret block, a pump, a quest submission block |
 | `EntityActor` | an identifiable entity | a drone, a vehicle, a projectile, a summon, a seagull stealing food, a boss |
+| `Remembered` | an actor that caused something and has since gone, kept as what it was (a namespaced kind, its UUID where it had one) and who was behind it | the poisoner who logged off, a spent area-effect cloud, a removed entity, a broken machine |
 | `Server` | the server on an operator's orders; trusted by protection | the console, RCON, a command block, a datapack function, a plugin's own task, `onEnable`, `onDisable` or handler for an event nobody is behind (`plugin <name>`) |
 | `Nature` | the world on its own, with no entity behind it | fire spreading, water flowing, crops growing |
 | `Unknown` | a mod acted and nothing said who | an unbridged mod's scheduled task, for a block change, seen only in a [watched area](bridges.md#the-chokepoint-cost); also a spawner's mob, a container moved with nobody behind it, and other actions Hadron can't trace |
@@ -47,7 +48,7 @@ Every actor except `Server`, `Nature` and `Unknown` carries up to three people, 
 
 Protection uses the controller where there is one, otherwise the responsible player. A charmed mob acts for its charmer, not its original owner, so stealing a creature never inherits the victim's claim rights.
 
-**Attribution persists.** Core stores the causal actor on projectiles, summons, falling blocks, primed explosives and queued work, so a shell landing ten seconds after firing, a multi-tick explosion's last batch, or a Building Gadgets paste finishing over several ticks still carries who caused it. While a modded block entity or entity ticks, core makes it the actor; while a player's packet is handled, that player is. Bridges add owners and controllers.
+**Attribution persists.** Core stores the causal actor on projectiles, summons, falling blocks, primed explosives, queued work, every effect and an entity's fire, so a shell landing ten seconds after firing, a multi-tick explosion's last batch, or a Building Gadgets paste finishing over several ticks still carries who caused it. While a modded block entity or entity ticks, core makes it the actor; while a player's packet is handled, that player is. Bridges add owners and controllers.
 
 An identifiable mob is always an `EntityActor`, even when it spawned naturally. `Nature` is reserved for processes with no entity, so a logger never loses which creature griefed.
 
@@ -97,6 +98,11 @@ Where an action ends somewhere other than where it set out to (a teleport settli
 
 An effect and an entity's fire keep the actor that caused them and where it was applied, saved with the entity. While they act, that actor is on the actor stack as an explicit cause, kept even when it is the entity itself, so everything they cause acts for it: damage, healing, what they spawn. A cause that has gone (an offline player, a spent cloud) is `Actor.Remembered`, whose `actingFor()` still answers.
 
+- **An effect's cause** is who applied it: the source `addEffect` is given (a splash or lingering potion's thrower, a tipped arrow, an area cloud, a wither, the entity itself for its own splash potion), otherwise the actor on the stack (a mod's machine, the server for `/effect`). Each effect keeps its own, hidden ones included: credit moves to a new application only when it replaces the effect (a higher amplifier, or the same one for longer); a weaker or shorter one waits underneath with its own cause, and resumes with it when the stronger one runs out.
+- **Fire's cause** is who set the entity alight: credit moves only on an ignition that leaves more burning time than before. Walking into a fire block or lava is nature's, as before: neither has anywhere to keep who placed it.
+- **Where** is the block the entity stood in when the effect was applied or the fire lit. `EntityDamageEvent` and `EntityRegainHealthEvent` state it as `getAppliedAt()` for damage and healing an effect or fire deals to the entity it is on: a `Spot`, `Unknown` (an unseen origin) for one saved before Hadron kept causes, and empty for everything else. It is not one of the event's places: the action happens where the entity is now.
+- **Saved** with the entity, beside vanilla's own data (`hadron:causes` on each effect, the `hadron:fire_cause` attachment), so a cause survives a restart and unloading; a world saved without them loads as before, with no cause. Nothing nature or an unknown mod applied has anyone to keep.
+
 ### Closing the known gaps
 
 `MissingFactTests` holds each fact the regions plugin had to guess, as a `@KnownGap`. Each step below lands on its own and turns its gaps green; until then a gap is missing exactly where the tests say, as today.
@@ -108,7 +114,7 @@ An effect and an entity's fire keep the actor that caused them and where it was 
 | A dismount states where the rider is set down | the outcome worked out before firing |
 | ~~A shift-click names the inventory items move into~~ | the click's places (closed) |
 | ~~Opening a double chest names both halves~~ | the inventory's places (closed) |
-| Poison and burning act for whoever caused them | attribution on effects and fire |
+| ~~Poison and burning act for whoever caused them~~ | attribution on effects and fire (closed) |
 | ~~Starting to mine fires an event~~ | Bukkit's `BlockDamageEvent` (closed); lasting damage became `BlockCrackEvent` |
 
 1. ~~`Placed`, `Place` and `getPlaces()` for every family, with the self-tests above; the acceptance kit places events by `getPlaces()` and its own placement rules go.~~ Done.
@@ -160,10 +166,10 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | `EntitySpawnEvent` | an entity enters the world; reason (natural, spawner, egg, breeding, summoned, released from capture, actor). Not for dropped items, experience orbs or falling blocks, whose cancelling would destroy what they carry; see `ItemDropEvent` | `addFreshEntity` |
 | `EntityRemoveEvent` | an entity leaves the world other than by dying, unloading or converting; cause (killed without damage, dismissed, converted in a mod's own code, captured, discarded) | `KillCommand`, for entities that don't die; `EndCrystal.hurt`, which shatters it; bridges for mods' own removals |
 | └ `EntityCaptureEvent` | an entity is stored into an item, block or carrier (bucket, mob catcher, Carry On); where it goes | `Bucketable`; bridges for catchers and carrying |
-| `EntityDamageEvent` | an entity is hurt; damage source, actor, and the weapon or spell | `hurt`, and `ArmorStand.hurt`, which skips it |
+| `EntityDamageEvent` | an entity is hurt; damage source, actor, and the weapon or spell; where an effect or fire dealing it was applied | `hurt`, and `ArmorStand.hurt`, which skips it |
 | `EntityDeathEvent` | an entity is dying; drops, experience and where each item goes are editable; not cancellable | `die` |
 | └ `PlayerDeathEvent` | a player is dying; each item, including extra slots, is assigned to kept, dropped, grave or destroyed; the death line is editable and replaces vanilla's | `ServerPlayer.die` |
-| `EntityRegainHealthEvent` | healed, including absorption | `heal`, `setAbsorptionAmount` |
+| `EntityRegainHealthEvent` | healed, including absorption; where an effect healing it was applied | `heal`, `setAbsorptionAmount` |
 | `EntityCombustEvent` | an entity is set on fire | `igniteForSeconds`, `setRemainingFireTicks` |
 | `EntityPotionEffectEvent` | a registered effect added, changed or removed | `addEffect`, `removeEffect` |
 | `EntityPotionEffectExpireEvent` *(after)* | an effect ran out | NeoForge's effect expiry |
