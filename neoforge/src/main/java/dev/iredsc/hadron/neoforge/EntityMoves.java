@@ -358,6 +358,11 @@ public final class EntityMoves {
         }
     }
 
+    /** Whether a checked piston tick is running on this thread, so a slime block's launch may need holding. */
+    public static boolean holdsLaunches() {
+        return PUSH.get() != null;
+    }
+
     /**
      * A slime block launching an entity it is about to push: held until that push is asked about, so a refused push
      * launches nothing; any held for an entity that then isn't pushed is applied as vanilla would.

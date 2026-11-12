@@ -73,6 +73,10 @@ abstract class PistonPushMixin {
     @WrapOperation(method = "moveCollidedEntities", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/entity/Entity;setDeltaMovement(DDD)V"))
     private static void hadron$launch(Entity entity, double x, double y, double z, Operation<Void> original) {
+        if (!EntityMoves.holdsLaunches()) {
+            original.call(entity, x, y, z);
+            return;
+        }
         EntityMoves.launching(entity, () -> original.call(entity, x, y, z));
     }
 }
