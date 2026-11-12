@@ -1,0 +1,10 @@
+name: Regions
+version: ${version}
+minecraft: ${minecraft}
+main: dev.iredsc.hadron.regions.RegionsPlugin
+description: Protects areas of the world, against players and every bridged mod's machines alike.
+commands:
+  region:
+    description: Make, change and look at regions
+    usage: /<command> <wand|define|redefine|remove|restore|bypass|list|info|show|flag|priority|addowner|addmember|removeplayer>
+    aliases: [rg]
