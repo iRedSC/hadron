@@ -23,7 +23,9 @@ import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
+import dev.iredsc.hadron.api.plugin.PluginCommand;
 import java.util.List;
+import java.util.Objects;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerPlayer;
@@ -153,6 +155,13 @@ public final class RegionsTests {
         define(t, alice, "a-removed-region-comes-back", t.pos(-2, 0, -2), t.pos(2, 2, 2));
         alice.command("rg remove a-removed-region-comes-back");
         t.assertChat(alice, "/region restore a-removed-region-comes-back");
+        PluginCommand region = Objects.requireNonNull(t.plugin().getCommand("region"));
+        String[] restoring = {"restore", ""};
+        t.assertEquals(List.of("a-removed-region-comes-back"), region.getTabCompleter().onTabComplete(
+                alice.player().createCommandSourceStack(), region, "rg", restoring), "what alice may restore");
+        t.assertEquals(List.of(), region.getTabCompleter().onTabComplete(
+                t.player("dave").player().createCommandSourceStack(), region, "rg", restoring),
+                "what an outsider is told was removed");
         alice.command("rg restore a-removed-region-comes-back");
         t.assertChat(alice, "Restored a-removed-region-comes-back");
         TestPlayer bob = t.player("bob");

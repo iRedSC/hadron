@@ -232,7 +232,8 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
         List<String> options = switch (args.length) {
             case 0, 1 -> admin ? SUBCOMMANDS : ANYONE;
             case 2 -> switch (args[0].toLowerCase(Locale.ROOT)) {
-                case "restore" -> List.copyOf(store.restorable());
+                // Only admins restore, so only they learn which removed regions there are.
+                case "restore" -> admin ? List.copyOf(store.restorable()) : List.of();
                 case "wand", "list", "define" -> List.of();
                 default -> store.all().stream().filter(r -> canManage(sender, r)).map(Region::id).toList();
             };
