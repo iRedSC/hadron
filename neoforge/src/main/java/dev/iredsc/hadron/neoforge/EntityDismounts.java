@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge;
 
+import dev.iredsc.hadron.api.event.entity.Landing;
 import dev.iredsc.hadron.checks.StaticState;
 import net.minecraft.tags.BlockTags;
 import net.minecraft.world.entity.Entity;
@@ -83,10 +84,11 @@ public final class EntityDismounts {
     static Vec3 setDown(Entity rider, Entity vehicle) {
         Getting g = of(rider);
         if (g == null) return rider.position();
-        if (g.placedAt != null) return g.placedAt;
+        // Placed once off, so where it really ends up is where placing puts it (a shulker at a block's centre).
+        if (g.placedAt != null) return Landing.of(rider, g.placedAt);
         g.found = rule(rider, vehicle);
         g.goesAhead = false;
-        return g.found.at();
+        return Landing.of(rider, g.found.at());
     }
 
     /** {@code dismountVehicle}'s rule, with the pose its search chose; the rider's own pose is put back. */

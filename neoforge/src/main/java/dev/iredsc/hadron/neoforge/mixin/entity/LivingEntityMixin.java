@@ -99,7 +99,7 @@ abstract class LivingEntityMixin implements EntityActors.Hurting {
             target = "Lnet/minecraft/world/entity/LivingEntity;teleportTo(DDD)V"))
     private void hadron$probeTeleport(LivingEntity self, double x, double y, double z, Operation<Void> original) {
         if (EntityTeleports.probing(self)) {
-            self.setPos(x, y, z);
+            EntityTeleports.probePlace(self, x, y, z);
         } else {
             original.call(self, x, y, z);
         }

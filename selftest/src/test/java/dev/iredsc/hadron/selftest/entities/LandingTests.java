@@ -257,6 +257,57 @@ public final class LandingTests {
         assertStayed(t, from, shulker, "the shulker");
     }
 
+    /** A riding shulker's own teleport takes it off first, so it lands at a block's centre like any other. */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aRidingShulkerStatesTheBlockCentreItLandsOn(TestContext t) throws Exception {
+        t.player("alice");
+        Boat boat = spawn(t, EntityType.BOAT, t.pos(0, 0, 3));
+        Shulker shulker = spawn(t, EntityType.SHULKER, t.pos(0, 0, 3));
+        shulker.setNoAi(false);
+        t.assertTrue(shulker.startRiding(boat, true), "the shulker should get in the boat");
+        t.tick(2);
+        List<EntityTeleportEvent> heard = hear(t, shulker, e -> false);
+        t.assertTrue(shulkerTeleport(shulker), "the shulker should find somewhere to go in 50 tries");
+        t.assertEquals(1, heard.size(), "the shulker's teleports");
+        t.assertFalse(shulker.isPassenger(), "the shulker should be out of the boat");
+        assertLandedWhereStated(t, heard.get(0), shulker, "the shulker");
+    }
+
+    /** {@code Shulker.getRawPeekAmount} and {@code setRawPeekAmount} aren't public: how far its shell is open. */
+    private static int peek(Shulker shulker) throws Exception {
+        Method get = Shulker.class.getDeclaredMethod("getRawPeekAmount");
+        get.setAccessible(true);
+        return (int) get.invoke(shulker);
+    }
+
+    private static void openShell(Shulker shulker) throws Exception {
+        Method set = Shulker.class.getDeclaredMethod("setRawPeekAmount", int.class);
+        set.setAccessible(true);
+        set.invoke(shulker, 100);
+    }
+
+    /**
+     * A shulker sent by a mod's {@code randomTeleport}: the search for room moves nothing it has, so refused, its shell
+     * stays open and it stays put.
+     */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aRefusedRandomTeleportLeavesAShulkerAsItWas(TestContext t) throws Exception {
+        t.player("alice");
+        Shulker shulker = spawn(t, EntityType.SHULKER, t.pos(0, 0, 3));
+        t.tick(2); // a shulker's own placing only closes its shell once it has ticked
+        openShell(shulker);
+        Vec3 from = shulker.position();
+        List<EntityTeleportEvent> heard = hear(t, shulker, e -> true);
+        BlockPos spot = t.pos(4, 0, -2);
+        t.assertFalse(shulker.randomTeleport(spot.getX() + 0.5, spot.getY(), spot.getZ() + 0.5, false),
+                "a refused random teleport reports it didn't go");
+        t.assertEquals(1, heard.size(), "the shulker's teleports");
+        t.assertEquals(100, peek(shulker), "how far the shulker's shell is open");
+        assertStayed(t, from, shulker, "the shulker");
+    }
+
     /** {@code /tp} to the side of a block: a shulker sits at its centre, and the event says so. */
     @HadronTest
     @Covers(EntityTeleportEvent.class)
@@ -398,5 +449,27 @@ public final class LandingTests {
         t.tick();
         t.assertEquals(boat, alice.player().getVehicle(), "alice's vehicle");
         assertStayed(t, from, alice.player(), "alice");
+    }
+
+    /** A mob's own pearl, thrown from a boat: refused, the mob stays in the boat, where it was. */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aRefusedPearlLeavesAMobThrowerInTheBoat(TestContext t) {
+        t.player("alice");
+        Boat boat = spawn(t, EntityType.BOAT, t.pos(2, 0, 0));
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        t.assertTrue(pig.startRiding(boat, true), "the pig should get in the boat");
+        t.tick(2);
+        Vec3 from = pig.position();
+        List<EntityTeleportEvent> heard = hear(t, pig, e -> true);
+        var pearl = new net.minecraft.world.entity.projectile.ThrownEnderpearl(t.level(), pig);
+        Vec3 drop = center(t.pos(-3, 2, 3));
+        pearl.setPos(drop.x, drop.y, drop.z);
+        pearl.setDeltaMovement(0, -1, 0);
+        t.level().addFreshEntity(pearl);
+        t.await("the pearl to land", () -> !heard.isEmpty(), 60);
+        t.tick();
+        t.assertEquals(boat, pig.getVehicle(), "the pig's vehicle");
+        assertStayed(t, from, pig, "the pig");
     }
 }

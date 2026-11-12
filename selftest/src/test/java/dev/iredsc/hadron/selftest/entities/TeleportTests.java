@@ -257,7 +257,7 @@ public final class TeleportTests {
      */
     @HadronTest
     @Covers(EntityTeleportEvent.class)
-    void anEndermansRandomTeleportWithNoRoomAsksNothing(TestContext t) throws Exception {
+    void anEndermansFailedRandomTeleportStepsBackWithoutAnotherEvent(TestContext t) throws Exception {
         t.player("alice");
         var enderman = spawn(t, EntityType.ENDERMAN, t.pos(-3, 0, -3));
         Vec3 from = enderman.position();

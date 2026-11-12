@@ -171,4 +171,25 @@ public final class DismountTests {
                 + ", but said " + heard.get(0).getTo());
         t.assertTrue(alice.player().position().distanceTo(seat) < 1.0E-6, "alice should stay where she was");
     }
+
+    /**
+     * A shulker taken off directly isn't placed, so it doesn't round to a block's centre either: the event says where
+     * it really stays.
+     */
+    @HadronTest
+    @Covers(EntityDismountEvent.class)
+    void aShulkerTakenOffDirectlyStaysOffCentre(TestContext t) {
+        t.player("alice");
+        Entity boat = boat(t);
+        var shulker = spawn(t, EntityType.SHULKER, t.pos(2, 0, 0));
+        t.assertTrue(shulker.startRiding(boat, true), "the shulker should get in the boat");
+        t.tick(2);
+        Vec3 seat = shulker.position();
+        List<EntityDismountEvent> heard = hear(t, shulker, false);
+        shulker.removeVehicle();
+        t.assertEquals(1, heard.size(), "the shulker's dismounts");
+        t.assertTrue(heard.get(0).getTo().distanceTo(shulker.position()) < 1.0E-6, "the event should say where the "
+                + "shulker is, " + shulker.position() + ", but said " + heard.get(0).getTo());
+        t.assertTrue(shulker.position().distanceTo(seat) < 1.0E-6, "nothing should have moved the shulker");
+    }
 }

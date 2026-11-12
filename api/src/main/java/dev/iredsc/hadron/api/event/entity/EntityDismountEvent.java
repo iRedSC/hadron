@@ -23,12 +23,14 @@ public class EntityDismountEvent extends EntityEvent implements Cancellable {
     private final boolean forced;
     private boolean cancelled;
 
-    /** {@code to} is where the rider is placed once off; its own position when nothing places it. */
+    /**
+     * {@code to} is where the rider ends up once off: where it is placed ({@link Landing#of} that spot), or its own
+     * position when nothing places it.
+     */
     public EntityDismountEvent(Entity rider, Entity dismounted, Vec3 to, boolean forced, Actor actor) {
         super(rider, actor);
         this.dismounted = Objects.requireNonNull(dismounted, "dismounted");
-        this.to = Landing.of(rider, Objects.requireNonNull(to, "to; the rider's own position when nothing moves it"),
-                false);
+        this.to = Objects.requireNonNull(to, "to; the rider's own position when nothing moves it");
         this.forced = forced;
     }
 

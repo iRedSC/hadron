@@ -5,6 +5,8 @@ import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
+import dev.iredsc.hadron.api.event.entity.Landing;
+import dev.iredsc.hadron.neoforge.mixin.entity.EntityMotionAccessor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.IdentityHashMap;
@@ -221,6 +223,7 @@ public final class EntityTeleports {
         EntityTeleportEvent event = Hooks.post(new EntityTeleportEvent(entity, toLevel != null ? toLevel : from,
                 new Vec3(x, y, z), yRot, xRot, cause, riders, actor(entity, cause)));
         if (event.isCancelled()) return null;
+        leave(entity);
         expect(entity, event);
         Vec3 to = event.getTo();
         return new Destination(event.getToLevel(), to.x, to.y, to.z, event.getToYRot(), event.getToXRot());
@@ -259,6 +262,16 @@ public final class EntityTeleports {
     }
 
     /**
+     * Places an entity for a probe: its position and box only, not through its own {@code setPos}, which can change
+     * more than where it is (a shulker closes its shell and rounds to a block's centre). Put back the same way, it is
+     * as it was. Where it would really end up is {@code Landing.of} the spot found, which the event states.
+     */
+    public static void probePlace(Entity entity, double x, double y, double z) {
+        entity.setPosRaw(x, y, z);
+        entity.setBoundingBox(((EntityMotionAccessor) entity).hadron$makeBoundingBox());
+    }
+
+    /**
      * A random teleport (an enderman, chorus fruit, a mod's {@code randomTeleport}). Vanilla's search runs first as a
      * probe: it places the entity (searching down for ground, checking for room, stepping back if there is none), with
      * no teleport, so nothing is sent or asked; it is then put back. A spot with room is asked about as where it lands,
@@ -289,9 +302,10 @@ public final class EntityTeleports {
         } finally {
             probing = outer;
         }
-        Vec3 landing = entity.position();
-        entity.setPos(start.x, start.y, start.z);
+        Vec3 foundAt = entity.position();
+        probePlace(entity, start.x, start.y, start.z);
         if (!found) return false;
+        Vec3 landing = Landing.of(entity, foundAt);
         float yRot = entity.getYRot();
         float xRot = entity.getXRot();
         EntityTeleportEvent event = Hooks.post(new EntityTeleportEvent(entity, level, landing, yRot, xRot, cause,

@@ -97,7 +97,7 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
         super(entity, actor);
         this.toLevel = Objects.requireNonNull(toLevel, "toLevel");
         this.askedLevel = toLevel;
-        this.to = landing(toLevel, Objects.requireNonNull(to, "to"));
+        this.to = landing(Objects.requireNonNull(to, "to"));
         this.toYRot = yRot;
         this.toXRot = xRot;
         this.cause = Objects.requireNonNull(cause, "cause; use TeleportCause.UNKNOWN when no other fits");
@@ -145,15 +145,14 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
     /** As {@link #setTo(ServerLevel, Vec3)}, facing {@code yRot} (yaw) and {@code xRot} (pitch). */
     public void setTo(ServerLevel level, Vec3 position, float yRot, float xRot) {
         this.toLevel = Objects.requireNonNull(level, "level; use getToLevel() to stay in the same world");
-        this.to = landing(level, Objects.requireNonNull(position, "position"));
+        this.to = landing(Objects.requireNonNull(position, "position"));
         this.toYRot = yRot;
         this.toXRot = xRot;
     }
 
-    /** Where it ends up placed at {@code at} in {@code level}: a rider stays on within a world, and gets off to leave it. */
-    private Vec3 landing(ServerLevel level, Vec3 at) {
-        Entity entity = getEntity();
-        return Landing.of(entity, at, entity.isPassenger() && level == entity.level());
+    /** Where it ends up placed at {@code at}: {@link Landing#of}. */
+    private Vec3 landing(Vec3 at) {
+        return Landing.of(getEntity(), at);
     }
 
     public TeleportCause getCause() {
