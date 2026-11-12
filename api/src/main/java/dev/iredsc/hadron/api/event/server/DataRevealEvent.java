@@ -1,5 +1,8 @@
 package dev.iredsc.hadron.api.event.server;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Placed;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
 import dev.iredsc.hadron.api.event.resource.ResourceHolder;
@@ -33,7 +36,7 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.NONE;
         bridges = "is about to send block, entity, inventory or account data to a player who didn't open it (Jade, "
                 + "WTHIT, map radar, a sigil reading another player's network)",
         fillIn = "the data, with removable fields")
-public class DataRevealEvent extends ServerEvent implements Cancellable {
+public class DataRevealEvent extends ServerEvent implements Cancellable, Placed {
     /** What the data is about. Sealed: a {@code switch} over it must handle every kind. */
     public sealed interface Target {
         /** A block, and its block entity if it has one. */
@@ -107,5 +110,18 @@ public class DataRevealEvent extends ServerEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /**
+     * Where what the data is about is: the block, where the entity stands, or {@link Place.Nowhere} for an account.
+     * Not where the viewer is: they read it from wherever they stand.
+     */
+    @Override
+    public Places getPlaces() {
+        return Places.of(switch (target) {
+            case Target.Block b -> Place.Spot.at(b.level(), b.pos());
+            case Target.Entity e -> Place.of(e.entity());
+            case Target.Account a -> Place.Nowhere.account(a.account());
+        });
     }
 }

@@ -6,6 +6,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
 import dev.iredsc.hadron.neoforge.EntityTeleports;
 import dev.iredsc.hadron.neoforge.HeldEffects;
+import dev.iredsc.hadron.neoforge.PlayerEvents;
 import java.util.Set;
 import java.util.function.Consumer;
 import net.minecraft.server.level.ServerLevel;
@@ -16,6 +17,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.RelativeMovement;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.portal.DimensionTransition;
+import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.ScoreAccess;
 import net.minecraft.world.scores.ScoreHolder;
 import net.minecraft.world.scores.Scoreboard;
@@ -72,7 +74,16 @@ abstract class ServerPlayerMixin {
                 ? new DimensionTransition(to.level(), to.position(), transition.speed(), to.yRot(), to.xRot(),
                         transition.missingRespawnBlock(), transition.postDimensionTransition())
                 : transition;
-        return EntityTeleports.during(self, () -> original.call(going));
+        // Where the player stands before leaving: the event fired once they arrive states it.
+        ServerLevel fromLevel = self.serverLevel();
+        Vec3 fromPosition = self.position();
+        return EntityTeleports.during(self, () -> {
+            Entity arrived = original.call(going);
+            if (arrived == self && self.serverLevel() != fromLevel) {
+                PlayerEvents.changedWorld(self, fromLevel, fromPosition);
+            }
+            return arrived;
+        });
     }
 
     /** Counting a statistic: inside a hold it waits whole, and comes back through here when kept. */

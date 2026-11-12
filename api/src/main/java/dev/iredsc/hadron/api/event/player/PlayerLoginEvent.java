@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.player;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.FiredBy;
 import org.jspecify.annotations.Nullable;
 import java.net.SocketAddress;
@@ -47,5 +49,11 @@ public class PlayerLoginEvent extends PlayerEvent {
     /** Why they're turned away; empty while they're allowed. */
     public Optional<Component> getKickMessage() {
         return Optional.ofNullable(kickMessage);
+    }
+
+    /** Nowhere yet: the player isn't in a world until they join. Their own account ({@link Place.Nowhere#player}). */
+    @Override
+    public Places getPlaces() {
+        return Places.of(Place.Nowhere.player(getPlayer().getUUID()));
     }
 }

@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.world;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -56,5 +58,14 @@ public class WeatherChangeEvent extends WorldEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /**
+     * Every level that sees the change: this one, and each level whose data wraps this one's (vanilla's Nether and
+     * End share the overworld's weather and time), one {@link Place.Level} each.
+     */
+    @Override
+    public Places getPlaces() {
+        return SharedData.levels(getLevel());
     }
 }

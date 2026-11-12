@@ -40,7 +40,12 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **Simulation**: a mod testing an action before doing it. Never fires an event.
 - **Per-player copy**: one player's own contents of an inventory at a block or entity (a Lootr chest), held by `InventoryHolder.PerPlayer`, so two players' copies are never one inventory. ([events](events.md#containers-inventoryevent))
 - **Break tool**: `BlockBreakEvent.getTool()`, what a block is broken with: an item, nothing, or unknown with a reason. Core names a machine's tool when the machine worked out that block's drops with it (`Block.getDrops`) just before removing it, under the same actor in the same tick; it never guesses. There is no tool tier.
+- **Plugin container**: a container a plugin owns (`PluginContainer`, made with `Hadron.createInventory`), held by `InventoryHolder.Plugin`. Protection lets it through unless it shows another inventory (its `at`), whose place is checked instead; its menus close before the plugin's `onDisable`.
 - **Event stack**: how an event holds an `ItemStack` it hands to listeners (`EventStack`): a copy, new on every read so no listener's edit reaches the next listener or the code that fired the event, or the live stack, only where the event's Javadoc says so. ([events](events.md#rules))
+- **Placed**: an event that says where it happens with `getPlaces()`: every action, every player event, and the server events with a target (`DataRevealEvent`, `AccessControlChangeEvent`, `CommandExecuteEvent`). Read from the event's own getters on every call. ([events](events.md#places))
+- **Place**: one place an action happens: a `Spot` (blocks in a level), a whole `Level`, `Nowhere` or `Unknown`. `Places` is a list of them that can't be empty. `Place.of(...)` gives the places of an inventory or a resource holder (both halves of a double chest) and the place of an entity.
+- **Nowhere**: `Place.Nowhere`, known to have no place in any world: linked storage, an account, a player logging in. Its kind, id and owner say whose it is, which is how protection decides it.
+- **Unknown place**: `Place.Unknown`, where core or a bridge can't say exactly where, with a reason from a closed set and a bound holding every place it could be. Protection fails closed on it wherever the bound reaches. Not `Actor.Unknown`, which is about who did it, not where.
 - **Data kind**: the id on `EntityDataChangeEvent` saying whose data changed, in the mod's namespace, such as `minecolonies:job`.
 
 ## Gaps and coverage

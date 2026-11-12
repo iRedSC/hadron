@@ -138,6 +138,8 @@ public final class ItemHooks {
         }
         boolean cancelled = Hooks.post(new EquipEvent(level, entity, slot, entity.getItemBySlot(slot), item,
                 actor(entity))).isCancelled();
+        // Counted as a try, as a spawn is: a dispense or a player's use whose every try was refused plays nothing.
+        EntitySpawns.tried(cancelled);
         if (cancelled) resync(entity);
         return cancelled;
     }
@@ -339,7 +341,8 @@ public final class ItemHooks {
     /** A menu is about to open; true keeps it closed. {@code menu} is null for horse inventories. */
     public static boolean open(ServerPlayer player, InventoryHolder holder, @Nullable AbstractContainerMenu menu) {
         if (!Hooks.listens(InventoryOpenEvent.class)) return false;
-        return Hooks.post(new InventoryOpenEvent(player, holder, menu, actor(player))).isCancelled();
+        InventoryHolder menuHolder = menu != null ? InventoryHolders.menuHolder(menu, player) : holder;
+        return Hooks.post(new InventoryOpenEvent(player, holder, menu, menuHolder, actor(player))).isCancelled();
     }
 
     /**
@@ -358,7 +361,9 @@ public final class ItemHooks {
         if (clicks) {
             InventoryHolder holder = slot != null ? InventoryHolders.ofSlot(menu, slot, player)
                     : InventoryHolders.ofMenu(menu, player);
-            if (Hooks.post(new InventoryClickEvent(player, holder, menu, slotId, button, type, actor)).isCancelled()) {
+            InventoryHolder menuHolder = InventoryHolders.menuHolder(menu, player);
+            if (Hooks.post(new InventoryClickEvent(player, holder, menu, menuHolder, slotId, button, type, actor))
+                    .isCancelled()) {
                 return true;
             }
         }

@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import net.minecraft.core.BlockPos;
@@ -30,5 +32,11 @@ public class HangingPlaceEvent extends EntitySpawnEvent {
     /** The face of {@link #getBlock()} it hangs on. */
     public Direction getBlockFace() {
         return getEntity().getDirection();
+    }
+
+    /** Where the hanging entity is, then the block it hangs on. */
+    @Override
+    public Places getPlaces() {
+        return super.getPlaces().and(Place.Spot.at(getLevel(), getBlock()));
     }
 }

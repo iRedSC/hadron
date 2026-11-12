@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.block;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
@@ -28,5 +30,12 @@ public class BlockBurnEvent extends BlockChangeEvent {
     /** The fire burning it, when known. */
     public Optional<BlockPos> getIgnitingPos() {
         return Optional.ofNullable(ignitingPos);
+    }
+
+    /** Its own places, then the fire that burns it, when known. */
+    @Override
+    public Places getPlaces() {
+        Places own = super.getPlaces();
+        return getIgnitingPos().map(fire -> own.and(Place.Spot.at(getLevel(), fire))).orElse(own);
     }
 }

@@ -6,13 +6,17 @@ import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
+import dev.iredsc.hadron.api.event.block.BlockDamageEvent;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
-import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.event.Place;
+import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
+import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
+import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.KnownGap;
 import dev.iredsc.hadron.test.TestContext;
@@ -129,7 +133,7 @@ public final class MissingFactTests {
     }
 
     @HadronTest
-    @KnownGap("A click in a menu names only the clicked slot's inventory, not the one items move into")
+    @Covers(InventoryClickEvent.class)
     void aShiftClickNamesTheInventoryItMovesInto(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos chest = t.pos(2, 0, 0);
@@ -144,14 +148,13 @@ public final class MissingFactTests {
         t.tick();
         require(!t.level().getBlockEntity(chest, BlockEntityType.CHEST).orElseThrow().isEmpty(),
                 "the dirt should have moved into the chest");
-        InventoryHolder theChest = new InventoryHolder.Block(t.level(), chest);
-        t.assertTrue(heard.stream().anyMatch(e -> names(e, theChest)),
-                "an event should name the chest the dirt moved into, but named "
-                        + heard.stream().map(e -> e.getHolder().place().toString()).toList());
+        Place theChest = Place.Spot.at(t.level(), chest);
+        t.assertTrue(heard.stream().anyMatch(e -> e instanceof InventoryClickEvent && names(e, theChest)),
+                "the shift-click should name the chest the dirt moved into, but its places were " + places(heard));
     }
 
     @HadronTest
-    @KnownGap("Opening a double chest names one of its halves, not both")
+    @Covers(InventoryOpenEvent.class)
     void openingADoubleChestNamesBothHalves(TestContext t) {
         TestPlayer alice = t.player("alice");
         // A double chest facing north: the left half's other half is to its east.
@@ -165,16 +168,20 @@ public final class MissingFactTests {
         alice.useBlock(t.pos(2, 0, 0));
         t.tick();
         require(alice.player().containerMenu != alice.player().inventoryMenu, "alice should have the chest open");
-        InventoryHolder clicked = new InventoryHolder.Block(t.level(), t.pos(2, 0, 0));
-        InventoryHolder otherHalf = new InventoryHolder.Block(t.level(), t.pos(3, 0, 0));
-        t.assertTrue(heard.stream().anyMatch(e -> names(e, clicked)) && heard.stream().anyMatch(e -> names(e, otherHalf)),
-                "events should name both halves, " + t.pos(2, 0, 0).toShortString() + " and "
-                        + t.pos(3, 0, 0).toShortString() + ", but named "
-                        + heard.stream().map(e -> e.getHolder().place().toString()).toList());
+        Place clicked = Place.Spot.at(t.level(), t.pos(2, 0, 0));
+        Place otherHalf = Place.Spot.at(t.level(), t.pos(3, 0, 0));
+        t.assertTrue(heard.stream().anyMatch(e -> e instanceof InventoryOpenEvent && names(e, clicked)
+                        && names(e, otherHalf)),
+                "opening it should name both halves, " + t.pos(2, 0, 0).toShortString() + " and "
+                        + t.pos(3, 0, 0).toShortString() + ", but its places were " + places(heard));
     }
 
-    private static boolean names(InventoryEvent e, InventoryHolder holder) {
-        return e.getHolder().place().equals(holder);
+    private static boolean names(InventoryEvent e, Place place) {
+        return e.getPlaces().contains(place);
+    }
+
+    private static String places(List<InventoryEvent> heard) {
+        return heard.stream().map(e -> e.getEventName() + " " + e.getPlaces()).toList().toString();
     }
 
     @HadronTest
@@ -209,7 +216,7 @@ public final class MissingFactTests {
     }
 
     @HadronTest
-    @KnownGap("Starting to mine a block fires nothing until the block breaks")
+    @Covers(BlockDamageEvent.class)
     void startingToMineABlockFiresAnEvent(TestContext t) {
         TestPlayer alice = t.player("alice");
         BlockPos stone = t.pos(2, 0, 0);

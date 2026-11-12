@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.inventory;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.EventStack;
@@ -156,5 +158,11 @@ public class InventoryChangeEvent extends InventoryEvent implements Cancellable 
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /** Where each inventory it changes is, in {@link #getHolders()}'s order. */
+    @Override
+    public Places getPlaces() {
+        return Place.of(getHolder()).and(getHolders().stream().flatMap(h -> Place.of(h).stream()).toList());
     }
 }

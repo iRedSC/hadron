@@ -59,16 +59,31 @@ These are the principles. How each event meets them is settled in the step that 
 
 ### Places
 
-Every action says where it happens: `getPlaces()`, declared once on `Placed`, which `ActionEvent` and `PlayerEvent` implement, and so does every `ServerEvent` with a target or a source in a world. It returns a list of `Place`s read from the event's own payload each time it is called, so it can't disagree with its getters, and a listener that redirects a teleport or trims an explosion changes the places with it. Each part of a payload that has a place of its own (a move's source and destination, each inventory a change touches, each entity carried) keeps it, and `getPlaces()` is their union, so a reader can tell which place belongs to which part. A `Place` is sealed:
+Every action says where it happens: `getPlaces()`, declared once on `Placed`, which `ActionEvent` and `PlayerEvent` implement, and so do `DataRevealEvent`, `AccessControlChangeEvent` and `CommandExecuteEvent`. `ActionEvent` declares it abstract, so a bridge's own action type that doesn't say where it happens doesn't compile. It returns `Places`, a list of `Place`s that can only be built from at least one, read from the event's own payload each time it is called, so it can't disagree with its getters, and a listener that redirects a teleport or spares a block from an explosion changes the places with it. Each part of a payload that has a place of its own (a move's source and destination, each inventory a change touches, each entity named) keeps it, and `getPlaces()` is their union, so a reader can tell which place belongs to which part: `Place.of(InventoryHolder)` and `Place.of(ResourceHolder)` give each part's places (both halves of a connected double chest, read from the chest's block state), and `Place.of(Entity)` an entity's. A `Place` is sealed:
 
-- `Spot(level, box)`: one block or an area.
+- `Spot(level, box)`: one block or an area. An entity's is the block it stands in.
 - `Level(level)`: a whole level.
-- `Nowhere(identity)`: known to have no place in a world, with what it is (linked storage, an account).
-- `Unknown(bound, reason)`: core or a bridge can't say exactly where, why, and a bound that contains every place it could be (`anywhere` when nothing narrows it).
+- `Nowhere(kind, id, owner)`: known to have no place in a world, with what it is: an ender chest's or a mod's linked storage (its network and frequency; an ender chest's owner is its player), an account (`hadron:account`), a player logging in (`hadron:player`).
+- `Unknown(bound, reason)`: core or a bridge can't say exactly where. The bound contains every place it could be: a `Spot`, a `Level`, or `Anywhere`. The reason is one of a closed set: an inventory nothing identified, a mod's menu nothing describes, an operation that can't be placed, an origin nobody saw, a command, nobody behind it.
 
-**Never guessed, never empty.** Where core can't know where something happens, it says `Unknown`, never a guessed spot and never an empty list: an empty list or a spot that isn't true is a bug. The actor's own position is never a bound on a target; the actor already says where it is.
+**Never guessed, never empty.** Where core can't know where something happens, it says `Unknown`, never a guessed spot and never an empty list: a spot that isn't true is a bug. The actor's own position is never a place of its action; the actor already says where it is. An item in someone's hand is where they are.
 
-**Self-tests hold it.** One fires every `Placed` class core fires and fails on any with no places. Another runs vanilla fixtures (a chest, a double chest, a furnace, a piston, a boat, a teleport) through every event they cause and fails on any `Unknown` whose reason vanilla shouldn't have. Per-family tests check the places against the payload and the world.
+What each family states:
+
+| Family | Places |
+|---|---|
+| `BlockEvent` | `getPos()`, then each space in `getBlocks()`; a move adds each block's source and target and its swept space; a flow both ends, a spread its source, a burn its fire, a drop where its items lie |
+| `EntityEvent` | the block the entity was in, then each other entity it names: a mount, a lead's holder, a breeding's parents (not the breeder), a target, a projectile's hit (point, block, entity; a hitscan shot, whose entity is its shooter, only these), a teleport's destination and passengers, a capture's block or carrier, a fishing hook's player and catch. Whoever did it (a damager, a shooter, a tamer) is not a place |
+| `ItemEvent` | where the stack is: the inventory holding it (crafting, smelting, an anvil, a trade, a change in place), the entity using, eating, holding or wearing it, where it lies (a merge, a despawn), where a drop lands, a pickup's item and destination. A leaf naming none is `Unknown` within its level |
+| `InventoryEvent` | `getHolder()`; a change adds every inventory it touches; a click, an open and a close add every inventory behind the menu's slots (both halves of a double chest), and a slot that is the menu's own (a crafting grid) is where the menu says it is open (`getMenuHolder()`), `Unknown` for a menu nothing describes; an inventory nothing identifies (a double chest's half that isn't a chest) is its own `Unknown`, never another's place |
+| `ResourceEvent` | each holder: a block, a chunk (its full height), an entity, an item where the inventory it is in is (`ResourceHolder.Item(stack, heldIn)`; `Unknown` when nothing says), an account (`Nowhere`) |
+| `WorldEvent` | its area, or its whole level; an explosion its centre, each block and each entity, as the lists stand; weather and time the changed level, every level holding the same data, and, when that is the server's main data, every level whose data is a `DerivedLevelData` (vanilla wraps the main data in one for every level but the overworld) |
+| `PlayerEvent` | the block the player stands in; a login `Nowhere` (the player); a bed both halves; a respawn where the player arrives; a change of world adds the block the player stood in in the world left (`getFrom()`, `getFromPosition()`) |
+| `ServerEvent` | `DataRevealEvent` its target (never its viewer); `AccessControlChangeEvent` the group, `Nowhere` (its area isn't in the event); `CommandExecuteEvent` `Unknown`, anywhere, for a command: its effects place themselves |
+
+Not stated yet: a drop doesn't say what it leaves; a respawn doesn't name the anchor it uses.
+
+**Self-tests hold it.** `PlaceTests` runs vanilla fixtures (a chest, a double chest, a furnace, a piston, a boat, a teleport, a console command) and fails on any event whose places can't be read or leave out an entity it names, and on any `Unknown` but a command's; others check each family's places against its payload. The fast `PlacesTest` fails when an entity event leaf names an entity but doesn't override `getPlaces()`. The acceptance kit places events by `getPlaces()` alone: in the box when a `Spot` overlaps it or a `Level` is its level, out for `Nowhere` and places elsewhere, failing closed on an `Unknown` whose bound reaches the box. Motion and whole-level events (weather, time) stay out of its protection: they are meanings, not places.
 
 ### True outcomes
 
@@ -91,12 +106,12 @@ An effect and an entity's fire keep the actor that caused them and where it was 
 | A teleport states where it settles | the outcome worked out before firing |
 | A rider is named when their vehicle carries them | `getCarried()` |
 | A dismount states where the rider is set down | the outcome worked out before firing |
-| A shift-click names the inventory items move into | the click's places |
-| Opening a double chest names both halves | the inventory's places |
+| ~~A shift-click names the inventory items move into~~ | the click's places (closed) |
+| ~~Opening a double chest names both halves~~ | the inventory's places (closed) |
 | Poison and burning act for whoever caused them | attribution on effects and fire |
-| Starting to mine fires an event | an event for it (Bukkit's `BlockDamageEvent`) |
+| ~~Starting to mine fires an event~~ | Bukkit's `BlockDamageEvent` (closed); lasting damage became `BlockCrackEvent` |
 
-1. `Placed`, `Place` and `getPlaces()` for every family, with the self-tests above; the acceptance kit places events by `getPlaces()` and its own placement rules go.
+1. ~~`Placed`, `Place` and `getPlaces()` for every family, with the self-tests above; the acceptance kit places events by `getPlaces()` and its own placement rules go.~~ Done.
 2. Each fact, one or a few per PR, each closing its gap and the checklist items for the events it touches, by a test.
 3. The protection helper, its own design and council: the meanings (kinds, whose business, what an attack is) over these facts, for the plugins that want them. The regions plugin becomes a policy over it.
 
@@ -127,7 +142,8 @@ An effect and an entity's fire keep the actor that caused them and where it was 
 | `BlockDropItemEvent` | a broken block's drops are about to appear; the item entities and experience are editable, and a cancel drops nothing | `Block.dropResources` (NeoForge's `BlockDropsEvent`), so player mining, `destroyBlock` and blocks losing their support |
 | `BlockUseEvent` | an actor right-clicks or activates a block, including remotely through a linked terminal. Cancelled, the block doesn't react but the held item still acts (a torch placed against it fires its own `BlockPlaceEvent`) | `useItemOn`, `useWithoutItem` |
 | `BlockRedstoneEvent` | an actor changes the signal a block emits without changing its state | bridge (Integrated Dynamics, LaserIO) |
-| `BlockDamageEvent` | a block takes lasting partial damage short of breaking | bridge (Create Big Cannons) |
+| `BlockDamageEvent` | an actor starts mining a block, before it is hit; the tool and the face (Bukkit's meaning). Not in creative, where a hit breaks at once | `ServerPlayerGameMode.handleBlockBreakAction`; bridges for drills that mine over time |
+| `BlockCrackEvent` | a block takes lasting partial damage short of breaking | bridge (Create Big Cannons) |
 | `SignChangeEvent` | sign text set | `SignBlockEntity` |
 | `BucketEmptyEvent`, `BucketFillEvent` | fluid placed or taken from the world by an item | `BucketItem` |
 
@@ -205,7 +221,7 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 
 ### Containers: `InventoryEvent`
 
-An inventory is identified by what holds it (a block, an entity, a player, an item inside another item, a frequency in linked storage, or one player's own copy of a block's or entity's inventory, such as a Lootr chest, which only that mod's bridge can name), not by where a player is standing.
+An inventory is identified by what holds it (a block, an entity, a player, an item inside another item, a frequency in linked storage, one player's own copy of a block's or entity's inventory, such as a Lootr chest, which only that mod's bridge can name, or a plugin's own container), not by where a player is standing. An open or a click also says which of the menu's slots are the viewer's own inventory, including a mod's menu that shows it through the loader's item handlers.
 
 | Event | What | Core chokepoint |
 |---|---|---|
@@ -220,7 +236,7 @@ An inventory is identified by what holds it (a block, an entity, a player, an it
 
 ### Resources: `ResourceEvent`
 
-Everything measured in amounts that isn't an item stack: energy, fluids in tanks, chemicals, heat, mana, LP, aura, radiation, ore left in a virtual vein, skill points, money. A resource is a registry-style id (`hadron:energy`, `hadron:fluid/minecraft/water`, `botania:mana`, `hadron:currency/coins`; a colon can't appear in an id's path, so a fluid's namespace becomes a path segment) with a unit. A holder is a block, an entity, an item, a chunk, or an account.
+Everything measured in amounts that isn't an item stack: energy, fluids in tanks, chemicals, heat, mana, LP, aura, radiation, ore left in a virtual vein, skill points, money. A resource is a registry-style id (`hadron:energy`, `hadron:fluid/minecraft/water`, `botania:mana`, `hadron:currency/coins`; a colon can't appear in an id's path, so a fluid's namespace becomes a path segment) with a unit. A holder is a block, an entity, an item (with the inventory it is in), a chunk, or an account.
 
 | Event | What | Core chokepoint |
 |---|---|---|

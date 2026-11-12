@@ -6,6 +6,14 @@ import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.List;
+import net.minecraft.world.level.block.state.properties.DoubleBlockHalf;
+import net.minecraft.world.level.block.state.properties.BlockStateProperties;
+import net.minecraft.world.level.block.ChestBlock;
+import net.minecraft.world.level.block.BedBlock;
+import java.util.ArrayList;
+import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.server.level.ServerLevel;
@@ -70,5 +78,31 @@ public class BlockUseEvent extends BlockEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /**
+     * Where it happens: the block clicked, then every other block the use acts on, since using one half of a block
+     * that spans two uses both: a bed's other half (sleeping, setting a spawn), a door's or a tall plant's other half,
+     * a double chest's other half.
+     */
+    @Override
+    public Places getPlaces() {
+        Places own = super.getPlaces();
+        BlockPos pos = getPos();
+        ServerLevel level = getLevel();
+        if (!level.isLoaded(pos)) return own;
+        BlockState state = level.getBlockState(pos);
+        List<Place> more = new ArrayList<>();
+        if (state.getBlock() instanceof BedBlock) {
+            BlockPos other = pos.relative(BedBlock.getConnectedDirection(state));
+            if (level.getBlockState(other).is(state.getBlock())) more.add(Place.Spot.at(level, other));
+        }
+        if (state.hasProperty(BlockStateProperties.DOUBLE_BLOCK_HALF)) {
+            BlockPos other = state.getValue(BlockStateProperties.DOUBLE_BLOCK_HALF) == DoubleBlockHalf.LOWER
+                    ? pos.above() : pos.below();
+            if (level.getBlockState(other).is(state.getBlock())) more.add(Place.Spot.at(level, other));
+        }
+        if (state.getBlock() instanceof ChestBlock) more.addAll(Place.of(new InventoryHolder.Block(level, pos)));
+        return own.and(more);
     }
 }

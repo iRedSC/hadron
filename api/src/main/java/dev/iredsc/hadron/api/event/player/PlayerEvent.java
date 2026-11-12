@@ -1,6 +1,9 @@
 package dev.iredsc.hadron.api.event.player;
 
 import dev.iredsc.hadron.api.event.Event;
+import dev.iredsc.hadron.api.event.Place;
+import dev.iredsc.hadron.api.event.Placed;
+import dev.iredsc.hadron.api.event.Places;
 import java.util.Objects;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -9,7 +12,7 @@ import net.minecraft.server.level.ServerPlayer;
  * them. Events any actor can cause (breaking a block, dropping an item) are not player events, even when a player
  * did them; see {@code ActionEvent#getActingPlayer()}.
  */
-public abstract class PlayerEvent extends Event {
+public abstract class PlayerEvent extends Event implements Placed {
     private final ServerPlayer player;
 
     protected PlayerEvent(ServerPlayer player) {
@@ -19,5 +22,14 @@ public abstract class PlayerEvent extends Event {
     /** The player this is about. */
     public ServerPlayer getPlayer() {
         return player;
+    }
+
+    /**
+     * Where it happens: the block the player stands in now. Events that touch more (a bed, a respawn's arrival) add
+     * each; a login, before the player is placed, is {@link Place.Nowhere}.
+     */
+    @Override
+    public Places getPlaces() {
+        return Places.of(Place.of(player));
     }
 }

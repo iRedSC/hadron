@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.selftest.plugin;
 
+import net.minecraft.network.chat.Component;
+import dev.iredsc.hadron.api.inventory.PluginContainer;
 import com.mojang.brigadier.suggestion.Suggestion;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
@@ -72,6 +74,7 @@ public final class HostLifecycleTests {
         System.getProperties().remove(HostProbePlugin.LOG);
         System.getProperties().remove(HostProbePlugin.OPEN_FOR);
         System.getProperties().remove(HostProbePlugin.FAIL);
+        System.getProperties().remove(HostProbePlugin.WATCH_AT_DISABLE);
     }
 
     @HadronTest(timeout = 900)
@@ -94,6 +97,43 @@ public final class HostLifecycleTests {
         } finally {
             jar.delete();
             t.tick(60);
+            clearProperties();
+            deleteTree(new File(folder, NAME));
+        }
+    }
+
+    @HadronTest(timeout = 900)
+    @Covers(value = PluginContainer.class, method = "stillValid")
+    void aDisabledPluginsContainersCloseForWhoeverHasThemOpen(TestContext t) throws Exception {
+        // The menu is vanilla's ChestMenu, so only its container says it is the probe's. It must be closed before
+        // the probe's onDisable, which is where a plugin saves what its containers hold.
+        TestPlayer alice = t.player("alice");
+        List<Object> log = new CopyOnWriteArrayList<>();
+        System.getProperties().put(HostProbePlugin.LOG, log);
+        System.getProperties().put(HostProbePlugin.WATCH_AT_DISABLE, alice.player().getGameProfile().getName());
+        PluginManager plugins = t.plugin().getServer().getPluginManager();
+        File folder = t.plugin().getServer().getPluginsFolder();
+        File jar = new File(folder, "selftest-hostprobe.jar");
+        try {
+            writeJar(jar, t.server().getServerVersion());
+            t.await("Hadron to enable the probe", () -> plugins.isPluginEnabled(NAME), 300);
+            JavaPlugin probe = java.util.Objects.requireNonNull(plugins.getPlugin(NAME), "the enabled probe by name");
+            PluginContainer box = new PluginContainer(probe, "box", 1);
+            t.assertTrue(box.open(alice.player(), Component.literal("Box")), "the probe's box should open");
+            t.assertTrue(box.stillValid(alice.player()), "the box is usable while the probe is enabled");
+            jar.delete();
+            t.await("Hadron to disable the probe whose jar was deleted", () -> !plugins.isPluginEnabled(NAME), 200);
+            String atDisable = "menu at disable: " + alice.player().inventoryMenu.getClass().getName();
+            t.assertTrue(log.contains(atDisable), "the probe's box should be closed before its onDisable runs, but "
+                    + "its onDisable logged " + log);
+            t.assertTrue(alice.player().containerMenu == alice.player().inventoryMenu, "the disabled probe's box "
+                    + "should be closed, but alice still has " + alice.player().containerMenu.getClass().getName()
+                    + " open");
+            t.assertFalse(box.stillValid(alice.player()), "a disabled plugin's container is no longer usable");
+            t.assertFalse(box.open(alice.player(), Component.literal("Box")), "nor can it be opened again");
+        } finally {
+            jar.delete();
+            if (plugins.isPluginEnabled(NAME)) t.await("the probe to unload", () -> !plugins.isPluginEnabled(NAME), 200);
             clearProperties();
             deleteTree(new File(folder, NAME));
         }

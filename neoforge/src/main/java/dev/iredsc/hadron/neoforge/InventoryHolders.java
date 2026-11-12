@@ -3,6 +3,7 @@ package dev.iredsc.hadron.neoforge;
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
+import dev.iredsc.hadron.api.inventory.PluginContainer;
 import dev.iredsc.hadron.neoforge.mixin.item.CompoundContainerAccessor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
@@ -16,7 +17,9 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
+import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ContainerLevelAccess;
+import net.minecraft.world.inventory.CrafterMenu;
 import net.minecraft.world.inventory.Slot;
 import net.minecraft.world.item.trading.Merchant;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -30,6 +33,7 @@ public final class InventoryHolders {
 
     /** What holds a container. {@code viewer} lets a player's own ender chest be named; may be null. */
     public static InventoryHolder of(Container container, @Nullable Player viewer) {
+        if (container instanceof PluginContainer plugin) return plugin.getHolder();
         if (container instanceof BlockEntity be && be.getLevel() instanceof ServerLevel level) {
             return new InventoryHolder.Block(level, be.getBlockPos());
         }
@@ -55,10 +59,27 @@ public final class InventoryHolders {
         return InventoryHolder.Unknown.INSTANCE;
     }
 
-    /** The holder of a clicked slot's inventory, or of the menu when the slot's inventory is the menu's own. */
+    /**
+     * The holder of a clicked slot's inventory, or, when nothing identifies it, what the menu says it is open on: a
+     * slot that is the menu's own (a crafting grid) is there. Never another slot's holder.
+     */
     public static InventoryHolder ofSlot(AbstractContainerMenu menu, Slot slot, Player viewer) {
         InventoryHolder holder = of(slot.container, viewer);
-        return holder instanceof InventoryHolder.Unknown ? ofMenu(menu, viewer) : holder;
+        return holder instanceof InventoryHolder.Unknown ? menuHolder(menu, viewer) : holder;
+    }
+
+    /**
+     * What a menu is open on, as the menu itself says, never guessed from its slots: the viewer for their own inventory
+     * screen, the block or entity its fields name, a chest's or crafter's menu's own container. {@link
+     * InventoryHolder.Unknown} when it says nothing.
+     */
+    public static InventoryHolder menuHolder(AbstractContainerMenu menu, Player viewer) {
+        if (viewer != null && menu == viewer.inventoryMenu) return new InventoryHolder.Entity(viewer);
+        InventoryHolder fields = ofFields(menu);
+        if (!(fields instanceof InventoryHolder.Unknown)) return fields;
+        if (menu instanceof ChestMenu chest) return of(chest.getContainer(), viewer);
+        if (menu instanceof CrafterMenu crafter) return of(crafter.getContainer(), viewer);
+        return InventoryHolder.Unknown.INSTANCE;
     }
 
     /** What a menu is open on: its first inventory that isn't the viewer's own, else the block or entity behind it. */
@@ -69,6 +90,16 @@ public final class InventoryHolders {
             InventoryHolder holder = of(slot.container, viewer);
             if (!(holder instanceof InventoryHolder.Unknown)) return holder;
         }
+        InventoryHolder fields = ofFields(menu);
+        if (!(fields instanceof InventoryHolder.Unknown)) return fields;
+        if (viewer != null && menu.slots.stream().allMatch(s -> s.container == viewer.getInventory())) {
+            return new InventoryHolder.Entity(viewer);
+        }
+        return InventoryHolder.Unknown.INSTANCE;
+    }
+
+    /** The block or entity a menu's fields name, or {@link InventoryHolder.Unknown}. */
+    private static InventoryHolder ofFields(AbstractContainerMenu menu) {
         for (Field field : FIELDS.get(menu.getClass())) {
             Object value;
             try {
@@ -87,9 +118,6 @@ public final class InventoryHolders {
             } else if (value instanceof Merchant merchant && merchant instanceof Entity entity) {
                 return new InventoryHolder.Entity(entity);
             }
-        }
-        if (viewer != null && menu.slots.stream().allMatch(s -> s.container == viewer.getInventory())) {
-            return new InventoryHolder.Entity(viewer);
         }
         return InventoryHolder.Unknown.INSTANCE;
     }

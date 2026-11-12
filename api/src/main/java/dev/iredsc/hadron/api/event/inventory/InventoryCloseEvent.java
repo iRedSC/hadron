@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.inventory;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
@@ -16,11 +18,19 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 public class InventoryCloseEvent extends InventoryEvent {
     private final ServerPlayer viewer;
     private final AbstractContainerMenu menu;
+    private final InventoryHolder menuHolder;
 
-    public InventoryCloseEvent(ServerPlayer viewer, InventoryHolder holder, AbstractContainerMenu menu, Actor actor) {
+    /**
+     * @param menuHolder what the menu is open on, as the menu says ({@link #getMenuHolder()}); {@link
+     *     InventoryHolder.Unknown} when it says nothing, never a guess from its slots
+     */
+    public InventoryCloseEvent(ServerPlayer viewer, InventoryHolder holder, AbstractContainerMenu menu,
+            InventoryHolder menuHolder, Actor actor) {
         super(holder, actor);
         this.viewer = Objects.requireNonNull(viewer, "viewer");
         this.menu = Objects.requireNonNull(menu, "menu");
+        this.menuHolder = Objects.requireNonNull(menuHolder,
+                "menuHolder; pass InventoryHolder.Unknown.INSTANCE when the menu doesn't say what it is open on");
     }
 
     /** Who had the menu open. */
@@ -31,5 +41,20 @@ public class InventoryCloseEvent extends InventoryEvent {
     /** The menu that closed. */
     public AbstractContainerMenu getMenu() {
         return menu;
+    }
+
+    /**
+     * What the menu is open on, as the menu itself says: the block a crafting table's or a chest's menu was opened on,
+     * a horse, the viewer for their own inventory screen. {@link InventoryHolder.Unknown} when the menu says nothing
+     * (a mod's menu no bridge describes); its own slots are then placed {@code Unknown}.
+     */
+    public InventoryHolder getMenuHolder() {
+        return menuHolder;
+    }
+
+    /** Where {@link #getHolder()} is, then every inventory behind the menu's slots, as for a click. */
+    @Override
+    public Places getPlaces() {
+        return Place.of(getHolder()).and(Menus.places(menu, viewer, menuHolder, getHolder()));
     }
 }

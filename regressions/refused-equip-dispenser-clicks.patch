@@ -1,0 +1,79 @@
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java
+index 60f0eaf..8ef7752 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawnRefunds.java
+@@ -3,7 +3,6 @@ package dev.iredsc.hadron.neoforge;
+ import dev.iredsc.hadron.checks.StaticState;
+ import org.jspecify.annotations.Nullable;
+ import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
+-import dev.iredsc.hadron.api.event.item.EquipEvent;
+ import dev.iredsc.hadron.api.event.entity.HangingPlaceEvent;
+ import dev.iredsc.hadron.api.event.entity.ProjectileLaunchEvent;
+ import java.util.function.BooleanSupplier;
+@@ -29,15 +28,14 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
+  * whether the spawn happened (a thrown trident leaves the inventory, a boat is used up, a bow uses an arrow), so a
+  * refused spawn would otherwise cost the player the item for nothing. Only when every spawn was refused: a multishot
+  * crossbow with one bolt refused still fired the others, so it keeps its cost. A player's use given back this way also
+- * leaves no statistic, advancement or vibration behind ({@link HeldEffects}). An equip counts as a try too
+- * ({@link EntitySpawns#tried}): a dispenser whose armour every listener refused stays quiet.
++ * leaves no statistic, advancement or vibration behind ({@link HeldEffects}).
+  */
+ public final class EntitySpawnRefunds {
+     private EntitySpawnRefunds() {}
+ 
+     private static boolean listening() {
+         return Hooks.listens(ProjectileLaunchEvent.class) || Hooks.listens(HangingPlaceEvent.class)
+-                || Hooks.listens(EntitySpawnEvent.class) || Hooks.listens(EquipEvent.class);
++                || Hooks.listens(EntitySpawnEvent.class);
+     }
+ 
+     /**
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawns.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawns.java
+index 97b75d1..89b903e 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawns.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/EntitySpawns.java
+@@ -67,8 +67,9 @@ public final class EntitySpawns {
+         } finally {
+             if (build != 0) Actors.Port.exit(PortKey.KEY, build);
+         }
++        attempts++;
+         boolean cancelled = Hooks.post(event).isCancelled();
+-        tried(cancelled);
++        if (cancelled) refused++;
+         if (cancelled && entity instanceof FishingHook hook) return refuseHook(hook);
+         return !cancelled;
+     }
+@@ -82,19 +83,7 @@ public final class EntitySpawns {
+         return false;
+     }
+ 
+-    /**
+-     * Counts one thing a dispense or a use tried that a listener could refuse: a spawn, or an equip
+-     * ({@link ItemHooks#cancelEquip}). Server thread only.
+-     */
+-    static void tried(boolean refusedNow) {
+-        attempts++;
+-        if (refusedNow) refused++;
+-    }
+-
+-    /**
+-     * What dispenses and uses tried (spawns, equips) and how many were refused, so far on the server thread;
+-     * {@link EntitySpawnRefunds} compares them.
+-     */
++    /** Spawns asked about and refused so far on the server thread; {@link EntitySpawnRefunds} compares them. */
+     @StaticState(reason = "a running count; EntitySpawnRefunds reads only its change across one dispense")
+     static int attempts;
+     @StaticState(reason = "a running count; EntitySpawnRefunds reads only its change across one dispense")
+diff --git a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java
+index ca56131..b2fe7b3 100644
+--- a/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java
++++ b/neoforge/src/main/java/dev/iredsc/hadron/neoforge/ItemHooks.java
+@@ -138,8 +138,6 @@ public final class ItemHooks {
+         }
+         boolean cancelled = Hooks.post(new EquipEvent(level, entity, slot, entity.getItemBySlot(slot), item,
+                 actor(entity))).isCancelled();
+-        // Counted as a try, as a spawn is: a dispense or a player's use whose every try was refused plays nothing.
+-        EntitySpawns.tried(cancelled);
+         if (cancelled) resync(entity);
+         return cancelled;
+     }

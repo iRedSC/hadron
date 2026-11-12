@@ -9,6 +9,7 @@ import dev.iredsc.hadron.api.event.player.PlayerAdvancementDoneEvent;
 import dev.iredsc.hadron.api.event.player.PlayerBedEnterEvent;
 import dev.iredsc.hadron.api.event.player.PlayerBedLeaveEvent;
 import dev.iredsc.hadron.api.event.player.PlayerChangedWorldEvent;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.player.PlayerExpChangeEvent;
 import dev.iredsc.hadron.api.event.player.PlayerFlightRevokeEvent;
 import dev.iredsc.hadron.api.event.player.PlayerGameModeChangeEvent;
@@ -354,16 +355,24 @@ public final class PlayerStateTests {
     @Covers(PlayerChangedWorldEvent.class)
     void changingWorldsIsReportedWithTheOldWorld(TestContext t) {
         TestPlayer alice = t.player("alice");
+        BlockPos stood = t.pos(3, 0, -2);
+        alice.teleport(stood.getX() + 0.5, stood.getY(), stood.getZ() + 0.5);
         List<ServerLevel> from = new ArrayList<>();
+        List<Place> left = new ArrayList<>();
         t.registerEvents(new Listener() {
             @EventHandler
             void on(PlayerChangedWorldEvent e) {
-                if (e.getPlayer() == alice.player()) from.add(e.getFrom());
+                if (e.getPlayer() != alice.player()) return;
+                from.add(e.getFrom());
+                left.add(Place.Spot.at(e.getFrom(), e.getFromPosition()));
+                left.addAll(e.getPlaces().subList(1, e.getPlaces().size()));
             }
         });
         alice.player().teleportTo(t.server().overworld(), 0.5, 120, 0.5, 0.0F, 0.0F);
         t.tick(2);
         t.assertEquals(List.of(t.level()), from, "the worlds reported as left");
+        t.assertEquals(List.of(Place.Spot.at(t.level(), stood), Place.Spot.at(t.level(), stood)), left,
+                "where she stood when she left, as getFromPosition() and as the event's place after her own");
         t.assertEquals(t.server().overworld(), alice.player().serverLevel(), "alice's world");
     }
 

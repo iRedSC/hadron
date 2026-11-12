@@ -111,6 +111,7 @@ final class ItemEvents {
     private static void close(PlayerContainerEvent.Close event) {
         if (!(event.getEntity() instanceof ServerPlayer player) || !Hooks.listens(InventoryCloseEvent.class)) return;
         Hooks.post(new InventoryCloseEvent(player, InventoryHolders.ofMenu(event.getContainer(), player),
-                event.getContainer(), ItemHooks.actor(player)));
+                event.getContainer(), InventoryHolders.menuHolder(event.getContainer(), player),
+                ItemHooks.actor(player)));
     }
 }

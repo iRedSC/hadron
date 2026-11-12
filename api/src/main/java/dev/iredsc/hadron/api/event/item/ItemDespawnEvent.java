@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.item;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.EventStack;
 import dev.iredsc.hadron.api.event.Cancellable;
@@ -37,5 +39,11 @@ public class ItemDespawnEvent extends ItemEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /** Where the item lies. */
+    @Override
+    public Places getPlaces() {
+        return Places.of(Place.of(getItemEntity()));
     }
 }

@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.player;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
@@ -143,5 +145,15 @@ public class PlayerFishEvent extends EntityEvent implements Cancellable {
                     + "nothing to cancel. To stop a catch, cancel CAUGHT_FISH; to stop bites, cancel BITE");
         }
         this.cancelled = cancel;
+    }
+
+    /**
+     * Where the hook is, then where the player is (a catch is pulled to them), then where the entity hooked is, if
+     * any.
+     */
+    @Override
+    public Places getPlaces() {
+        Places own = super.getPlaces().and(Place.of(getPlayer()));
+        return getCaught().map(caught -> own.and(Place.of(caught))).orElse(own);
     }
 }

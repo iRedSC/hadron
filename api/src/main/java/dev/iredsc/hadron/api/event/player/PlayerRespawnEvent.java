@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.player;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.FiredBy;
 import java.util.Objects;
 import net.minecraft.server.level.ServerLevel;
@@ -61,5 +63,14 @@ public class PlayerRespawnEvent extends PlayerEvent {
     /** Whether they're coming back from the End's exit portal rather than from death. */
     public boolean isFromEndFight() {
         return fromEndFight;
+    }
+
+    /**
+     * Where the player is now, then where they arrive ({@link #getRespawnLevel()}, {@link #getRespawnPosition()}, as
+     * they stand now).
+     */
+    @Override
+    public Places getPlaces() {
+        return super.getPlaces().and(Place.Spot.at(getRespawnLevel(), getRespawnPosition()));
     }
 }

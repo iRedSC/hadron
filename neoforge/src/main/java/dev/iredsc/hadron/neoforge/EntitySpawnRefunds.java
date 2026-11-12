@@ -3,6 +3,7 @@ package dev.iredsc.hadron.neoforge;
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
+import dev.iredsc.hadron.api.event.item.EquipEvent;
 import dev.iredsc.hadron.api.event.entity.HangingPlaceEvent;
 import dev.iredsc.hadron.api.event.entity.ProjectileLaunchEvent;
 import java.util.function.BooleanSupplier;
@@ -28,14 +29,15 @@ import net.neoforged.neoforge.server.ServerLifecycleHooks;
  * whether the spawn happened (a thrown trident leaves the inventory, a boat is used up, a bow uses an arrow), so a
  * refused spawn would otherwise cost the player the item for nothing. Only when every spawn was refused: a multishot
  * crossbow with one bolt refused still fired the others, so it keeps its cost. A player's use given back this way also
- * leaves no statistic, advancement or vibration behind ({@link HeldEffects}).
+ * leaves no statistic, advancement or vibration behind ({@link HeldEffects}). An equip counts as a try too
+ * ({@link EntitySpawns#tried}): a dispenser whose armour every listener refused stays quiet.
  */
 public final class EntitySpawnRefunds {
     private EntitySpawnRefunds() {}
 
     private static boolean listening() {
         return Hooks.listens(ProjectileLaunchEvent.class) || Hooks.listens(HangingPlaceEvent.class)
-                || Hooks.listens(EntitySpawnEvent.class);
+                || Hooks.listens(EntitySpawnEvent.class) || Hooks.listens(EquipEvent.class);
     }
 
     /**

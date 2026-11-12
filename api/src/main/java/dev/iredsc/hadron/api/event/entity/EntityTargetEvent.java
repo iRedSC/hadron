@@ -1,5 +1,7 @@
 package dev.iredsc.hadron.api.event.entity;
 
+import dev.iredsc.hadron.api.event.Places;
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.Cancellable;
@@ -47,5 +49,12 @@ public class EntityTargetEvent extends EntityEvent implements Cancellable {
     @Override
     public void setCancelled(boolean cancel) {
         this.cancelled = cancel;
+    }
+
+    /** Where the mob is, then where its new target is, if any. */
+    @Override
+    public Places getPlaces() {
+        Places own = super.getPlaces();
+        return getTarget().map(target -> own.and(Place.of(target))).orElse(own);
     }
 }
