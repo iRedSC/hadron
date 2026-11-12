@@ -321,7 +321,8 @@ public final class LastingCauseTests {
         t.assertTrue(loaded.hasEffect(MobEffects.POISON), "the poison should load without its cause");
         List<EntityDamageEvent> heard = hurts(t, loaded);
         EntityDamageEvent tick = nextPoison(t, heard);
-        t.assertEquals(Actor.Nature.INSTANCE, tick.getActor(), "the actor of poison saved before causes were kept");
+        t.assertEquals(Actor.Unknown.INSTANCE, tick.getActor(), "the actor of poison saved before causes were kept "
+                + "(nobody proven: an attribution gap)");
         t.assertEquals(Optional.of(Place.Unknown.anywhere(Place.Unknown.Reason.UNSEEN_ORIGIN)), tick.getAppliedAt(),
                 "where poison saved before causes were kept was applied");
     }
@@ -349,7 +350,8 @@ public final class LastingCauseTests {
         }, Pig.class);
         List<EntityDamageEvent> oldHeard = hurts(t, oldLoaded);
         EntityDamageEvent oldBurn = nextBurn(t, oldHeard);
-        t.assertEquals(Actor.Nature.INSTANCE, oldBurn.getActor(), "the actor of fire saved before causes were kept");
+        t.assertEquals(Actor.Unknown.INSTANCE, oldBurn.getActor(), "the actor of fire saved before causes were kept "
+                + "(nobody proven: an attribution gap)");
         t.assertEquals(Optional.of(Place.Unknown.anywhere(Place.Unknown.Reason.UNSEEN_ORIGIN)),
                 oldBurn.getAppliedAt(), "where fire saved before causes were kept was set");
     }
@@ -579,5 +581,72 @@ public final class LastingCauseTests {
         }
         t.assertTrue(pig.get() == null, "the removed pig should be let go while its poison still acts, but something "
                 + "still holds it");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aForcedReplacementWithTheSameStrengthTakesTheCredit(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        golem.addEffect(poison(400, 0), bob.player());
+        // Forcing replaces the instance outright, even with the same amplifier and duration.
+        golem.forceAddEffect(poison(400, 0), alice.player());
+        assertFor(t, alice, nextPoison(t, hurts(t, golem)), "the forced replacement's poison");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aWholeChainPassedToAnotherEntityResumesForWhoeverPassedIt(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        IronGolem first = golem(t, t.pos(2, 0, 0));
+        IronGolem second = golem(t, t.pos(-2, 0, 2));
+        first.addEffect(poison(600, 0), bob.player());
+        first.addEffect(poison(40, 1), bob.player()); // bob's weaker poison waits underneath
+        second.addEffect(first.getEffect(MobEffects.POISON), alice.player());
+        t.await("the second golem's hidden poison to resume", () -> second.getEffect(MobEffects.POISON) != null
+                && second.getEffect(MobEffects.POISON).getAmplifier() == 0, 60);
+        assertFor(t, alice, nextPoison(t, hurts(t, second)), "the second golem's resumed poison");
+        t.await("the first golem's hidden poison to resume", () -> first.getEffect(MobEffects.POISON) != null
+                && first.getEffect(MobEffects.POISON).getAmplifier() == 0, 60);
+        assertFor(t, bob, nextPoison(t, hurts(t, first)), "the first golem's resumed poison");
+    }
+
+    @HadronTest
+    @Covers(EntitySpawnEvent.class)
+    void anUnrecordedEffectActsForNobodyKnownWhoeverRemovesItsEntity(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        golem.addEffect(new MobEffectInstance(MobEffects.OOZING, 400, 0));
+        IronGolem loaded = reload(t, golem, tag -> tag.getCompound("neoforge:attachments")
+                .remove("hadron:effect_causes"), IronGolem.class);
+        List<EntitySpawnEvent> slimes = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntitySpawnEvent e) {
+                if (e.getEntity() instanceof Slime) slimes.add(e);
+            }
+        });
+        Actors.acting(new Actor.Player(alice.player()), () -> loaded.remove(Entity.RemovalReason.KILLED));
+        t.assertTrue(!slimes.isEmpty(), "oozing should spawn slimes as the golem goes");
+        for (EntitySpawnEvent e : slimes) {
+            t.assertEquals(Actor.Unknown.INSTANCE, e.getActor(), "who an unrecorded oozing's slime spawns for (not "
+                    + "alice, who removed the golem)");
+        }
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void anEffectChangedOutsideAnApplicationActsForNobodyKnown(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        golem.addEffect(poison(400, 0), bob.player());
+        // A mod lengthening bob's poison itself, outside addEffect: nothing says who did that.
+        golem.getEffect(MobEffects.POISON).update(poison(800, 0));
+        EntityDamageEvent tick = nextPoison(t, hurts(t, golem));
+        t.assertEquals(Actor.Unknown.INSTANCE, tick.getActor(), "the actor of poison changed outside an application");
+        t.assertEquals(Optional.of(Place.Unknown.anywhere(Place.Unknown.Reason.UNSEEN_ORIGIN)), tick.getAppliedAt(),
+                "where poison changed outside an application was applied");
     }
 }

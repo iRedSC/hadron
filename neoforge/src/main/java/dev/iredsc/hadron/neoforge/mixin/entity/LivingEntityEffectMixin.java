@@ -18,7 +18,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Who applied each effect, kept on the entity as its chain changes ({@link DataEffectCauses}): recorded where an
- * effect is applied, before its first tick, and dropped when it ends.
+ * effect is applied, before its first tick, and dropped when it ends. Vanilla is handed a deep copy of what was passed
+ * in, so an instance active on one entity is never shared with another.
  */
 @Mixin(LivingEntity.class)
 abstract class LivingEntityEffectMixin {
@@ -26,7 +27,7 @@ abstract class LivingEntityEffectMixin {
     private boolean hadron$applied(MobEffectInstance effect, @Nullable Entity source, Operation<Boolean> original) {
         LivingEntity self = (LivingEntity) (Object) this;
         if (!(self.level() instanceof ServerLevel)) return original.call(effect, source);
-        return DataEffectCauses.applying(self, effect, source, () -> original.call(effect, source));
+        return DataEffectCauses.applying(self, effect, source, applied -> original.call(applied, source));
     }
 
     @WrapMethod(method = "forceAddEffect")
@@ -36,8 +37,8 @@ abstract class LivingEntityEffectMixin {
             original.call(effect, source);
             return;
         }
-        DataEffectCauses.applying(self, effect, source, () -> {
-            original.call(effect, source);
+        DataEffectCauses.applying(self, effect, source, applied -> {
+            original.call(applied, source);
             return Boolean.TRUE;
         });
     }

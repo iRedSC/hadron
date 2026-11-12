@@ -10,29 +10,24 @@ import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
-import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 
 /**
  * While an effect acts (its tick, and what it does as its entity is hurt or goes), whoever applied it is on the actor
- * stack, worked out only if something reads it ({@link Lasting#enter}); and a hidden effect resuming brings its own
- * cause up with it ({@link DataEffectCauses#resumed}).
+ * stack, worked out only if something reads it ({@link Lasting#enter}); and its chain may change in a tick only as a
+ * tick changes it, a hidden effect resuming with its own cause ({@link DataEffectCauses#afterTick}).
  */
 @Mixin(MobEffectInstance.class)
 abstract class MobEffectInstanceMixin {
-    @Shadow
-    private @Nullable MobEffectInstance hiddenEffect;
-
+    /** A tick may change the chain only as a tick does; anything else since the last look is lost first. */
     @WrapMethod(method = "tick")
     private boolean hadron$tick(LivingEntity entity, Runnable onUpdate, Operation<Boolean> original) {
-        MobEffectInstance hid = hiddenEffect;
+        if (entity.level().isClientSide()) return original.call(entity, onUpdate);
+        MobEffectInstance self = (MobEffectInstance) (Object) this;
+        DataEffectCauses.beforeTick(entity, self);
         boolean going = original.call(entity, onUpdate);
-        // Vanilla resumes a hidden effect by copying it into this one and hiding what it hid.
-        if (hid != null && hiddenEffect != hid && !entity.level().isClientSide()) {
-            DataEffectCauses.resumed(entity, ((MobEffectInstance) (Object) this).getEffect());
-        }
+        DataEffectCauses.afterTick(entity, self);
         return going;
     }
 

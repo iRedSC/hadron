@@ -22,10 +22,13 @@ import org.jspecify.annotations.Nullable;
 public final class Lasting {
     private Lasting() {}
 
-    /** What is acting on an entity right now: a recorded cause, or {@link Unrecorded} for one saved without it. */
+    /**
+     * What is acting on an entity right now: a recorded cause, or {@link Unrecorded} where nobody can be proven (saved
+     * before Hadron kept causes, or changed by no known path), which acts for {@link Actor.Unknown}.
+     */
     public sealed interface Acting permits LastingCause, Unrecorded {}
 
-    /** An effect or fire acting whose cause nothing recorded: saved before Hadron kept it, or added around it. */
+    /** An effect or fire acting whose cause nobody can prove: saved before Hadron kept it, or changed around it. */
     public enum Unrecorded implements Acting {
         INSTANCE
     }
@@ -59,19 +62,22 @@ public final class Lasting {
     }
 
     /**
-     * Marks {@code cause} as acting on {@code subject} and pushes who it is, {@link Actor.Nature} included, so what the
-     * effect or fire does is never credited to whoever else is on the stack. Returns the stack handle for
-     * {@link #exit}, or 0 when nothing was pushed: a cause nothing recorded. Allocates and looks up nothing: who it is
-     * is worked out only if something reads the stack while it acts ({@code Actors.Port.enterLazy}).
+     * Marks {@code cause} as acting on {@code subject} and pushes who it is, {@link Actor.Nature} included, or
+     * {@link Actor.Unknown} for null (nobody proven: an attribution gap, which fails closed), so what the effect or
+     * fire does is never credited to whoever else is on the stack. Returns the stack handle for {@link #exit}.
+     * Allocates and looks up nothing: who it is is worked out only if something reads the stack while it acts
+     * ({@code Actors.Port.enterLazy}).
      */
     public static long enter(Entity subject, @Nullable LastingCause cause) {
         ((State) subject).hadron$setActing(cause != null ? cause : Unrecorded.INSTANCE);
-        return cause == null ? 0 : Actors.Port.enterLazy(PortKey.KEY, cause);
+        // Nobody proven is still a frame: never whoever else is on the stack (the player who kills an oozing mob).
+        return cause == null ? Actors.Port.enter(PortKey.KEY, Actor.Unknown.INSTANCE)
+                : Actors.Port.enterLazy(PortKey.KEY, cause);
     }
 
     /** Undoes {@link #enter}: pops what it pushed, and puts back what was acting before. */
     public static void exit(Entity subject, @Nullable Acting outer, long scope) {
-        if (scope != 0) Actors.Port.exit(PortKey.KEY, scope);
+        Actors.Port.exit(PortKey.KEY, scope);
         ((State) subject).hadron$setActing(outer);
     }
 
