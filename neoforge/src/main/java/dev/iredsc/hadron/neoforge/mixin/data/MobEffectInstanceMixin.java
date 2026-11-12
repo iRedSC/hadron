@@ -6,6 +6,7 @@ import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.iredsc.hadron.neoforge.DataEffectCauses;
 import dev.iredsc.hadron.neoforge.Lasting;
 import dev.iredsc.hadron.neoforge.LastingCause;
+import java.lang.ref.WeakReference;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.damagesource.DamageSource;
@@ -54,6 +55,27 @@ public abstract class MobEffectInstanceMixin implements Lasting.EffectState {
     @Override
     public @Nullable MobEffectInstance hadron$hidden() {
         return hiddenEffect;
+    }
+
+    /** Which entity this instance is active on; weak, so an instance a mod keeps never keeps the entity. Not saved. */
+    @Unique
+    private @Nullable WeakReference<LivingEntity> hadron$activeOn;
+
+    @Override
+    public @Nullable LivingEntity hadron$activeOn() {
+        WeakReference<LivingEntity> ref = hadron$activeOn;
+        return ref == null ? null : ref.get();
+    }
+
+    @Override
+    public void hadron$setActiveOn(LivingEntity entity) {
+        if (hadron$activeOn() != entity) hadron$activeOn = new WeakReference<>(entity);
+    }
+
+    /** An instance ticking is active on that entity: one loaded from a save learns it here. */
+    @Inject(method = "tick", at = @At("HEAD"))
+    private void hadron$ticking(LivingEntity entity, Runnable onUpdate, CallbackInfoReturnable<Boolean> cir) {
+        if (!entity.level().isClientSide()) hadron$setActiveOn(entity);
     }
 
     /** A copy keeps its source's cause, and a hidden effect resuming brings its own back. */

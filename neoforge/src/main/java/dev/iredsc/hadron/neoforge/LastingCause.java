@@ -27,12 +27,19 @@ import org.jspecify.annotations.Nullable;
  * a burning entity, saved with it, and put on the actor stack while the effect or the fire acts ({@link Lasting}).
  *
  * <p>Only what can be saved is kept: what the cause was and who was behind it, never the thing itself. While the
- * cause is still there it acts as itself (the player, the cloud, the machine); once it is gone it acts as an
- * {@link Actor.Remembered}, for the same people.
+ * cause is still there it acts as itself (the player, the cloud, the machine), for the people it had when it applied
+ * this; once it is gone it acts as an {@link Actor.Remembered}, for the same people. Nature and {@link Actor.Unknown}
+ * are kept as themselves, so they act as themselves too, not as whoever happens to be on the stack.
  */
 public final class LastingCause implements Lasting.Acting {
-    /** Who it was, in a form that can be saved. Nature and {@code Actor.Unknown} are nobody, kept as no cause. */
+    /** Who it was, in a form that can be saved. */
     sealed interface Who {}
+
+    /** Nobody: the world on its own, or a mod nothing said anything about. */
+    enum Nobody implements Who {
+        NATURE,
+        UNKNOWN
+    }
 
     /** The server on an operator's orders: the {@code /effect} command. */
     record ServerWho(String name) implements Who {}
@@ -46,9 +53,9 @@ public final class LastingCause implements Lasting.Acting {
     private static final ResourceLocation PLAYER = BuiltInRegistries.ENTITY_TYPE.getKey(EntityType.PLAYER);
 
     /**
-     * Saved as {@code applied_at} (a dimension and a position) and, when someone is known, {@code server} (a name), or
-     * {@code kind} with {@code id} or {@code machine} and {@code attribution}. Fields it doesn't know are ignored, and
-     * missing ones mean nobody, so a newer or older layout still loads.
+     * Saved as {@code applied_at} (a dimension and a position) and who: {@code server} (a name), or {@code kind} with
+     * {@code id} or {@code machine} and {@code attribution}, or {@code nobody} ({@code unknown}); none of them is
+     * nature. Fields it doesn't know are ignored, so a newer or older layout still loads.
      */
     static final Codec<LastingCause> CODEC = RecordCodecBuilder.create(i -> i.group(
             GlobalPos.CODEC.fieldOf("applied_at").forGetter(c -> c.where),
@@ -57,7 +64,7 @@ public final class LastingCause implements Lasting.Acting {
             ResourceLocation.CODEC.optionalFieldOf("kind").forGetter(c -> switch (c.who) {
                 case EntityWho e -> Optional.of(e.kind());
                 case MachineWho m -> Optional.of(m.kind());
-                case null, default -> Optional.empty();
+                default -> Optional.empty();
             }),
             UUIDUtil.CODEC.optionalFieldOf("id").forGetter(c -> c.who instanceof EntityWho e
                     ? e.id() : Optional.empty()),
@@ -66,54 +73,68 @@ public final class LastingCause implements Lasting.Acting {
             AttributionMemory.CODEC.optionalFieldOf("attribution").forGetter(c -> switch (c.who) {
                 case EntityWho e when !e.attribution().isEmpty() -> Optional.of(e.attribution());
                 case MachineWho m when !m.attribution().isEmpty() -> Optional.of(m.attribution());
-                case null, default -> Optional.empty();
-            }))
+                default -> Optional.empty();
+            }),
+            Codec.STRING.optionalFieldOf("nobody").forGetter(c -> c.who == Nobody.UNKNOWN
+                    ? Optional.of("unknown") : Optional.empty()))
             .apply(i, LastingCause::decode));
 
-    private final @Nullable Who who;
+    private final Who who;
     private final GlobalPos where;
-    /** The live entity it last resolved to; weak, so a cause never keeps a removed entity in memory. */
-    private @Nullable WeakReference<Entity> entity;
-    /** What it last resolved to when that isn't an entity: the server, a machine, or a remembered actor. */
-    private @Nullable Actor fixed;
+    /**
+     * What it last resolved to, checked each time it is asked for and looked up again once that has gone. Held
+     * strongly, so asking again allocates nothing; a removed entity is let go the next time the cause acts.
+     */
+    private @Nullable Actor resolved;
+    /** The entity it was applied by, only to find it without a search the first time it acts; weak until then. */
+    private @Nullable WeakReference<Entity> appliedBy;
+    /** For a machine, the block entity it resolved to: a different one put in its place is not it. */
+    private @Nullable BlockEntity machine;
+    /** A machine found broken (its spot loaded and holding no block entity of its type): it stays remembered. */
+    private boolean machineGone;
 
-    private LastingCause(@Nullable Who who, GlobalPos where) {
-        this.who = who;
+    private LastingCause(Who who, GlobalPos where) {
+        this.who = Objects.requireNonNull(who, "who");
         this.where = Objects.requireNonNull(where, "where");
     }
 
     private static LastingCause decode(GlobalPos where, Optional<String> server, Optional<ResourceLocation> kind,
-            Optional<UUID> id, Optional<GlobalPos> machine, Optional<Attribution> attribution) {
+            Optional<UUID> id, Optional<GlobalPos> machine, Optional<Attribution> attribution,
+            Optional<String> nobody) {
         Attribution people = attribution.orElse(Attribution.none());
-        Who who = null;
+        Who who;
         if (server.isPresent()) {
             who = new ServerWho(server.get());
         } else if (kind.isPresent() && machine.isPresent()) {
             who = new MachineWho(kind.get(), machine.get(), people);
         } else if (kind.isPresent()) {
             who = new EntityWho(kind.get(), id, people);
+        } else {
+            who = nobody.filter("unknown"::equals).isPresent() ? Nobody.UNKNOWN : Nobody.NATURE;
         }
         return new LastingCause(who, where);
     }
 
     /**
      * The cause of something applied to {@code subject} now, where it stands: {@code actor}, which may be the subject
-     * itself (a player's own potion), or nobody for null, {@link Actor.Nature} and {@link Actor.Unknown}.
+     * itself (a player's own potion), or {@link Actor.Nature} for null, when nothing at all is behind it.
      */
     public static LastingCause of(@Nullable Actor actor, Entity subject) {
-        LastingCause cause = new LastingCause(actor == null ? null : who(actor),
-                GlobalPos.of(subject.level().dimension(), subject.blockPosition()));
-        if (cause.who == null || actor == null) return cause;
-        switch (actor) {
-            case Actor.Player p -> cause.entity = new WeakReference<>(p.player());
-            case Actor.FakePlayer f -> cause.entity = new WeakReference<>(f.fake());
-            case Actor.EntityActor e -> cause.entity = new WeakReference<>(e.entity());
-            default -> cause.fixed = actor;
+        Actor by = actor != null ? actor : Actor.Nature.INSTANCE;
+        LastingCause cause = new LastingCause(who(by), GlobalPos.of(subject.level().dimension(),
+                subject.blockPosition()));
+        switch (by) {
+            case Actor.Player p -> cause.appliedBy = new WeakReference<>(p.player());
+            case Actor.FakePlayer f -> cause.appliedBy = new WeakReference<>(f.fake());
+            case Actor.EntityActor e -> cause.appliedBy = new WeakReference<>(e.entity());
+            case Actor.Machine m -> cause.machine = m.level().isLoaded(m.pos()) ? m.level().getBlockEntity(m.pos())
+                    : null;
+            default -> { }
         }
         return cause;
     }
 
-    private static @Nullable Who who(Actor actor) {
+    private static Who who(Actor actor) {
         return switch (actor) {
             case Actor.Player p -> entityWho(p.player(), p.attribution());
             case Actor.FakePlayer f -> entityWho(f.fake(), f.attribution());
@@ -122,8 +143,8 @@ public final class LastingCause implements Lasting.Acting {
                     GlobalPos.of(m.level().dimension(), m.pos()), m.attribution());
             case Actor.Remembered r -> new EntityWho(r.kind(), r.id(), r.attribution());
             case Actor.Server s -> new ServerWho(s.name());
-            case Actor.Nature n -> null;
-            case Actor.Unknown u -> null;
+            case Actor.Nature n -> Nobody.NATURE;
+            case Actor.Unknown u -> Nobody.UNKNOWN;
         };
     }
 
@@ -139,11 +160,6 @@ public final class LastingCause implements Lasting.Acting {
         return BuiltInRegistries.BLOCK.getKey(level.getBlockState(pos).getBlock());
     }
 
-    /** Whether anyone is known: nobody for nature, an unknown mod, or a fire block or lava, which keep no placer. */
-    public boolean hasActor() {
-        return who != null;
-    }
-
     /** Whether this cause is {@code entity} itself: its own splash potion, its own poison. */
     boolean names(Entity entity) {
         return who instanceof EntityWho e && e.id().isPresent() && e.id().get().equals(entity.getUUID());
@@ -151,56 +167,78 @@ public final class LastingCause implements Lasting.Acting {
 
     /**
      * Who acts now: the cause itself while it is still there, for the people it had when it applied this (a bridge's
-     * turret firing for its owner keeps that owner), otherwise an {@link Actor.Remembered} for the same people; null
-     * for nobody. Remembers what it found, so a cause that is still there costs one check a call, and allocates
-     * nothing unless a bridge gave a live entity people other than its own.
+     * turret firing for its owner keeps that owner), otherwise an {@link Actor.Remembered} for the same people;
+     * {@link Actor.Nature} or {@link Actor.Unknown} for nobody. Looked up once and kept while it holds, so asking again
+     * costs a check and allocates nothing.
      */
-    public @Nullable Actor actor(MinecraftServer server) {
-        if (who == null) return null;
-        WeakReference<Entity> ref = entity;
-        Entity live = ref == null ? null : ref.get();
-        if (live != null && !live.isRemoved() && who instanceof EntityWho e) {
-            return EntityActors.as(live, e.attribution());
-        }
-        Actor kept = fixed;
-        if (live == null && kept != null && !stale(kept, server)) return kept;
-        return resolve(server);
+    public Actor actor(MinecraftServer server) {
+        Actor kept = resolved;
+        if (kept != null && !stale(kept, server)) return kept;
+        Actor actor = resolve(server);
+        resolved = actor;
+        return actor;
     }
 
-    /** Whether a kept actor should be looked up again: a machine that has gone, a remembered player back online. */
+    /**
+     * Whether what it resolved to no longer holds: an entity removed, a machine's block entity gone (broken, replaced,
+     * or its chunk unloaded), a machine remembered while its spot was unloaded and now loaded, a remembered player back
+     * online.
+     */
     private boolean stale(Actor kept, MinecraftServer server) {
         return switch (kept) {
-            case Actor.Machine m -> !m.level().isLoaded(m.pos()) || m.level().getBlockEntity(m.pos()) == null;
+            case Actor.Player p -> p.player().isRemoved();
+            case Actor.FakePlayer f -> f.fake().isRemoved();
+            case Actor.EntityActor e -> e.entity().isRemoved();
+            case Actor.Machine m -> machine == null || machine.isRemoved();
+            case Actor.Remembered r when who instanceof MachineWho m -> !machineGone && loaded(server, m.at()) != null;
             case Actor.Remembered r -> r.kind().equals(PLAYER) && r.id().isPresent()
                     && server.getPlayerList().getPlayer(r.id().get()) != null;
             default -> false;
         };
     }
 
-    private @Nullable Actor resolve(MinecraftServer server) {
-        entity = null;
-        fixed = null;
-        Actor actor = switch (Objects.requireNonNull(who)) {
+    private static @Nullable ServerLevel loaded(MinecraftServer server, GlobalPos at) {
+        ServerLevel level = server.getLevel(at.dimension());
+        return level != null && level.isLoaded(at.pos()) ? level : null;
+    }
+
+    private Actor resolve(MinecraftServer server) {
+        return switch (who) {
+            case Nobody n -> n == Nobody.UNKNOWN ? Actor.Unknown.INSTANCE : Actor.Nature.INSTANCE;
             case ServerWho s -> new Actor.Server(s.name());
             case EntityWho e -> {
-                Entity found = e.id().map(id -> find(server, e.kind(), id)).orElse(null);
-                if (found != null) {
-                    entity = new WeakReference<>(found);
-                    yield EntityActors.as(found, e.attribution());
-                }
-                yield new Actor.Remembered(e.kind(), e.id(), e.attribution());
+                WeakReference<Entity> hint = appliedBy;
+                appliedBy = null;
+                Entity first = hint == null ? null : hint.get();
+                Entity found = first != null && !first.isRemoved() ? first
+                        : e.id().map(id -> find(server, e.kind(), id)).orElse(null);
+                yield found != null ? EntityActors.as(found, e.attribution())
+                        : new Actor.Remembered(e.kind(), e.id(), e.attribution());
             }
-            case MachineWho m -> {
-                ServerLevel level = server.getLevel(m.at().dimension());
-                BlockPos pos = m.at().pos();
-                BlockEntity be = level != null && level.isLoaded(pos) ? level.getBlockEntity(pos) : null;
-                yield be != null && BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType()).equals(m.kind())
-                        ? new Actor.Machine(level, pos, m.attribution())
-                        : new Actor.Remembered(m.kind(), Optional.empty(), m.attribution());
-            }
+            case MachineWho m -> resolveMachine(server, m);
         };
-        if (entity == null) fixed = actor;
-        return actor;
+    }
+
+    /**
+     * The machine while it is at its spot: the very block entity it resolved to, as long as that was never seen
+     * replaced. Only where nothing could tell machines apart, after a restart or once its spot was seen unloaded, does
+     * a block entity of the same type there count as it. Anything else at a loaded spot (a furnace where a chest was,
+     * a new chest where the old one was broken, nothing) means the machine is gone: remembered for good.
+     */
+    private Actor resolveMachine(MinecraftServer server, MachineWho m) {
+        BlockEntity kept = machine;
+        ServerLevel level = loaded(server, m.at());
+        machine = null;
+        if (level == null) return new Actor.Remembered(m.kind(), Optional.empty(), m.attribution());
+        BlockEntity there = level.getBlockEntity(m.at().pos());
+        boolean same = there != null && (kept == null || kept == there)
+                && BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(there.getType()).equals(m.kind());
+        if (!same) {
+            machineGone = true;
+            return new Actor.Remembered(m.kind(), Optional.empty(), m.attribution());
+        }
+        machine = there;
+        return new Actor.Machine(level, m.at().pos(), m.attribution());
     }
 
     private static @Nullable Entity find(MinecraftServer server, ResourceLocation kind, UUID id) {

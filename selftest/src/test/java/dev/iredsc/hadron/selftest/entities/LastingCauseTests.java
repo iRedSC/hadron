@@ -10,6 +10,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityRegainHealthEvent;
+import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
@@ -37,11 +38,14 @@ import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.entity.decoration.ArmorStand;
+import net.minecraft.world.entity.monster.Slime;
 import net.minecraft.world.entity.projectile.Arrow;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.alchemy.PotionContents;
 import net.minecraft.world.item.alchemy.Potions;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.entity.BlockEntityType;
 import net.minecraft.world.phys.EntityHitResult;
 
 /**
@@ -429,5 +433,95 @@ public final class LastingCauseTests {
         EntityDamageEvent burn = nextBurn(t, hurts(t, stand));
         assertFor(t, bob, burn, "the stand's burning");
         t.assertEquals(Optional.of(Place.Spot.at(t.level(), litAt)), burn.getAppliedAt(), "where the stand was lit");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void burningDownInTheIgnitionsTickKeepsItsCredit(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        Actors.acting(new Actor.Player(bob.player()), () -> pig.igniteForTicks(40));
+        Actors.acting(new Actor.Player(alice.player()), () -> pig.igniteForTicks(41));
+        // The pig's own burning takes it back to 40 in the same tick: that's burning, not a refusal taken back.
+        pig.baseTick();
+        t.assertEquals(40, pig.getRemainingFireTicks(), "the pig's burning time after one tick of burning");
+        assertFor(t, alice, nextBurn(t, hurts(t, pig)), "burning after alice's longer ignition burned down a tick");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void anEffectActiveOnOneEntityKeepsItsCauseThereWhenAppliedToAnother(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        IronGolem first = golem(t, t.pos(2, 0, 0));
+        IronGolem second = golem(t, t.pos(-2, 0, 2));
+        first.addEffect(poison(400, 0), bob.player());
+        // A mod passing on the very instance active on the first golem, with alice behind it.
+        second.addEffect(first.getEffect(MobEffects.POISON), alice.player());
+        List<EntityDamageEvent> firstHurts = hurts(t, first);
+        List<EntityDamageEvent> secondHurts = hurts(t, second);
+        assertFor(t, bob, nextPoison(t, firstHurts), "the first golem's poison");
+        assertFor(t, alice, nextPoison(t, secondHurts), "the second golem's poison");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aMachineReplacedByAnotherIsRemembered(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos machine = t.pos(-3, 0, 0);
+        t.setBlock(machine, Blocks.CHEST);
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        Actors.acting(new Actor.Machine(t.level(), machine, Attribution.of(bob.uuid())),
+                () -> golem.addEffect(poison(400, 0)));
+        List<EntityDamageEvent> heard = hurts(t, golem);
+        EntityDamageEvent before = nextPoison(t, heard);
+        t.assertTrue(before.getActor() instanceof Actor.Machine, "the chest, still there, should be the cause, but was "
+                + before.getActor());
+        t.setBlock(machine, Blocks.FURNACE);
+        EntityDamageEvent after = nextPoison(t, heard);
+        t.assertTrue(after.getActor() instanceof Actor.Remembered r
+                        && r.kind().equals(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(BlockEntityType.CHEST)),
+                "a furnace where the chest was is not the chest: the cause should be the remembered chest, but was "
+                        + after.getActor());
+        assertFor(t, bob, after, "the replaced chest's poison");
+    }
+
+    @HadronTest
+    @Covers(EntitySpawnEvent.class)
+    void naturalOozingSpawnsForNatureWhoeverRemovesItsEntity(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        Actors.acting(Actor.Nature.INSTANCE, () -> golem.addEffect(new MobEffectInstance(MobEffects.OOZING, 400, 0)));
+        List<EntitySpawnEvent> slimes = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntitySpawnEvent e) {
+                if (e.getEntity() instanceof Slime) slimes.add(e);
+            }
+        });
+        Actors.acting(new Actor.Player(alice.player()), () -> golem.remove(Entity.RemovalReason.KILLED));
+        t.assertTrue(!slimes.isEmpty(), "oozing should spawn slimes as the golem goes");
+        for (EntitySpawnEvent e : slimes) {
+            t.assertEquals(Actor.Nature.INSTANCE, e.getActor(), "who natural oozing's slime spawns for");
+            t.assertTrue(Actors.remembered(e.getEntity()).isEmpty(), "natural oozing's slime should answer to nobody, "
+                    + "but answers to " + Actors.remembered(e.getEntity()));
+        }
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aBridgesCauseActsAsTheSameActorEachTick(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Pig turret = spawn(t, EntityType.PIG, t.pos(-3, 0, 0));
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        Actors.acting(new Actor.EntityActor(turret, Attribution.of(bob.uuid())),
+                () -> golem.addEffect(poison(400, 2), turret));
+        List<EntityDamageEvent> heard = hurts(t, golem);
+        Actor first = nextPoison(t, heard).getActor();
+        Actor second = nextPoison(t, heard).getActor();
+        // One actor, looked up once: a tick that builds a new one would allocate on every tick of every such effect.
+        t.assertTrue(first == second, "each tick of the turret's poison should act as the same actor, but got "
+                + first + " then a new " + second);
     }
 }

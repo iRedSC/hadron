@@ -12,7 +12,8 @@ import org.spongepowered.asm.mixin.Mixin;
 
 /**
  * Every effect applied to a living entity records who applied it and where, on the effect vanilla really keeps:
- * the one it adds, the one it replaces, or the copy it hides underneath ({@link Lasting#applying}).
+ * the one it adds, the one it replaces, or the copy it hides underneath; an instance already active on another entity
+ * is applied as a copy, so each keeps its own cause ({@link Lasting#applying}).
  */
 @Mixin(LivingEntity.class)
 abstract class LivingEntityEffectMixin {
@@ -20,7 +21,7 @@ abstract class LivingEntityEffectMixin {
     private boolean hadron$applied(MobEffectInstance effect, @Nullable Entity source, Operation<Boolean> original) {
         LivingEntity self = (LivingEntity) (Object) this;
         if (!(self.level() instanceof ServerLevel)) return original.call(effect, source);
-        return Lasting.applying(self, effect, source, () -> original.call(effect, source));
+        return Lasting.applying(self, effect, source, applied -> original.call(applied, source));
     }
 
     @WrapMethod(method = "forceAddEffect")
@@ -30,8 +31,8 @@ abstract class LivingEntityEffectMixin {
             original.call(effect, source);
             return;
         }
-        Lasting.applying(self, effect, source, () -> {
-            original.call(effect, source);
+        Lasting.applying(self, effect, source, applied -> {
+            original.call(applied, source);
             return Boolean.TRUE;
         });
     }

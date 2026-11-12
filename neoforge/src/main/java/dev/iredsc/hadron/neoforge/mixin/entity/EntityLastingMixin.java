@@ -52,6 +52,32 @@ abstract class EntityLastingMixin implements Lasting.State {
         hadron$fireUndo = undo;
     }
 
+    @Unique
+    private boolean hadron$burningDown;
+
+    @Override
+    public boolean hadron$burningDown() {
+        return hadron$burningDown;
+    }
+
+    @Override
+    public void hadron$setBurningDown(boolean burningDown) {
+        hadron$burningDown = burningDown;
+    }
+
+    /** The fire burning down by itself each tick, so the credit hook never reads it as an ignition taken back. */
+    @WrapOperation(method = "baseTick", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/world/entity/Entity;setRemainingFireTicks(I)V"))
+    private void hadron$burnDown(Entity self, int ticks, Operation<Void> original) {
+        boolean outer = hadron$burningDown;
+        hadron$burningDown = true;
+        try {
+            original.call(self, ticks);
+        } finally {
+            hadron$burningDown = outer;
+        }
+    }
+
     @Inject(method = "setRemainingFireTicks", at = @At("HEAD"))
     private void hadron$fireCause(int ticks, CallbackInfo ci) {
         if (ticks != remainingFireTicks && !level().isClientSide()) {
