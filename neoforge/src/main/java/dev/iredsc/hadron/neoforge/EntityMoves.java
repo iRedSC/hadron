@@ -251,6 +251,17 @@ public final class EntityMoves {
         return out;
     }
 
+    /** Whether a walking player's movement packet is checked: they ride nothing and someone listens. */
+    public static boolean checksWalk(ServerPlayer player) {
+        return !player.isPassenger() && Hooks.listens(PlayerMoveEvent.class);
+    }
+
+    /** Whether a driver's vehicle packet is checked: they drive what they ride and someone listens. */
+    public static boolean checksSteer(ServerPlayer driver) {
+        Entity root = driver.getRootVehicle();
+        return root != driver && root.getControllingPassenger() == driver && Hooks.listens(EntityMoveEvent.class);
+    }
+
     /**
      * A walking player's movement packet ({@code handleMovePlayer}): applied, then, if they or anything riding them is
      * in another block, asked about there, before anything is broadcast. Refused, they are put back and their client
@@ -309,25 +320,41 @@ public final class EntityMoves {
 
     // ---- Pistons ------------------------------------------------------------------------------------------------
 
-    /** The moving piston block a piston tick is moving entities for, so each names it; null outside one. */
-    @StaticState(reason = "set only while a piston block entity ticks on the server thread, cleared in finally")
-    private static @Nullable BlockPos pushing;
+    /**
+     * One piston block's entity moves for one tick: the moving block they name, and a slime launch vanilla set for an
+     * entity just before pushing it, held until that push is asked about. One per call, kept per thread, so the client
+     * and server sides of a singleplayer game, and a push nested in another, never share one.
+     */
+    private static final class Push {
+        final BlockPos pos;
+        @Nullable Entity launched;
+        @Nullable Runnable launch;
 
-    /** A slime launch vanilla set for an entity just before pushing it, held until its push is asked about. */
-    @StaticState(reason = "one launch held during a piston tick on the server thread, applied or dropped by its push")
-    private static @Nullable Entity launched;
-    @StaticState(reason = "one launch held during a piston tick on the server thread, applied or dropped by its push")
-    private static @Nullable Runnable launch;
+        Push(BlockPos pos) {
+            this.pos = pos.immutable();
+        }
 
-    /** Runs a piston block's entity moves for this tick, each naming the moving block at {@code pos}. */
+        void launchHeld() {
+            Runnable held = launch;
+            launched = null;
+            launch = null;
+            if (held != null) held.run();
+        }
+    }
+
+    @StaticState(reason = "the server thread's piston tick in progress, set and restored around it; per thread")
+    private static final ThreadLocal<@Nullable Push> PUSH = new ThreadLocal<>();
+
+    /** Runs a server piston block's entity moves for this tick, each naming the moving block at {@code pos}. */
     public static void pushing(BlockPos pos, Runnable moves) {
-        BlockPos was = pushing;
-        pushing = pos.immutable();
+        Push was = PUSH.get();
+        Push now = new Push(pos);
+        PUSH.set(now);
         try {
             moves.run();
         } finally {
-            launchHeld();
-            pushing = was;
+            now.launchHeld();
+            PUSH.set(was);
         }
     }
 
@@ -336,61 +363,76 @@ public final class EntityMoves {
      * launches nothing; any held for an entity that then isn't pushed is applied as vanilla would.
      */
     public static void launching(Entity entity, Runnable set) {
-        if (pushing == null || !(entity.level() instanceof ServerLevel) || !Hooks.listens(type(entity))) {
+        Push push = PUSH.get();
+        if (push == null || !(entity.level() instanceof ServerLevel) || !Hooks.listens(type(entity))) {
             set.run();
             return;
         }
-        launchHeld();
-        launched = entity;
-        launch = set;
-    }
-
-    private static void launchHeld() {
-        Runnable held = launch;
-        launched = null;
-        launch = null;
-        if (held != null) held.run();
+        push.launchHeld();
+        push.launched = entity;
+        push.launch = set;
     }
 
     /**
-     * A piston about to move {@code entity} {@code distance} along {@code direction} (vanilla's
-     * {@code moveEntityByPiston}, on each tick of its travel): asked about before it moves, with where the push takes it
-     * and each passenger, if any of them would be in another block, naming the piston as its actor. Refused, nothing
-     * moves (nothing is stepped on, nothing launched) and it is pinned where it stands; the piston's blocks finish
-     * moving. Let through, vanilla moves it and its passengers are seated.
+     * Where vanilla's {@code move(PISTON, delta)} would take {@code entity}, without moving it: the per-tick piston
+     * limit, a cobweb's slowing, then collision with step-up, as {@code move} applies them.
      */
-    public static void pushed(Entity entity, Direction direction, double distance, Runnable move) {
-        BlockPos piston = pushing;
-        if (piston == null || !(entity.level() instanceof ServerLevel level) || !Hooks.listens(type(entity))) {
-            if (launched == entity) launchHeld();
+    public static Vec3 resolve(Entity entity, Vec3 delta, java.util.function.Function<Vec3, Vec3> collide,
+            double[] pistonDeltas, long pistonDeltasGameTime, Vec3 stuck) {
+        if (entity.noPhysics) return delta;
+        if (delta.lengthSqr() <= 1.0E-7) return delta;
+        boolean fresh = entity.level().getGameTime() != pistonDeltasGameTime;
+        Vec3 limited = Vec3.ZERO;
+        for (Direction.Axis axis : Direction.Axis.values()) {
+            double d = delta.get(axis);
+            if (d == 0) continue;
+            double before = fresh ? 0 : pistonDeltas[axis.ordinal()];
+            double moved = Mth.clamp(d + before, -0.51, 0.51) - before;
+            if (Math.abs(moved) <= 1.0E-5F) return Vec3.ZERO;
+            limited = limited.with(axis, moved);
+            break; // vanilla moves along the first axis set
+        }
+        if (stuck.lengthSqr() > 1.0E-7) limited = limited.multiply(stuck);
+        return collide.apply(limited);
+    }
+
+    /**
+     * A piston about to move {@code entity} by {@code resolved}, where vanilla's own collision and step-up take it
+     * (vanilla's {@code moveEntityByPiston}, on each tick of its travel): asked about before it moves, if it or a
+     * passenger would be in another block, naming the piston as its actor. Refused, nothing moves (nothing is stepped
+     * on, nothing launched) and it is pinned where it stands; the piston's blocks finish moving. Let through, vanilla
+     * moves it and its passengers are seated.
+     */
+    public static void pushed(Entity entity, Vec3 resolved, Runnable move) {
+        Push push = PUSH.get();
+        if (push == null || !(entity.level() instanceof ServerLevel level) || !Hooks.listens(type(entity))) {
+            if (push != null && push.launched == entity) push.launchHeld();
             move.run();
             return;
         }
-        Vec3 delta = new Vec3(direction.getStepX() * distance, direction.getStepY() * distance,
-                direction.getStepZ() * distance);
         Stood was = Stood.of(entity);
         List<Stood> riders = riders(entity);
-        boolean crosses = !sameBlock(was.x() + delta.x, was.y() + delta.y, was.z() + delta.z, was.x(), was.y(), was.z())
-                || riders.stream().anyMatch(r -> !sameBlock(r.x() + delta.x, r.y() + delta.y, r.z() + delta.z, r.x(),
-                        r.y(), r.z()));
+        Vec3 going = was.position().add(resolved);
+        boolean crosses = !sameBlock(going.x, going.y, going.z, was.x(), was.y(), was.z())
+                || riders.stream().anyMatch(r -> !sameBlock(r.x() + resolved.x, r.y() + resolved.y,
+                        r.z() + resolved.z, r.x(), r.y(), r.z()));
         if (crosses) {
             Map<Entity, Vec3> to = new IdentityHashMap<>();
-            for (Stood r : riders) to.put(r.entity(), r.position().add(delta));
-            Actor actor = Actors.currentOr(new Actor.Machine(level, piston, Attribution.none()));
-            Vec3 going = was.position().add(delta);
+            for (Stood r : riders) to.put(r.entity(), r.position().add(resolved));
+            Actor actor = Actors.currentOr(new Actor.Machine(level, push.pos, Attribution.none()));
             EntityMoveEvent event = entity instanceof ServerPlayer player
                     ? new PlayerMoveEvent(player, was.position(), going, positions(riders), to, actor)
                     : new EntityMoveEvent(entity, was.position(), going, positions(riders), to, actor);
             if (Hooks.post(event).isCancelled()) {
-                if (launched == entity) {
-                    launched = null;
-                    launch = null;
+                if (push.launched == entity) {
+                    push.launched = null;
+                    push.launch = null;
                 }
                 ((EntityState) entity).hadron$pin(was.x(), was.y(), was.z());
                 return;
             }
         }
-        if (launched == entity) launchHeld();
+        if (push.launched == entity) push.launchHeld();
         move.run();
         seat(entity);
         // Its own check starts from where the piston left it, so the push isn't seen twice.

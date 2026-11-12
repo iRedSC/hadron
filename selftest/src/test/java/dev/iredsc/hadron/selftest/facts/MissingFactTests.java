@@ -129,6 +129,33 @@ public final class MissingFactTests {
                 "an event should state that alice was set down at " + down + ", but heard " + shown(heard));
     }
 
+    @HadronTest
+    @KnownGap("A refused move still presses pressure plates and counts travel stats")
+    void aRefusedStepLeavesNoTrace(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos start = t.pos(2, 0, 0);
+        BlockPos plate = start.east(2);
+        t.setBlock(plate, Blocks.OAK_PRESSURE_PLATE);
+        alice.teleport(start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
+        t.tick(3);
+        t.registerEvents(new dev.iredsc.hadron.api.event.Listener() {
+            @dev.iredsc.hadron.api.event.EventHandler
+            void on(EntityMoveEvent e) {
+                if (e.getEntity() == alice.player()) e.setCancelled(true);
+            }
+        });
+        net.minecraft.world.phys.Vec3 was = alice.player().position();
+        int walked = alice.player().getStats().getValue(net.minecraft.stats.Stats.CUSTOM.get(
+                net.minecraft.stats.Stats.WALK_ONE_CM));
+        alice.player().connection.handleMovePlayer(new net.minecraft.network.protocol.game.ServerboundMovePlayerPacket
+                .Pos(was.x + 2, was.y, was.z, true));
+        require(alice.player().position().distanceTo(was) < 1.0E-6, "alice's step should be refused");
+        t.assertTrue(!t.getBlock(plate).getValue(net.minecraft.world.level.block.PressurePlateBlock.POWERED),
+                "a refused step shouldn't press the plate it would have crossed");
+        t.assertEquals(walked, alice.player().getStats().getValue(net.minecraft.stats.Stats.CUSTOM.get(
+                net.minecraft.stats.Stats.WALK_ONE_CM)), "alice's walked distance after a refused step");
+    }
+
     private static boolean arrivesAt(EntityEvent e, BlockPos pos) {
         if (e instanceof EntityMoveEvent m) return m.getToBlock().equals(pos);
         if (e instanceof EntityTeleportEvent tp) return BlockPos.containing(tp.getTo()).equals(pos);

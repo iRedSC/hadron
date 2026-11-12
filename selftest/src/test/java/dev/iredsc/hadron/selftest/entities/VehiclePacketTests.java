@@ -108,8 +108,9 @@ public final class VehiclePacketTests {
                 + ", but is at " + alice.player().position());
         t.assertTrue(bob.player().position().distanceTo(bobWas) < 1.0E-6, "bob should be back at " + bobWas
                 + ", but is at " + bob.player().position());
-        t.assertTrue(!alice.received(ClientboundMoveVehiclePacket.class).isEmpty(),
-                "alice's client should be told where the boat really is");
+        // The correction travels to alice's client on the connection: wait for it to arrive.
+        t.await("alice's client to be told where the boat really is",
+                () -> !alice.received(ClientboundMoveVehiclePacket.class).isEmpty(), 5);
         steer(alice, boat, -0.2, 0);
         t.assertTrue(boat.position().distanceTo(boatWas.add(-0.2, 0, 0)) < 1.0E-3, "a small move within its block "
                 + "after the refusal should go through, to " + boatWas.add(-0.2, 0, 0) + ", but the boat is at "

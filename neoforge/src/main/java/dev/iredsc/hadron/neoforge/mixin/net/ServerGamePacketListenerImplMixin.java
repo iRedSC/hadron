@@ -31,7 +31,7 @@ public abstract class ServerGamePacketListenerImplMixin {
     @WrapMethod(method = "handleMovePlayer")
     private void hadron$walk(ServerboundMovePlayerPacket packet, Operation<Void> original) {
         // Vanilla first moves the packet onto the server thread (by throwing); only there is it applied and checked.
-        if (!player.server.isSameThread()) {
+        if (!player.server.isSameThread() || !EntityMoves.checksWalk(player)) {
             original.call(packet);
             return;
         }
@@ -40,7 +40,7 @@ public abstract class ServerGamePacketListenerImplMixin {
 
     @WrapMethod(method = "handleMoveVehicle")
     private void hadron$steer(ServerboundMoveVehiclePacket packet, Operation<Void> original) {
-        if (!player.server.isSameThread()) {
+        if (!player.server.isSameThread() || !EntityMoves.checksSteer(player)) {
             original.call(packet);
             return;
         }

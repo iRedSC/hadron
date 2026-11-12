@@ -240,4 +240,110 @@ public final class PistonPushTests {
         });
         return heard;
     }
+
+    /** Every move of {@code entity} heard, with where it stood when heard, none refused. */
+    private static List<EntityMoveEvent> hearOnly(TestContext t, Entity entity) {
+        List<EntityMoveEvent> heard = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityMoveEvent e) {
+                if (e.getEntity() == entity) heard.add(e);
+            }
+        });
+        return heard;
+    }
+
+    /**
+     * A chicken pushed toward a wall stops against it, inside its own block: no push names a block it doesn't reach
+     * (before, the push was named going through the wall).
+     */
+    @HadronTest
+    @Covers(EntityMoveEvent.class)
+    void aPushStoppedByAWallNamesWhereItStops(TestContext t) {
+        t.player("alice");
+        BlockPos piston = groundPiston(t, Blocks.STONE);
+        t.setBlock(piston.east(3), Blocks.STONE);
+        net.minecraft.world.entity.animal.Chicken chicken = dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t,
+                EntityType.CHICKEN, piston.east(2));
+        chicken.setPos(piston.getX() + 2.75, piston.getY(), piston.getZ() + 0.5);
+        chicken.setNoGravity(true);
+        t.tick(2);
+        List<EntityMoveEvent> heard = hearOnly(t, chicken);
+        t.setBlock(piston.west(), Blocks.REDSTONE_BLOCK);
+        t.tick(3);
+        t.assertEquals(piston.east(2), chicken.blockPosition(), "the chicken's block, stopped short of the wall");
+        t.assertTrue(heard.stream().allMatch(e -> e.getToBlock().equals(chicken.blockPosition())),
+                "each push should name where the chicken stops, " + chicken.blockPosition() + ", but named "
+                        + heard.stream().map(EntityMoveEvent::getToBlock).toList());
+    }
+
+    /**
+     * A cow on a slab pushed toward a full block steps up onto it: each push that takes it into another block is
+     * asked about, naming the block it really reaches, and every block between where it was and that one.
+     */
+    @HadronTest
+    @Covers(EntityMoveEvent.class)
+    void aPushThatStepsUpNamesWhereItLandsAndEveryBlockBetween(TestContext t) {
+        t.player("alice");
+        BlockPos base = t.pos(2, 0, 0);
+        BlockPos piston = base.west(2).above();
+        Fixtures.awaitTicking(t, piston);
+        t.setBlock(base, Blocks.STONE_SLAB);
+        t.setBlock(base.east(), Blocks.STONE);
+        t.setBlock(piston, Blocks.PISTON.defaultBlockState().setValue(PistonBaseBlock.FACING, Direction.EAST));
+        t.setBlock(piston.east(), Blocks.STONE);
+        List<net.minecraft.world.phys.Vec3> landed = new ArrayList<>();
+        net.minecraft.world.entity.animal.Cow cow = new net.minecraft.world.entity.animal.Cow(EntityType.COW,
+                t.level()) {
+            @Override
+            public void move(net.minecraft.world.entity.MoverType type, net.minecraft.world.phys.Vec3 delta) {
+                BlockPos was = blockPosition();
+                super.move(type, delta);
+                if (type == net.minecraft.world.entity.MoverType.PISTON && !was.equals(blockPosition())) {
+                    landed.add(position());
+                }
+            }
+        };
+        cow.setNoAi(true);
+        t.level().addFreshEntity(cow);
+        cow.setPos(base.getX() + 0.5, base.getY() + 0.5, base.getZ() + 0.5);
+        cow.setOnGround(true);
+        t.tick(2);
+        List<EntityMoveEvent> heard = hearOnly(t, cow);
+        t.setBlock(piston.west(), Blocks.REDSTONE_BLOCK);
+        t.tick(5);
+        t.assertTrue(!landed.isEmpty(), "the piston should push the cow on; it is at " + cow.position());
+        t.assertEquals(landed.size(), heard.size(), "a push asked about for each block the cow was pushed into");
+        for (int i = 0; i < landed.size(); i++) {
+            EntityMoveEvent e = heard.get(i);
+            t.assertTrue(e.getTo().distanceTo(landed.get(i)) < 1.0E-6, "push " + i + " should name where the cow "
+                    + "lands, " + landed.get(i) + ", but named " + e.getTo());
+            for (BlockPos crossed : BlockPos.betweenClosed(e.getFromBlock(), e.getToBlock())) {
+                t.assertTrue(e.getPlaces().stream().anyMatch(p -> p instanceof dev.iredsc.hadron.api.event.Place.Spot s
+                        && s.box().isInside(crossed)), "push " + i + " should place " + crossed.toShortString()
+                        + ", between where it was and where it lands: " + e.getPlaces());
+            }
+        }
+    }
+
+    /** A pinned item that something else moves away and back is a fresh item: vanilla may nudge it again. */
+    @HadronTest
+    @Covers(EntityMoveEvent.class)
+    void aPinLetsGoOnceTheEntityMovesOtherwise(TestContext t) {
+        t.player("alice");
+        BlockPos piston = groundPiston(t, Blocks.STONE);
+        net.minecraft.world.entity.item.ItemEntity item = diamond(t, piston);
+        net.minecraft.world.phys.Vec3 was = item.position();
+        hearAny(t, item);
+        t.setBlock(piston.west(), Blocks.REDSTONE_BLOCK);
+        t.tick(10);
+        t.assertTrue(item.position().distanceTo(was) < 1.0E-6, "the item should be pinned where it was refused");
+        item.teleportTo(was.x + 5, was.y, was.z);
+        t.tick();
+        item.teleportTo(was.x, was.y, was.z);
+        item.setDeltaMovement(net.minecraft.world.phys.Vec3.ZERO);
+        t.tick(5);
+        t.assertTrue(item.position().distanceTo(was) > 0.01, "back inside the stone after moving away, the item "
+                + "should be nudged out as vanilla does, but it is still at " + item.position());
+    }
 }

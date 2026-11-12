@@ -13,6 +13,7 @@
     "EndCrystalMixin",
     "EntityLeashMixin",
     "EntityMixin",
+    "EntityMotionAccessor",
     "EntityRemovedLeashMixin",
     "EntityTypeMixin",
     "EntityVelocityMixin",

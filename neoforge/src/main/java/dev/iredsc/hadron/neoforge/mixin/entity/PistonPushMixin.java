@@ -9,7 +9,10 @@ import net.minecraft.core.Direction;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.piston.PistonMovingBlockEntity;
+import net.minecraft.world.phys.Vec3;
+import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.Shadow;
 import org.spongepowered.asm.mixin.injection.At;
 
 /**
@@ -19,22 +22,51 @@ import org.spongepowered.asm.mixin.injection.At;
  */
 @Mixin(PistonMovingBlockEntity.class)
 abstract class PistonPushMixin {
+    /** The piston direction vanilla's collision ignores moving blocks along, while it pushes an entity. */
+    @Shadow
+    @Final
+    private static ThreadLocal<Direction> NOCLIP;
+
     @WrapMethod(method = "moveCollidedEntities")
     private static void hadron$collided(Level level, BlockPos pos, float progress, PistonMovingBlockEntity piston,
             Operation<Void> original) {
+        if (level.isClientSide()) {
+            original.call(level, pos, progress, piston);
+            return;
+        }
         EntityMoves.pushing(pos, () -> original.call(level, pos, progress, piston));
     }
 
     @WrapMethod(method = "moveStuckEntities")
     private static void hadron$stuck(Level level, BlockPos pos, float progress, PistonMovingBlockEntity piston,
             Operation<Void> original) {
+        if (level.isClientSide()) {
+            original.call(level, pos, progress, piston);
+            return;
+        }
         EntityMoves.pushing(pos, () -> original.call(level, pos, progress, piston));
     }
 
     @WrapMethod(method = "moveEntityByPiston")
     private static void hadron$push(Direction noClip, Entity entity, double distance, Direction direction,
             Operation<Void> original) {
-        EntityMoves.pushed(entity, direction, distance, () -> original.call(noClip, entity, distance, direction));
+        if (entity.level().isClientSide()) {
+            original.call(noClip, entity, distance, direction);
+            return;
+        }
+        // Where vanilla's move will really take it: the same limit and collision, under the same no-clip direction.
+        Vec3 delta = new Vec3(distance * direction.getStepX(), distance * direction.getStepY(),
+                distance * direction.getStepZ());
+        EntityMotionAccessor motion = (EntityMotionAccessor) entity;
+        Vec3 resolved;
+        NOCLIP.set(noClip);
+        try {
+            resolved = EntityMoves.resolve(entity, delta, motion::hadron$collide, motion.hadron$pistonDeltas(),
+                    motion.hadron$pistonDeltasGameTime(), motion.hadron$stuckSpeedMultiplier());
+        } finally {
+            NOCLIP.set(null);
+        }
+        EntityMoves.pushed(entity, resolved, () -> original.call(noClip, entity, distance, direction));
     }
 
     /** A slime block's launch is held until the push that follows it is asked about. */

@@ -23,11 +23,12 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  * any entity a piston pushes. Fired only when a block changes, so it is cheap to listen to, and never on a guess:
  * <ul>
  *   <li>a move a client sends (walking, steering its vehicle) is asked about where the server applies the packet,
- *       with every rider seated, before any other client is sent it; refused, the mover's client is corrected;</li>
+ *       with every rider seated, before any other client is sent it; refused, the mover's client is corrected (what
+ *       the move pressed or counted on the way stays: a known gap);</li>
  *   <li>a move a vehicle makes in its own tick (a mount rearing, a camel sitting down) is asked about at the end of
  *       that tick, once vanilla has seated every passenger, before any client is sent it;</li>
- *   <li>a piston's push is asked about before it is made, with where it takes the entity and its riders; refused,
- *       nothing moves and nothing is stepped on;</li>
+ *   <li>a piston's push is asked about before it is made, with where vanilla's own limit and collision (a wall, a
+ *       step up) will take the entity and its riders; refused, nothing moves and nothing is stepped on;</li>
  *   <li>a move something else makes between ticks (a mod or plugin setting a vehicle's or player's position) is asked
  *       about at the end of its next tick: the server may already have sent that move to watching clients, who then
  *       see it put back if refused.</li>
@@ -129,10 +130,22 @@ public class EntityMoveEvent extends EntityEvent implements Cancellable {
         this.cancelled = cancel;
     }
 
-    /** The block it leaves, the block it enters, then where the move leaves each entity it carries. */
+    /**
+     * The block it leaves, the block it enters, and, when those aren't the same block or next to each other through a
+     * face (a step up and along, a jump of several blocks), every block between them as one area, so no block it
+     * crossed is left out; then where each entity it carries sets out and ends up.
+     */
     @Override
     public Places getPlaces() {
-        return Places.of(Place.Spot.at(getLevel(), getFromBlock()), Place.Spot.at(getLevel(), getToBlock()))
-                .and(getCarried().places());
+        BlockPos a = getFromBlock();
+        BlockPos b = getToBlock();
+        List<Place> more = new ArrayList<>();
+        more.add(Place.Spot.at(getLevel(), b));
+        if (a.distManhattan(b) > 1) {
+            more.add(new Place.Spot(getLevel(), net.minecraft.world.level.levelgen.structure.BoundingBox.fromCorners(a,
+                    b)));
+        }
+        more.addAll(getCarried().places());
+        return Places.of(Place.Spot.at(getLevel(), a), more);
     }
 }

@@ -229,6 +229,14 @@ abstract class EntityMixin implements EntityState {
         hadron$pinZ = z;
     }
 
+    /** Any other change of position lets go of a refused push's pin, so it can't catch the entity again later. */
+    @Inject(method = "setPosRaw", at = @At("HEAD"))
+    private void hadron$unpin(double x, double y, double z, CallbackInfo ci) {
+        if (!Double.isNaN(hadron$pinX) && (x != hadron$pinX || y != hadron$pinY || z != hadron$pinZ)) {
+            hadron$pinX = Double.NaN;
+        }
+    }
+
     /**
      * An entity a refused piston push left in place isn't nudged out of the block the piston put on it, while nothing
      * else has moved it: the nearest open face can be the space it was refused.
