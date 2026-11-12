@@ -357,4 +357,59 @@ class ActorsTest {
         assertDoesNotThrow(() -> Actors.Port.exit(TestHost.KEY, 1));
         assertTrue(Actors.isEmpty());
     }
+
+    @Test
+    void aLazyFrameIsWorkedOutOnlyWhenReadAndOnceAFrame() {
+        int[] resolved = {0};
+        Actors.Port.Lazy lazy = () -> {
+            resolved[0]++;
+            return BLOCK;
+        };
+        long unread = Actors.Port.enterLazy(TestHost.KEY, lazy);
+        Actors.Port.exit(TestHost.KEY, unread);
+        assertEquals(0, resolved[0], "a lazy frame nobody read is never worked out");
+        long read = Actors.Port.enterLazy(TestHost.KEY, lazy);
+        try {
+            assertEquals(Optional.of(BLOCK), Actors.current());
+            assertSame(BLOCK, Actors.currentOr(CONSOLE));
+            assertEquals(1, resolved[0], "a lazy frame read twice is worked out once");
+            try (Actors.Scope inner = Actors.push(CONSOLE)) {
+                assertEquals(Optional.of(CONSOLE), Actors.current());
+            }
+            assertEquals(Optional.of(BLOCK), Actors.current());
+            assertEquals(1, resolved[0], "a frame keeps what it worked out while it is open");
+        } finally {
+            Actors.Port.exit(TestHost.KEY, read);
+        }
+        assertTrue(Actors.isEmpty());
+        long again = Actors.Port.enterLazy(TestHost.KEY, lazy);
+        Actors.current();
+        Actors.Port.exit(TestHost.KEY, again);
+        assertEquals(2, resolved[0], "a new frame works its actor out again: nothing is kept between frames");
+    }
+
+    @Test
+    void aLazyFrameBeingWorkedOutSeesWhatIsUnderIt() {
+        List<Optional<Actor>> seen = new ArrayList<>();
+        Actors.Port.Lazy lazy = () -> {
+            seen.add(Actors.current());
+            return BLOCK;
+        };
+        try (Actors.Scope outer = Actors.push(CONSOLE)) {
+            long frame = Actors.Port.enterLazy(TestHost.KEY, lazy);
+            try {
+                assertEquals(Optional.of(BLOCK), Actors.current());
+            } finally {
+                Actors.Port.exit(TestHost.KEY, frame);
+            }
+        }
+        assertEquals(List.of(Optional.of(CONSOLE)), seen, "a lazy frame's own lookup reads the frame under it");
+        long alone = Actors.Port.enterLazy(TestHost.KEY, () -> {
+            seen.add(Actors.current());
+            return BLOCK;
+        });
+        Actors.current();
+        Actors.Port.exit(TestHost.KEY, alone);
+        assertEquals(Optional.empty(), seen.get(1), "with nothing under it, its lookup reads an empty stack");
+    }
 }

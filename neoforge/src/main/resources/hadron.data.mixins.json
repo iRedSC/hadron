@@ -5,7 +5,6 @@
   "compatibilityLevel": "JAVA_21",
   "mixins": [
     "LevelChunkMixin",
-    "MobEffectInstanceMixin",
     "PistonBaseBlockMixin",
     "PistonMovingBlockEntityMixin"
   ],

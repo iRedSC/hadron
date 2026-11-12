@@ -3,9 +3,9 @@ package dev.iredsc.hadron.neoforge;
 import com.mojang.serialization.Codec;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.Place;
-import java.lang.ref.WeakReference;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
@@ -20,18 +20,20 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Who applied an effect or set an entity alight, and where: kept on each effect instance (hidden ones included) and on
- * a burning entity, saved with it, and put on the actor stack while the effect or the fire acts ({@link Lasting}).
+ * Who applied an effect or set an entity alight, and where. Kept per entity: one for each effect in each effect's
+ * chain ({@link DataEffectCauses}), and one for its fire ({@link Lasting#fireCause}); saved with it.
  *
- * <p>Only what can be saved is kept: what the cause was and who was behind it, never the thing itself. While the
- * cause is still there it acts as itself (the player, the cloud, the machine), for the people it had when it applied
- * this; once it is gone it acts as an {@link Actor.Remembered}, for the same people. Nature and {@link Actor.Unknown}
- * are kept as themselves, so they act as themselves too, not as whoever happens to be on the stack.
+ * <p>A value: it holds only what identifies the cause (what it was, its UUID or a machine's id, and the people behind
+ * it), never the thing itself, so nothing it names is kept in memory and nothing in it can go stale. It is worked out
+ * into an {@link Actor} only when something reads it ({@link Actors.Port.Lazy}): the cause itself while it is there,
+ * for the people it had when it applied this (a bridge's turret firing for its owner keeps that owner), otherwise an
+ * {@link Actor.Remembered} for the same people. Nature and {@link Actor.Unknown} are causes too, and act as themselves.
  */
-public final class LastingCause implements Lasting.Acting {
+public final class LastingCause implements Lasting.Acting, Actors.Port.Lazy {
     /** Who it was, in a form that can be saved. */
     sealed interface Who {}
 
@@ -44,18 +46,21 @@ public final class LastingCause implements Lasting.Acting {
     /** The server on an operator's orders: the {@code /effect} command. */
     record ServerWho(String name) implements Who {}
 
-    /** An entity, a player included, or a remembered actor ({@code id} empty for a gone machine). */
+    /** An entity, a player included, or a remembered one; {@code id} empty only for a remembered machine without one. */
     record EntityWho(ResourceLocation kind, Optional<UUID> id, Attribution attribution) implements Who {}
 
-    /** A block entity at a position. */
-    record MachineWho(ResourceLocation kind, GlobalPos at, Attribution attribution) implements Who {}
+    /**
+     * A block entity at a position, by the id Hadron gave it ({@link AttributionMemory#machineId}), so another put in
+     * its place is never taken for it; empty where its spot held no block entity to give one to.
+     */
+    record MachineWho(ResourceLocation kind, GlobalPos at, Optional<UUID> id, Attribution attribution) implements Who {}
 
     private static final ResourceLocation PLAYER = BuiltInRegistries.ENTITY_TYPE.getKey(EntityType.PLAYER);
 
     /**
      * Saved as {@code applied_at} (a dimension and a position) and who: {@code server} (a name), or {@code kind} with
-     * {@code id} or {@code machine} and {@code attribution}, or {@code nobody} ({@code unknown}); none of them is
-     * nature. Fields it doesn't know are ignored, so a newer or older layout still loads.
+     * {@code id}, plus {@code machine} for a machine, and {@code attribution}; or {@code nobody} ({@code unknown});
+     * none of them is nature. Fields it doesn't know are ignored, so a newer or older layout still loads.
      */
     static final Codec<LastingCause> CODEC = RecordCodecBuilder.create(i -> i.group(
             GlobalPos.CODEC.fieldOf("applied_at").forGetter(c -> c.where),
@@ -66,8 +71,11 @@ public final class LastingCause implements Lasting.Acting {
                 case MachineWho m -> Optional.of(m.kind());
                 default -> Optional.empty();
             }),
-            UUIDUtil.CODEC.optionalFieldOf("id").forGetter(c -> c.who instanceof EntityWho e
-                    ? e.id() : Optional.empty()),
+            UUIDUtil.CODEC.optionalFieldOf("id").forGetter(c -> switch (c.who) {
+                case EntityWho e -> e.id();
+                case MachineWho m -> m.id();
+                default -> Optional.empty();
+            }),
             GlobalPos.CODEC.optionalFieldOf("machine").forGetter(c -> c.who instanceof MachineWho m
                     ? Optional.of(m.at()) : Optional.empty()),
             AttributionMemory.CODEC.optionalFieldOf("attribution").forGetter(c -> switch (c.who) {
@@ -81,17 +89,6 @@ public final class LastingCause implements Lasting.Acting {
 
     private final Who who;
     private final GlobalPos where;
-    /**
-     * What it last resolved to, checked each time it is asked for and looked up again once that has gone. Held
-     * strongly, so asking again allocates nothing; a removed entity is let go the next time the cause acts.
-     */
-    private @Nullable Actor resolved;
-    /** The entity it was applied by, only to find it without a search the first time it acts; weak until then. */
-    private @Nullable WeakReference<Entity> appliedBy;
-    /** For a machine, the block entity it resolved to: a different one put in its place is not it. */
-    private @Nullable BlockEntity machine;
-    /** A machine found broken (its spot loaded and holding no block entity of its type): it stays remembered. */
-    private boolean machineGone;
 
     private LastingCause(Who who, GlobalPos where) {
         this.who = Objects.requireNonNull(who, "who");
@@ -106,7 +103,7 @@ public final class LastingCause implements Lasting.Acting {
         if (server.isPresent()) {
             who = new ServerWho(server.get());
         } else if (kind.isPresent() && machine.isPresent()) {
-            who = new MachineWho(kind.get(), machine.get(), people);
+            who = new MachineWho(kind.get(), machine.get(), id, people);
         } else if (kind.isPresent()) {
             who = new EntityWho(kind.get(), id, people);
         } else {
@@ -117,21 +114,12 @@ public final class LastingCause implements Lasting.Acting {
 
     /**
      * The cause of something applied to {@code subject} now, where it stands: {@code actor}, which may be the subject
-     * itself (a player's own potion), or {@link Actor.Nature} for null, when nothing at all is behind it.
+     * itself (a player's own potion), or {@link Actor.Nature} for null, when nothing at all is behind it. A machine's
+     * block entity is given its id here if it has none yet.
      */
     public static LastingCause of(@Nullable Actor actor, Entity subject) {
-        Actor by = actor != null ? actor : Actor.Nature.INSTANCE;
-        LastingCause cause = new LastingCause(who(by), GlobalPos.of(subject.level().dimension(),
-                subject.blockPosition()));
-        switch (by) {
-            case Actor.Player p -> cause.appliedBy = new WeakReference<>(p.player());
-            case Actor.FakePlayer f -> cause.appliedBy = new WeakReference<>(f.fake());
-            case Actor.EntityActor e -> cause.appliedBy = new WeakReference<>(e.entity());
-            case Actor.Machine m -> cause.machine = m.level().isLoaded(m.pos()) ? m.level().getBlockEntity(m.pos())
-                    : null;
-            default -> { }
-        }
-        return cause;
+        return new LastingCause(who(actor != null ? actor : Actor.Nature.INSTANCE),
+                GlobalPos.of(subject.level().dimension(), subject.blockPosition()));
     }
 
     private static Who who(Actor actor) {
@@ -139,8 +127,7 @@ public final class LastingCause implements Lasting.Acting {
             case Actor.Player p -> entityWho(p.player(), p.attribution());
             case Actor.FakePlayer f -> entityWho(f.fake(), f.attribution());
             case Actor.EntityActor e -> entityWho(e.entity(), e.attribution());
-            case Actor.Machine m -> new MachineWho(machineKind(m.level(), m.pos()),
-                    GlobalPos.of(m.level().dimension(), m.pos()), m.attribution());
+            case Actor.Machine m -> machineWho(m);
             case Actor.Remembered r -> new EntityWho(r.kind(), r.id(), r.attribution());
             case Actor.Server s -> new ServerWho(s.name());
             case Actor.Nature n -> Nobody.NATURE;
@@ -153,11 +140,17 @@ public final class LastingCause implements Lasting.Acting {
                 attribution);
     }
 
-    /** A machine's block entity type, or its block's id where no block entity is there to say. */
-    private static ResourceLocation machineKind(ServerLevel level, BlockPos pos) {
+    private static MachineWho machineWho(Actor.Machine m) {
+        ServerLevel level = m.level();
+        BlockPos pos = m.pos();
+        GlobalPos at = GlobalPos.of(level.dimension(), pos);
         BlockEntity be = level.isLoaded(pos) ? level.getBlockEntity(pos) : null;
-        if (be != null) return BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType());
-        return BuiltInRegistries.BLOCK.getKey(level.getBlockState(pos).getBlock());
+        if (be == null) {
+            return new MachineWho(BuiltInRegistries.BLOCK.getKey(level.getBlockState(pos).getBlock()), at,
+                    Optional.empty(), m.attribution());
+        }
+        return new MachineWho(BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType()), at,
+                Optional.of(AttributionMemory.machineId(be)), m.attribution());
     }
 
     /** Whether this cause is {@code entity} itself: its own splash potion, its own poison. */
@@ -165,80 +158,41 @@ public final class LastingCause implements Lasting.Acting {
         return who instanceof EntityWho e && e.id().isPresent() && e.id().get().equals(entity.getUUID());
     }
 
+    /** Worked out now, on the running server; {@link Actor.Unknown} with none. */
+    @Override
+    public Actor resolve() {
+        MinecraftServer server = ServerLifecycleHooks.getCurrentServer();
+        return server == null ? Actor.Unknown.INSTANCE : actor(server);
+    }
+
     /**
-     * Who acts now: the cause itself while it is still there, for the people it had when it applied this (a bridge's
-     * turret firing for its owner keeps that owner), otherwise an {@link Actor.Remembered} for the same people;
-     * {@link Actor.Nature} or {@link Actor.Unknown} for nobody. Looked up once and kept while it holds, so asking again
-     * costs a check and allocates nothing.
+     * Who acts now: the cause itself while it is there, for the people it had when it applied this, otherwise an
+     * {@link Actor.Remembered} for the same people. A player is there while online; another entity while loaded,
+     * wherever it is now (after a reload too: it is found by its UUID); a machine while the very block entity it was
+     * (by its id) is at its spot, loaded.
      */
     public Actor actor(MinecraftServer server) {
-        Actor kept = resolved;
-        if (kept != null && !stale(kept, server)) return kept;
-        Actor actor = resolve(server);
-        resolved = actor;
-        return actor;
-    }
-
-    /**
-     * Whether what it resolved to no longer holds: an entity removed, a machine's block entity gone (broken, replaced,
-     * or its chunk unloaded), a machine remembered while its spot was unloaded and now loaded, a remembered player back
-     * online.
-     */
-    private boolean stale(Actor kept, MinecraftServer server) {
-        return switch (kept) {
-            case Actor.Player p -> p.player().isRemoved();
-            case Actor.FakePlayer f -> f.fake().isRemoved();
-            case Actor.EntityActor e -> e.entity().isRemoved();
-            case Actor.Machine m -> machine == null || machine.isRemoved();
-            case Actor.Remembered r when who instanceof MachineWho m -> !machineGone && loaded(server, m.at()) != null;
-            case Actor.Remembered r -> r.kind().equals(PLAYER) && r.id().isPresent()
-                    && server.getPlayerList().getPlayer(r.id().get()) != null;
-            default -> false;
-        };
-    }
-
-    private static @Nullable ServerLevel loaded(MinecraftServer server, GlobalPos at) {
-        ServerLevel level = server.getLevel(at.dimension());
-        return level != null && level.isLoaded(at.pos()) ? level : null;
-    }
-
-    private Actor resolve(MinecraftServer server) {
         return switch (who) {
             case Nobody n -> n == Nobody.UNKNOWN ? Actor.Unknown.INSTANCE : Actor.Nature.INSTANCE;
             case ServerWho s -> new Actor.Server(s.name());
             case EntityWho e -> {
-                WeakReference<Entity> hint = appliedBy;
-                appliedBy = null;
-                Entity first = hint == null ? null : hint.get();
-                Entity found = first != null && !first.isRemoved() ? first
-                        : e.id().map(id -> find(server, e.kind(), id)).orElse(null);
+                Entity found = e.id().isPresent() ? find(server, e.kind(), e.id().get()) : null;
                 yield found != null ? EntityActors.as(found, e.attribution())
                         : new Actor.Remembered(e.kind(), e.id(), e.attribution());
             }
-            case MachineWho m -> resolveMachine(server, m);
+            case MachineWho m -> machine(server, m);
         };
     }
 
-    /**
-     * The machine while it is at its spot: the very block entity it resolved to, as long as that was never seen
-     * replaced. Only where nothing could tell machines apart, after a restart or once its spot was seen unloaded, does
-     * a block entity of the same type there count as it. Anything else at a loaded spot (a furnace where a chest was,
-     * a new chest where the old one was broken, nothing) means the machine is gone: remembered for good.
-     */
-    private Actor resolveMachine(MinecraftServer server, MachineWho m) {
-        BlockEntity kept = machine;
-        ServerLevel level = loaded(server, m.at());
-        machine = null;
-        if (level == null) return new Actor.Remembered(m.kind(), Optional.empty(), m.attribution());
-        BlockEntity there = level.getBlockEntity(m.at().pos());
-        boolean same = there != null && (kept == null || kept == there)
-                && BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(there.getType()).equals(m.kind());
-        if (!same) {
-            machineGone = true;
-            return new Actor.Remembered(m.kind(), Optional.empty(), m.attribution());
-        }
-        machine = there;
-        return new Actor.Machine(level, m.at().pos(), m.attribution());
+    private static Actor machine(MinecraftServer server, MachineWho m) {
+        ServerLevel level = server.getLevel(m.at().dimension());
+        BlockPos pos = m.at().pos();
+        BlockEntity be = level != null && level.isLoaded(pos) ? level.getBlockEntity(pos) : null;
+        boolean same = level != null && be != null && m.id().isPresent()
+                && BuiltInRegistries.BLOCK_ENTITY_TYPE.getKey(be.getType()).equals(m.kind())
+                && m.id().get().equals(AttributionMemory.machineIdIfAny(be));
+        return same ? new Actor.Machine(level, pos, m.attribution())
+                : new Actor.Remembered(m.kind(), m.id(), m.attribution());
     }
 
     private static @Nullable Entity find(MinecraftServer server, ResourceLocation kind, UUID id) {
@@ -258,6 +212,16 @@ public final class LastingCause implements Lasting.Acting {
         ServerLevel level = server.getLevel(where.dimension());
         return level == null ? Place.Unknown.anywhere(Place.Unknown.Reason.UNSEEN_ORIGIN)
                 : Place.Spot.at(level, where.pos());
+    }
+
+    @Override
+    public boolean equals(@Nullable Object o) {
+        return o instanceof LastingCause c && who.equals(c.who) && where.equals(c.where);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(who, where);
     }
 
     @Override

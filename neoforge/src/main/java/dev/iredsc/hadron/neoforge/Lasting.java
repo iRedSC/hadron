@@ -4,11 +4,8 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.Place;
 import java.util.Optional;
-import java.util.function.Function;
 import net.minecraft.server.MinecraftServer;
-import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.LivingEntity;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -56,62 +53,6 @@ public final class Lasting {
      */
     public record FireUndo(@Nullable LastingCause cause, int ticks, long gameTime) {}
 
-    /**
-     * What the effect mixin adds to every {@link MobEffectInstance}: who applied it and where. Hidden effects keep
-     * their own, and a hidden effect resuming brings its own back. Cast any instance to it.
-     */
-    public interface EffectState {
-        @Nullable LastingCause hadron$cause();
-
-        void hadron$setCause(@Nullable LastingCause cause);
-
-        /** The weaker or shorter effect this one hides, which resumes when this one runs out. */
-        @Nullable MobEffectInstance hadron$hidden();
-
-        /** The entity this instance was last active on, or null when none is known. */
-        @Nullable LivingEntity hadron$activeOn();
-
-        void hadron$setActiveOn(LivingEntity entity);
-    }
-
-    /** Who applied an effect, or null when nothing recorded it. */
-    public static @Nullable LastingCause cause(MobEffectInstance effect) {
-        return ((EffectState) effect).hadron$cause();
-    }
-
-    /**
-     * Runs {@code apply}, vanilla applying an effect to {@code subject}, with the credit going to {@code source} when
-     * there is one (which may be the subject itself, a player's own splash potion), otherwise to whoever is on the
-     * stack ({@link Actor.Nature} when nothing is), with where the subject stands. Returns what {@code apply} returns.
-     *
-     * <p>The credit lands only where vanilla really applies it: on the instance when it becomes the subject's active
-     * effect, on the active one when {@code update} replaces it (a higher amplifier, or the same for longer), and on a
-     * hidden copy when it waits underneath. An instance that ends up nowhere new (refused, weaker and shorter, or
-     * already the active one) keeps the cause it had. An instance already active on another entity (a mod passing one
-     * entity's effect to the next) is applied as a copy, so each entity's effect has its own cause.
-     */
-    public static <T> T applying(LivingEntity subject, MobEffectInstance effect, @Nullable Entity source,
-            Function<MobEffectInstance, T> apply) {
-        LivingEntity elsewhere = ((EffectState) effect).hadron$activeOn();
-        MobEffectInstance applied = elsewhere != null && elsewhere != subject
-                && elsewhere.getEffect(effect.getEffect()) == effect ? new MobEffectInstance(effect) : effect;
-        MobEffectInstance before = subject.getEffect(applied.getEffect());
-        EffectState state = (EffectState) applied;
-        LastingCause own = state.hadron$cause();
-        Actor actor = source != null ? EntityActors.of(source) : EntityActors.current();
-        // Carried on the instance while vanilla runs, so update() and the hidden copies it makes can take it.
-        state.hadron$setCause(LastingCause.of(actor, subject));
-        try {
-            return apply.apply(applied);
-        } finally {
-            if (applied != before && subject.getEffect(applied.getEffect()) == applied) {
-                state.hadron$setActiveOn(subject);
-            } else {
-                state.hadron$setCause(own);
-            }
-        }
-    }
-
     /** What is acting on the entity now, or null; pass it back to {@link #exit}. */
     public static @Nullable Acting acting(Entity subject) {
         return ((State) subject).hadron$acting();
@@ -120,14 +61,12 @@ public final class Lasting {
     /**
      * Marks {@code cause} as acting on {@code subject} and pushes who it is, {@link Actor.Nature} included, so what the
      * effect or fire does is never credited to whoever else is on the stack. Returns the stack handle for
-     * {@link #exit}, or 0 when nothing was pushed: a cause nothing recorded. Allocates nothing once the cause has been
-     * looked up.
+     * {@link #exit}, or 0 when nothing was pushed: a cause nothing recorded. Allocates and looks up nothing: who it is
+     * is worked out only if something reads the stack while it acts ({@code Actors.Port.enterLazy}).
      */
     public static long enter(Entity subject, @Nullable LastingCause cause) {
         ((State) subject).hadron$setActing(cause != null ? cause : Unrecorded.INSTANCE);
-        MinecraftServer server = subject.getServer();
-        if (cause == null || server == null) return 0;
-        return Actors.Port.enter(PortKey.KEY, cause.actor(server));
+        return cause == null ? 0 : Actors.Port.enterLazy(PortKey.KEY, cause);
     }
 
     /** Undoes {@link #enter}: pops what it pushed, and puts back what was acting before. */

@@ -19,11 +19,11 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.lang.ref.WeakReference;
 import java.util.function.Consumer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.nbt.CompoundTag;
-import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageType;
@@ -313,12 +313,10 @@ public final class LastingCauseTests {
         IronGolem golem = golem(t, t.pos(2, 0, 0));
         golem.addEffect(poison(600, 0), bob.player());
         IronGolem loaded = reload(t, golem, tag -> {
-            ListTag effects = tag.getList("active_effects", Tag.TAG_COMPOUND);
-            t.assertTrue(!effects.isEmpty(), "the golem should save its poison");
-            for (int i = 0; i < effects.size(); i++) {
-                t.assertTrue(effects.getCompound(i).contains("hadron:causes"), "the poison should save its cause");
-                effects.getCompound(i).remove("hadron:causes");
-            }
+            t.assertTrue(!tag.getList("active_effects", Tag.TAG_COMPOUND).isEmpty(), "the golem should save its poison");
+            CompoundTag attachments = tag.getCompound("neoforge:attachments");
+            t.assertTrue(attachments.contains("hadron:effect_causes"), "the golem should save who poisoned it");
+            attachments.remove("hadron:effect_causes");
         }, IronGolem.class);
         t.assertTrue(loaded.hasEffect(MobEffects.POISON), "the poison should load without its cause");
         List<EntityDamageEvent> heard = hurts(t, loaded);
@@ -511,17 +509,75 @@ public final class LastingCauseTests {
 
     @HadronTest
     @Covers(EntityDamageEvent.class)
-    void aBridgesCauseActsAsTheSameActorEachTick(TestContext t) {
+    void anEffectLoadedFromASaveKeepsItsCauseWhenPassedOnBeforeItTicks(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        golem.addEffect(poison(400, 0), bob.player());
+        IronGolem loaded = reload(t, golem, tag -> {}, IronGolem.class);
+        IronGolem other = golem(t, t.pos(-2, 0, 2));
+        // Straight after loading, before the loaded poison has ticked once.
+        other.addEffect(loaded.getEffect(MobEffects.POISON), alice.player());
+        assertFor(t, bob, nextPoison(t, hurts(t, loaded)), "the loaded golem's poison");
+        assertFor(t, alice, nextPoison(t, hurts(t, other)), "the other golem's poison");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aCauseThatWasSavedAndLoadedIsFoundAgain(TestContext t) {
         TestPlayer bob = t.player("bob");
         Pig turret = spawn(t, EntityType.PIG, t.pos(-3, 0, 0));
         IronGolem golem = golem(t, t.pos(2, 0, 0));
         Actors.acting(new Actor.EntityActor(turret, Attribution.of(bob.uuid())),
-                () -> golem.addEffect(poison(400, 2), turret));
-        List<EntityDamageEvent> heard = hurts(t, golem);
-        Actor first = nextPoison(t, heard).getActor();
-        Actor second = nextPoison(t, heard).getActor();
-        // One actor, looked up once: a tick that builds a new one would allocate on every tick of every such effect.
-        t.assertTrue(first == second, "each tick of the turret's poison should act as the same actor, but got "
-                + first + " then a new " + second);
+                () -> golem.addEffect(poison(400, 0), turret));
+        // The turret is saved and loaded again (its chunk unloading, a restart): a new object with the same UUID.
+        Pig reloaded = reload(t, turret, tag -> {}, Pig.class);
+        EntityDamageEvent tick = nextPoison(t, hurts(t, golem));
+        t.assertTrue(tick.getActor() instanceof Actor.EntityActor e && e.entity() == reloaded,
+                "the poison should act as the reloaded turret, but acted as " + tick.getActor());
+        assertFor(t, bob, tick, "the reloaded turret's poison");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aMachineRebuiltAsTheSameKindIsStillRemembered(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos machine = t.pos(-3, 0, 0);
+        t.setBlock(machine, Blocks.CHEST);
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        Actors.acting(new Actor.Machine(t.level(), machine, Attribution.of(bob.uuid())),
+                () -> golem.addEffect(poison(400, 0)));
+        t.setBlock(machine, Blocks.AIR);
+        t.setBlock(machine, Blocks.CHEST);
+        EntityDamageEvent tick = nextPoison(t, hurts(t, golem));
+        t.assertTrue(tick.getActor() instanceof Actor.Remembered,
+                "a new chest where the poisoning one was broken is not it, but the cause was " + tick.getActor());
+        assertFor(t, bob, tick, "the broken chest's poison");
+    }
+
+    /** Poisons {@code golem} by a pig, then removes the pig; returns a reference that doesn't keep the pig. */
+    private static WeakReference<Pig> poisonByAPigAndRemoveIt(TestContext t, IronGolem golem) {
+        Pig pig = spawn(t, EntityType.PIG, t.pos(-3, 0, 0));
+        golem.addEffect(poison(400, 0), pig);
+        pig.discard();
+        return new WeakReference<>(pig);
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aRemovedCauseIsNotKeptInMemory(TestContext t) {
+        t.player("bob");
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        WeakReference<Pig> pig = poisonByAPigAndRemoveIt(t, golem);
+        EntityDamageEvent tick = nextPoison(t, hurts(t, golem));
+        t.assertTrue(tick.getActor() instanceof Actor.Remembered r && r.kind().equals(
+                        BuiltInRegistries.ENTITY_TYPE.getKey(EntityType.PIG)),
+                "the removed pig's poison should act as the remembered pig, but acted as " + tick.getActor());
+        for (int i = 0; i < 20 && pig.get() != null; i++) {
+            System.gc();
+            t.tick();
+        }
+        t.assertTrue(pig.get() == null, "the removed pig should be let go while its poison still acts, but something "
+                + "still holds it");
     }
 }

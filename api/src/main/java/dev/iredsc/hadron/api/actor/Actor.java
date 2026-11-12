@@ -86,7 +86,8 @@ public sealed interface Actor {
      *
      * @param kind what it was, namespaced: an entity type's id ({@code minecraft:player},
      *     {@code minecraft:area_effect_cloud}), or a block entity type's for a machine
-     * @param id which one: the entity's UUID (a player's is their account's); empty for a machine, which has none
+     * @param id which one: the entity's UUID (a player's is their account's), or for a machine the id Hadron gave its
+     *     block entity; empty where there was none
      * @param attribution the people who were behind it; {@link Attribution#none()} for nobody
      */
     record Remembered(ResourceLocation kind, Optional<UUID> id, Attribution attribution) implements Actor {

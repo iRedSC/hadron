@@ -26,6 +26,8 @@
     "LivingEntityEffectMixin",
     "LivingEntityMixin",
     "MinecartTNTMixin",
+    "MobEffectInstanceAccessor",
+    "MobEffectInstanceMixin",
     "MobMixin",
     "PlayerInteractMixin",
     "ProjectileMixin",
