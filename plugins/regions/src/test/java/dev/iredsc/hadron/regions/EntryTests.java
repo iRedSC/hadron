@@ -182,8 +182,6 @@ public final class EntryTests {
     }
 
     @HadronTest
-    @KnownGap("EntityMountEvent states where the mount is, not where the rider is seated: a boat's back seat can lie in "
-            + "another block than the boat")
     void anOutsiderCantBoardASeatInsideARegion(TestContext t) {
         TestPlayer alice = RegionsTests.admin(t);
         RegionsTests.define(t, alice, "seat-vault", t.pos(3, -1, -1), t.pos(5, 2, 1));
@@ -197,6 +195,42 @@ public final class EntryTests {
         bob.interact(boat);
         t.tick(2);
         t.assertTrue(bob.player().getX() < t.pos(3, 0, 0).getX(), "bob should not be seated in the vault, but sits at "
+                + bob.player().position());
+    }
+
+    @HadronTest
+    void aMemberBoardingCantShiftAnOutsiderAboardIntoARegion(TestContext t) {
+        TestPlayer alice = RegionsTests.admin(t);
+        RegionsTests.define(t, alice, "shift-vault", t.pos(3, -1, -1), t.pos(5, 2, 1));
+        alice.command("rg flag shift-vault entry deny");
+        TestPlayer carol = t.player("carol");
+        alice.command("rg addmember shift-vault carol");
+        TestPlayer bob = t.player("bob");
+        int edge = t.pos(3, 0, 0).getX();
+        // Facing east, a tenth of a block short of the vault: a lone rider sits where the boat is, outside it, and
+        // moves 0.2 forward, into it, when a second boards behind.
+        Boat boat = EntityType.BOAT.create(t.level());
+        boat.moveTo(edge - 0.1, t.pos(2, 0, 0).getY(), t.pos(2, 0, 0).getZ() + 0.5, -90f, 0f);
+        boat.setNoGravity(true);
+        t.level().addFreshEntity(boat);
+        bob.interact(boat);
+        t.assertTrue(bob.player().getVehicle() == boat, "bob should be in the boat");
+        t.tick(2);
+        Vec3 bobWas = bob.player().position();
+        t.assertTrue(bobWas.x < edge, "bob should start outside the vault, but sits at " + bobWas);
+        carol.interact(boat);
+        t.assertTrue(carol.player().getVehicle() == null, "carol's boarding, which shifts bob into the vault, should "
+                + "be refused");
+        t.assertEquals(bobWas, bob.player().position(), "bob's seat, the boarding refused");
+        t.tick(3);
+        t.assertTrue(bob.player().getX() < edge, "bob should still be outside the vault a few ticks on, but sits at "
+                + bob.player().position());
+        // The control: once bob is a member, the same boarding shifts him in.
+        alice.command("rg addmember shift-vault bob");
+        carol.interact(boat);
+        t.tick(2);
+        t.assertTrue(carol.player().getVehicle() == boat, "carol should board once the rider she shifts is a member");
+        t.assertTrue(bob.player().getX() >= edge, "the boarding should shift a member into the vault, but bob sits at "
                 + bob.player().position());
     }
 

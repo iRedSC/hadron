@@ -159,11 +159,16 @@ final class Protection implements Listener {
                 Place.Spot.at(e.getToLevel(), e.getTo())), e.getCarried());
     }
 
-    /** Boarding is entering where the mount is: a player stepping into a boat inside a region rides in. */
+    /**
+     * Boarding is entering the seat, which can be another block than the mount's, and it moves who the rider brings
+     * and who is already aboard and has to shift: the event states each. It is entering where the mount is, too: a
+     * seat's point can lie under a region the boat stands in.
+     */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void mount(EntityMountEvent e) {
-        entry(e, e, moved(e.getEntity(), Place.Spot.at(e.getLevel(), e.getPosition()), Place.of(e.getMount())),
-                Carried.none());
+        Place from = Place.Spot.at(e.getLevel(), e.getPosition());
+        entry(e, e, List.of(new Carried.Ride(e.getEntity(), from, Place.Spot.at(e.getLevel(), e.getTo())),
+                new Carried.Ride(e.getEntity(), from, Place.of(e.getMount()))), e.getCarried());
     }
 
     /** Getting off is entering where the rider is set down: beside a boat at a region's edge can be inside it. */
