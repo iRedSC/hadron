@@ -26,7 +26,8 @@ import net.minecraft.world.phys.Vec3;
 
 /**
  * {@code EntityMountEvent.getTo()} is where the rider is really seated, on each seat of a boat and a camel, a minecart
- * and a horse, with everything the rider carries stated too, and a refused mount leaves everyone where they were.
+ * and a horse, with everything the rider carries and every rider already aboard that it shifts stated too, and a
+ * refused mount leaves everyone where they were.
  */
 public final class MountTests {
     /** Every mount of {@code who} heard from now on, each cancelled when {@code refuse}. */
@@ -87,18 +88,71 @@ public final class MountTests {
         return e;
     }
 
-    /** Alice boards a fresh {@code vehicle}: one mount, stating exactly where she then sits. */
-    private static EntityMountEvent seatsWhereStated(TestContext t, Function<TestContext, Entity> vehicle) {
+    /**
+     * {@code vehicle} with a zombie already on it, driving: a player who boards goes ahead of it, and it to the back.
+     */
+    private static Function<TestContext, Entity> withZombie(Function<TestContext, Entity> vehicle) {
+        return t -> {
+            Entity v = vehicle.apply(t);
+            Zombie zombie = spawn(t, EntityType.ZOMBIE, v.blockPosition());
+            t.assertTrue(zombie.startRiding(v, true), "the zombie should get on the " + v.getName().getString());
+            t.tick(2);
+            return v;
+        };
+    }
+
+    /** Alice boards {@code v}: one mount, stating exactly where she then sits. */
+    private static EntityMountEvent boards(TestContext t, Entity v) {
         TestPlayer alice = t.player("alice");
-        Entity v = vehicle.apply(t);
-        t.tick(2);
         Vec3 from = alice.player().position();
         List<EntityMountEvent> heard = hear(t, alice.player(), false);
         t.assertTrue(alice.player().startRiding(v), "alice should get on the " + v.getName().getString());
         EntityMountEvent e = assertSeatedWhereStated(t, heard, alice.player(), v);
         t.assertTrue(e.getPosition().distanceTo(from) < 1.0E-6, "the event should say she sets out from " + from);
-        t.assertEquals(Carried.none(), e.getCarried(), "what alice carries");
         return e;
+    }
+
+    /**
+     * Alice boards a fresh {@code vehicle}, moving nobody else: one mount, stating exactly where she then sits and
+     * nobody besides, and whoever was aboard is exactly where they were.
+     */
+    private static EntityMountEvent seatsWhereStated(TestContext t, Function<TestContext, Entity> vehicle) {
+        t.player("alice");
+        Entity v = vehicle.apply(t);
+        t.tick(2);
+        List<Entity> riders = List.copyOf(v.getPassengers());
+        List<Vec3> seats = riders.stream().map(Entity::position).toList();
+        EntityMountEvent e = boards(t, v);
+        t.assertEquals(Carried.none(), e.getCarried(), "who else alice's mount moves");
+        t.assertEquals(seats, riders.stream().map(Entity::position).toList(), "where the riders already aboard sit");
+        return e;
+    }
+
+    /**
+     * {@code e} names {@code shifted}, already aboard, and nobody else: from the block it was in, {@code from}, to the
+     * block it is in now, {@code by} blocks along from where it was, and that is where the vehicle keeps it.
+     */
+    private static void assertShiftStated(TestContext t, EntityMountEvent e, Entity shifted, Vec3 from, double by) {
+        String who = shifted.getName().getString();
+        t.assertTrue(e.getCarried() instanceof Carried.Known, "who the mount moves is known: " + e.getCarried());
+        List<Carried.Ride> rides = ((Carried.Known) e.getCarried()).rides();
+        t.assertEquals(List.of(shifted), rides.stream().map(Carried.Ride::entity).toList(), "who the mount moves");
+        t.assertTrue(Math.abs(shifted.position().distanceTo(from) - by) < 1.0E-6, who + " should have been shifted "
+                + by + " from " + from + " at once, but is at " + shifted.position());
+        t.assertFalse(shifted.blockPosition().equals(BlockPos.containing(from)), "this shift should take " + who
+                + " into another block than " + BlockPos.containing(from).toShortString());
+        t.assertEquals(Place.Spot.at(t.level(), BlockPos.containing(from)), rides.get(0).from(), "where " + who
+                + " sets out");
+        t.assertEquals(Place.Spot.at(t.level(), shifted.blockPosition()), rides.get(0).to(), "where " + who
+                + " ends up; it is at " + shifted.position());
+        t.assertTrue(e.getPlaces().contains(Place.Spot.at(t.level(), shifted.blockPosition())),
+                "the event's places should hold the block " + who + " is shifted into: " + e.getPlaces());
+        Vec3 seat = shifted.position();
+        Vec3 vehicleAt = e.getMount().position();
+        t.tick(2);
+        t.assertTrue(shifted.position().distanceTo(seat.add(e.getMount().position().subtract(vehicleAt))) < 1.0E-6,
+                who + " was seated at once where vanilla seats it on its next tick, but moved from " + seat + " to "
+                + shifted.position());
     }
 
     /** Alice boards, refused: she stays where she was, posed as she was, the vehicle's riders are as they were. */
@@ -140,13 +194,84 @@ public final class MountTests {
     @HadronTest
     @Covers(EntityMountEvent.class)
     void aBoatsSecondSeatIsStatedAndIsNotTheBoatsBlock(TestContext t) {
-        EntityMountEvent e = seatsWhereStated(t, withBob(MountTests::boat));
+        t.player("alice");
+        EntityMountEvent e = boards(t, withBob(MountTests::boat).apply(t));
         Entity boat = e.getMount();
         t.assertTrue(e.getTo().distanceTo(boat.position()) > 0.5, "the back seat is behind the boat at "
                 + boat.position() + ", but the event said " + e.getTo());
         t.assertFalse(BlockPos.containing(e.getTo()).equals(boat.blockPosition()), "this boat's back seat is in "
                 + "another block than the boat's " + boat.blockPosition().toShortString() + ", but the event said "
                 + e.getTo());
+    }
+
+    /**
+     * A boat's lone rider sits at its middle and moves 0.2 forward when a second boards: here across a block edge,
+     * into a block nothing but the mount's carried riders would name.
+     */
+    @HadronTest
+    @Covers(EntityMountEvent.class)
+    void aSecondRiderStatesTheFirstRidersShift(TestContext t) {
+        t.player("alice");
+        TestPlayer bob = t.player("bob");
+        Entity boat = boat(t);
+        boat.setPos(boat.getX(), boat.getY(), boat.getBlockZ() + 0.9);
+        t.assertTrue(bob.player().startRiding(boat), "bob should get in the boat");
+        t.tick(2);
+        Vec3 bobFrom = bob.player().position();
+        EntityMountEvent e = boards(t, boat);
+        assertShiftStated(t, e, bob.player(), bobFrom, 0.2);
+    }
+
+    /** A player boards ahead of a mob: the zombie driving goes from the boat's middle to its back seat, 0.6 behind. */
+    @HadronTest
+    @Covers(EntityMountEvent.class)
+    void aPlayerBoardingABoatAMobDrivesStatesTheMobsMoveToTheBackSeat(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Entity boat = withZombie(MountTests::boat).apply(t);
+        Entity zombie = boat.getPassengers().get(0);
+        Vec3 zombieFrom = zombie.position();
+        EntityMountEvent e = boards(t, boat);
+        t.assertEquals(List.of(alice.player(), zombie), boat.getPassengers(), "the boat's riders, driver first");
+        assertShiftStated(t, e, zombie, zombieFrom, 0.6);
+    }
+
+    /**
+     * A zombie facing nearly backwards to {@code boat}, further round than a boat lets a rider face, and out of its
+     * reach: a boat takes a mob that touches it aboard by itself.
+     */
+    private static Zombie facingBackNear(TestContext t, Entity boat) {
+        Zombie zombie = spawn(t, EntityType.ZOMBIE, boat.blockPosition().east(3));
+        zombie.setYRot(boat.getYRot() + 170.0F);
+        zombie.setYHeadRot(boat.getYRot() + 170.0F);
+        return zombie;
+    }
+
+    /**
+     * Listening seats a rider at once, and must do no more than that: a boat turns whoever it seats to face within
+     * its limits, on its tick, so a mob that boards facing backwards still does until then, exactly as with nobody
+     * listening. (Seating it with the boat's own {@code positionRider} turned it at once, and a player, whom vanilla
+     * seats as she boards, twice.)
+     */
+    @HadronTest
+    @Covers(EntityMountEvent.class)
+    void aBoardingMobFacesAsItDoesWithNobodyListening(TestContext t) {
+        t.player("alice");
+        Entity unheard = spawn(t, EntityType.BOAT, t.pos(2, 0, 3));
+        Entity heard = spawn(t, EntityType.BOAT, t.pos(2, 0, -3));
+        Zombie vanilla = facingBackNear(t, unheard);
+        Zombie listened = facingBackNear(t, heard);
+        t.tick(2);
+        t.assertTrue(vanilla.startRiding(unheard, true), "the zombie should get in the boat nobody listens to");
+        List<EntityMountEvent> mounts = hear(t, listened, false);
+        t.assertTrue(listened.startRiding(heard, true), "the zombie should get in the boat");
+        assertSeatedWhereStated(t, mounts, listened, heard);
+        t.assertEquals(vanilla.getYRot(), listened.getYRot(), "the zombie's facing, boarding with a listener, against "
+                + "one boarding without");
+        t.assertEquals(vanilla.getYHeadRot(), listened.getYHeadRot(), "its head, against the other's");
+        t.assertEquals(vanilla.yBodyRot, listened.yBodyRot, "its body, against the other's");
+        t.tick(2);
+        t.assertEquals(vanilla.getYRot(), listened.getYRot(), "the zombie's facing two ticks later, once each boat "
+                + "has turned its rider");
     }
 
     @HadronTest
@@ -165,7 +290,7 @@ public final class MountTests {
 
     @HadronTest
     @Covers(EntityMountEvent.class)
-    void aCamelsSecondSeatIsStated(TestContext t) {
+    void aCamelsSecondSeatIsStatedAndItsFirstRiderStaysPut(TestContext t) {
         EntityMountEvent e = seatsWhereStated(t, withBob(MountTests::camel));
         Vec3 behind = e.getTo().subtract(e.getMount().position());
         t.assertTrue(Math.hypot(behind.x, behind.z) > 0.5, "a camel's second rider sits behind its middle at "
@@ -276,6 +401,12 @@ public final class MountTests {
     @Covers(EntityMountEvent.class)
     void aRefusedSecondSeatLeavesTheBoatsRiderAsHeWas(TestContext t) {
         refusedStaysOff(t, withBob(MountTests::boat));
+    }
+
+    @HadronTest
+    @Covers(EntityMountEvent.class)
+    void aRefusedBoardingAheadOfAMobDriverLeavesItDriving(TestContext t) {
+        refusedStaysOff(t, withZombie(MountTests::boat));
     }
 
     @HadronTest

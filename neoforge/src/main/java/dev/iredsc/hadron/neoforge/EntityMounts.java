@@ -26,17 +26,25 @@ import net.minecraft.world.phys.Vec3;
  * vehicle's passenger list swapped for the one it will have and the rider standing, and both are put back before the
  * event fires: no game event, no packet, nothing told to either entity.
  *
+ * <p>Boarding can move who is already aboard: a boat's lone rider shifts forward for a second, and a mob driver goes
+ * to the back seat when a player boards ahead of it. Each rider the new list seats somewhere other than where it is
+ * is a ride of the mount too, with its own passengers.
+ *
  * <p>Vanilla seats only a player at once, and anything else on the vehicle's next tick, by when the vehicle may have
- * moved. So when the mount goes ahead and someone listens, the rider and everything riding it are seated right then
- * ({@link #seated}), with vanilla's own {@code positionRider}.
+ * moved. So when the mount goes ahead and someone listens, everyone the event named is put on its seat right then
+ * ({@link #seated}): the spot only, not {@code positionRider}, which would also turn them as a vehicle's tick does (a
+ * steered boat adds its turn), once more than vanilla.
  */
 public final class EntityMounts {
-    /** Where the rider will sit, and everything riding it with where each ends up. */
+    /** Where the rider will sit, and everyone else the mount moves with where each ends up. */
     record Seating(Vec3 to, Carried carried) {}
 
     private EntityMounts() {}
 
-    /** Where {@code vehicle} will seat {@code rider}, and each entity the rider carries. Changes nothing. */
+    /**
+     * Where {@code vehicle} will seat {@code rider}, each entity the rider carries, and each rider already aboard
+     * that boarding moves, with what it carries. Changes nothing.
+     */
     static Seating seating(Entity rider, Entity vehicle) {
         EntityPassengersAccessor seats = (EntityPassengersAccessor) vehicle;
         ImmutableList<Entity> were = seats.hadron$passengers();
@@ -45,9 +53,15 @@ public final class EntityMounts {
         try {
             seats.hadron$setPassengers(with(were, rider));
             if (pose != Pose.STANDING) rider.setPose(Pose.STANDING);
-            Vec3 to = vehicle.getPassengerRidingPosition(rider).subtract(rider.getVehicleAttachmentPoint(vehicle));
+            Vec3 to = seat(vehicle, rider);
             List<Carried.Ride> rides = new ArrayList<>();
             carried(rider, to, to, 0, rides);
+            for (Entity aboard : were) {
+                Vec3 seat = seat(vehicle, aboard);
+                if (aboard == rider || seat.equals(aboard.position())) continue;
+                rides.add(Carried.ride(aboard, (ServerLevel) vehicle.level(), seat));
+                carried(aboard, seat, seat, 0, rides);
+            }
             return new Seating(to, Carried.of(rides));
         } finally {
             seats.hadron$setPassengers(were);
@@ -55,6 +69,11 @@ public final class EntityMounts {
             // Standing up can nudge a mob out of a tight space; it hasn't stood up.
             if (!rider.position().equals(at)) rider.setPos(at);
         }
+    }
+
+    /** Where {@code vehicle} puts {@code passenger} with the riders it has now: vanilla's {@code positionRider}. */
+    private static Vec3 seat(Entity vehicle, Entity passenger) {
+        return vehicle.getPassengerRidingPosition(passenger).subtract(passenger.getVehicleAttachmentPoint(vehicle));
     }
 
     /** {@code were} with {@code rider} added as {@code Entity.addPassenger} adds it: a player ahead of a mob driver. */
@@ -91,19 +110,22 @@ public final class EntityMounts {
     }
 
     /**
-     * {@code Entity.startRiding} mounted {@code rider} on {@code vehicle}: seats it now, and everything riding it,
-     * where its event said. Nothing when nobody listens: vanilla seats them on the vehicle's next tick.
+     * {@code Entity.startRiding} mounted {@code rider} on {@code vehicle}: puts it on its seat now, with everything
+     * riding it and every rider its boarding moved, where its event said. Nothing when nobody listens: vanilla seats
+     * them on the vehicle's next tick.
      */
     public static void seated(Entity rider, Entity vehicle) {
         if (rider.level().isClientSide || !Hooks.listens(EntityMountEvent.class)) return;
-        vehicle.positionRider(rider);
-        seatRiders(rider);
+        settle(vehicle, rider);
     }
 
-    private static void seatRiders(Entity carrier) {
+    /** Puts {@code rider}, and each of {@code carrier}'s riders that isn't on its seat, there, and then its riders. */
+    private static void settle(Entity carrier, Entity rider) {
         for (Entity passenger : carrier.getPassengers()) {
-            carrier.positionRider(passenger);
-            seatRiders(passenger);
+            Vec3 to = seat(carrier, passenger);
+            if (passenger != rider && to.equals(passenger.position())) continue;
+            passenger.setPos(to);
+            settle(passenger, rider);
         }
     }
 }
