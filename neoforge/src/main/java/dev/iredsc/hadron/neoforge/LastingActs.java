@@ -4,6 +4,7 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.Place;
 import java.util.Optional;
+import java.util.function.Supplier;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.world.entity.Entity;
 import org.jspecify.annotations.Nullable;
@@ -79,6 +80,21 @@ public final class LastingActs {
     public static void exit(Entity subject, @Nullable Acting outer, long scope) {
         Actors.Port.exit(PortKey.KEY, scope);
         ((State) subject).hadron$setActing(outer);
+    }
+
+    /**
+     * Runs {@code work}, {@code subject} applying something to itself (a potion it drinks, food it eats, its totem),
+     * with the subject on the stack as an explicit cause. Without it the subject on the stack is read as nature, as
+     * for an entity ticking in a wither rose.
+     */
+    public static <T> T asOwnCause(Entity subject, Supplier<T> work) {
+        Acting outer = acting(subject);
+        long scope = enter(subject, LastingCause.of(EntityActors.of(subject), subject));
+        try {
+            return work.get();
+        } finally {
+            exit(subject, outer, scope);
+        }
     }
 
     /**

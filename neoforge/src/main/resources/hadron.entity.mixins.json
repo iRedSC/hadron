@@ -9,6 +9,7 @@
     "BlockAttachedEntityMixin",
     "BoatLeashMixin",
     "BucketableMixin",
+    "ConsumedEffectMixin",
     "DeathMessageMixin",
     "EndCrystalMixin",
     "EntityLastingMixin",

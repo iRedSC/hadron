@@ -240,8 +240,9 @@ public final class DataEffectCauses {
     /**
      * Runs {@code apply}, vanilla applying {@code incoming} to {@code subject}, on a deep copy of it (chain included),
      * and records who applied it: {@code source} when there is one (which may be the subject itself, a player's own
-     * splash potion), otherwise whoever is on the stack ({@link Actor.Nature} when nothing is), with where the subject
-     * stands. Credit goes only where it can be proven; see the class.
+     * splash potion), otherwise whoever is on the stack, with where the subject stands. {@link Actor.Nature} when
+     * nothing is, or only the subject itself (a wither rose it stands in, applied during its own tick), unless it was
+     * pushed as its own cause ({@link LastingActs#asOwnCause}). Credit goes only where it can be proven; see the class.
      */
     public static <T> T applying(LivingEntity subject, MobEffectInstance incoming, @Nullable Entity source,
             Function<MobEffectInstance, T> apply) {
@@ -255,7 +256,8 @@ public final class DataEffectCauses {
         for (MobEffectInstance e = subject.getEffect(effect); e != null; e = hidden(e), i++) {
             was.add(known != null ? known.get(i) : new Link(e, Optional.empty()));
         }
-        Actor actor = source != null ? EntityActors.of(source) : EntityActors.current();
+        Actor actor = source != null ? EntityActors.of(source)
+                : EntityActors.fromStack(subject, Actor.Nature.INSTANCE);
         Optional<LastingCause> cause = Optional.of(LastingCause.of(actor, subject));
         T result = apply.apply(copy);
         List<Link> recorded = links(subject, effect);
