@@ -1,6 +1,9 @@
 package dev.iredsc.hadron.neoforge;
 
+import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
+import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.neoforge.mixin.entity.MobEffectInstanceAccessor;
@@ -69,7 +72,8 @@ public final class DataEffectCauses {
         static final Codec<Link> CODEC = RecordCodecBuilder.create(i -> i.group(
                 Codec.INT.fieldOf("amplifier").forGetter(l -> l.amplifier),
                 Codec.INT.fieldOf("duration").forGetter(l -> l.duration),
-                LastingCause.CODEC.optionalFieldOf("cause").forGetter(l -> l.cause))
+                // Lenient: a cause that can't be read is nobody proven, and takes nothing else with it.
+                LastingCause.CODEC.lenientOptionalFieldOf("cause").forGetter(l -> l.cause))
                 .apply(i, Link::new));
 
         /** Takes {@code e} as its instance, and what it says now as known. */
@@ -103,9 +107,25 @@ public final class DataEffectCauses {
         }
     }
 
-    /** Saved as a map from each effect's id to its chain's links, the active instance's first. */
-    static final Codec<DataEffectCauses> CODEC = Codec.unboundedMap(MobEffect.CODEC, Link.CODEC.listOf())
-            .xmap(DataEffectCauses::new, causes -> causes.chains);
+    private static final Codec<List<Link>> LINKS = Link.CODEC.listOf();
+
+    /**
+     * Saved as a map from each effect's id to its chain's links, the active instance's first. Read entry by entry: one
+     * whose effect is no longer registered (its mod was removed, and vanilla drops the effect too) or whose links
+     * can't be read is left out, so that effect is unrecorded, and every other entry is kept. NeoForge drops a whole
+     * attachment whose codec reports any error, which would take every other effect's cause with it.
+     */
+    static final Codec<DataEffectCauses> CODEC = Codec.of(
+            Codec.unboundedMap(MobEffect.CODEC, LINKS).comap(causes -> causes.chains), DataEffectCauses::decode);
+
+    private static <T> DataResult<Pair<DataEffectCauses, T>> decode(DynamicOps<T> ops, T input) {
+        return ops.getMapValues(input).map(entries -> {
+            Map<Holder<MobEffect>, List<Link>> loaded = new HashMap<>();
+            entries.forEach(entry -> MobEffect.CODEC.parse(ops, entry.getFirst()).result().ifPresent(effect ->
+                    LINKS.parse(ops, entry.getSecond()).result().ifPresent(links -> loaded.put(effect, links))));
+            return Pair.of(new DataEffectCauses(loaded), ops.empty());
+        });
+    }
 
     private final Map<Holder<MobEffect>, List<Link>> chains;
 

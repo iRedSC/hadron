@@ -63,7 +63,7 @@ public final class LastingCauseTests {
             ResourceLocation.fromNamespaceAndPath("neoforge", "poison"));
 
     /** Every damage event for {@code victim} from now on. */
-    private static List<EntityDamageEvent> hurts(TestContext t, Entity victim) {
+    static List<EntityDamageEvent> hurts(TestContext t, Entity victim) {
         List<EntityDamageEvent> heard = new ArrayList<>();
         t.registerEvents(new Listener() {
             @EventHandler
@@ -75,7 +75,7 @@ public final class LastingCauseTests {
     }
 
     /** The next damage {@code victim} takes from poison, after whatever {@code heard} holds now. */
-    private static EntityDamageEvent nextPoison(TestContext t, List<EntityDamageEvent> heard) {
+    static EntityDamageEvent nextPoison(TestContext t, List<EntityDamageEvent> heard) {
         return nextPoison(t, heard, 60);
     }
 
@@ -85,7 +85,7 @@ public final class LastingCauseTests {
         return heard.stream().filter(e -> e.getDamageSource().is(POISON)).findFirst().orElseThrow();
     }
 
-    private static EntityDamageEvent nextBurn(TestContext t, List<EntityDamageEvent> heard) {
+    static EntityDamageEvent nextBurn(TestContext t, List<EntityDamageEvent> heard) {
         heard.clear();
         t.await("the next burning damage", () -> heard.stream().anyMatch(e -> e.getDamageSource()
                 .is(DamageTypeTags.IS_FIRE)), 60);
@@ -93,15 +93,15 @@ public final class LastingCauseTests {
     }
 
     /** A sturdy victim: poison never takes a golem's 100 health down to the 1 it stops at. */
-    private static IronGolem golem(TestContext t, BlockPos at) {
+    static IronGolem golem(TestContext t, BlockPos at) {
         return spawn(t, EntityType.IRON_GOLEM, at);
     }
 
-    private static MobEffectInstance poison(int ticks, int amplifier) {
+    static MobEffectInstance poison(int ticks, int amplifier) {
         return new MobEffectInstance(MobEffects.POISON, ticks, amplifier);
     }
 
-    private static void assertFor(TestContext t, TestPlayer who, EntityDamageEvent e, String what) {
+    static void assertFor(TestContext t, TestPlayer who, EntityDamageEvent e, String what) {
         t.assertEquals(Optional.of(who.uuid()), e.getActor().actingFor(), what + " acts for");
     }
 
@@ -286,7 +286,7 @@ public final class LastingCauseTests {
     }
 
     /** Saves {@code entity}, removes it, and adds what loads back from {@code edit}ed save data. */
-    private static <T extends Entity> T reload(TestContext t, T entity, Consumer<CompoundTag> edit, Class<T> type) {
+    static <T extends Entity> T reload(TestContext t, T entity, Consumer<CompoundTag> edit, Class<T> type) {
         CompoundTag saved = new CompoundTag();
         t.assertTrue(entity.save(saved), "the entity should save");
         entity.discard();
