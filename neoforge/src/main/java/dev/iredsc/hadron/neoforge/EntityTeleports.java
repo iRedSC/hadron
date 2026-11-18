@@ -23,7 +23,9 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.decoration.BlockAttachedEntity;
 import net.minecraft.world.level.portal.DimensionTransition;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -50,7 +52,10 @@ public final class EntityTeleports {
     @StaticState(reason = "a cause NeoForge reported for an entity's next teleport this tick; checked against the tick and cleared when used")
     private static @Nullable Destination markedOverride;
 
-    /** A same-world teleport just asked about, and where everyone stood, to check where its riders land. */
+    /**
+     * A same-world teleport just asked about, and where everyone stood, to check where the teleported entity and its
+     * riders land (a hanging entity itself is not checked).
+     */
     @StaticState(reason = "the one same-world teleport under way on the server thread, consumed when it lands")
     private static @Nullable Asked asked;
 
@@ -88,8 +93,9 @@ public final class EntityTeleports {
     private EntityTeleports() {}
 
     /**
-     * Notes a same-world teleport its event let through: once it lands, each rider's block is checked against the
-     * event's places ({@link #landed}).
+     * Notes a same-world teleport its event let through: once it lands, the teleported entity's block and each
+     * rider's are checked against the event's places ({@link #landed}), except the block of a hanging entity that is
+     * the one teleported, which places itself.
      */
     static void expect(Entity entity, EntityTeleportEvent event) {
         if (!(entity.level() instanceof ServerLevel level) || event.getToLevel() != level) return;
@@ -109,7 +115,11 @@ public final class EntityTeleports {
         if (a == null || a.root().entity() != entity) return false;
         asked = null;
         if (entity.level() != a.level() || a.level().getGameTime() != a.tick()) return false;
-        boolean outside = outside(entity, a);
+        // A painting, item frame or leash knot turns the position it is given into an anchor and centres itself on
+        // it, so it lands off the stated spot by its own rule, and putting it back would shift it again: not checked.
+        // In vanilla, then, the check of the entity itself never finds it outside: a shulker's landing is stated and
+        // hanging entities are skipped. It is only reached by an entity whose own placing moves it (a mod's).
+        boolean outside = !(entity instanceof BlockAttachedEntity) && outside(entity, a);
         for (Stood r : a.riders()) {
             if (outside) break;
             outside = outside(r.entity(), a);
@@ -263,8 +273,8 @@ public final class EntityTeleports {
 
     /**
      * Places an entity for a probe: its position and box only, not through its own {@code setPos}, which can change
-     * more than where it is (a shulker closes its shell and rounds to a block's centre). Put back the same way, it is
-     * as it was. Where it would really end up is {@code Landing.of} the spot found, which the event states.
+     * more than where it is (a shulker closes its shell and rounds to a block's centre). Put back with the box
+     * it had, it is as it was. Where it would really end up is {@code Landing.of} the spot found, which the event states.
      */
     public static void probePlace(Entity entity, double x, double y, double z) {
         entity.setPosRaw(x, y, z);
@@ -294,6 +304,7 @@ public final class EntityTeleports {
             return during(entity, () -> original.attempt(x, y, z, effects));
         }
         Vec3 start = entity.position();
+        AABB box = entity.getBoundingBox();
         Entity outer = probing;
         probing = entity;
         boolean found;
@@ -302,9 +313,11 @@ public final class EntityTeleports {
             found = original.attempt(x, y, z, false);
         } finally {
             probing = outer;
-            // Even when a mod's search throws: a probe never leaves the entity where it looked.
+            // Even when a mod's search throws: a probe never leaves the entity where it looked, and it keeps the box
+            // it had, which a mod may have set.
             foundAt = entity.position();
-            probePlace(entity, start.x, start.y, start.z);
+            entity.setPosRaw(start.x, start.y, start.z);
+            entity.setBoundingBox(box);
         }
         if (!found) return false;
         Vec3 landing = Landing.of(entity, foundAt);

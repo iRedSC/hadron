@@ -192,4 +192,101 @@ public final class DismountTests {
                 + "shulker is, " + shulker.position() + ", but said " + heard.get(0).getTo());
         t.assertTrue(shulker.position().distanceTo(seat) < 1.0E-6, "nothing should have moved the shulker");
     }
+
+    /**
+     * A boat removed under its rider sets her down by no search: she stays in her seat's column, no lower than the
+     * boat, and can't refuse.
+     */
+    @HadronTest
+    @Covers(EntityDismountEvent.class)
+    void aBoatRemovedUnderItsRiderLeavesHerWhereSheSat(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Entity boat = riding(t, alice, DismountTests::boat);
+        Vec3 seat = alice.player().position();
+        Vec3 stays = new Vec3(seat.x, Math.max(seat.y, boat.getY()), seat.z);
+        List<EntityDismountEvent> heard = hear(t, alice.player(), true);
+        boat.kill();
+        t.assertEquals(1, heard.size(), "alice's dismounts");
+        EntityDismountEvent e = heard.get(0);
+        t.assertTrue(e.isForced(), "getting off a boat that is gone is forced");
+        t.assertFalse(alice.player().isPassenger(), "a forced dismount goes ahead though refused");
+        t.assertTrue(alice.player().position().distanceTo(stays) < 1.0E-6, "alice should be left where she sat, "
+                + stays + ", but is at " + alice.player().position());
+        t.assertTrue(e.getTo().distanceTo(alice.player().position()) < 1.0E-6, "alice should be where the event said "
+                + "she is set down, " + e.getTo() + ", but is at " + alice.player().position());
+    }
+
+    /**
+     * A listener that moves the boat as the rider gets off changes nothing about where she is set down: she ends
+     * exactly where the event said, not beside the boat where it now is.
+     */
+    @HadronTest
+    @Covers(EntityDismountEvent.class)
+    void aBoatMovedByAListenerStillSetsTheRiderDownWhereStated(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Entity boat = riding(t, alice, DismountTests::boat);
+        Vec3 boatWas = boat.position();
+        List<Vec3> stated = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDismountEvent e) {
+                if (e.getEntity() != alice.player()) return;
+                stated.add(e.getTo());
+                boat.setPos(boat.getX() + 4.0, boat.getY(), boat.getZ());
+            }
+        });
+        sneak(alice);
+        t.await("alice to get off", () -> !alice.player().isPassenger(), 10);
+        t.assertEquals(1, stated.size(), "alice's dismounts");
+        t.assertTrue(boat.position().distanceTo(boatWas) > 3.9, "the listener should have moved the boat from "
+                + boatWas + ", but it is at " + boat.position());
+        t.assertTrue(stated.get(0).distanceTo(alice.player().position()) < 1.0E-6, "alice should be where the event "
+                + "said she is set down, " + stated.get(0) + ", but is at " + alice.player().position());
+    }
+
+    /** A mob getting out of a boat is set down beside it like a player, and the event says where. */
+    @HadronTest
+    @Covers(EntityDismountEvent.class)
+    void aMobLeavingABoatStatesWhereItIsSetDown(TestContext t) {
+        t.player("alice");
+        Entity boat = boat(t);
+        var zombie = spawn(t, EntityType.ZOMBIE, t.pos(2, 0, 0));
+        t.assertTrue(zombie.startRiding(boat, true), "the zombie should get in the boat");
+        t.tick(2);
+        Vec3 seat = zombie.position();
+        List<EntityDismountEvent> heard = hear(t, zombie, false);
+        zombie.stopRiding();
+        t.assertEquals(1, heard.size(), "the zombie's dismounts");
+        EntityDismountEvent e = heard.get(0);
+        t.assertFalse(e.isForced(), "a mob getting out of a boat that stays can be refused");
+        t.assertFalse(zombie.isPassenger(), "the zombie should be out of the boat");
+        t.assertTrue(e.getTo().distanceTo(seat) > 0.3, "getting out sets it down beside the boat, away from its seat "
+                + seat + ", but the event said " + e.getTo());
+        t.assertTrue(e.getTo().distanceTo(zombie.position()) < 1.0E-6, "the zombie should be where the event said it "
+                + "is set down, " + e.getTo() + ", but is at " + zombie.position());
+        t.assertTrue(e.getPlaces().contains(Place.Spot.at(t.level(), zombie.blockPosition())),
+                "the event's places should hold where it is set down: " + e.getPlaces());
+    }
+
+    /** A shulker getting out of a boat is placed, so it rounds to a block's centre: the event states that centre. */
+    @HadronTest
+    @Covers(EntityDismountEvent.class)
+    void aShulkerLeavingABoatStatesTheBlockCentreItIsSetDownAt(TestContext t) {
+        t.player("alice");
+        Entity boat = boat(t);
+        var shulker = spawn(t, EntityType.SHULKER, t.pos(2, 0, 0));
+        t.assertTrue(shulker.startRiding(boat, true), "the shulker should get in the boat");
+        t.tick(2);
+        List<EntityDismountEvent> heard = hear(t, shulker, false);
+        shulker.stopRiding();
+        t.assertEquals(1, heard.size(), "the shulker's dismounts");
+        EntityDismountEvent e = heard.get(0);
+        t.assertFalse(e.isForced(), "a shulker getting out of a boat that stays can be refused");
+        t.assertFalse(shulker.isPassenger(), "the shulker should be out of the boat");
+        Vec3 at = shulker.position();
+        t.assertEquals(Vec3.atBottomCenterOf(shulker.blockPosition()), at, "a shulker off its boat sits at the "
+                + "bottom centre of its block");
+        t.assertTrue(e.getTo().distanceTo(at) < 1.0E-6, "the shulker should be where the event said it is set down, "
+                + e.getTo() + ", but is at " + at);
+    }
 }

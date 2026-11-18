@@ -99,6 +99,8 @@ abstract class LivingEntityMixin implements EntityActors.Hurting {
     /**
      * While the search runs as a probe, it places the entity without a teleport: nothing is sent, nothing asked. It is
      * placed where it would really land, so vanilla checks for room there, as it does when the entity places itself.
+     * The teleport itself is then done directly, not through {@code randomTeleport} again: another mod hooking
+     * {@code randomTeleport} sees the probe, with effects off, and not the teleport.
      */
     @WrapOperation(method = "randomTeleport", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/entity/LivingEntity;teleportTo(DDD)V"))
