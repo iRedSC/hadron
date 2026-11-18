@@ -10,6 +10,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.Place;
 import com.mojang.authlib.GameProfile;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
+import dev.iredsc.hadron.api.event.entity.EntityPotionEffectEvent;
 import dev.iredsc.hadron.api.event.entity.EntityRegainHealthEvent;
 import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.test.Covers;
@@ -746,5 +747,31 @@ public final class LastingCauseTests {
                 "a machine with no block entity should be remembered as its block with no id, but was "
                         + tick.getActor());
         assertFor(t, bob, tick, "the poison of a machine with no block entity");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void anApplicationInsideAnotherKeepsItsOwnCredit(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        TestPlayer carol = t.player("carol");
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        golem.addEffect(poison(600, 0), bob.player());
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityPotionEffectEvent e) {
+                // While carol's application is asked about, alice applies the very same poison first.
+                if (e.getEntity() == golem && e.getActor().actingFor().equals(Optional.of(carol.uuid()))) {
+                    golem.addEffect(poison(40, 1), alice.player());
+                }
+            }
+        });
+        // By the time vanilla applies carol's, alice's is there, as strong and as long: carol's changes nothing.
+        golem.addEffect(poison(40, 1), carol.player());
+        List<EntityDamageEvent> heard = hurts(t, golem);
+        assertFor(t, alice, nextPoison(t, heard), "the poison alice applied inside carol's application");
+        t.await("alice's poison to run out", () -> golem.getEffect(MobEffects.POISON) != null
+                && golem.getEffect(MobEffects.POISON).getAmplifier() == 0, 60);
+        assertFor(t, bob, nextPoison(t, heard), "bob's poison, hidden by alice's, once it resumes");
     }
 }

@@ -31,6 +31,8 @@ import org.jspecify.annotations.Nullable;
  *       what it said keeps its cause; one that was there and now says what the application said was replaced in place
  *       and takes the new cause; one from the application's own chain takes the new cause; and a copy vanilla made
  *       during the call takes the cause of the one instance it can only be a copy of. Anything else is unrecorded.
+ *       Where a listener applies the same effect again inside an application, the inner one's record stands and
+ *       whatever the outer one changed after it is unrecorded: the two can't be told apart.
  *   <li>A tick ({@link #beforeTick}, {@link #afterTick}) may change an instance only as a tick does: each duration
  *       down by one, and a hidden effect resuming into the active one.
  *   <li>Every other read ({@link #active}) checks the chain still is what its links say.
@@ -183,6 +185,8 @@ public final class DataEffectCauses {
      */
     public static void afterTick(LivingEntity entity, MobEffectInstance top) {
         List<Link> links = links(entity, top.getEffect());
+        // Not the active instance any more (ended or replaced while it ticked, which recorded its own links), or never
+        // recorded: no link here is this tick's to explain, and the next read checks the chain as it then is.
         if (links == null || entity.getEffect(top.getEffect()) != top || links.getFirst().instance != top) return;
         boolean ticked = links.getFirst().duration != 0;
         int i = 0;
@@ -234,6 +238,14 @@ public final class DataEffectCauses {
         Actor actor = source != null ? EntityActors.of(source) : EntityActors.current();
         Optional<LastingCause> cause = Optional.of(LastingCause.of(actor, subject));
         T result = apply.apply(copy);
+        List<Link> recorded = links(subject, effect);
+        if (recorded != null && recorded != known) {
+            // A listener applied this effect again inside this application, and that one recorded the chain as it
+            // left it. What it recorded stands where the chain still says so; what this one changed after can't be
+            // told from it, and is lost.
+            checked(subject, effect);
+            return result;
+        }
         MobEffectInstance after = subject.getEffect(effect);
         if (after == null) {
             removed(subject, effect);
@@ -252,6 +264,7 @@ public final class DataEffectCauses {
             List<MobEffectInstance> fromIncoming, MobEffectInstance copy, Optional<LastingCause> cause) {
         for (Link before : was) {
             if (before.instance != e) continue;
+            // Only how it shows may have changed (ambient, particles, icon): that replaces nothing, so credit stays.
             if (e.getAmplifier() == before.amplifier && e.getDuration() == before.duration) return before.cause;
             return e.getAmplifier() == copy.getAmplifier() && e.getDuration() == copy.getDuration()
                     ? cause : Optional.empty();
