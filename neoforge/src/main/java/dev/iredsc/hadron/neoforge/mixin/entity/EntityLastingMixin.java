@@ -2,7 +2,7 @@ package dev.iredsc.hadron.neoforge.mixin.entity;
 
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
-import dev.iredsc.hadron.neoforge.Lasting;
+import dev.iredsc.hadron.neoforge.LastingActs;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
@@ -19,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
  * time takes the credit, and burning acts for it.
  */
 @Mixin(Entity.class)
-abstract class EntityLastingMixin implements Lasting.State {
+abstract class EntityLastingMixin implements LastingActs.State {
     @Shadow
     private int remainingFireTicks;
 
@@ -27,28 +27,28 @@ abstract class EntityLastingMixin implements Lasting.State {
     public abstract Level level();
 
     @Unique
-    private Lasting.@Nullable Acting hadron$acting;
+    private LastingActs.@Nullable Acting hadron$acting;
 
     @Override
-    public Lasting.@Nullable Acting hadron$acting() {
+    public LastingActs.@Nullable Acting hadron$acting() {
         return hadron$acting;
     }
 
     @Override
-    public void hadron$setActing(Lasting.@Nullable Acting acting) {
+    public void hadron$setActing(LastingActs.@Nullable Acting acting) {
         hadron$acting = acting;
     }
 
     @Unique
-    private Lasting.@Nullable FireUndo hadron$fireUndo;
+    private LastingActs.@Nullable FireUndo hadron$fireUndo;
 
     @Override
-    public Lasting.@Nullable FireUndo hadron$fireUndo() {
+    public LastingActs.@Nullable FireUndo hadron$fireUndo() {
         return hadron$fireUndo;
     }
 
     @Override
-    public void hadron$setFireUndo(Lasting.@Nullable FireUndo undo) {
+    public void hadron$setFireUndo(LastingActs.@Nullable FireUndo undo) {
         hadron$fireUndo = undo;
     }
 
@@ -81,19 +81,19 @@ abstract class EntityLastingMixin implements Lasting.State {
     @Inject(method = "setRemainingFireTicks", at = @At("HEAD"))
     private void hadron$fireCause(int ticks, CallbackInfo ci) {
         if (ticks != remainingFireTicks && !level().isClientSide()) {
-            Lasting.fireSet((Entity) (Object) this, remainingFireTicks, ticks);
+            LastingActs.fireSet((Entity) (Object) this, remainingFireTicks, ticks);
         }
     }
 
     @WrapOperation(method = "baseTick", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/Entity;"
             + "hurt(Lnet/minecraft/world/damagesource/DamageSource;F)Z"))
     private boolean hadron$burn(Entity self, DamageSource source, float amount, Operation<Boolean> original) {
-        Lasting.Acting outer = Lasting.acting(self);
-        long scope = Lasting.enter(self, Lasting.fireCause(self));
+        LastingActs.Acting outer = LastingActs.acting(self);
+        long scope = LastingActs.enter(self, LastingActs.fireCause(self));
         try {
             return original.call(self, source, amount);
         } finally {
-            Lasting.exit(self, outer, scope);
+            LastingActs.exit(self, outer, scope);
         }
     }
 }

@@ -39,7 +39,7 @@ final class AttributionMemory implements Actors.Memory {
             () -> AttachmentType.builder(Attribution::none).serialize(CODEC, a -> !a.isEmpty()).build());
 
     /**
-     * Who set a burning entity alight, and where, while it burns ({@link Lasting#fireSet}). An entity saved before
+     * Who set a burning entity alight, and where, while it burns ({@link LastingActs#fireSet}). An entity saved before
      * Hadron kept it has none, and burns on with an unrecorded cause.
      */
     static final Supplier<AttachmentType<Optional<LastingCause>>> FIRE_CAUSE = ATTACHMENTS.register("fire_cause",

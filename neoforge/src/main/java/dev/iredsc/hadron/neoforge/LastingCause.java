@@ -25,7 +25,7 @@ import org.jspecify.annotations.Nullable;
 
 /**
  * Who applied an effect or set an entity alight, and where. Kept per entity: one for each effect in each effect's
- * chain ({@link DataEffectCauses}), and one for its fire ({@link Lasting#fireCause}); saved with it.
+ * chain ({@link DataEffectCauses}), and one for its fire ({@link LastingActs#fireCause}); saved with it.
  *
  * <p>A value: it holds only what identifies the cause (what it was, its UUID or a machine's id, and the people behind
  * it), never the thing itself, so nothing it names is kept in memory and nothing in it can go stale. It is worked out
@@ -33,7 +33,7 @@ import org.jspecify.annotations.Nullable;
  * for the people it had when it applied this (a bridge's turret firing for its owner keeps that owner), otherwise an
  * {@link Actor.Remembered} for the same people. Nature and {@link Actor.Unknown} are causes too, and act as themselves.
  */
-public final class LastingCause implements Lasting.Acting, Actors.Port.Lazy {
+public final class LastingCause implements LastingActs.Acting, Actors.Port.Lazy {
     /** Who it was, in a form that can be saved. */
     sealed interface Who {}
 

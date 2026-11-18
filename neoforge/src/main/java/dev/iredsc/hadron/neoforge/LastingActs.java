@@ -14,13 +14,13 @@ import org.jspecify.annotations.Nullable;
  * on it so the damage and healing events can say where it was applied.
  *
  * <pre>{@code
- * Lasting.Acting outer = Lasting.acting(subject);
- * long scope = Lasting.enter(subject, cause);
- * try { ... } finally { Lasting.exit(subject, outer, scope); }
+ * LastingActs.Acting outer = LastingActs.acting(subject);
+ * long scope = LastingActs.enter(subject, cause);
+ * try { ... } finally { LastingActs.exit(subject, outer, scope); }
  * }</pre>
  */
-public final class Lasting {
-    private Lasting() {}
+public final class LastingActs {
+    private LastingActs() {}
 
     /**
      * What is acting on an entity right now: a recorded cause, or {@link Unrecorded} where nobody can be proven (saved

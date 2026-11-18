@@ -107,11 +107,11 @@ public final class EntityEvents {
 
     /**
      * The one way core builds {@link EntityDamageEvent}, for every living entity, armor stands included: who dealt it,
-     * and where, when an effect or fire acting on the entity deals it ({@link Lasting#appliedAt}).
+     * and where, when an effect or fire acting on the entity deals it ({@link LastingActs#appliedAt}).
      */
     public static EntityDamageEvent damageEvent(LivingEntity entity, DamageSource source, float amount) {
         Actor actor = EntityActors.damage(source, entity);
-        Place appliedAt = Lasting.appliedAt(entity);
+        Place appliedAt = LastingActs.appliedAt(entity);
         return appliedAt == null ? new EntityDamageEvent(entity, source, reportedDamage(amount), actor)
                 : new EntityDamageEvent(entity, source, reportedDamage(amount), actor, appliedAt);
     }
@@ -119,7 +119,7 @@ public final class EntityEvents {
     /** The one way core builds {@link EntityRegainHealthEvent}: who heals it, and where an effect healing it was applied. */
     public static EntityRegainHealthEvent healEvent(LivingEntity entity, float amount) {
         Actor actor = EntityActors.fromStack(entity, Actor.Nature.INSTANCE);
-        Place appliedAt = Lasting.appliedAt(entity);
+        Place appliedAt = LastingActs.appliedAt(entity);
         return appliedAt == null ? new EntityRegainHealthEvent(entity, amount, actor)
                 : new EntityRegainHealthEvent(entity, amount, actor, appliedAt);
     }

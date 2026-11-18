@@ -4,7 +4,7 @@ import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.iredsc.hadron.neoforge.DataEffectCauses;
-import dev.iredsc.hadron.neoforge.Lasting;
+import dev.iredsc.hadron.neoforge.LastingActs;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.effect.MobEffect;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -15,7 +15,7 @@ import org.spongepowered.asm.mixin.injection.At;
 
 /**
  * While an effect acts (its tick, and what it does as its entity is hurt or goes), whoever applied it is on the actor
- * stack, worked out only if something reads it ({@link Lasting#enter}); and its chain may change in a tick only as a
+ * stack, worked out only if something reads it ({@link LastingActs#enter}); and its chain may change in a tick only as a
  * tick changes it, a hidden effect resuming with its own cause ({@link DataEffectCauses#afterTick}).
  */
 @Mixin(MobEffectInstance.class)
@@ -35,12 +35,12 @@ abstract class MobEffectInstanceMixin {
             + "applyEffectTick(Lnet/minecraft/world/entity/LivingEntity;I)Z"))
     private boolean hadron$act(MobEffect effect, LivingEntity entity, int level, Operation<Boolean> original) {
         if (entity.level().isClientSide()) return original.call(effect, entity, level);
-        Lasting.Acting outer = Lasting.acting(entity);
-        long scope = Lasting.enter(entity, DataEffectCauses.active(entity, (MobEffectInstance) (Object) this));
+        LastingActs.Acting outer = LastingActs.acting(entity);
+        long scope = LastingActs.enter(entity, DataEffectCauses.active(entity, (MobEffectInstance) (Object) this));
         try {
             return original.call(effect, entity, level);
         } finally {
-            Lasting.exit(entity, outer, scope);
+            LastingActs.exit(entity, outer, scope);
         }
     }
 
@@ -51,12 +51,12 @@ abstract class MobEffectInstanceMixin {
             original.call(entity, reason);
             return;
         }
-        Lasting.Acting outer = Lasting.acting(entity);
-        long scope = Lasting.enter(entity, DataEffectCauses.active(entity, (MobEffectInstance) (Object) this));
+        LastingActs.Acting outer = LastingActs.acting(entity);
+        long scope = LastingActs.enter(entity, DataEffectCauses.active(entity, (MobEffectInstance) (Object) this));
         try {
             original.call(entity, reason);
         } finally {
-            Lasting.exit(entity, outer, scope);
+            LastingActs.exit(entity, outer, scope);
         }
     }
 
@@ -67,12 +67,12 @@ abstract class MobEffectInstanceMixin {
             original.call(entity, source, amount);
             return;
         }
-        Lasting.Acting outer = Lasting.acting(entity);
-        long scope = Lasting.enter(entity, DataEffectCauses.active(entity, (MobEffectInstance) (Object) this));
+        LastingActs.Acting outer = LastingActs.acting(entity);
+        long scope = LastingActs.enter(entity, DataEffectCauses.active(entity, (MobEffectInstance) (Object) this));
         try {
             original.call(entity, source, amount);
         } finally {
-            Lasting.exit(entity, outer, scope);
+            LastingActs.exit(entity, outer, scope);
         }
     }
 }
