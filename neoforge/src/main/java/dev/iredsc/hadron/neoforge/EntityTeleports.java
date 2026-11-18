@@ -297,13 +297,15 @@ public final class EntityTeleports {
         Entity outer = probing;
         probing = entity;
         boolean found;
+        Vec3 foundAt;
         try {
             found = original.attempt(x, y, z, false);
         } finally {
             probing = outer;
+            // Even when a mod's search throws: a probe never leaves the entity where it looked.
+            foundAt = entity.position();
+            probePlace(entity, start.x, start.y, start.z);
         }
-        Vec3 foundAt = entity.position();
-        probePlace(entity, start.x, start.y, start.z);
         if (!found) return false;
         Vec3 landing = Landing.of(entity, foundAt);
         float yRot = entity.getYRot();
