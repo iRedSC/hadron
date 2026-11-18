@@ -88,7 +88,9 @@ public class EntityDamageEvent extends EntityEvent implements Cancellable {
      * block the entity stood in when it was poisoned or set alight, which may be far from where it is hurt now.
      * {@link Place.Unknown} ({@link Place.Unknown.Reason#UNSEEN_ORIGIN}) when it is such damage but nothing recorded
      * where: an effect saved before Hadron recorded it, or one a mod added without going through
-     * {@code addEffect}. Empty for every other hit: a blow, an arrow, a fall, lava.
+     * {@code addEffect}. Empty for every other hit: a blow, an arrow, a fall, lava. A hit dealt to the entity from
+     * inside the effect's own act (a listener answering its poison with a blow) is part of what the effect did, and
+     * says the same place.
      */
     public Optional<Place> getAppliedAt() {
         return Optional.ofNullable(appliedAt);

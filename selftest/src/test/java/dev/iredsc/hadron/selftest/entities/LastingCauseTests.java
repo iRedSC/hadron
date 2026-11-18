@@ -197,6 +197,13 @@ public final class LastingCauseTests {
         EntityDamageEvent tick = nextPoison(t, heard, 120);
         t.assertTrue(tick.getActor() instanceof Actor.Player p && p.player() == carol.player(),
                 "carol's own poison should act as carol, but acted as " + tick.getActor());
+        // A potion she drinks reaches addEffect with no source at all, and only her on the stack.
+        TestPlayer dave = t.player("dave");
+        List<EntityDamageEvent> davesHurts = hurts(t, dave.player());
+        Actors.acting(new Actor.Player(dave.player()), () -> dave.player().addEffect(poison(400, 0)));
+        EntityDamageEvent drunk = nextPoison(t, davesHurts, 120);
+        t.assertTrue(drunk.getActor() instanceof Actor.Player p && p.player() == dave.player(),
+                "the poison dave drank should act as dave, but acted as " + drunk.getActor());
     }
 
     @HadronTest
