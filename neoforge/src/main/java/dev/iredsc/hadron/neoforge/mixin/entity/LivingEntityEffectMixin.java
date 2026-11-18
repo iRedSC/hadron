@@ -21,7 +21,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 /**
  * Who applied each effect, kept on the entity as its chain changes ({@link DataEffectCauses}): recorded where an
  * effect is applied, before its first tick, and dropped when it ends. Vanilla is handed a deep copy of what was passed
- * in, so an instance active on one entity is never shared with another.
+ * in, so an instance active on one entity is never shared with another; an instance of a mod's own subclass is handed
+ * over as given, and must be a fresh one for each entity.
  */
 @Mixin(LivingEntity.class)
 abstract class LivingEntityEffectMixin {

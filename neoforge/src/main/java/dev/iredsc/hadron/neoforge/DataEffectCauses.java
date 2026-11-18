@@ -30,10 +30,13 @@ import org.jspecify.annotations.Nullable;
  *
  * <ul>
  *   <li>An application ({@link #applying}) works on its own deep copy of the incoming instance, chain included, so it
- *       never shares state with whoever passed it in. Afterwards, an instance that was there before and still says
- *       what it said keeps its cause; one that was there and now says what the application said was replaced in place
- *       and takes the new cause; one from the application's own chain takes the new cause; and a copy vanilla made
- *       during the call takes the cause of the one instance it can only be a copy of. Anything else is unrecorded.
+ *       never shares state with whoever passed it in. An instance whose class is not exactly vanilla's is applied as
+ *       given instead, since a copy would lose what the subclass does: a mod must make a fresh one for each entity,
+ *       and one it shares between entities changes by no known path and is unrecorded. Afterwards, an instance
+ *       that was there before and still says what it said keeps its cause; one that was there and now says what the
+ *       application said was replaced in place and takes the new cause; one from the application's own chain takes
+ *       the new cause; and a copy vanilla made during the call takes the cause of the one instance it can only be a
+ *       copy of. Anything else is unrecorded.
  *       Where a listener applies the same effect again inside an application, the inner one's record stands and
  *       whatever the outer one changed after it is unrecorded: the two can't be told apart.
  *   <li>A tick ({@link #beforeTick}, {@link #afterTick}) may change an instance only as a tick does: each duration
@@ -238,7 +241,8 @@ public final class DataEffectCauses {
     }
 
     /**
-     * Runs {@code apply}, vanilla applying {@code incoming} to {@code subject}, on a deep copy of it (chain included),
+     * Runs {@code apply}, vanilla applying {@code incoming} to {@code subject}, on a deep copy of it (chain included;
+     * a mod's own subclass as given, see {@link #deepCopy}),
      * and records who applied it: {@code source} when there is one (which may be the subject itself, a player's own
      * splash potion), otherwise whoever is on the stack, with where the subject stands. {@link Actor.Nature} when
      * nothing is, or only the subject itself (a wither rose it stands in, applied during its own tick), unless it was
