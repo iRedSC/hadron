@@ -27,7 +27,10 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  * {@code randomTeleport} search down for ground and check there is room; this fires once that search has found the
  * spot, so a spot with no room fires nothing, and refusing a chorus fruit landing lets it try its next spot. A
  * shulker's own teleport does the same: up to 5 spots, each its own event. A shulker lands at the bottom centre of a
- * block, and that centre is what this states. Everything else lands exactly where it was sent.
+ * block, and that centre is what this states. Everything else lands exactly where it was sent, with two known gaps:
+ * a painting, item frame or other hanging entity lands where its own placement rule puts it, which can be another
+ * block; and an entity riding something, sent within its world, is put back in its seat by its vehicle on its next
+ * tick.
  *
  * <p>Whatever rides it and goes along is {@link #getCarried()}, rather than getting events of its own. Riders go
  * wherever it goes within a world. To another world, it depends on how it is sent, and {@link #getCarried()} says which
@@ -114,7 +117,12 @@ public class EntityTeleportEvent extends EntityEvent implements Cancellable {
         return getLevel();
     }
 
-    /** Where it lands: where it was sent, except a shulker, which sits at the bottom centre of that block. */
+    /**
+     * Where it lands: where it was sent, except a shulker, which sits at the bottom centre of that block. Two known
+     * gaps: a painting, item frame or other hanging entity lands where its own placement rule puts it, which can be
+     * another block; and an entity riding something, sent within its world, is put back in its seat by its vehicle
+     * on its next tick.
+     */
     public Vec3 getTo() {
         return to;
     }

@@ -214,6 +214,28 @@ public final class LandingTests {
         t.assertEquals(box, enderman.getBoundingBox(), "the enderman's box, which the search must leave as it was");
     }
 
+    /**
+     * The search for room runs vanilla's whole random teleport, which ends by dropping a mob's path; run as a probe it
+     * must not, or a refused teleport would still stop the mob walking.
+     */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aRefusedEndermanKeepsItsPath(TestContext t) throws Exception {
+        t.player("alice");
+        EnderMan enderman = spawn(t, EntityType.ENDERMAN, t.pos(-3, 0, -3));
+        enderman.setOnGround(true); // with its AI off it never settles itself, and only a mob on the ground paths
+        Vec3 goal = center(t.pos(3, 0, -3));
+        t.assertTrue(enderman.getNavigation().moveTo(goal.x, goal.y, goal.z, 1.0), "the enderman should find a path "
+                + "across the floor");
+        t.assertTrue(enderman.getNavigation().isInProgress(), "the enderman's path should be under way before it "
+                + "teleports");
+        List<EntityTeleportEvent> heard = hear(t, enderman, e -> true);
+        t.assertFalse(endermanTeleport(enderman, t.pos(4, 0, 4)), "a refused teleport reports it didn't go");
+        t.assertEquals(1, heard.size(), "the enderman's teleports");
+        t.assertTrue(enderman.getNavigation().isInProgress(), "a refused teleport should leave the enderman's path "
+                + "under way, but it was dropped");
+    }
+
     /** A listener's {@code setTo} is exact: sent into the air, it is put there, not on the floor below. */
     @HadronTest
     @Covers(EntityTeleportEvent.class)

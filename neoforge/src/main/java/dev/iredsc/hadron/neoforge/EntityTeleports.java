@@ -52,7 +52,10 @@ public final class EntityTeleports {
     @StaticState(reason = "a cause NeoForge reported for an entity's next teleport this tick; checked against the tick and cleared when used")
     private static @Nullable Destination markedOverride;
 
-    /** A same-world teleport just asked about, and where everyone stood, to check where its riders land. */
+    /**
+     * A same-world teleport just asked about, and where everyone stood, to check where the teleported entity and its
+     * riders land (a hanging entity itself is not checked).
+     */
     @StaticState(reason = "the one same-world teleport under way on the server thread, consumed when it lands")
     private static @Nullable Asked asked;
 
@@ -90,8 +93,9 @@ public final class EntityTeleports {
     private EntityTeleports() {}
 
     /**
-     * Notes a same-world teleport its event let through: once it lands, each rider's block is checked against the
-     * event's places ({@link #landed}).
+     * Notes a same-world teleport its event let through: once it lands, the teleported entity's block and each
+     * rider's are checked against the event's places ({@link #landed}), except the block of a hanging entity that is
+     * the one teleported, which places itself.
      */
     static void expect(Entity entity, EntityTeleportEvent event) {
         if (!(entity.level() instanceof ServerLevel level) || event.getToLevel() != level) return;
@@ -113,6 +117,8 @@ public final class EntityTeleports {
         if (entity.level() != a.level() || a.level().getGameTime() != a.tick()) return false;
         // A painting, item frame or leash knot turns the position it is given into an anchor and centres itself on
         // it, so it lands off the stated spot by its own rule, and putting it back would shift it again: not checked.
+        // In vanilla, then, the check of the entity itself never finds it outside: a shulker's landing is stated and
+        // hanging entities are skipped. It is only reached by an entity whose own placing moves it (a mod's).
         boolean outside = !(entity instanceof BlockAttachedEntity) && outside(entity, a);
         for (Stood r : a.riders()) {
             if (outside) break;
