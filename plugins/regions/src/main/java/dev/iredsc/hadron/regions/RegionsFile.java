@@ -1,11 +1,17 @@
 package dev.iredsc.hadron.regions;
 
 import dev.iredsc.hadron.api.config.ConfigurationSection;
+import dev.iredsc.hadron.api.config.InvalidConfigurationException;
 import dev.iredsc.hadron.api.config.YamlConfiguration;
+import java.io.File;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.EnumMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -15,6 +21,10 @@ import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import org.yaml.snakeyaml.LoaderOptions;
+import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.DuplicateKeyException;
+import org.yaml.snakeyaml.constructor.SafeConstructor;
 
 /**
  * {@code regions.yml}: every region, as plain YAML an owner can read and fix by hand.
@@ -46,6 +56,58 @@ final class RegionsFile {
 
         Problem(String message) {
             super(message);
+        }
+    }
+
+    /**
+     * Reads one of the plugin's data files (regions.yml, bypass.yml), refusing what {@link YamlConfiguration} would
+     * take and quietly fold into one key: a key written twice in the same map, and a key with a dot in it, which it
+     * reads as a key inside a key. Either would drop what the owner wrote, and the next save would write the file
+     * without it.
+     */
+    static YamlConfiguration open(File file) throws Problem {
+        String text;
+        try {
+            text = new String(Files.readAllBytes(file.toPath()), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new Problem("Couldn't read " + file + ": " + e.getMessage());
+        }
+        return parse(file.getName(), text);
+    }
+
+    static YamlConfiguration parse(String name, String text) throws Problem {
+        LoaderOptions strict = new LoaderOptions();
+        strict.setAllowDuplicateKeys(false);
+        YamlConfiguration yaml = new YamlConfiguration();
+        try {
+            foldedKeys(name, "", new Yaml(new SafeConstructor(strict)).load(text));
+            yaml.loadFromString(text);
+        } catch (DuplicateKeyException e) {
+            String key = e.getProblem().replaceFirst("^found duplicate key ", "");
+            throw new Problem(name + ", line " + (e.getProblemMark().getLine() + 1) + ": \"" + key + "\" is written "
+                    + "twice in the same map, so one of the two would be lost. Rename or remove one of them");
+        } catch (InvalidConfigurationException | RuntimeException e) {
+            throw new Problem(name + " isn't valid YAML: " + e.getMessage());
+        }
+        return yaml;
+    }
+
+    /** Refuses the keys YamlConfiguration folds together though YAML holds them apart, in maps at any depth. */
+    private static void foldedKeys(String name, String under, Object node) throws Problem {
+        if (!(node instanceof Map<?, ?> map)) return;
+        String where = name + (under.isEmpty() ? "" : ", under " + under) + ": \"";
+        Set<String> seen = new HashSet<>();
+        for (Map.Entry<?, ?> e : map.entrySet()) {
+            String key = String.valueOf(e.getKey());
+            if (key.indexOf('.') >= 0) {
+                throw new Problem(where + key + "\" has a dot in it, which would be read as a key inside a key. "
+                        + "Remove the dot, or write the part after it as a key on its own line beneath");
+            }
+            if (!seen.add(key)) {
+                throw new Problem(where + key + "\" is written twice in the same map, once as text and once as a "
+                        + "number or other value, so one of the two would be lost. Rename or remove one of them");
+            }
+            foldedKeys(name, under.isEmpty() ? key : under + " > " + key, e.getValue());
         }
     }
 

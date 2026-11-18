@@ -1,7 +1,5 @@
 package dev.iredsc.hadron.regions;
 
-import dev.iredsc.hadron.api.config.InvalidConfigurationException;
-import dev.iredsc.hadron.api.config.YamlConfiguration;
 import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.world.Area;
 import dev.iredsc.hadron.api.world.Areas;
@@ -44,17 +42,7 @@ final class RegionStore {
     static RegionStore load(JavaPlugin plugin) throws RegionsFile.Problem {
         File file = new File(plugin.getDataFolder(), "regions.yml");
         RegionStore store = new RegionStore(plugin, file);
-        if (file.exists()) {
-            YamlConfiguration yaml = new YamlConfiguration();
-            try {
-                yaml.load(file);
-            } catch (IOException e) {
-                throw new RegionsFile.Problem("Couldn't read " + file + ": " + e.getMessage());
-            } catch (InvalidConfigurationException e) {
-                throw new RegionsFile.Problem("regions.yml isn't valid YAML: " + e.getMessage());
-            }
-            store.byId.putAll(RegionsFile.read(yaml));
-        }
+        if (file.exists()) store.byId.putAll(RegionsFile.read(RegionsFile.open(file)));
         store.reindex();
         return store;
     }

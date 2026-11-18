@@ -1,7 +1,6 @@
 package dev.iredsc.hadron.regions;
 
 import dev.iredsc.hadron.api.Permissions;
-import dev.iredsc.hadron.api.config.InvalidConfigurationException;
 import dev.iredsc.hadron.api.config.YamlConfiguration;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
@@ -35,20 +34,18 @@ final class Bypass implements Listener {
     static Bypass load(JavaPlugin plugin) throws RegionsFile.Problem {
         Bypass bypass = new Bypass(new File(plugin.getDataFolder(), "bypass.yml"));
         if (!bypass.file.exists()) return bypass;
-        YamlConfiguration yaml = new YamlConfiguration();
-        try {
-            yaml.load(bypass.file);
-        } catch (IOException e) {
-            throw new RegionsFile.Problem("Couldn't read " + bypass.file + ": " + e.getMessage());
-        } catch (InvalidConfigurationException e) {
-            throw new RegionsFile.Problem("bypass.yml isn't valid YAML: " + e.getMessage());
-        }
-        bypass.on.addAll(read(yaml));
+        bypass.on.addAll(read(RegionsFile.open(bypass.file)));
         return bypass;
     }
 
     static Set<UUID> read(YamlConfiguration yaml) throws RegionsFile.Problem {
         Set<UUID> out = new LinkedHashSet<>();
+        for (String key : yaml.getKeys(false)) {
+            if (!key.equals("players")) {
+                throw new RegionsFile.Problem("bypass.yml: \"" + key + "\" isn't a setting; the file holds only "
+                        + "players, a list of player UUIDs. Rename it to players, or remove it");
+            }
+        }
         if (!yaml.contains("players")) return out;
         List<?> raw = yaml.isList("players") ? yaml.getList("players") : null;
         if (raw == null) {
