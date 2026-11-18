@@ -1,8 +1,10 @@
 package dev.iredsc.hadron.neoforge.mixin.entity;
 
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.iredsc.hadron.neoforge.LastingActs;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.level.Level;
@@ -82,6 +84,20 @@ abstract class EntityLastingMixin implements LastingActs.State {
     private void hadron$fireCause(int ticks, CallbackInfo ci) {
         if (ticks != remainingFireTicks && !level().isClientSide()) {
             LastingActs.fireSet((Entity) (Object) this, remainingFireTicks, ticks);
+        }
+    }
+
+    /**
+     * An entity in the world read again from NBT ({@code /data}) has its burning time written past the setter: the
+     * same change, with the same credit. One only now loading isn't in the world yet, and keeps the cause saved with it.
+     */
+    @WrapMethod(method = "load")
+    private void hadron$fireLoaded(CompoundTag tag, Operation<Void> original) {
+        int before = remainingFireTicks;
+        original.call(tag);
+        Entity self = (Entity) (Object) this;
+        if (remainingFireTicks != before && self.isAddedToLevel() && !level().isClientSide()) {
+            LastingActs.fireSet(self, before, remainingFireTicks);
         }
     }
 

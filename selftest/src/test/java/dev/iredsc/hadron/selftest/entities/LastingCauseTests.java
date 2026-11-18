@@ -774,4 +774,20 @@ public final class LastingCauseTests {
                 && golem.getEffect(MobEffects.POISON).getAmplifier() == 0, 60);
         assertFor(t, bob, nextPoison(t, heard), "bob's poison, hidden by alice's, once it resumes");
     }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aBurningTimeWrittenOverALiveEntityTakesTheCredit(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        Pig pig = spawn(t, EntityType.PIG, t.pos(2, 0, 0));
+        Actors.acting(new Actor.Player(bob.player()), () -> pig.igniteForTicks(100));
+        // As /data merge does: the entity's own NBT read back with a longer burning time, past the setter.
+        CompoundTag tag = pig.saveWithoutId(new CompoundTag());
+        tag.putShort("Fire", (short) 400);
+        Actor.Server console = new Actor.Server("a data command");
+        Actors.acting(console, () -> pig.load(tag));
+        t.assertEquals(400, pig.getRemainingFireTicks(), "the pig's burning time after its NBT was written over");
+        t.assertEquals(console, nextBurn(t, hurts(t, pig)).getActor(), "the actor of burning that a command made "
+                + "longer (not bob, whose fire would have gone out)");
+    }
 }
