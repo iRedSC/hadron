@@ -118,6 +118,9 @@ An effect and an entity's fire keep the actor that caused them and where it was 
 | Poison and burning act for whoever caused them | attribution on effects and fire |
 | A move refused after it happens (a client step, a boat packet, a piston landing an entity elsewhere than asked) keeps what it pressed, tripped or counted | asking before vanilla applies it (the packet handlers run whole before the refusal, and a piston's landing check runs after vanilla placed the entity); one follow-up PR |
 | ~~Starting to mine fires an event~~ | Bukkit's `BlockDamageEvent` (closed); lasting damage became `BlockCrackEvent` |
+| A tamed pet teleporting to its owner fires `EntityTeleportEvent` (today it fires nothing: vanilla places the pet without a teleport) | asking before the pet is placed; its own PR |
+| A riding entity's teleport within its world states where it ends up (an enderman in a minecart, a mob sent with `/tp`: the event states the spot it was sent to, and its vehicle puts it back in its seat on its next tick) | stating the seat, or taking it off as part of the teleport; its own PR |
+| A chorus fruit eater riding something is set down when no try finds room, as in vanilla (while a plugin listens for teleports, they stay on) | getting them off when every try has failed; its own PR |
 
 1. ~~`Placed`, `Place` and `getPlaces()` for every family, with the self-tests above; the acceptance kit places events by `getPlaces()` and its own placement rules go.~~ Done.
 2. Each fact, one or a few per PR, each closing its gap and the checklist items for the events it touches, by a test.
