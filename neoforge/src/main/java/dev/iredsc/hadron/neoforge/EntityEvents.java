@@ -192,7 +192,11 @@ public final class EntityEvents {
         Actor actor = EntityActors.fromStack(rider, EntityActors.of(rider));
         if (event.isMounting()) {
             if (!Hooks.listens(EntityMountEvent.class)) return;
-            if (Hooks.post(new EntityMountEvent(rider, vehicle, actor)).isCancelled()) event.setCanceled(true);
+            // Worked out before firing, with nothing changed, so the event states the seat and not the vehicle.
+            EntityMounts.Seating seat = EntityMounts.seating(rider, vehicle);
+            if (Hooks.post(new EntityMountEvent(rider, vehicle, seat.to(), seat.carried(), actor)).isCancelled()) {
+                event.setCanceled(true);
+            }
             return;
         }
         if (!Hooks.listens(EntityDismountEvent.class)) return;

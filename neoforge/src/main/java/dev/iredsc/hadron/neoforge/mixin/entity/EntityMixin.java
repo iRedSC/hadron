@@ -7,6 +7,7 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityCombustEvent;
 import dev.iredsc.hadron.neoforge.EntityActors;
+import dev.iredsc.hadron.neoforge.EntityMounts;
 import dev.iredsc.hadron.neoforge.EntityState;
 import dev.iredsc.hadron.neoforge.LeashDrop;
 import dev.iredsc.hadron.neoforge.EntityTeleports;
@@ -24,6 +25,7 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /** Per-entity state in fields, and the teleport, fire and air chokepoints every entity shares. */
 @Mixin(Entity.class)
@@ -330,6 +332,12 @@ abstract class EntityMixin implements EntityState {
                         transition.missingRespawnBlock(), transition.postDimensionTransition())
                 : transition;
         return EntityTeleports.during(self, () -> original.call(going));
+    }
+
+    /** A mount that went ahead seats the rider at once, where its event said, instead of on the vehicle's next tick. */
+    @Inject(method = "startRiding(Lnet/minecraft/world/entity/Entity;Z)Z", at = @At("RETURN"))
+    private void hadron$seated(Entity vehicle, boolean force, CallbackInfoReturnable<Boolean> cir) {
+        if (cir.getReturnValue()) EntityMounts.seated((Entity) (Object) this, vehicle);
     }
 
     /** Getting off a vehicle places the rider with a teleport; that is part of the dismount, not a teleport. */

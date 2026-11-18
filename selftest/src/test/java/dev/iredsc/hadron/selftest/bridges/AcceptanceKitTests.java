@@ -935,7 +935,7 @@ public final class AcceptanceKitTests {
         Pig horse = pig(t, t.pos(1, 0, 0));
         Acceptance area = t.acceptance(around(t));
         t.assertTrue(Hadron.getPluginManager().callEvent(new EntityMountEvent(bob.player(), horse,
-                new Actor.Player(bob.player()))), "bob boarding a mount in the area was refused: " + area.events());
+                horse.position(), Carried.none(), new Actor.Player(bob.player()))), "bob boarding a mount in the area was refused: " + area.events());
     }
 
     @HadronTest
@@ -1526,7 +1526,7 @@ public final class AcceptanceKitTests {
         Pig rider = pig(t, t.pos(-3, 0, 0));
         Acceptance area = t.acceptance(around(t));
         t.assertTrue(Hadron.getPluginManager().callEvent(new EntityMountEvent(rider, bob.player(),
-                Actor.Unknown.INSTANCE)), "a pig outside climbing onto bob in the area was refused: " + area.events());
+                bob.player().position(), Carried.none(), Actor.Unknown.INSTANCE)), "a pig outside climbing onto bob in the area was refused: " + area.events());
     }
 
     @HadronTest
