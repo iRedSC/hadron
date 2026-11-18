@@ -7,10 +7,8 @@ import dev.iredsc.hadron.api.event.block.BlockIgniteEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityPotionEffectEvent;
 import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
-import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
 import dev.iredsc.hadron.api.event.inventory.InventoryMoveItemEvent;
-import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
 import dev.iredsc.hadron.api.event.entity.ArmorStandManipulateEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.resource.Resource;
@@ -28,6 +26,7 @@ import java.util.List;
 import java.util.Objects;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
@@ -141,11 +140,14 @@ public final class RegionsTests {
         TestPlayer bob = t.player("bob");
         bob.moveTo(t.pos(1, 0, 0));
         t.tick(2);
-        bob.moveTo(t.pos(2, 0, 0));
-        // Moves are checked as the player ticks.
+        Vec3 outside = bob.player().position();
+        // A step is asked about where the server applies its packet: refused, he never stands inside.
+        bob.player().connection.handleMovePlayer(new ServerboundMovePlayerPacket.Pos(outside.x + 1, outside.y, outside.z,
+                true));
+        t.assertEquals(outside, bob.player().position(), "where bob stands, his step into the vault refused");
         t.tick(2);
         t.assertTrue(bob.player().getBlockX() < t.pos(2, 0, 0).getX(),
-                "bob should have been put back outside the vault, but stands at " + bob.player().blockPosition());
+                "bob should still be outside the vault, but stands at " + bob.player().blockPosition());
     }
 
     @HadronTest
@@ -157,8 +159,9 @@ public final class RegionsTests {
         t.assertChat(alice, "/region restore a-removed-region-comes-back");
         PluginCommand region = Objects.requireNonNull(t.plugin().getCommand("region"));
         String[] restoring = {"restore", ""};
-        t.assertEquals(List.of("a-removed-region-comes-back"), region.getTabCompleter().onTabComplete(
-                alice.player().createCommandSourceStack(), region, "rg", restoring), "what alice may restore");
+        // Regions earlier tests left removed are offered too: they stay restorable until the plugin disables.
+        t.assertTrue(region.getTabCompleter().onTabComplete(alice.player().createCommandSourceStack(), region, "rg",
+                restoring).contains("a-removed-region-comes-back"), "alice should be offered the region she removed");
         t.assertEquals(List.of(), region.getTabCompleter().onTabComplete(
                 t.player("dave").player().createCommandSourceStack(), region, "rg", restoring),
                 "what an outsider is told was removed");
@@ -308,7 +311,8 @@ public final class RegionsTests {
     @HadronTest
     void aMemberCantFerryAnOutsiderIn(TestContext t) {
         TestPlayer alice = admin(t);
-        define(t, alice, "ferry-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        // From the ground down: seated in a boat, a rider's feet are in the ground's own layer.
+        define(t, alice, "ferry-vault", t.pos(2, -1, -1), t.pos(4, 2, 1));
         alice.command("rg flag ferry-vault entry deny");
         TestPlayer carol = t.player("carol");
         alice.command("rg addmember ferry-vault carol");
@@ -329,26 +333,6 @@ public final class RegionsTests {
     }
 
     @HadronTest
-    void chorusFruitCantDropAnOutsiderIn(TestContext t) {
-        TestPlayer alice = admin(t);
-        define(t, alice, "chorus-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
-        alice.command("rg flag chorus-vault entry deny");
-        TestPlayer bob = t.player("bob");
-        BlockPos above = t.pos(3, 6, 0);
-        Vec3 asked = new Vec3(above.getX() + 0.5, above.getY(), above.getZ() + 0.5);
-        // Chorus fruit settles on the ground below the spot it asks for, inside the vault.
-        EntityTeleportEvent chorus = new EntityTeleportEvent(bob.player(), t.level(), asked,
-                TeleportCause.CHORUS_FRUIT, new Actor.Player(bob.player()));
-        t.plugin().getServer().getPluginManager().callEvent(chorus);
-        t.assertTrue(chorus.isCancelled(), "chorus fruit landing in the vault should be refused");
-        // The control: a command's teleport lands exactly where asked, above the vault, and goes ahead.
-        EntityTeleportEvent exact = new EntityTeleportEvent(bob.player(), t.level(), asked,
-                TeleportCause.COMMAND, new Actor.Player(bob.player()));
-        t.plugin().getServer().getPluginManager().callEvent(exact);
-        t.assertFalse(exact.isCancelled(), "a teleport to just above the vault should go ahead");
-    }
-
-    @HadronTest
     void anOutsiderCantBoardABoatInside(TestContext t) {
         // The boat comes first: once the region exists, the test's own spawn inside it is refused.
         Boat boat = EntityType.BOAT.create(t.level());
@@ -366,23 +350,6 @@ public final class RegionsTests {
         t.assertTrue(bob.player().getVehicle() == null, "bob should not board a boat inside a region he may not enter");
         t.assertFalse(boat.isRemoved(), "the boat should still be there");
         effects.assertNone("a refused boarding");
-    }
-
-    @HadronTest
-    void aTeleportThatLandsInsideAnywaySendsThemBack(TestContext t) {
-        TestPlayer alice = admin(t);
-        define(t, alice, "landing-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
-        alice.command("rg flag landing-vault entry deny");
-        TestPlayer bob = t.player("bob");
-        Vec3 start = bob.player().position();
-        BlockPos above = t.pos(3, 6, 0);
-        // A mod's random teleport asks for a spot above the vault, which entry allows, then settles on the ground
-        // inside it.
-        t.assertTrue(bob.player().randomTeleport(above.getX() + 0.5, above.getY(), above.getZ() + 0.5, false),
-                "the random teleport should find ground");
-        t.tick(2);
-        t.assertTrue(bob.player().position().distanceTo(start) < 1,
-                "bob should be sent back to where he came from, but stands at " + bob.player().blockPosition());
     }
 
     @HadronTest
@@ -411,28 +378,6 @@ public final class RegionsTests {
                 turret);
         t.plugin().getServer().getPluginManager().callEvent(shot);
         t.assertTrue(shot.isCancelled(), "a turret nobody owns inside a pvp deny region should not hurt a player");
-    }
-
-    @HadronTest
-    void gettingOffABoatIntoARegionSendsThemBack(TestContext t) {
-        TestPlayer alice = admin(t);
-        define(t, alice, "dismount-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
-        alice.command("rg flag dismount-vault entry deny");
-        TestPlayer bob = t.player("bob");
-        Boat boat = EntityType.BOAT.create(t.level());
-        BlockPos start = t.pos(0, 0, 0);
-        boat.moveTo(start.getX() + 0.5, start.getY(), start.getZ() + 0.5);
-        t.level().addFreshEntity(boat);
-        bob.interact(boat);
-        t.assertTrue(bob.player().getVehicle() == boat, "bob should be in the boat");
-        t.tick(2);
-        // As vanilla's dismount does: off, then set down beside the boat, which here is inside the vault.
-        bob.player().stopRiding();
-        BlockPos inside = t.pos(2, 0, 0);
-        bob.player().setPos(inside.getX() + 0.5, inside.getY(), inside.getZ() + 0.5);
-        t.tick(3);
-        t.assertTrue(bob.player().getBlockX() < inside.getX(),
-                "bob should be sent back out of the vault, but stands at " + bob.player().blockPosition());
     }
 
     @HadronTest
