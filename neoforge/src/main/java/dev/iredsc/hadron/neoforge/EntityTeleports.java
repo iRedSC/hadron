@@ -23,6 +23,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.PathfinderMob;
+import net.minecraft.world.entity.decoration.BlockAttachedEntity;
 import net.minecraft.world.level.portal.DimensionTransition;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
@@ -110,7 +111,9 @@ public final class EntityTeleports {
         if (a == null || a.root().entity() != entity) return false;
         asked = null;
         if (entity.level() != a.level() || a.level().getGameTime() != a.tick()) return false;
-        boolean outside = outside(entity, a);
+        // A painting, item frame or leash knot turns the position it is given into an anchor and centres itself on
+        // it, so it lands off the stated spot by its own rule, and putting it back would shift it again: not checked.
+        boolean outside = !(entity instanceof BlockAttachedEntity) && outside(entity, a);
         for (Stood r : a.riders()) {
             if (outside) break;
             outside = outside(r.entity(), a);

@@ -10,6 +10,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.entity.EntityDismountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
+import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent.TeleportCause;
 import dev.iredsc.hadron.test.Covers;
@@ -22,10 +23,13 @@ import java.util.List;
 import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.decoration.Painting;
+import net.minecraft.world.entity.decoration.PaintingVariants;
 import net.minecraft.world.entity.monster.EnderMan;
 import net.minecraft.world.entity.monster.Shulker;
 import net.minecraft.world.entity.vehicle.Boat;
@@ -395,6 +399,45 @@ public final class LandingTests {
 
     private static String coords(Vec3 v) {
         return v.x + " " + v.y + " " + v.z;
+    }
+
+    /** A 2x2 painting at the test world's centre, sent with {@code /tp}; returns it where it ended up. */
+    private static Painting tpPainting(TestContext t) {
+        Painting painting = spawn(t, EntityType.PAINTING, t.pos(0, 1, 0));
+        painting.setVariant(t.level().registryAccess().registryOrThrow(Registries.PAINTING_VARIANT)
+                .getHolderOrThrow(PaintingVariants.MATCH));
+        console(t, "tp " + painting.getStringUUID() + " " + coords(center(t.pos(4, 2, 4)).add(0.2, 0.3, 0.1)));
+        return painting;
+    }
+
+    /**
+     * A painting places itself by its own rule, off the spot it is sent to; a listener refusing every move must not
+     * shift it from where it lands with no such listener.
+     */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aPaintingSentWithTpLandsTheSameWhenEveryMoveIsRefused(TestContext t) {
+        t.player("alice");
+        Painting alone = tpPainting(t);
+        BlockPos anchor = alone.getPos();
+        Vec3 landed = alone.position();
+        alone.discard();
+        List<EntityTeleportEvent> heard = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityTeleportEvent e) {
+                if (e.getEntity() instanceof Painting) heard.add(e);
+            }
+
+            @EventHandler
+            void on(EntityMoveEvent e) {
+                e.setCancelled(true);
+            }
+        });
+        Painting refused = tpPainting(t);
+        t.assertEquals(1, heard.size(), "the painting's teleports");
+        t.assertEquals(anchor, refused.getPos(), "the block the painting hangs at");
+        t.assertEquals(landed, refused.position(), "where the painting is");
     }
 
     /** A nether portal in the test world, two wide and three high, along x; returns its lower west portal block. */
