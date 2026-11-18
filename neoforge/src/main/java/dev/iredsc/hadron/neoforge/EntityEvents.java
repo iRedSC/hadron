@@ -353,12 +353,15 @@ public final class EntityEvents {
                     hadron.getToYRot(), hadron.getToXRot()));
             return;
         }
-        // NeoForge's event carries only a position in this level; a new level (a pearl's) or facing is applied by the
-        // teleport method called next, which consumes the mark.
         event.setTargetX(to.x);
         event.setTargetY(to.y);
         event.setTargetZ(to.z);
         EntityTeleports.expect(entity, hadron);
+        // A shulker is placed next, by no teleport method: a mark would wait for its next teleport this tick, which
+        // would then go unasked.
+        if (cause != TeleportCause.ENDER_PEARL) return;
+        // NeoForge's event carries only a position in this level; a pearl's new level or facing is applied by the
+        // teleport method called next, which consumes the mark.
         boolean turned = hadron.getToYRot() != entity.getYRot() || hadron.getToXRot() != entity.getXRot();
         EntityTeleports.mark(entity, cause, true, hadron.getToLevel() != level || turned
                 ? new EntityTeleports.Destination(hadron.getToLevel(), to.x, to.y, to.z, hadron.getToYRot(),

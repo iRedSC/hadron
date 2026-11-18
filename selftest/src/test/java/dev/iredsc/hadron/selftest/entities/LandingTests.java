@@ -244,6 +244,21 @@ public final class LandingTests {
         assertLandedWhereStated(t, heard.get(0), shulker, "the shulker");
     }
 
+    /** Its own teleport is placed by no teleport method, so nothing of it may wait for the next one. */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aShulkerSentOnInTheSameTickIsAskedAgain(TestContext t) throws Exception {
+        t.player("alice");
+        Shulker shulker = spawn(t, EntityType.SHULKER, t.pos(0, 0, 3));
+        shulker.setNoAi(false);
+        List<EntityTeleportEvent> heard = hear(t, shulker, e -> e.getCause() != TeleportCause.RANDOM_TELEPORT);
+        t.assertTrue(shulkerTeleport(shulker), "the shulker should find somewhere to go in 50 tries");
+        Vec3 landed = shulker.position();
+        shulker.teleportTo(landed.x + 2, landed.y, landed.z);
+        t.assertEquals(2, heard.size(), "the shulker's teleports, its own and the one sent after it");
+        assertStayed(t, landed, shulker, "the shulker, whose second teleport was refused");
+    }
+
     @HadronTest
     @Covers(EntityTeleportEvent.class)
     void aRefusedShulkerStaysWhereItWas(TestContext t) throws Exception {
