@@ -20,6 +20,7 @@ import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.block.entity.BlockEntity;
+import net.neoforged.neoforge.common.util.FakePlayer;
 import net.neoforged.neoforge.server.ServerLifecycleHooks;
 import org.jspecify.annotations.Nullable;
 
@@ -46,24 +47,36 @@ public final class LastingCause implements LastingActs.Acting, Actors.Port.Lazy 
     /** The server on an operator's orders: the {@code /effect} command. */
     record ServerWho(String name) implements Who {}
 
-    /** An entity, a player included, or a remembered one; {@code id} empty only for a remembered machine without one. */
+    /**
+     * An entity, a player included, or a remembered one; {@code id} empty only for a remembered machine without one.
+     * {@code kind} is its entity type's id, or {@link #FAKE_PLAYER} for a fake player.
+     */
     record EntityWho(ResourceLocation kind, Optional<UUID> id, Attribution attribution) implements Who {}
 
     /**
      * A block entity at a position, by the id Hadron gave it ({@link AttributionMemory#machineId}), so another put in
-     * its place is never taken for it; empty where its spot held no block entity to give one to.
+     * its place is never taken for it; empty where its spot held no block entity to give one to. {@code kind} is its
+     * block entity type's id, or its block's where it had no block entity.
      */
     record MachineWho(ResourceLocation kind, GlobalPos at, Optional<UUID> id, Attribution attribution) implements Who {}
 
     private static final ResourceLocation PLAYER = BuiltInRegistries.ENTITY_TYPE.getKey(EntityType.PLAYER);
 
     /**
+     * What a fake player is kept as. Its entity type is a player's and its UUID may be a real player's (a mod's machine
+     * borrowing its owner's profile), so kept as a player it would come back as that player, acting directly. Nothing
+     * lists fake players to find one again, so it always acts as {@link Actor.Remembered}.
+     */
+    static final ResourceLocation FAKE_PLAYER = ResourceLocation.fromNamespaceAndPath("hadron", "fake_player");
+
+    /**
      * Saved as {@code applied_at} (a dimension and a position) and who: {@code server} (a name), or {@code kind} with
-     * {@code id}, plus {@code machine} for a machine, and {@code attribution}; or {@code nobody} ({@code unknown});
-     * none of them is nature. Fields it doesn't know are ignored, so a newer or older layout still loads.
+     * {@code id}, plus {@code machine} for a machine, and {@code attribution}; or {@code nobody} ({@code nature} or
+     * {@code unknown}). Fields it doesn't know are ignored, so a newer or older layout still loads; a record that says
+     * who in no way this knows (none of them, or a {@code nobody} it can't read) is nobody proven: unknown.
      */
     static final Codec<LastingCause> CODEC = RecordCodecBuilder.create(i -> i.group(
-            GlobalPos.CODEC.fieldOf("applied_at").forGetter(c -> c.where),
+            GlobalPos.CODEC.fieldOf("applied_at").forGetter(c -> c.appliedAt),
             Codec.STRING.optionalFieldOf("server").forGetter(c -> c.who instanceof ServerWho s
                     ? Optional.of(s.name()) : Optional.empty()),
             ResourceLocation.CODEC.optionalFieldOf("kind").forGetter(c -> switch (c.who) {
@@ -83,19 +96,20 @@ public final class LastingCause implements LastingActs.Acting, Actors.Port.Lazy 
                 case MachineWho m when !m.attribution().isEmpty() -> Optional.of(m.attribution());
                 default -> Optional.empty();
             }),
-            Codec.STRING.optionalFieldOf("nobody").forGetter(c -> c.who == Nobody.UNKNOWN
-                    ? Optional.of("unknown") : Optional.empty()))
+            Codec.STRING.optionalFieldOf("nobody").forGetter(c -> c.who instanceof Nobody n
+                    ? Optional.of(n == Nobody.NATURE ? "nature" : "unknown") : Optional.empty()))
             .apply(i, LastingCause::decode));
 
     private final Who who;
-    private final GlobalPos where;
+    /** Where its subject stood when it was applied; the cause itself may be anywhere. */
+    private final GlobalPos appliedAt;
 
-    private LastingCause(Who who, GlobalPos where) {
+    private LastingCause(Who who, GlobalPos appliedAt) {
         this.who = Objects.requireNonNull(who, "who");
-        this.where = Objects.requireNonNull(where, "where");
+        this.appliedAt = Objects.requireNonNull(appliedAt, "appliedAt");
     }
 
-    private static LastingCause decode(GlobalPos where, Optional<String> server, Optional<ResourceLocation> kind,
+    private static LastingCause decode(GlobalPos appliedAt, Optional<String> server, Optional<ResourceLocation> kind,
             Optional<UUID> id, Optional<GlobalPos> machine, Optional<Attribution> attribution,
             Optional<String> nobody) {
         Attribution people = attribution.orElse(Attribution.none());
@@ -107,9 +121,9 @@ public final class LastingCause implements LastingActs.Acting, Actors.Port.Lazy 
         } else if (kind.isPresent()) {
             who = new EntityWho(kind.get(), id, people);
         } else {
-            who = nobody.filter("unknown"::equals).isPresent() ? Nobody.UNKNOWN : Nobody.NATURE;
+            who = nobody.filter("nature"::equals).isPresent() ? Nobody.NATURE : Nobody.UNKNOWN;
         }
-        return new LastingCause(who, where);
+        return new LastingCause(who, appliedAt);
     }
 
     /**
@@ -136,8 +150,9 @@ public final class LastingCause implements LastingActs.Acting, Actors.Port.Lazy 
     }
 
     private static EntityWho entityWho(Entity entity, Attribution attribution) {
-        return new EntityWho(BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType()), Optional.of(entity.getUUID()),
-                attribution);
+        ResourceLocation kind = entity instanceof FakePlayer ? FAKE_PLAYER
+                : BuiltInRegistries.ENTITY_TYPE.getKey(entity.getType());
+        return new EntityWho(kind, Optional.of(entity.getUUID()), attribution);
     }
 
     private static MachineWho machineWho(Actor.Machine m) {
@@ -168,8 +183,8 @@ public final class LastingCause implements LastingActs.Acting, Actors.Port.Lazy 
     /**
      * Who acts now: the cause itself while it is there, for the people it had when it applied this, otherwise an
      * {@link Actor.Remembered} for the same people. A player is there while online; another entity while loaded,
-     * wherever it is now (after a reload too: it is found by its UUID); a machine while the very block entity it was
-     * (by its id) is at its spot, loaded.
+     * wherever it is now (after a reload too: it is found by its UUID, and must still be the kind it was); a machine
+     * while the very block entity it was (by its id) is at its spot, loaded. A fake player is never found again.
      */
     public Actor actor(MinecraftServer server) {
         return switch (who) {
@@ -202,30 +217,33 @@ public final class LastingCause implements LastingActs.Acting, Actors.Port.Lazy 
         }
         for (ServerLevel level : server.getAllLevels()) {
             Entity found = level.getEntity(id);
-            if (found != null && !found.isRemoved()) return found;
+            if (found != null && !found.isRemoved()
+                    && BuiltInRegistries.ENTITY_TYPE.getKey(found.getType()).equals(kind)) {
+                return found;
+            }
         }
         return null;
     }
 
     /** Where it was applied: the block its subject stood in, or unknown where that level is no longer loaded. */
     public Place appliedAt(MinecraftServer server) {
-        ServerLevel level = server.getLevel(where.dimension());
+        ServerLevel level = server.getLevel(appliedAt.dimension());
         return level == null ? Place.Unknown.anywhere(Place.Unknown.Reason.UNSEEN_ORIGIN)
-                : Place.Spot.at(level, where.pos());
+                : Place.Spot.at(level, appliedAt.pos());
     }
 
     @Override
     public boolean equals(@Nullable Object o) {
-        return o instanceof LastingCause c && who.equals(c.who) && where.equals(c.where);
+        return o instanceof LastingCause c && who.equals(c.who) && appliedAt.equals(c.appliedAt);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(who, where);
+        return Objects.hash(who, appliedAt);
     }
 
     @Override
     public String toString() {
-        return "LastingCause[" + who + " at " + where + "]";
+        return "LastingCause[" + who + " at " + appliedAt + "]";
     }
 }

@@ -8,6 +8,7 @@ import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.Place;
+import com.mojang.authlib.GameProfile;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.api.event.entity.EntityRegainHealthEvent;
 import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
@@ -30,11 +31,14 @@ import net.minecraft.world.damagesource.DamageType;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.resources.ResourceKey;
 import net.minecraft.resources.ResourceLocation;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.AreaEffectCloud;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.animal.Chicken;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.entity.decoration.ArmorStand;
@@ -648,5 +652,99 @@ public final class LastingCauseTests {
         t.assertEquals(Actor.Unknown.INSTANCE, tick.getActor(), "the actor of poison changed outside an application");
         t.assertEquals(Optional.of(Place.Unknown.anywhere(Place.Unknown.Reason.UNSEEN_ORIGIN)), tick.getAppliedAt(),
                 "where poison changed outside an application was applied");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aSavedCauseHadronCantReadActsForNobodyKnown(TestContext t) {
+        t.player("alice");
+        BlockPos litAt = t.pos(2, 0, 0);
+        for (String nobody : new String[] {"written_by_a_newer_hadron", ""}) {
+            Pig pig = spawn(t, EntityType.PIG, litAt);
+            Actors.acting(Actor.Nature.INSTANCE, () -> pig.igniteForSeconds(10));
+            Pig loaded = reload(t, pig, tag -> {
+                CompoundTag cause = tag.getCompound("neoforge:attachments").getCompound("hadron:fire_cause");
+                t.assertEquals("nature", cause.getString("nobody"), "how a fire nature lit says who lit it");
+                if (nobody.isEmpty()) {
+                    cause.remove("nobody");
+                } else {
+                    cause.putString("nobody", nobody);
+                }
+            }, Pig.class);
+            EntityDamageEvent burn = nextBurn(t, hurts(t, loaded));
+            String what = nobody.isEmpty() ? "that doesn't say who" : "whose who Hadron can't read";
+            t.assertEquals(Actor.Unknown.INSTANCE, burn.getActor(), "the actor of fire with a saved cause " + what
+                    + " (nobody proven, so never nature)");
+            t.assertEquals(Optional.of(Place.Spot.at(t.level(), litAt)), burn.getAppliedAt(),
+                    "where fire with a saved cause " + what + " was lit, which it still says");
+            loaded.discard();
+        }
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void anotherKindOfEntityWithTheCausesUuidIsNotTheCause(TestContext t) {
+        t.player("alice");
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        Pig pig = spawn(t, EntityType.PIG, t.pos(-3, 0, 0));
+        golem.addEffect(poison(400, 0), pig);
+        pig.discard();
+        // As /summon with a UUID, or a mod's conversion that keeps one, would make it.
+        Chicken chicken = EntityType.CHICKEN.create(t.level());
+        chicken.setUUID(pig.getUUID());
+        chicken.setPos(pig.position());
+        t.assertTrue(t.level().addFreshEntity(chicken), "a chicken with the removed pig's UUID should join the world");
+        EntityDamageEvent tick = nextPoison(t, hurts(t, golem));
+        t.assertTrue(tick.getActor() instanceof Actor.Remembered r && r.kind().equals(
+                        BuiltInRegistries.ENTITY_TYPE.getKey(EntityType.PIG)),
+                "a chicken with the pig's UUID is not the pig: the cause should be the remembered pig, but was "
+                        + tick.getActor());
+    }
+
+    /** A NeoForge fake player, as a mod gets one; by name, since selftest compiles against vanilla Minecraft only. */
+    private static ServerPlayer fakePlayer(TestContext t, GameProfile profile) {
+        try {
+            return (ServerPlayer) Class.forName("net.neoforged.neoforge.common.util.FakePlayerFactory", true,
+                            LastingCauseTests.class.getClassLoader())
+                    .getMethod("get", ServerLevel.class, GameProfile.class).invoke(null, t.level(), profile);
+        } catch (ReflectiveOperationException e) {
+            throw new AssertionError("NeoForge's FakePlayerFactory.get(ServerLevel, GameProfile) should make a fake "
+                    + "player", e);
+        }
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    @Covers(value = Actor.class, method = "actingFor")
+    void aFakePlayersPoisonNeverActsAsThePlayerWhoseProfileItBorrows(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        // A mod's machine, with nobody said to answer for it, using its owner's profile: bob's UUID, and he is online.
+        ServerPlayer fake = fakePlayer(t, new GameProfile(bob.uuid(), "bob"));
+        golem.addEffect(poison(400, 0), fake);
+        EntityDamageEvent tick = nextPoison(t, hurts(t, golem));
+        t.assertTrue(tick.getActor() instanceof Actor.Remembered r
+                        && r.kind().equals(ResourceLocation.fromNamespaceAndPath("hadron", "fake_player"))
+                        && r.id().equals(Optional.of(bob.uuid())),
+                "a fake player's poison should act as a remembered hadron:fake_player, but acted as " + tick.getActor());
+        t.assertEquals(Optional.empty(), tick.getActor().actingFor(), "who a fake player nobody answers for acts for "
+                + "(not bob, whose profile it borrowed)");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aMachineWithNoBlockEntityIsRememberedAsItsBlock(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos machine = t.pos(-3, 0, 0);
+        t.setBlock(machine, Blocks.STONE);
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        Actors.acting(new Actor.Machine(t.level(), machine, Attribution.of(bob.uuid())),
+                () -> golem.addEffect(poison(400, 0)));
+        EntityDamageEvent tick = nextPoison(t, hurts(t, golem));
+        t.assertTrue(tick.getActor() instanceof Actor.Remembered r && r.id().isEmpty()
+                        && r.kind().equals(BuiltInRegistries.BLOCK.getKey(Blocks.STONE)),
+                "a machine with no block entity should be remembered as its block with no id, but was "
+                        + tick.getActor());
+        assertFor(t, bob, tick, "the poison of a machine with no block entity");
     }
 }

@@ -85,8 +85,10 @@ public sealed interface Actor {
      * Protection treats it like any other actor: it acts for whoever {@link #actingFor()} says.
      *
      * @param kind what it was, namespaced: an entity type's id ({@code minecraft:player},
-     *     {@code minecraft:area_effect_cloud}), or a block entity type's for a machine
-     * @param id which one: the entity's UUID (a player's is their account's), or for a machine the id Hadron gave its
+     *     {@code minecraft:area_effect_cloud}); {@code hadron:fake_player} for a fake player, never
+     *     {@code minecraft:player}; for a machine its block entity type's id, or its block's where it had no block entity
+     * @param id which one: the entity's UUID (a player's is their account's; a fake player's may be borrowed from a
+     *     real player, so ask {@link #actingFor()}, never this, who answers), or for a machine the id Hadron gave its
      *     block entity; empty where there was none
      * @param attribution the people who were behind it; {@link Attribution#none()} for nobody
      */
