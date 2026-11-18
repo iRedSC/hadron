@@ -13,6 +13,7 @@
     "BrewingStandBlockEntityMixin",
     "CampfireBlockEntityAccessor",
     "CampfireBlockEntityMixin",
+    "ChorusFruitItemMixin",
     "CombinedInvWrapperAccessor",
     "CompoundContainerAccessor",
     "CrafterBlockMixin",

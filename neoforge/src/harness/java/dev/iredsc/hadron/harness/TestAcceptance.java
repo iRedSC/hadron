@@ -3,6 +3,7 @@ package dev.iredsc.hadron.harness;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import dev.iredsc.hadron.api.event.Cancellable;
+import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.Event;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.EventPriority;
@@ -10,6 +11,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.Placed;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
+import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityKnockbackEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
@@ -56,6 +58,7 @@ import net.minecraft.world.level.block.entity.BlockEntity;
 import net.minecraft.world.level.block.entity.ChestBlockEntity;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import net.neoforged.neoforge.common.NeoForge;
 import net.neoforged.neoforge.event.entity.EntityJoinLevelEvent;
@@ -112,6 +115,8 @@ final class TestAcceptance implements Acceptance, Listener {
      */
     private final Map<UUID, Optional<AcceptanceDiff.Thing>> arrived = new LinkedHashMap<>();
     private final java.util.function.Consumer<EntityJoinLevelEvent> joins = this::joined;
+    /** What each block move in the box this step carried, checked against what moved. */
+    private final AcceptanceCarriage carriage = new AcceptanceCarriage(this::live);
 
     private void joined(EntityJoinLevelEvent event) {
         Entity e = event.getEntity();
@@ -213,6 +218,7 @@ final class TestAcceptance implements Acceptance, Listener {
         elsewhere.clear();
         denied.clear();
         arrived.clear();
+        carriage.clear();
     }
 
     @Override
@@ -252,6 +258,7 @@ final class TestAcceptance implements Acceptance, Listener {
         Set<Part> which = parts.length == 0 ? EnumSet.allOf(Part.class) : EnumSet.copyOf(List.of(parts));
         List<String> problems = new ArrayList<>(AcceptanceDiff.changes(before, after, which, seen, elsewhere, touched,
                 arrived));
+        if (which.contains(Part.ENTITIES)) problems.addAll(carriage.movedDespiteRefusal());
         if (which.contains(Part.BLOCKS)) {
             // A vibration in the box is what a sculk sensor there would turn into a redstone signal. Walking through
             // is allowed, so motion doesn't count, and a test player's events in another world are elsewhere.
@@ -274,6 +281,7 @@ final class TestAcceptance implements Acceptance, Listener {
         // Protection fails closed on nature's unplaceable events too, but they are nobody's to attribute.
         List<String> problems = new ArrayList<>(unplaced.stream().filter(u -> !AcceptanceDiff.nobodys(u.seen().actor()))
                 .map(Unplaced::toString).toList());
+        problems.addAll(carriage.carriedUnnamed());
         for (Seen s : seen) {
             if (AcceptanceDiff.nobodys(s.actor())) continue;
             Optional<UUID> who = s.actor().actingFor();
@@ -321,6 +329,7 @@ final class TestAcceptance implements Acceptance, Listener {
         switch (place(event)) {
             case Where.In in -> {
                 seen.add(new Seen(event, a.getActor(), event instanceof Cancellable c && c.isCancelled(), in.pos()));
+                if (event instanceof BlockMoveEvent move) carriage.heard(move);
                 for (Entity e : named(event)) {
                     touched.add(e.getUUID());
                     followed.putIfAbsent(e.getUUID(), e);
@@ -351,6 +360,17 @@ final class TestAcceptance implements Acceptance, Listener {
                 }
             }
         }
+    }
+
+    /** The entity with this id now, wherever it is, or null when it is gone. */
+    private @Nullable Entity live(UUID id) {
+        Entity known = followed.get(id);
+        if (known != null && !known.isRemoved()) return known;
+        for (ServerLevel l : level.getServer().getAllLevels()) {
+            Entity e = l.getEntity(id);
+            if (e != null && !e.isRemoved()) return e;
+        }
+        return null;
     }
 
     private boolean allowed(Actor actor, Event event) {
@@ -412,6 +432,8 @@ final class TestAcceptance implements Acceptance, Listener {
                     + "make it a block, entity, item, inventory, resource or world event, whose family states them";
             case UNSEEN_ORIGIN -> "nothing says where it came from: state where it starts";
             case COMMAND -> "a command acts where its effects do, which fire their own events";
+            case UNKNOWN_CARRIAGE -> "what it carries along is unknown, and its bound reaches the area: name every "
+                    + "entity riding along, with where it ends up";
             case NOBODY_BEHIND_IT -> "nobody is behind it and nothing else says where: push the actor (the player or "
                     + "machine doing it)";
         };
@@ -470,6 +492,7 @@ final class TestAcceptance implements Acceptance, Listener {
             case null -> {}
             case Entity e -> out.add(e);
             case Optional<?> o -> o.ifPresent(v -> collect(v, out));
+            case Carried.Known k -> out.addAll(k.entities());
             case java.util.Collection<?> c -> c.forEach(v -> collect(v, out));
             case InventoryHolder h -> holderEntity(h).ifPresent(out::add);
             case ResourceHolder.Entity r -> out.add(r.entity());

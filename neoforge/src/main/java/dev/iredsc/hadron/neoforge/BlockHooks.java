@@ -167,6 +167,18 @@ public final class BlockHooks {
         int lastUser = -1;
         long lastUsePos = NO_POS;
         long lastUseTime;
+        /** The player mining through the game mode now, and where; null when none. */
+        @Nullable Mining mining;
+        /**
+         * The last tool a block's drops were worked out with on this thread ({@code Block.getDrops}), for the removal
+         * of exactly that block, by the same actor, in the same game tick. Consumed by that removal.
+         */
+        @Nullable LevelAccessor harvestLevel;
+        long harvestPos = NO_POS;
+        @Nullable BlockState harvestState;
+        long harvestTime;
+        @Nullable Actor harvestActor;
+        ItemStack harvestTool = ItemStack.EMPTY;
 
         boolean ticking() {
             return ticks > 0;
@@ -215,7 +227,7 @@ public final class BlockHooks {
         if (actor == null) actor = outsider(ctx, server, pos);
         if (actor == null || !Hooks.listens(BlockBreakEvent.class)) return false;
         boolean cancelled = Hooks.post(new BlockBreakEvent(server, pos, state,
-                level.getFluidState(pos).createLegacyBlock(), actor)).isCancelled();
+                level.getFluidState(pos).createLegacyBlock(), IGNITED, actor)).isCancelled();
         ctx.decidedLevel = level;
         ctx.decidedPos = pos.asLong();
         ctx.decidedTime = level.getGameTime();
@@ -418,10 +430,16 @@ public final class BlockHooks {
     }
 
     private static BlockChangeEvent build(Kind kind, ServerLevel level, BlockChange change, long source, Actor actor) {
+        return build(kind, level, change, source, BlockBreakEvent.Tool.Unknown.NOT_STATED, actor);
+    }
+
+    /** {@code tool} is used only for a {@link Kind#BREAK}. */
+    private static BlockChangeEvent build(Kind kind, ServerLevel level, BlockChange change, long source,
+            BlockBreakEvent.Tool tool, Actor actor) {
         BlockPos pos = change.getPos();
         return switch (kind) {
             case CHANGE -> new BlockChangeEvent(level, change, actor);
-            case BREAK -> new BlockBreakEvent(level, change, actor);
+            case BREAK -> new BlockBreakEvent(level, change, tool, actor);
             case PLACE -> new BlockPlaceEvent(level, change, actor);
             case TRANSFORM -> new BlockTransformEvent(level, change, actor);
             case IGNITE -> new BlockIgniteEvent(level, change, actor);
@@ -555,8 +573,10 @@ public final class BlockHooks {
             return false;
         }
         if (kind == null || !Hooks.listens(type(kind))) return false;
+        BlockBreakEvent.Tool tool = kind == Kind.BREAK
+                ? harvested(ctx, server, pos, before, REMOVED_DIRECTLY) : BlockBreakEvent.Tool.Unknown.NOT_STATED;
         BlockChangeEvent event = Hooks.post(build(kind, server, BlockChange.of(server, pos, before, after), source,
-                who));
+                tool, who));
         boolean cancelled = event.isCancelled();
         HeldEffects.changeDecided(cancelled);
         return cancelled;
@@ -687,7 +707,8 @@ public final class BlockHooks {
                         ? Actors.Port.enter(PortKey.KEY, who, ctx.buildOperation) : 0;
                 BlockChangeEvent event;
                 try {
-                    event = build(kind, server, BlockChange.of(server, block.getPos(), before, air), NO_POS, who);
+                    event = build(kind, server, BlockChange.of(server, block.getPos(), before, air), NO_POS,
+                            BlockBreakEvent.Tool.None.INSTANCE, who);
                 } finally {
                     if (making != 0) Actors.Port.exit(PortKey.KEY, making);
                 }
@@ -744,8 +765,85 @@ public final class BlockHooks {
         BlockState before = level.getBlockState(pos);
         if (before.isAir() || !Hooks.listens(type(kind))) return false;
         BlockState after = level.getFluidState(pos).createLegacyBlock();
-        return Hooks.post(build(kind, server, BlockChange.of(server, pos, before, after), NO_POS, actor))
+        // Vanilla's destroyBlock harvests with nothing; a mod that worked out the drops first used its own tool.
+        BlockBreakEvent.Tool tool = kind == Kind.BREAK
+                ? harvested(ctx, server, pos, before, BlockBreakEvent.Tool.None.INSTANCE)
+                : BlockBreakEvent.Tool.Unknown.NOT_STATED;
+        return Hooks.post(build(kind, server, BlockChange.of(server, pos, before, after), NO_POS, tool, actor))
                 .isCancelled();
+    }
+
+    // ---------------------------------------------------------------------------------------------------------------
+    // What a block is broken with
+
+    private static final BlockBreakEvent.Tool REMOVED_DIRECTLY =
+            new BlockBreakEvent.Tool.Unknown(BlockBreakEvent.Tool.Reason.REMOVED_DIRECTLY);
+    private static final BlockBreakEvent.Tool IGNITED =
+            new BlockBreakEvent.Tool.Unknown(BlockBreakEvent.Tool.Reason.IGNITED);
+    private static final BlockBreakEvent.Tool PERMISSION_CHECK =
+            new BlockBreakEvent.Tool.Unknown(BlockBreakEvent.Tool.Reason.PERMISSION_CHECK);
+
+    /** A player mining through the game mode, saved by {@link #enterMining} and put back by {@link #exitMining}. */
+    public record Mining(ServerPlayer player, LevelAccessor level, long pos) {}
+
+    /** The game mode is about to mine {@code pos} for {@code player}. Returns what to put back on exit. */
+    public static @Nullable Mining enterMining(ServerPlayer player, LevelAccessor level, BlockPos pos) {
+        Context ctx = CONTEXT.get();
+        Mining previous = ctx.mining;
+        ctx.mining = new Mining(player, level, pos.asLong());
+        return previous;
+    }
+
+    public static void exitMining(@Nullable Mining previous) {
+        CONTEXT.get().mining = previous;
+    }
+
+    /**
+     * What a NeoForge break event's player breaks with: their main hand while the game mode mines that block for them,
+     * as vanilla harvests with it; otherwise a mod asking whether it may break, before saying with what.
+     */
+    static BlockBreakEvent.Tool breakEventTool(LevelAccessor level, BlockPos pos, @Nullable Player player) {
+        Mining mining = CONTEXT.get().mining;
+        if (player == null || mining == null || mining.player() != player || mining.level() != level
+                || mining.pos() != pos.asLong()) {
+            return PERMISSION_CHECK;
+        }
+        return of(player.getMainHandItem());
+    }
+
+    private static BlockBreakEvent.Tool of(ItemStack item) {
+        return item.isEmpty() ? BlockBreakEvent.Tool.None.INSTANCE : new BlockBreakEvent.Tool.Item(item);
+    }
+
+    /** {@code Block.getDrops} is working out {@code state}'s drops at {@code pos} with {@code tool}. */
+    public static void harvesting(ServerLevel level, BlockPos pos, BlockState state, ItemStack tool) {
+        if (!Hooks.listens(BlockBreakEvent.class)) return;
+        Context ctx = CONTEXT.get();
+        ctx.harvestLevel = level;
+        ctx.harvestPos = pos.asLong();
+        ctx.harvestState = state;
+        ctx.harvestTime = level.getGameTime();
+        ctx.harvestActor = current();
+        ctx.harvestTool = tool.copy();
+    }
+
+    /**
+     * The tool {@code before}'s drops were just worked out with, when that was this very block, under the same actor
+     * as now (a machine's tick, a pushed actor), this tick; {@code otherwise} when not. Consumed when it matches.
+     */
+    private static BlockBreakEvent.Tool harvested(Context ctx, ServerLevel level, BlockPos pos, BlockState before,
+            BlockBreakEvent.Tool otherwise) {
+        if (ctx.harvestLevel != level || ctx.harvestPos != pos.asLong() || ctx.harvestState != before
+                || ctx.harvestTime != level.getGameTime() || !java.util.Objects.equals(ctx.harvestActor, current())) {
+            return otherwise;
+        }
+        BlockBreakEvent.Tool tool = of(ctx.harvestTool);
+        ctx.harvestLevel = null;
+        ctx.harvestPos = NO_POS;
+        ctx.harvestState = null;
+        ctx.harvestActor = null;
+        ctx.harvestTool = ItemStack.EMPTY;
+        return tool;
     }
 
     // ---------------------------------------------------------------------------------------------------------------

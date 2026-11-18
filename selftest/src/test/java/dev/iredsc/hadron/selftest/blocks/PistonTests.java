@@ -2,10 +2,15 @@ package dev.iredsc.hadron.selftest.blocks;
 
 import static dev.iredsc.hadron.selftest.blocks.Fixtures.assertNature;
 
+import dev.iredsc.hadron.api.event.Carried;
+import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.block.BlockPistonExtendEvent;
+import dev.iredsc.hadron.api.event.block.BlockPistonEvent;
 import dev.iredsc.hadron.api.event.block.BlockPistonRetractEvent;
 import dev.iredsc.hadron.test.Covers;
 import dev.iredsc.hadron.test.HadronTest;
@@ -13,6 +18,8 @@ import dev.iredsc.hadron.test.TestContext;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.core.BlockPos;
+import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.EntityType;
 import net.minecraft.core.Direction;
 import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.Blocks;
@@ -122,5 +129,72 @@ public final class PistonTests {
         t.assertFalse(seen.isEmpty(), "the piston should have tried to pull");
         t.assertBlock(piston.east(2), Blocks.STONE);
         t.assertBlock(piston.east(), Blocks.PISTON_HEAD);
+    }
+
+    /** Every EntityMoveEvent heard from now on; refusing the ones {@code refuse} picks. */
+    private static List<EntityMoveEvent> recordPushes(TestContext t, java.util.function.Predicate<EntityMoveEvent> refuse) {
+        List<EntityMoveEvent> seen = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityMoveEvent e) {
+                seen.add(e);
+                if (refuse.test(e)) e.setCancelled(true);
+            }
+        });
+        return seen;
+    }
+
+    private static boolean byPiston(EntityMoveEvent e, BlockPos movingBlock) {
+        return e.getActor() instanceof Actor.Machine m && m.pos().equals(movingBlock);
+    }
+
+    /**
+     * A piston picks up what it bumps into and what sticks to its honey as it travels, after its block move: that
+     * event's carriage is unknown, never an empty list that reads as nothing, and has no bound; each entity it moves
+     * into another block is asked about as it moves, in its own move naming the piston.
+     */
+    @HadronTest
+    @Covers(BlockPistonExtendEvent.class)
+    @Covers(BlockPistonRetractEvent.class)
+    @Covers(EntityMoveEvent.class)
+    void whatAPistonCarriesIsUnknownAndEachEntityItMovesIsAsked(TestContext t) {
+        t.player("alice"); // the pig only ticks near a player
+        BlockPos piston = piston(t, Blocks.STICKY_PISTON);
+        t.setBlock(piston.east(), Blocks.HONEY_BLOCK);
+        Pig pig = dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t, EntityType.PIG, piston.east().above());
+        pig.setOnGround(true); // a still pig never settles itself; honey carries only what stands on it
+        List<BlockMoveEvent> seen = recordMoves(t);
+        List<EntityMoveEvent> pushes = recordPushes(t, e -> false);
+        power(t, piston, true);
+        power(t, piston, false);
+        t.assertEquals(2, seen.size(), "the push, then the pull");
+        for (BlockMoveEvent e : seen) {
+            t.assertTrue(e instanceof BlockPistonEvent, "a piston's move, but was " + e.getEventName());
+            t.assertEquals(Carried.unknown(Carried.Unknown.Reason.DECIDED_AS_IT_MOVES), e.getCarried(),
+                    e.getEventName() + "'s carriage");
+            t.assertTrue(e.getPlaces().stream().noneMatch(p -> p instanceof Place.Unknown),
+                    e.getEventName() + "'s places should name only its blocks: " + e.getPlaces());
+        }
+        t.assertTrue(pushes.stream().anyMatch(e -> e.getEntity() == pig && byPiston(e, piston.east(2))),
+                "the pig carried on the honey should be asked about, by the piston, but heard " + pushes);
+    }
+
+    /** A pushed pig refused: the piston's blocks finish moving, the pig stays where it stood. */
+    @HadronTest
+    @Covers(EntityMoveEvent.class)
+    void aRefusedPushLeavesTheEntityWhereItStood(TestContext t) {
+        t.player("alice");
+        BlockPos piston = piston(t, Blocks.STICKY_PISTON);
+        t.setBlock(piston.east(), Blocks.HONEY_BLOCK);
+        Pig pig = dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t, EntityType.PIG, piston.east().above());
+        pig.setOnGround(true); // a still pig never settles itself; honey carries only what stands on it
+        t.tick();
+        BlockPos stood = pig.blockPosition();
+        List<EntityMoveEvent> refused = recordPushes(t, e -> e.getEntity() == pig);
+        power(t, piston, true);
+        t.assertTrue(!refused.isEmpty(), "the pig's push should have been asked about; it stood at " + stood
+                + " and is at " + pig.position() + ", on the ground: " + pig.onGround());
+        t.assertEquals(stood, pig.blockPosition(), "the pig's block, its push refused");
+        t.assertBlock(piston.east(2), Blocks.HONEY_BLOCK);
     }
 }

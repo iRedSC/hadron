@@ -40,7 +40,7 @@ Core never fires these; with no bridge, plugins hear nothing for them.
 | `BlockCrackEvent` | puts lasting partial damage on a block short of breaking it | damage before and after |
 | `BlockDataChangeEvent` | changes a block entity's data with the block state unchanged (a spawner's mob, a drawer lock, a terminal binding, a name) | the block entity data before and after |
 | `BlockRedstoneEvent` | changes the signal a block emits without changing its state | old and new signal, face |
-| `StructureMoveEvent` | assembles, moves, rotates or disassembles a contraption or ship within one level | source to target mapping, swept space, old and new transforms |
+| `StructureMoveEvent` | assembles, moves, rotates or disassembles a contraption or ship within one level | source to target mapping, swept space, old and new transforms, every entity riding along |
 | `EntityControlChangeEvent`, `EntityControlExpireEvent` | changes who controls an entity without mounting (charm, thrall, drone link, guard assignment); expiry is after-only | old and new controller |
 | `EntityDataChangeEvent` | changes lasting data it keeps on an entity that no other entity event describes (a colonist's job, a familiar's upgrades, a player's spell anchor) | the kind of data, and the data before and after |
 | `InventoryDestroyEvent`, `InventoryGenerateEvent`, `InventorySortEvent` | makes items appear with no source, vanish with no destination, or rearranges contents in place | slots before and after |

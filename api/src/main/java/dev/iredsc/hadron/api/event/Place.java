@@ -185,7 +185,12 @@ public sealed interface Place {
             /** A command: its source (the console sits at spawn) isn't where it acts; what it does places itself. */
             COMMAND,
             /** Nobody is behind it, and nothing else in the event says where it happens. */
-            NOBODY_BEHIND_IT
+            NOBODY_BEHIND_IT,
+            /**
+             * What a move carries along is unknown ({@code Carried.Unknown}): whatever it carries is somewhere in the
+             * bound, before and after, such as the blocks a piston sweeps and those beside them.
+             */
+            UNKNOWN_CARRIAGE
         }
 
         public Unknown {
