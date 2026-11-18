@@ -216,6 +216,34 @@ public final class DismountTests {
                 + "she is set down, " + e.getTo() + ", but is at " + alice.player().position());
     }
 
+    /**
+     * A listener that moves the boat as the rider gets off changes nothing about where she is set down: she ends
+     * exactly where the event said, not beside the boat where it now is.
+     */
+    @HadronTest
+    @Covers(EntityDismountEvent.class)
+    void aBoatMovedByAListenerStillSetsTheRiderDownWhereStated(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        Entity boat = riding(t, alice, DismountTests::boat);
+        Vec3 boatWas = boat.position();
+        List<Vec3> stated = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityDismountEvent e) {
+                if (e.getEntity() != alice.player()) return;
+                stated.add(e.getTo());
+                boat.setPos(boat.getX() + 4.0, boat.getY(), boat.getZ());
+            }
+        });
+        sneak(alice);
+        t.await("alice to get off", () -> !alice.player().isPassenger(), 10);
+        t.assertEquals(1, stated.size(), "alice's dismounts");
+        t.assertTrue(boat.position().distanceTo(boatWas) > 3.9, "the listener should have moved the boat from "
+                + boatWas + ", but it is at " + boat.position());
+        t.assertTrue(stated.get(0).distanceTo(alice.player().position()) < 1.0E-6, "alice should be where the event "
+                + "said she is set down, " + stated.get(0) + ", but is at " + alice.player().position());
+    }
+
     /** A mob getting out of a boat is set down beside it like a player, and the event says where. */
     @HadronTest
     @Covers(EntityDismountEvent.class)
