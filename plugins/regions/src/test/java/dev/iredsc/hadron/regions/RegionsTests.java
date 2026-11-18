@@ -311,8 +311,9 @@ public final class RegionsTests {
     @HadronTest
     void aMemberCantFerryAnOutsiderIn(TestContext t) {
         TestPlayer alice = admin(t);
-        // From the ground down: seated in a boat, a rider's feet are in the ground's own layer.
-        define(t, alice, "ferry-vault", t.pos(2, -1, -1), t.pos(4, 2, 1));
+        // From on top of the ground: seated in a boat, a rider's feet are in the ground's own layer, under the vault
+        // the boat carries them into.
+        define(t, alice, "ferry-vault", t.pos(2, 0, -1), t.pos(4, 2, 1));
         alice.command("rg flag ferry-vault entry deny");
         TestPlayer carol = t.player("carol");
         alice.command("rg addmember ferry-vault carol");

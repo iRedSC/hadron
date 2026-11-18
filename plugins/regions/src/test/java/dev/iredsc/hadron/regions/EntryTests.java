@@ -152,7 +152,8 @@ public final class EntryTests {
     @HadronTest
     void aMemberCantSwingAnOutsiderInByTurningTheBoat(TestContext t) {
         TestPlayer alice = RegionsTests.admin(t);
-        // From the ground down: seated in a boat, a rider's feet are in the ground's own layer.
+        // From the ground down: seated in a boat, a rider's feet are in the ground's own layer, and a turn in place
+        // moves nothing but the seats.
         RegionsTests.define(t, alice, "turn-vault", t.pos(3, -1, -1), t.pos(5, 2, 1));
         alice.command("rg flag turn-vault entry deny");
         TestPlayer carol = t.player("carol");
@@ -235,8 +236,9 @@ public final class EntryTests {
     }
 
     @HadronTest
-    @KnownGap("A ride states the block its rider's feet are in, not the space the rider takes up: seated in a boat on "
-            + "the ground, that block is the ground's, below a region that starts on top of it")
+    @KnownGap("A rider swung across an edge by a turn in place, in a region that starts above the block its feet point "
+            + "is in: the boat's own block doesn't change in a turn, and a ride states the block its rider's feet are "
+            + "in, not the space the rider takes up")
     void anOutsiderSeatedInABoatCantBeSwungInAboveTheGround(TestContext t) {
         TestPlayer alice = RegionsTests.admin(t);
         RegionsTests.define(t, alice, "ground-vault", t.pos(3, 0, -1), t.pos(5, 2, 1));

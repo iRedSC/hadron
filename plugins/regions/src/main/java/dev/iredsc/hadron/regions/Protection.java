@@ -106,7 +106,7 @@ final class Protection implements Listener {
         if (!store.hasAny(level)) return;
         Flag flag = e instanceof BlockUseEvent ? Flag.USE : Flag.BUILD;
         // A ship's crew enters where it carries them, as a boat's riders do.
-        if (e instanceof BlockMoveEvent m && entry(e, c, List.of(), m.getCarried())) return;
+        if (e instanceof BlockMoveEvent m && entry(e, c, null, List.of(), m.getCarried())) return;
         if (e.getActor() instanceof Actor.Nature) {
             List<Region> from = source(e).map(at -> store.at(level, at)).orElse(List.of());
             for (BlockPos pos : touched(e)) {
@@ -148,48 +148,52 @@ final class Protection implements Listener {
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void move(EntityMoveEvent e) {
         ServerLevel level = e.getLevel();
-        entry(e, e, moved(e.getEntity(), Place.Spot.at(level, e.getFromBlock()), Place.Spot.at(level, e.getToBlock())),
-                e.getCarried());
+        carries(e, Place.Spot.at(level, e.getFromBlock()), Place.Spot.at(level, e.getToBlock()), e.getCarried());
     }
 
     /** An ender pearl, chorus fruit, a portal, a mod's teleporter: judged where it lands, which the event states. */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void teleport(EntityTeleportEvent e) {
-        entry(e, e, moved(e.getEntity(), Place.Spot.at(e.getFromLevel(), e.getFrom()),
-                Place.Spot.at(e.getToLevel(), e.getTo())), e.getCarried());
+        carries(e, Place.Spot.at(e.getFromLevel(), e.getFrom()), Place.Spot.at(e.getToLevel(), e.getTo()),
+                e.getCarried());
     }
 
     /**
      * Boarding is entering the seat, which can be another block than the mount's, and it moves who the rider brings
-     * and who is already aboard and has to shift: the event states each. It is entering where the mount is, too: a
-     * seat's point can lie under a region the boat stands in.
+     * and who is already aboard and has to shift: the event states each. What carries them all is the mount.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void mount(EntityMountEvent e) {
         Place from = Place.Spot.at(e.getLevel(), e.getPosition());
-        entry(e, e, List.of(new Carried.Ride(e.getEntity(), from, Place.Spot.at(e.getLevel(), e.getTo())),
-                new Carried.Ride(e.getEntity(), from, Place.of(e.getMount()))), e.getCarried());
+        entry(e, e, new Carried.Ride(e.getEntity(), from, Place.of(e.getMount())),
+                List.of(new Carried.Ride(e.getEntity(), from, Place.Spot.at(e.getLevel(), e.getTo()))), e.getCarried());
     }
 
     /** Getting off is entering where the rider is set down: beside a boat at a region's edge can be inside it. */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void dismount(EntityDismountEvent e) {
-        entry(e, e, moved(e.getEntity(), Place.Spot.at(e.getLevel(), e.getPosition()),
-                Place.Spot.at(e.getLevel(), e.getTo())), Carried.none());
+        carries(e, Place.Spot.at(e.getLevel(), e.getPosition()), Place.Spot.at(e.getLevel(), e.getTo()),
+                Carried.none());
     }
 
-    private static List<Carried.Ride> moved(Entity who, Place from, Place to) {
-        return List.of(new Carried.Ride(who, from, to));
+    /** {@link #entry} for an entity whose own ride, {@code from} to {@code to}, is what carries everyone else. */
+    private <E extends EntityEvent & Cancellable> void carries(E e, Place from, Place to, Carried carried) {
+        Carried.Ride ride = new Carried.Ride(e.getEntity(), from, to);
+        entry(e, e, ride, List.of(ride), carried);
     }
 
     /**
      * Refuses {@code e} if a player it moves may not enter where they end up: {@code moved} and everyone
-     * {@code carried}, each judged from where that one sets out to where that one ends up. The server's own moves and
-     * bypassing players are let through. Everyone going is shown where they were refused.
+     * {@code carried}, each judged from where that one sets out to where that one ends up, and from where
+     * {@code carrier}, the entity carrying them all, sets out to where it ends up. Both, because a seat can be lower
+     * or further over than the vehicle it is in: a boat's riders have their feet in the ground it stands on. Null when
+     * no entity carries them (a ship's crew). The server's own moves and bypassing players are let through. Everyone
+     * going is shown where they were refused.
      *
      * @return whether it was refused.
      */
-    private boolean entry(ActionEvent e, Cancellable c, List<Carried.Ride> moved, Carried carried) {
+    private boolean entry(ActionEvent e, Cancellable c, Carried.@Nullable Ride carrier, List<Carried.Ride> moved,
+            Carried carried) {
         if (e.getActor() instanceof Actor.Server) return false;
         List<Carried.Ride> going = new ArrayList<>(moved);
         Optional<Region> no = Optional.empty();
@@ -202,8 +206,11 @@ final class Protection implements Listener {
         }
         going.removeIf(r -> !(r.entity() instanceof ServerPlayer p) || bypass.active(p));
         for (Carried.Ride r : going) {
-            if (no.isPresent()) break;
-            no = refusingEntry(mayBeIn(r.from()), r.to(), Optional.of(r.entity().getUUID()));
+            Optional<UUID> who = Optional.of(r.entity().getUUID());
+            if (no.isEmpty()) no = refusingEntry(mayBeIn(r.from()), r.to(), who);
+            if (no.isEmpty() && carrier != null && r != carrier) {
+                no = refusingEntry(mayBeIn(carrier.from()), carrier.to(), who);
+            }
         }
         if (no.isEmpty()) return false;
         c.setCancelled(true);
