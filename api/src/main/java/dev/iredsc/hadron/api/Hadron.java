@@ -2,6 +2,8 @@ package dev.iredsc.hadron.api;
 
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
+import dev.iredsc.hadron.api.inventory.PluginContainer;
+import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.PluginManager;
 import dev.iredsc.hadron.api.plugin.Scheduler;
 import dev.iredsc.hadron.api.plugin.Server;
@@ -60,6 +62,15 @@ public final class Hadron {
 
     public static void broadcastMessage(String message) {
         getServer().broadcastMessage(message);
+    }
+
+    /**
+     * A container the plugin owns, of 1 to 6 chest rows: a shop, a kit menu, a frequency chest. Events name it as
+     * {@code InventoryHolder.Plugin} with {@code id}, protection lets it through, and Hadron closes its menus when the
+     * plugin disables. Show it with {@link PluginContainer#open}.
+     */
+    public static PluginContainer createInventory(JavaPlugin plugin, String id, int rows) {
+        return new PluginContainer(plugin, id, rows);
     }
 
     public static boolean isPrimaryThread() {

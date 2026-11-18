@@ -4,6 +4,7 @@
   "package": "dev.iredsc.hadron.neoforge.mixin.block",
   "compatibilityLevel": "JAVA_21",
   "mixins": [
+    "BlockDropsToolMixin",
     "BlockStateBaseMixin",
     "BoneMealItemMixin",
     "BoundTickingBlockEntityMixin",

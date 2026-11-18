@@ -12,6 +12,7 @@ import dev.iredsc.hadron.api.event.block.BlockChangeEvent;
 import dev.iredsc.hadron.api.event.block.BlockCrackEvent;
 import dev.iredsc.hadron.api.event.block.BlockDataChangeEvent;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
+import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
 import dev.iredsc.hadron.api.event.block.BlockRedstoneEvent;
 import dev.iredsc.hadron.api.event.block.StructureMoveEvent;
@@ -312,12 +313,14 @@ public final class BridgeContractTests {
         boolean[] cancel = {true};
         List<BlockMoveEvent> seen = record(t, BlockMoveEvent.class, cancel);
         fire(t, machine(t, alice), a -> new BlockMoveEvent(t.level(), from, dirt,
-                List.of(new BlockMoveEvent.Move(from, to, dirt)), List.of(to), moveChanges(t, from, to, dirt), a), move);
+                List.of(new BlockMoveEvent.Move(from, to, dirt)), List.of(to), moveChanges(t, from, to, dirt),
+                Carried.none(), a), move);
         t.assertBlock(from, Blocks.DIRT);
         t.assertBlock(to, Blocks.AIR);
         cancel[0] = false;
         fire(t, machine(t, alice), a -> new BlockMoveEvent(t.level(), from, dirt,
-                List.of(new BlockMoveEvent.Move(from, to, dirt)), List.of(to), moveChanges(t, from, to, dirt), a), move);
+                List.of(new BlockMoveEvent.Move(from, to, dirt)), List.of(to), moveChanges(t, from, to, dirt),
+                Carried.none(), a), move);
         t.assertBlock(to, Blocks.DIRT);
         t.assertEquals(2, seen.size(), "the BlockMoveEvents received");
         t.assertEquals(List.of(new BlockMoveEvent.Move(from, to, dirt)), seen.get(1).getMoves(), "the moves");
@@ -338,7 +341,7 @@ public final class BridgeContractTests {
         Matrix4d end = new Matrix4d().translation(0, 0, 3);
         fire(t, machine(t, alice), a -> new StructureMoveEvent(t.level(), from, planks, StructureMoveEvent.Phase.MOVE,
                 start, end, List.of(new BlockMoveEvent.Move(from, to, planks)), List.of(t.pos(1, 0, 1), t.pos(1, 0, 2), to),
-                moveChanges(t, from, to, planks), a), () -> {
+                moveChanges(t, from, to, planks), List.of(), a), () -> {
                     t.setBlock(to, planks);
                     t.setBlock(from, Blocks.AIR);
                 });
@@ -347,6 +350,31 @@ public final class BridgeContractTests {
                 "a BlockMoveEvent listener should hear the StructureMoveEvent with its phase and transforms, but "
                         + "heard " + seen.get(0));
         t.assertBlock(to, Blocks.OAK_PLANKS);
+    }
+
+    @HadronTest
+    @Covers(StructureMoveEvent.class)
+    void aStructureMoveNamesTheRidersItsBridgeGivesItAndPlacesThem(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        BlockPos from = t.pos(1, 0, 0);
+        BlockPos to = t.pos(1, 0, 3);
+        t.setBlock(from, Blocks.OAK_PLANKS);
+        BlockState planks = t.getBlock(from);
+        net.minecraft.world.entity.animal.Pig crew = dev.iredsc.hadron.selftest.entities.Fixtures.spawn(t,
+                net.minecraft.world.entity.EntityType.PIG, from.above());
+        boolean[] cancel = {false};
+        List<BlockMoveEvent> seen = record(t, BlockMoveEvent.class, cancel);
+        fire(t, machine(t, alice), a -> new StructureMoveEvent(t.level(), from, planks, StructureMoveEvent.Phase.MOVE,
+                new Matrix4d(), new Matrix4d().translation(0, 0, 3), List.of(new BlockMoveEvent.Move(from, to, planks)),
+                List.of(t.pos(1, 0, 1), t.pos(1, 0, 2), to), moveChanges(t, from, to, planks),
+                List.<net.minecraft.world.entity.Entity>of(crew), a), () -> {});
+        BlockMoveEvent heard = only(t, seen, "BlockMoveEvent");
+        // The deck moves 3 south; the pig standing on it ends up 3 south of where it stands.
+        Carried.Ride ride = Carried.ride(crew, t.level(), crew.position().add(0, 0, 3));
+        t.assertEquals(Carried.of(ride), heard.getCarried(), "what the ship carries, and where to");
+        t.assertTrue(heard.getPlaces().contains(dev.iredsc.hadron.api.event.Place.of(crew))
+                && heard.getPlaces().contains(ride.to()), "the crew's place, and where it ends up, should be among the "
+                + "move's places: " + heard.getPlaces());
     }
 
     // ---- Entities

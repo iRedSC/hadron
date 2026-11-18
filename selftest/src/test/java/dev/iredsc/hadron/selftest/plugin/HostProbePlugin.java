@@ -19,6 +19,8 @@ public final class HostProbePlugin extends JavaPlugin implements MenuProvider {
     static final String LOG = "hadron.selftest.hostprobe.log";
     static final String OPEN_FOR = "hadron.selftest.hostprobe.openFor";
     static final String FAIL = "hadron.selftest.hostprobe.fail";
+    /** A player's name: onDisable logs what menu they have open then, as {@code "menu at disable: <class>"}. */
+    static final String WATCH_AT_DISABLE = "hadron.selftest.hostprobe.watchAtDisable";
 
     @SuppressWarnings("unchecked")
     private static void log(String line) {
@@ -36,6 +38,14 @@ public final class HostProbePlugin extends JavaPlugin implements MenuProvider {
         }
         log("enabled");
         if (System.getProperties().get(FAIL) != null) throw new IllegalStateException("told to fail");
+    }
+
+    @Override
+    public void onDisable() {
+        Object who = System.getProperties().get(WATCH_AT_DISABLE);
+        if (who == null) return;
+        ServerPlayer player = getServer().getMinecraftServer().getPlayerList().getPlayerByName(who.toString());
+        if (player != null) log("menu at disable: " + player.containerMenu.getClass().getName());
     }
 
     @Override

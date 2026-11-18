@@ -104,6 +104,22 @@ public class InventoryClickEvent extends InventoryEvent implements Cancellable {
         return menu.getCarried();
     }
 
+
+    /** The menu's slots that are the viewer's own inventory (main, hotbar, armour, offhand), in menu order. */
+    public List<Slot> getViewerSlots() {
+        return MenuSlots.viewerSlots(menu, viewer);
+    }
+
+    /** The menu's slots that aren't the viewer's: the chest's, the machine's, the shop's, in menu order. */
+    public List<Slot> getHolderSlots() {
+        return MenuSlots.holderSlots(menu, viewer);
+    }
+
+    /** Whether the clicked slot is the viewer's own inventory; false for a click outside any slot. */
+    public boolean isViewerSlot() {
+        return getSlot().map(slot -> MenuSlots.isViewers(slot, viewer)).orElse(false);
+    }
+
     @Override
     public boolean isCancelled() {
         return cancelled;
