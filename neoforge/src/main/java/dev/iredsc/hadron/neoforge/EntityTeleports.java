@@ -24,6 +24,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.PathfinderMob;
 import net.minecraft.world.level.portal.DimensionTransition;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -263,8 +264,8 @@ public final class EntityTeleports {
 
     /**
      * Places an entity for a probe: its position and box only, not through its own {@code setPos}, which can change
-     * more than where it is (a shulker closes its shell and rounds to a block's centre). Put back the same way, it is
-     * as it was. Where it would really end up is {@code Landing.of} the spot found, which the event states.
+     * more than where it is (a shulker closes its shell and rounds to a block's centre). Put back with the box
+     * it had, it is as it was. Where it would really end up is {@code Landing.of} the spot found, which the event states.
      */
     public static void probePlace(Entity entity, double x, double y, double z) {
         entity.setPosRaw(x, y, z);
@@ -294,6 +295,7 @@ public final class EntityTeleports {
             return during(entity, () -> original.attempt(x, y, z, effects));
         }
         Vec3 start = entity.position();
+        AABB box = entity.getBoundingBox();
         Entity outer = probing;
         probing = entity;
         boolean found;
@@ -302,9 +304,11 @@ public final class EntityTeleports {
             found = original.attempt(x, y, z, false);
         } finally {
             probing = outer;
-            // Even when a mod's search throws: a probe never leaves the entity where it looked.
+            // Even when a mod's search throws: a probe never leaves the entity where it looked, and it keeps the box
+            // it had, which a mod may have set.
             foundAt = entity.position();
-            probePlace(entity, start.x, start.y, start.z);
+            entity.setPosRaw(start.x, start.y, start.z);
+            entity.setBoundingBox(box);
         }
         if (!found) return false;
         Vec3 landing = Landing.of(entity, foundAt);

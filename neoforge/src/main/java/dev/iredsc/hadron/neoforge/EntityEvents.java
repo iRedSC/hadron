@@ -312,7 +312,7 @@ public final class EntityEvents {
      * an enderman) asks once its search has found where it lands. An ender pearl's and a shulker's land exactly on the
      * spot asked (a shulker at the bottom centre of its block, which the event states), so they fire here, where
      * cancelling also skips their side effects (an ender pearl's fall damage); the teleport method they then call won't
-     * ask again.
+     * ask again. A pearl lands in the world it is in, which isn't its thrower's once it has gone through a portal.
      */
     private static void teleport(EntityTeleportEvent event) {
         Entity entity = event.getEntity();
@@ -335,7 +335,9 @@ public final class EntityEvents {
             EntityTeleports.leave(entity);
             return;
         }
-        var hadron = Hooks.post(new dev.iredsc.hadron.api.event.entity.EntityTeleportEvent(entity, level,
+        ServerLevel toLevel = event instanceof EntityTeleportEvent.EnderPearl pearl
+                && pearl.getPearlEntity().level() instanceof ServerLevel landsIn ? landsIn : level;
+        var hadron = Hooks.post(new dev.iredsc.hadron.api.event.entity.EntityTeleportEvent(entity, toLevel,
                 new net.minecraft.world.phys.Vec3(event.getTargetX(), event.getTargetY(), event.getTargetZ()), cause,
                 EntityTeleports.actor(entity, cause)));
         if (hadron.isCancelled()) {
@@ -360,10 +362,10 @@ public final class EntityEvents {
         // A shulker is placed next, by no teleport method: a mark would wait for its next teleport this tick, which
         // would then go unasked.
         if (cause != TeleportCause.ENDER_PEARL) return;
-        // NeoForge's event carries only a position in this level; a pearl's new level or facing is applied by the
-        // teleport method called next, which consumes the mark.
+        // NeoForge's event carries only a position in the pearl's level; a pearl's new level or facing is applied by
+        // the teleport method called next, which consumes the mark.
         boolean turned = hadron.getToYRot() != entity.getYRot() || hadron.getToXRot() != entity.getXRot();
-        EntityTeleports.mark(entity, cause, true, hadron.getToLevel() != level || turned
+        EntityTeleports.mark(entity, cause, true, hadron.getToLevel() != toLevel || turned
                 ? new EntityTeleports.Destination(hadron.getToLevel(), to.x, to.y, to.z, hadron.getToYRot(),
                         hadron.getToXRot())
                 : null);

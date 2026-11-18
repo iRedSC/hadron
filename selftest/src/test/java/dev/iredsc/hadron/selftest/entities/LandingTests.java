@@ -36,6 +36,7 @@ import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.NetherPortalBlock;
 import net.minecraft.world.level.block.Portal;
 import net.minecraft.world.level.block.TrapDoorBlock;
+import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
 
 /**
@@ -200,10 +201,32 @@ public final class LandingTests {
         t.player("alice");
         EnderMan enderman = spawn(t, EntityType.ENDERMAN, t.pos(-3, 0, -3));
         Vec3 from = enderman.position();
+        AABB box = enderman.getBoundingBox().inflate(0.25); // a box only a mod would give it
+        enderman.setBoundingBox(box);
         List<EntityTeleportEvent> heard = hear(t, enderman, e -> true);
         t.assertFalse(endermanTeleport(enderman, t.pos(4, 0, 4)), "a refused teleport reports it didn't go");
         t.assertEquals(1, heard.size(), "the enderman's teleports");
         assertStayed(t, from, enderman, "the enderman");
+        t.assertEquals(box, enderman.getBoundingBox(), "the enderman's box, which the search must leave as it was");
+    }
+
+    /** A listener's {@code setTo} is exact: sent into the air, it is put there, not on the floor below. */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aRedirectedEndermanLandsExactlyWhereItWasSent(TestContext t) throws Exception {
+        t.player("alice");
+        EnderMan enderman = spawn(t, EntityType.ENDERMAN, t.pos(-3, 0, -3));
+        Vec3 sent = Vec3.atBottomCenterOf(t.pos(-4, 5, 4)).add(0.2, 0.3, -0.1);
+        List<EntityTeleportEvent> heard = hear(t, enderman, e -> {
+            e.setTo(e.getToLevel(), sent, 90f, 30f);
+            return false;
+        });
+        t.assertTrue(endermanTeleport(enderman, t.pos(4, 3, 4)), "the enderman should find room above the floor");
+        t.assertEquals(1, heard.size(), "the enderman's teleports");
+        t.assertTrue(enderman.position().distanceTo(sent) < 1.0E-6, "the enderman should be exactly at " + sent
+                + ", but is at " + enderman.position());
+        t.assertEquals(90f, enderman.getYRot(), "the way it was turned");
+        t.assertEquals(30f, enderman.getXRot(), "how far it was tilted");
     }
 
     /** A spot with no room fires nothing and moves nothing: nothing would land there. */
@@ -505,5 +528,79 @@ public final class LandingTests {
         t.tick();
         t.assertEquals(boat, pig.getVehicle(), "the pig's vehicle");
         assertStayed(t, from, pig, "the pig");
+    }
+
+    /** A spot in the air above the overworld's spawn: another world than the test's, in a chunk that is loaded. */
+    private static Vec3 overworldSpot(TestContext t) {
+        BlockPos spawn = t.server().overworld().getSharedSpawnPos();
+        return new Vec3(spawn.getX() + 0.3, 300.25, spawn.getZ() + 0.7);
+    }
+
+    /**
+     * Alice's pearl, gone through a portal since she threw it, lands at {@code spot} in the overworld.
+     * {@code ThrownEnderpearl.onHit} is protected; it is what a pearl's tick calls when it meets a block.
+     */
+    private static void landPearlInOverworld(TestContext t, TestPlayer alice, Vec3 spot) throws Exception {
+        var pearl = new net.minecraft.world.entity.projectile.ThrownEnderpearl(t.server().overworld(), alice.player());
+        pearl.setPos(spot.x, spot.y, spot.z);
+        Method onHit = net.minecraft.world.entity.projectile.ThrownEnderpearl.class.getDeclaredMethod("onHit",
+                net.minecraft.world.phys.HitResult.class);
+        onHit.setAccessible(true);
+        onHit.invoke(pearl, new net.minecraft.world.phys.BlockHitResult(spot, Direction.UP, BlockPos.containing(spot),
+                false));
+    }
+
+    /** A pearl that left its thrower's world still takes the thrower: to the pearl's world, which the event states. */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aPearlInAnotherWorldStatesThatWorldAndTheThrowerLandsThere(TestContext t) throws Exception {
+        TestPlayer alice = t.player("alice");
+        ready(t);
+        ServerLevel overworld = t.server().overworld();
+        t.assertTrue(overworld != t.level(), "the test's world isn't the overworld");
+        Vec3 spot = overworldSpot(t);
+        List<EntityTeleportEvent> heard = hear(t, alice.player(), e -> false);
+        landPearlInOverworld(t, alice, spot);
+        t.assertEquals(1, heard.size(), "alice's teleports");
+        EntityTeleportEvent e = heard.get(0);
+        t.assertEquals(TeleportCause.ENDER_PEARL, e.getCause(), "the cause");
+        t.assertEquals(overworld, e.getToLevel(), "the world the event says she lands in");
+        t.assertEquals(overworld, alice.player().level(), "the world alice is in");
+        t.assertTrue(alice.player().position().distanceTo(spot) < 1.0E-6, "alice should be exactly where the pearl "
+                + "landed, " + spot + ", but is at " + alice.player().position());
+        assertLandedWhereStated(t, e, alice.player(), "alice");
+    }
+
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aRefusedPearlInAnotherWorldLeavesTheThrowerWhereSheWas(TestContext t) throws Exception {
+        TestPlayer alice = t.player("alice");
+        ready(t);
+        Vec3 from = alice.player().position();
+        float health = alice.player().getHealth();
+        List<EntityTeleportEvent> heard = hear(t, alice.player(), e -> true);
+        landPearlInOverworld(t, alice, overworldSpot(t));
+        t.tick();
+        t.assertEquals(1, heard.size(), "alice's teleports");
+        assertStayed(t, from, alice.player(), "alice");
+        t.assertEquals(health, alice.player().getHealth(), "alice's health: a refused pearl deals no fall damage");
+    }
+
+    /** Sent back to her own world by a listener, she lands exactly there, though the pearl is in another. */
+    @HadronTest
+    @Covers(EntityTeleportEvent.class)
+    void aPearlInAnotherWorldRedirectedHomeLandsTheThrowerWhereSent(TestContext t) throws Exception {
+        TestPlayer alice = t.player("alice");
+        ready(t);
+        Vec3 sent = center(t.pos(-4, 0, 4)).add(0.2, 0.0, -0.1);
+        List<EntityTeleportEvent> heard = hear(t, alice.player(), e -> {
+            e.setTo(t.level(), sent);
+            return false;
+        });
+        landPearlInOverworld(t, alice, overworldSpot(t));
+        t.assertEquals(1, heard.size(), "alice's teleports");
+        t.assertEquals(t.level(), alice.player().level(), "the world alice is in");
+        t.assertTrue(alice.player().position().distanceTo(sent) < 1.0E-6, "alice should be exactly at " + sent
+                + ", but is at " + alice.player().position());
     }
 }
