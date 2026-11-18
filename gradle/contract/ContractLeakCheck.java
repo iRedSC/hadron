@@ -50,7 +50,7 @@ public final class ContractLeakCheck {
     static final Set<String> PORT_TYPES = Set.of("Port", "Lifecycle", "Backend", "NetBackend", "Memory", "PluginContext", "HostKey");
     static final Set<String> BOXED = Set.of("Byte", "Short", "Integer", "Long", "Float", "Double", "Character");
     /** English uses of a word that is also an implementation class name; reviewed, exact phrases only. */
-    static final List<String> ENGLISH = List.of("Platform APIs");
+    static final List<String> ENGLISH = List.of("Platform APIs", "Lasting data", "Lasting damage");
     /**
      * The only binary files the bundle's test project may hold, relative to it: Hadron's jars, which are its real
      * implementation by design, and Gradle's wrapper. Anything else that isn't text fails the check.
