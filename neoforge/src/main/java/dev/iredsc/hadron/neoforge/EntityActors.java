@@ -4,7 +4,6 @@ import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
-import java.util.Optional;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -79,10 +78,10 @@ public final class EntityActors {
      * as its cause (a player's own poison, see {@link LastingActs}).
      */
     public static Actor fromStack(Entity subject, Actor fallback) {
-        Optional<Actor> current = Actors.current();
-        if (current.isEmpty()) return fallback;
-        if (isSelf(current.get(), subject) && !LastingActs.isExplicitCause(subject, current.get())) return fallback;
-        return current.get();
+        Actor current = current();
+        if (current == null) return fallback;
+        if (isSelf(current, subject) && !LastingActs.isExplicitCause(subject, current)) return fallback;
+        return current;
     }
 
     /** Who dealt damage: the arrow (which remembers its shooter), the attacker, or what the stack says. */

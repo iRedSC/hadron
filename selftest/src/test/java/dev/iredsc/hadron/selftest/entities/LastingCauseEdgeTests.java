@@ -4,6 +4,7 @@ import static dev.iredsc.hadron.selftest.entities.Fixtures.spawn;
 import static dev.iredsc.hadron.selftest.entities.LastingCauseTests.assertFor;
 import static dev.iredsc.hadron.selftest.entities.LastingCauseTests.golem;
 import static dev.iredsc.hadron.selftest.entities.LastingCauseTests.hurts;
+import static dev.iredsc.hadron.selftest.entities.LastingCauseTests.nextBurn;
 import static dev.iredsc.hadron.selftest.entities.LastingCauseTests.nextPoison;
 import static dev.iredsc.hadron.selftest.entities.LastingCauseTests.poison;
 import static dev.iredsc.hadron.selftest.entities.LastingCauseTests.reload;
@@ -130,5 +131,36 @@ public final class LastingCauseEdgeTests {
         t.assertTrue(golem.getEffect(MobEffects.POISON) == own, "the golem's poison should be the instance the mod "
                 + "applied, but is " + golem.getEffect(MobEffects.POISON));
         t.assertTrue(ticks[0] > 0, "the tick the mod's effect instance overrides should have run");
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    @Covers(value = EntityDamageEvent.class, method = "getAppliedAt")
+    void fireLitAgainByWhatLitItIsNoNewIgnition(TestContext t) {
+        TestPlayer alice = t.player("alice");
+        TestPlayer bob = t.player("bob");
+        BlockPos litAt = t.pos(2, 0, 0);
+        BlockPos movedTo = t.pos(-2, 0, 0);
+        Pig pig = spawn(t, EntityType.PIG, litAt);
+        List<EntityDamageEvent> heard = hurts(t, pig);
+        Actors.acting(new Actor.Player(alice.player()), () -> pig.igniteForTicks(40));
+        // As lava does every tick: nature lights it, then lights it again where it stands. The second is no new
+        // ignition, so taking the burning time back to alice's in the same tick still gives her the credit back.
+        Actors.acting(Actor.Nature.INSTANCE, () -> pig.igniteForTicks(100));
+        Actors.acting(Actor.Nature.INSTANCE, () -> pig.igniteForTicks(200));
+        pig.setRemainingFireTicks(40);
+        assertFor(t, alice, nextBurn(t, heard), "burning after nature's fire, lit twice, was taken back");
+
+        Actors.acting(Actor.Nature.INSTANCE, () -> pig.igniteForTicks(300));
+        Actors.acting(new Actor.Player(bob.player()), () -> pig.igniteForTicks(400));
+        assertFor(t, bob, nextBurn(t, heard), "burning after bob lit what nature had lit");
+
+        Actors.acting(Actor.Nature.INSTANCE, () -> pig.igniteForTicks(500));
+        pig.setPos(movedTo.getX() + 0.5, movedTo.getY(), movedTo.getZ() + 0.5);
+        Actors.acting(Actor.Nature.INSTANCE, () -> pig.igniteForTicks(600));
+        EntityDamageEvent burn = nextBurn(t, heard);
+        t.assertEquals(Actor.Nature.INSTANCE, burn.getActor(), "the actor of burning that nature lit");
+        t.assertEquals(Optional.of(Place.Spot.at(t.level(), movedTo)), burn.getAppliedAt(),
+                "where nature lit the pig again, in another block");
     }
 }

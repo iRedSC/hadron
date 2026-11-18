@@ -168,6 +168,15 @@ public final class LastingCause implements LastingActs.Acting, Actors.Port.Lazy 
                 Optional.of(AttributionMemory.machineId(be)), m.attribution());
     }
 
+    /**
+     * Whether {@link #of} would give this cause again for nature and {@code subject} where it stands now. Allocates
+     * nothing, for an entity standing in lava or fire, which is lit again every tick.
+     */
+    boolean isNatureAt(Entity subject) {
+        return who == Nobody.NATURE && appliedAt.dimension() == subject.level().dimension()
+                && appliedAt.pos().equals(subject.blockPosition());
+    }
+
     /** Whether this cause is {@code entity} itself: its own splash potion, its own poison. */
     boolean names(Entity entity) {
         return who instanceof EntityWho e && e.id().isPresent() && e.id().get().equals(entity.getUUID());

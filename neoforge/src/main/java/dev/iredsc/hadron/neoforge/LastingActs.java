@@ -100,7 +100,9 @@ public final class LastingActs {
      * The fire on {@code entity} changed from {@code before} to {@code after} ticks: an ignition that leaves more
      * burning time than before takes the credit, with who is on the stack (not the entity itself: walking into fire
      * or lava is nature's, since a fire block or lava has nowhere to keep who placed it) and where the entity stands;
-     * going out drops it. Anything else (burning down, a shorter ignition) leaves the credit where it was.
+     * going out drops it. Anything else (burning down, a shorter ignition) leaves the credit where it was. Nature
+     * lighting again what it lit, in the block it lit it in (an entity standing in lava or fire, every tick), changes
+     * nothing and allocates nothing.
      *
      * <p>An extension that is taken back gives the credit back: vanilla sets a target alight before a flaming arrow's
      * hit and, when the hit is refused, puts its burning time back exactly as it was. So an explicit set back down to
@@ -130,8 +132,12 @@ public final class LastingActs {
             return;
         }
         if (after <= Math.max(before, 0)) return;
-        state.hadron$setFireUndo(new FireUndo(fireCause(entity), before, now));
-        setFireCause(entity, LastingCause.of(EntityActors.fromStack(entity, Actor.Nature.INSTANCE), entity));
+        Actor actor = EntityActors.fromStack(entity, Actor.Nature.INSTANCE);
+        LastingCause was = fireCause(entity);
+        // Lava and fire light what stands in them again every tick: the same cause in the same block records nothing.
+        if (was != null && actor instanceof Actor.Nature && was.isNatureAt(entity)) return;
+        state.hadron$setFireUndo(new FireUndo(was, before, now));
+        setFireCause(entity, LastingCause.of(actor, entity));
     }
 
     private static void setFireCause(Entity entity, @Nullable LastingCause cause) {
