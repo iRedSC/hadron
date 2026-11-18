@@ -2,7 +2,11 @@ package dev.iredsc.hadron.neoforge.mixin.entity;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.neoforge.DataEffectCauses;
+import dev.iredsc.hadron.neoforge.EntityActors;
+import dev.iredsc.hadron.neoforge.PortKey;
 import net.minecraft.core.Holder;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.effect.MobEffect;
@@ -41,6 +45,22 @@ abstract class LivingEntityEffectMixin {
             original.call(applied, source);
             return Boolean.TRUE;
         });
+    }
+
+    /**
+     * A totem's effects are its holder's own, like a potion they drink: vanilla applies them with no source from
+     * inside the killing hit, where the stack holds whoever dealt it (an attacker, or the cause of a fire or wither).
+     */
+    @WrapOperation(method = "checkTotemDeathProtection", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/"
+            + "entity/LivingEntity;addEffect(Lnet/minecraft/world/effect/MobEffectInstance;)Z"))
+    private boolean hadron$totem(LivingEntity self, MobEffectInstance effect, Operation<Boolean> original) {
+        if (!(self.level() instanceof ServerLevel)) return original.call(self, effect);
+        long scope = Actors.Port.enter(PortKey.KEY, EntityActors.of(self));
+        try {
+            return original.call(self, effect);
+        } finally {
+            Actors.Port.exit(PortKey.KEY, scope);
+        }
     }
 
     /** Ran out, cured (milk, a totem) or cleared: every path that ends an effect tells the entity here. */
