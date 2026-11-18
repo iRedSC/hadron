@@ -310,8 +310,15 @@ public final class DataEffectCauses {
         return Optional.empty();
     }
 
-    /** {@code effect} and every instance it hides, copied, so applying it shares nothing with whoever passed it in. */
+    /**
+     * {@code effect} and every instance it hides, copied, so applying it shares nothing with whoever passed it in:
+     * vanilla keeps the very object it is given, so one passed to two entities, or still active on another, would be
+     * ticked by both and carry one's credit to the other. A mod's own subclass is kept as given, as vanilla keeps it:
+     * a copy would be a plain instance without what the subclass does (its tick, what it does when it starts). If a
+     * mod does share one, it changes by no known path and is unrecorded, as any such instance is.
+     */
     private static MobEffectInstance deepCopy(MobEffectInstance effect) {
+        if (effect.getClass() != MobEffectInstance.class) return effect;
         MobEffectInstance copy = new MobEffectInstance(effect);
         MobEffectInstance hidden = hidden(effect);
         ((MobEffectInstanceAccessor) copy).hadron$setHiddenEffect(hidden == null ? null : deepCopy(hidden));

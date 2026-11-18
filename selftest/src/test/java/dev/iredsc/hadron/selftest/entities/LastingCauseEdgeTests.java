@@ -26,8 +26,10 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.effect.MobEffects;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.IronGolem;
 import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.item.ItemStack;
@@ -107,5 +109,26 @@ public final class LastingCauseEdgeTests {
         Actor healer = heals.get(0).getActor();
         t.assertTrue(healer instanceof Actor.EntityActor own && own.entity() == pig, "the regeneration of the pig's "
                 + "own totem should act as the pig, but acted as " + healer);
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    void aModsOwnEffectInstanceIsAppliedAsGivenAndKeepsItsCause(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        IronGolem golem = golem(t, t.pos(2, 0, 0));
+        int[] ticks = {0};
+        MobEffectInstance own = new MobEffectInstance(MobEffects.POISON, 400, 0) {
+            @Override
+            public boolean tick(LivingEntity entity, Runnable onExpirationRunnable) {
+                ticks[0]++;
+                return super.tick(entity, onExpirationRunnable);
+            }
+        };
+        List<EntityDamageEvent> heard = hurts(t, golem);
+        golem.addEffect(own, bob.player());
+        assertFor(t, bob, nextPoison(t, heard), "the poison of a mod's own effect instance");
+        t.assertTrue(golem.getEffect(MobEffects.POISON) == own, "the golem's poison should be the instance the mod "
+                + "applied, but is " + golem.getEffect(MobEffects.POISON));
+        t.assertTrue(ticks[0] > 0, "the tick the mod's effect instance overrides should have run");
     }
 }
