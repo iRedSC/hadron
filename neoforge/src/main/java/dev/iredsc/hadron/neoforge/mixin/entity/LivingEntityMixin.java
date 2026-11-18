@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.entity;
 
+import dev.iredsc.hadron.api.event.entity.Landing;
 import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
@@ -18,6 +19,7 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.Level;
+import net.minecraft.world.phys.Vec3;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
@@ -94,12 +96,16 @@ abstract class LivingEntityMixin implements EntityActors.Hurting {
                 (tx, ty, tz, fx) -> original.call(tx, ty, tz, fx));
     }
 
-    /** While the search runs as a probe, it places the entity without a teleport: nothing is sent, nothing asked. */
+    /**
+     * While the search runs as a probe, it places the entity without a teleport: nothing is sent, nothing asked. It is
+     * placed where it would really land, so vanilla checks for room there, as it does when the entity places itself.
+     */
     @WrapOperation(method = "randomTeleport", at = @At(value = "INVOKE",
             target = "Lnet/minecraft/world/entity/LivingEntity;teleportTo(DDD)V"))
     private void hadron$probeTeleport(LivingEntity self, double x, double y, double z, Operation<Void> original) {
         if (EntityTeleports.probing(self)) {
-            EntityTeleports.probePlace(self, x, y, z);
+            Vec3 landing = Landing.of(self, new Vec3(x, y, z));
+            EntityTeleports.probePlace(self, landing.x, landing.y, landing.z);
         } else {
             original.call(self, x, y, z);
         }
