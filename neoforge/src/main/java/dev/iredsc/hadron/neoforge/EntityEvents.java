@@ -26,10 +26,11 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.InteractionResult;
 import net.minecraft.world.effect.MobEffectInstance;
 import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.monster.Shulker;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.Mob;
 import net.minecraft.world.entity.animal.Animal;
+import net.minecraft.world.entity.monster.Shulker;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.bus.api.EventPriority;
 import net.neoforged.fml.ModLoadingContext;
 import net.neoforged.neoforge.common.NeoForge;
@@ -199,7 +200,7 @@ public final class EntityEvents {
         boolean forced = rider.isRemoved() || !rider.isAlive() || vehicle.isRemoved() || !vehicle.isAlive()
                 || EntityTeleports.inProgress(rider, vehicle);
         // Worked out before firing and applied exactly once it goes ahead, so the event states where it lands.
-        net.minecraft.world.phys.Vec3 to = EntityDismounts.setDown(rider, vehicle);
+        Vec3 to = EntityDismounts.setDown(rider, vehicle);
         if (Hooks.post(new EntityDismountEvent(rider, vehicle, to, forced, actor)).isCancelled() && !forced) {
             event.setCanceled(true);
             return;

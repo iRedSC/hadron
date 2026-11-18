@@ -25,9 +25,9 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
  *
  * <p>{@link #getTo()} is where it lands, not where it was asked to go. Chorus fruit, an enderman and a mod's
  * {@code randomTeleport} search down for ground and check there is room; this fires once that search has found the
- * spot, so a spot with no room fires nothing, and refusing a chorus fruit landing lets it try its next spot. A shulker
- * lands at the bottom centre of a block, and that centre is what this states. Everything else lands exactly where it
- * was sent.
+ * spot, so a spot with no room fires nothing, and refusing a chorus fruit landing lets it try its next spot. A
+ * shulker's own teleport does the same: up to 5 spots, each its own event. A shulker lands at the bottom centre of a
+ * block, and that centre is what this states. Everything else lands exactly where it was sent.
  *
  * <p>Whatever rides it and goes along is {@link #getCarried()}, rather than getting events of its own. Riders go
  * wherever it goes within a world. To another world, it depends on how it is sent, and {@link #getCarried()} says which
