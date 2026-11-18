@@ -243,42 +243,73 @@ public final class DataEffectCauses {
      * splash potion), otherwise whoever is on the stack, with where the subject stands. {@link Actor.Nature} when
      * nothing is, or only the subject itself (a wither rose it stands in, applied during its own tick), unless it was
      * pushed as its own cause ({@link LastingActs#asOwnCause}). Credit goes only where it can be proven; see the class.
+     * Nature applying again what it applied where the subject still stands (a wither rose, every tick) records
+     * nothing new.
      */
     public static <T> T applying(LivingEntity subject, MobEffectInstance incoming, @Nullable Entity source,
             Function<MobEffectInstance, T> apply) {
         Holder<MobEffect> effect = incoming.getEffect();
         MobEffectInstance copy = deepCopy(incoming);
+        List<Link> known = checked(subject, effect);
+        Actor actor = source != null ? EntityActors.of(source)
+                : EntityActors.fromStack(subject, Actor.Nature.INSTANCE);
+        Link only = known != null && known.size() == 1 && hidden(copy) == null ? known.getFirst() : null;
+        MobEffectInstance top = only != null ? only.instance : null;
+        if (only != null && top != null && actor instanceof Actor.Nature && only.cause.isPresent()
+                && only.cause.get().isNatureAt(subject)) {
+            // Nature applying again the one instance it applied in this block (a wither rose or a turtle helmet, every
+            // tick): the cause to record is the one recorded. Where vanilla then only tops that instance up in place,
+            // or turns the application down, its link stands and nothing more is allocated.
+            T result = apply.apply(copy);
+            boolean unchanged = top.getAmplifier() == only.amplifier && top.getDuration() == only.duration;
+            boolean toppedUp = top.getAmplifier() == copy.getAmplifier() && top.getDuration() == copy.getDuration();
+            if (links(subject, effect) == known && subject.getEffect(effect) == top && hidden(top) == null
+                    && (unchanged || toppedUp)) {
+                only.see(top);
+            } else {
+                record(subject, effect, known, List.of(only), List.of(copy), copy,
+                        Optional.of(LastingCause.of(actor, subject)));
+            }
+            return result;
+        }
         List<MobEffectInstance> fromIncoming = new ArrayList<>();
         for (MobEffectInstance e = copy; e != null; e = hidden(e)) fromIncoming.add(e);
-        List<Link> known = checked(subject, effect);
         List<Link> was = new ArrayList<>();
         int i = 0;
         for (MobEffectInstance e = subject.getEffect(effect); e != null; e = hidden(e), i++) {
             was.add(known != null ? known.get(i) : new Link(e, Optional.empty()));
         }
-        Actor actor = source != null ? EntityActors.of(source)
-                : EntityActors.fromStack(subject, Actor.Nature.INSTANCE);
         Optional<LastingCause> cause = Optional.of(LastingCause.of(actor, subject));
         T result = apply.apply(copy);
+        record(subject, effect, known, was, fromIncoming, copy, cause);
+        return result;
+    }
+
+    /**
+     * Records {@code effect}'s chain on {@code subject} as an application left it: {@code known} are the links it had
+     * before, {@code was} one for each instance that was there, {@code fromIncoming} the instances applied, {@code
+     * copy} the first of them, and {@code cause} who applied them.
+     */
+    private static void record(LivingEntity subject, Holder<MobEffect> effect, @Nullable List<Link> known,
+            List<Link> was, List<MobEffectInstance> fromIncoming, MobEffectInstance copy, Optional<LastingCause> cause) {
         List<Link> recorded = links(subject, effect);
         if (recorded != null && recorded != known) {
             // A listener applied this effect again inside this application, and that one recorded the chain as it
             // left it. What it recorded stands where the chain still says so; what this one changed after can't be
             // told from it, and is lost.
             checked(subject, effect);
-            return result;
+            return;
         }
         MobEffectInstance after = subject.getEffect(effect);
         if (after == null) {
             removed(subject, effect);
-            return result;
+            return;
         }
         List<Link> links = new ArrayList<>();
         for (MobEffectInstance e = after; e != null; e = hidden(e)) {
             links.add(new Link(e, causeAfter(e, was, fromIncoming, copy, cause)));
         }
         subject.getData(AttributionMemory.EFFECT_CAUSES).chains.put(effect, links);
-        return result;
     }
 
     /** An instance's cause after an application, by the rules in the class Javadoc; empty where nothing is proven. */

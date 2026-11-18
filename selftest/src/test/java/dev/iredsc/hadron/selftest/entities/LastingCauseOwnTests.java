@@ -2,9 +2,11 @@ package dev.iredsc.hadron.selftest.entities;
 
 import static dev.iredsc.hadron.selftest.entities.Fixtures.create;
 import static dev.iredsc.hadron.selftest.entities.Fixtures.ready;
+import static dev.iredsc.hadron.selftest.entities.LastingCauseTests.assertFor;
 import static dev.iredsc.hadron.selftest.entities.LastingCauseTests.golem;
 import static dev.iredsc.hadron.selftest.entities.LastingCauseTests.hurts;
 import static dev.iredsc.hadron.selftest.entities.LastingCauseTests.nextPoison;
+import static dev.iredsc.hadron.selftest.entities.LastingCauseTests.poison;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
@@ -31,8 +33,8 @@ import net.minecraft.world.level.block.Blocks;
 
 /**
  * An effect applied with no source is nature's when only its own entity is on the stack (a wither rose it stands in),
- * and the entity's own when it gave it to itself (a potion it drinks, food it eats) (docs/events.md, "Attribution
- * reaches every tick").
+ * and the entity's own when it gave it to itself (a potion it drinks, food it eats); and nature applying again what it
+ * applied leaves the credit where it was (docs/events.md, "Attribution reaches every tick").
  */
 public final class LastingCauseOwnTests {
     private static EntityDamageEvent nextWither(TestContext t, List<EntityDamageEvent> heard) {
@@ -45,6 +47,11 @@ public final class LastingCauseOwnTests {
     private static void assertNatureAt(TestContext t, BlockPos at, EntityDamageEvent e, String what) {
         t.assertEquals(Actor.Nature.INSTANCE, e.getActor(), "the actor of " + what);
         t.assertEquals(Optional.of(Place.Spot.at(t.level(), at)), e.getAppliedAt(), "where " + what + " was applied");
+    }
+
+    /** Poison applied with no source and nobody behind it, as a block applies one. */
+    private static void byNature(IronGolem golem, int ticks) {
+        Actors.acting(Actor.Nature.INSTANCE, () -> golem.addEffect(poison(ticks, 0)));
     }
 
     @HadronTest
@@ -120,5 +127,41 @@ public final class LastingCauseOwnTests {
         EntityDamageEvent tick = nextPoison(t, heard);
         t.assertTrue(tick.getActor() instanceof Actor.EntityActor own && own.entity() == golem,
                 "the poison the golem drank should act as the golem, but acted as " + tick.getActor());
+    }
+
+    @HadronTest
+    @Covers(EntityDamageEvent.class)
+    @Covers(value = EntityDamageEvent.class, method = "getAppliedAt")
+    void natureApplyingAgainWhatItAppliedMovesNoCredit(TestContext t) {
+        TestPlayer bob = t.player("bob");
+        BlockPos first = t.pos(2, 0, 0);
+        BlockPos movedTo = t.pos(-2, 0, 0);
+        IronGolem golem = golem(t, first);
+        List<EntityDamageEvent> heard = hurts(t, golem);
+        // As a wither rose does every tick: nature applies it, then applies it again where the golem stands.
+        byNature(golem, 100);
+        byNature(golem, 200);
+        EntityDamageEvent again = nextPoison(t, heard);
+        assertNatureAt(t, first, again, "poison nature applied twice in one block");
+        t.assertTrue(golem.getEffect(MobEffects.POISON).getDuration() > 100, "the second application should have "
+                + "made the poison last longer");
+
+        golem.setPos(movedTo.getX() + 0.5, movedTo.getY(), movedTo.getZ() + 0.5);
+        byNature(golem, 300);
+        assertNatureAt(t, movedTo, nextPoison(t, heard), "poison nature applied again in another block");
+
+        golem.addEffect(poison(400, 0), bob.player());
+        assertFor(t, bob, nextPoison(t, heard), "poison after bob applied it over nature's");
+
+        byNature(golem, 500);
+        assertNatureAt(t, movedTo, nextPoison(t, heard), "poison nature applied over bob's");
+
+        // A shorter one changes nothing, and a stronger, shorter one hides nature's under it with its own cause.
+        golem.addEffect(poison(40, 1), bob.player());
+        assertFor(t, bob, nextPoison(t, heard), "the stronger poison bob put on top of nature's");
+        byNature(golem, 30);
+        t.await("bob's poison to run out", () -> golem.getEffect(MobEffects.POISON) != null
+                && golem.getEffect(MobEffects.POISON).getAmplifier() == 0, 60);
+        assertNatureAt(t, movedTo, nextPoison(t, heard), "nature's poison, resumed from under bob's");
     }
 }
