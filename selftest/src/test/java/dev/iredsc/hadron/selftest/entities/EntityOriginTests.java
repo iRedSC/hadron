@@ -29,11 +29,17 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.NbtIo;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.sounds.SoundSource;
+import net.minecraft.world.Difficulty;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.animal.Cow;
+import net.minecraft.world.entity.animal.MushroomCow;
 import net.minecraft.world.entity.animal.Pig;
+import net.minecraft.world.entity.monster.Drowned;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.ZombieVillager;
+import net.minecraft.world.entity.monster.ZombifiedPiglin;
 import net.minecraft.world.entity.vehicle.MinecartHopper;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -267,6 +273,66 @@ public final class EntityOriginTests {
         ZombieVillager converted = zombie.convertTo(EntityType.ZOMBIE_VILLAGER, false);
         t.assertTrue(converted != null, "the zombie should convert");
         t.assertEquals(spot(t, at), Actors.origin(converted), "the origin of a mob converted from another");
+    }
+
+    @HadronTest
+    @Covers(value = Actors.class, method = "origin")
+    void aPigLightningTurnsKeepsWhereThePigEnteredTheWorld(TestContext t) {
+        t.assertTrue(t.level().getDifficulty() != Difficulty.PEACEFUL, "the test server is on peaceful, so lightning "
+                + "turns no pig");
+        t.player("alice"); // entities only tick, and commands only find them, near a player
+        ready(t);
+        BlockPos at = t.pos(5, 0, 5);
+        Pig pig = spawn(t, EntityType.PIG, at);
+        // It came from elsewhere: struck here, its zombified piglin is still from there.
+        pig.teleportTo(at.getX() - 3.5, at.getY(), at.getZ() + 0.5);
+        console(t, "summon minecraft:lightning_bolt " + pig.getX() + " " + pig.getY() + " " + pig.getZ());
+        t.await("lightning to turn the pig", () -> !near(t, ZombifiedPiglin.class).isEmpty(), 20);
+        t.assertEquals(spot(t, at), Actors.origin(near(t, ZombifiedPiglin.class).get(0)),
+                "the origin of a zombified piglin lightning made of a pig from elsewhere");
+    }
+
+    @HadronTest
+    @Covers(value = Actors.class, method = "origin")
+    void aShearedMooshroomsCowKeepsWhereTheMooshroomEnteredTheWorld(TestContext t) {
+        t.player("alice");
+        ready(t);
+        BlockPos at = t.pos(2, 0, 0);
+        MushroomCow mooshroom = spawn(t, EntityType.MOOSHROOM, at);
+        mooshroom.teleportTo(at.getX() - 3.5, at.getY(), at.getZ() + 0.5);
+        mooshroom.shear(SoundSource.PLAYERS);
+        List<Cow> cows = near(t, Cow.class).stream().filter(c -> !(c instanceof MushroomCow)).toList();
+        t.assertEquals(1, cows.size(), "the number of cows a sheared mooshroom left");
+        t.assertEquals(spot(t, at), Actors.origin(cows.get(0)), "the origin of the cow a mooshroom from elsewhere "
+                + "was sheared into");
+    }
+
+    @HadronTest
+    @Covers(value = Actors.class, method = "origin")
+    void aMobWithNoRecordedOriginThatConvertsStaysUnseen(TestContext t) {
+        t.player("alice");
+        ready(t);
+        Zombie zombie = spawn(t, EntityType.ZOMBIE, t.pos(2, 0, 0));
+        Zombie old = reload(t, zombie, tag -> tag.getCompound(ATTACHMENTS).remove(ORIGIN), Zombie.class);
+        t.assertEquals(unseen(), Actors.origin(old), "the origin of a zombie saved without one");
+        // As when it drowns: where it converts is not where it entered the world, which nothing knows.
+        Drowned drowned = old.convertTo(EntityType.DROWNED, true);
+        t.assertTrue(drowned != null, "the zombie should convert");
+        t.assertEquals(unseen(), Actors.origin(drowned), "the origin of a drowned made of a zombie that had none");
+    }
+
+    @HadronTest
+    @Covers(value = Actors.class, method = "origin")
+    void addingAnEntityAlreadyInTheWorldLeavesItsOriginWhereItWas(TestContext t) {
+        t.player("alice");
+        ready(t);
+        BlockPos at = t.pos(2, 0, 0);
+        MinecartHopper cart = spawn(t, EntityType.HOPPER_MINECART, at);
+        cart.teleportTo(at.getX() - 3.5, at.getY(), at.getZ() + 0.5);
+        // A mod adding it again: Minecraft refuses, since it is in the world already, and it enters nowhere new.
+        t.assertTrue(!t.level().addFreshEntity(cart), "adding a hopper minecart already in the world should fail");
+        t.assertEquals(spot(t, at), Actors.origin(cart), "the origin of a live hopper minecart after a second, "
+                + "failed addFreshEntity");
     }
 
     @HadronTest

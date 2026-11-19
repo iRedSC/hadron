@@ -41,17 +41,20 @@ public final class EntitySpawns {
     /** True to let the entity in. */
     public static boolean add(ServerLevel level, Entity entity) {
         if (entity instanceof Player) return true;
-        // Kept whether or not anyone listens: where it entered the world can't be worked out later.
-        AttributionMemory.enteredAt(entity);
+        EntityState state = (EntityState) entity;
+        boolean carried = entity instanceof ItemEntity || entity instanceof ExperienceOrb
+                || entity instanceof FallingBlockEntity;
+        boolean converted = !carried && (converting > 0 || state.hadron$converted());
+        // Kept whether or not anyone listens: where it entered the world can't be worked out later. Not for the new
+        // mob of a conversion, which keeps exactly what the old one had (inherit), nor for an entity already in the
+        // world, which this call won't add: it entered where it did.
+        if (!converted && !entity.isAddedToLevel()) AttributionMemory.enteredAt(entity);
         rememberCause(entity);
         // What these carry was already taken from somewhere (a broken block, a dead mob's inventory, a falling
         // block's space), so refusing their arrival would destroy it rather than undo anything. Items have their
         // own events in the item family.
-        if (entity instanceof ItemEntity || entity instanceof ExperienceOrb || entity instanceof FallingBlockEntity) {
-            return true;
-        }
-        EntityState state = (EntityState) entity;
-        if (converting > 0 || state.hadron$converted()) {
+        if (carried) return true;
+        if (converted) {
             state.hadron$setConverted(false);
             return true;
         }

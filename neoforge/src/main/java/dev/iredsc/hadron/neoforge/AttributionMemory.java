@@ -99,9 +99,13 @@ final class AttributionMemory implements Actors.Memory {
         entity.setData(ORIGIN, Optional.of(GlobalPos.of(entity.level().dimension(), entity.blockPosition())));
     }
 
-    /** The new entity of a conversion entered the world where the old one did. */
+    /**
+     * The new entity of a conversion entered the world where the old one did: it keeps exactly what the old one had,
+     * no origin included, whatever it was given before the conversion was announced.
+     */
     static void inheritOrigin(Entity from, Entity to) {
         if (from.hasData(ORIGIN)) to.setData(ORIGIN, from.getData(ORIGIN));
+        else to.removeData(ORIGIN);
     }
 
     @Override
