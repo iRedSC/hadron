@@ -1,16 +1,21 @@
 package dev.iredsc.hadron.neoforge.mixin.item;
 
 import com.llamalad7.mixinextras.injector.ModifyExpressionValue;
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.sugar.Local;
+import dev.iredsc.hadron.neoforge.EntitySpawns;
 import dev.iredsc.hadron.neoforge.ItemHooks;
 import java.util.function.Consumer;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.InteractionResultHolder;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.context.UseOnContext;
 import net.minecraft.world.level.Level;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -20,7 +25,8 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * The item stack chokepoints every holder goes through: using in the air (ItemUseEvent, players and fake players),
- * finishing eating or drinking (ItemConsumeEvent), losing durability (ItemDamageEvent) and breaking (ItemBreakEvent).
+ * finishing eating or drinking (ItemConsumeEvent), losing durability (ItemDamageEvent) and breaking (ItemBreakEvent);
+ * and the item's own use, which is what places an entity.
  */
 @Mixin(ItemStack.class)
 abstract class ItemStackMixin {
@@ -29,6 +35,33 @@ abstract class ItemStackMixin {
             CallbackInfoReturnable<InteractionResultHolder<ItemStack>> cir) {
         ItemStack self = (ItemStack) (Object) this;
         if (ItemHooks.use(self, level, player, hand)) cir.setReturnValue(InteractionResultHolder.fail(self));
+    }
+
+    /**
+     * The item's own use, whoever calls it (a player, a fake player, a mod): an entity it brings into the world is
+     * placed ({@code EntitySpawnEvent.Cause.PLACED}). A block's reaction to the item in hand never passes these.
+     */
+    @WrapMethod(method = "use")
+    private InteractionResultHolder<ItemStack> hadron$placingUse(Level level, Player player, InteractionHand hand,
+            Operation<InteractionResultHolder<ItemStack>> original) {
+        if (level.isClientSide()) return original.call(level, player, hand);
+        EntitySpawns.beginItemUse();
+        try {
+            return original.call(level, player, hand);
+        } finally {
+            EntitySpawns.endItemUse();
+        }
+    }
+
+    @WrapMethod(method = {"useOn", "onItemUseFirst"})
+    private InteractionResult hadron$placingUseOn(UseOnContext context, Operation<InteractionResult> original) {
+        if (context.getLevel().isClientSide()) return original.call(context);
+        EntitySpawns.beginItemUse();
+        try {
+            return original.call(context);
+        } finally {
+            EntitySpawns.endItemUse();
+        }
     }
 
     /** Returning the stack itself is how vanilla says "nothing consumed"; the user then just stops using it. */

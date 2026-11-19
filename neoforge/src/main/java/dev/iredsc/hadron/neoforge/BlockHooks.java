@@ -1003,9 +1003,11 @@ public final class BlockHooks {
                     forgetIgnition();
                     return stack;
                 }
-                return EntitySpawnRefunds.dispensing(stack, work); // the removal obeys the decision just made
+                // The removal obeys the decision just made. Lighting TNT places nothing: its primed TNT is no
+                // placement (EntitySpawns.placing), as when a player lights it.
+                return EntitySpawnRefunds.dispensing(stack, work);
             }
-            if (!fill && !empty) return EntitySpawnRefunds.dispensing(stack, work);
+            if (!fill && !empty) return EntitySpawnRefunds.dispensing(stack, () -> EntitySpawns.placing(work));
             if (fill ? cancelBucketFill(null, level, target, state, stack, null)
                     : cancelBucketEmpty((BucketItem) stack.getItem(), null, level, target, null, stack)) {
                 return stack;
@@ -1013,7 +1015,7 @@ public final class BlockHooks {
             suppressAt(level, target);
             try {
                 // A mob bucket whose mob is refused takes its water back, and stays in the dispenser.
-                return EntitySpawnRefunds.dispensing(stack, work);
+                return EntitySpawnRefunds.dispensing(stack, () -> EntitySpawns.placing(work));
             } finally {
                 restoreSuppressAt();
             }

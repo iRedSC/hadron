@@ -11,12 +11,13 @@ import net.minecraft.world.entity.decoration.HangingEntity;
 import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
- * An item frame or painting is being hung. Cancel it and nothing is hung, and a player's item is not spent.
+ * An item frame or painting is being hung. Cancel it and nothing is hung, and a player's item is not spent. Its
+ * {@link #getCause()} is always {@link EntitySpawnEvent.Cause#PLACED}.
  */
 @FiredBy(core = FULL)
 public class HangingPlaceEvent extends EntitySpawnEvent {
     public HangingPlaceEvent(HangingEntity hanging, Actor actor) {
-        super(hanging, null, actor);
+        super(hanging, Cause.PLACED, null, actor);
     }
 
     @Override
