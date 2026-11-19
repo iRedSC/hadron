@@ -33,7 +33,9 @@
     "ServerPlayerGameModeClickMixin",
     "ServerPlayerGameModeMixin",
     "ServerPlayerMixin",
+    "ShulkerMixin",
     "TamableAnimalMixin",
+    "ThrownEnderpearlMixin",
     "TraderLlamaLeashMixin",
     "VehicleEntityMixin"
   ],

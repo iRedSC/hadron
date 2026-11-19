@@ -4,6 +4,7 @@ import org.jspecify.annotations.Nullable;
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
 import com.llamalad7.mixinextras.injector.v2.WrapWithCondition;
+import dev.iredsc.hadron.neoforge.EntityDismounts;
 import dev.iredsc.hadron.neoforge.EntityTeleports;
 import dev.iredsc.hadron.neoforge.HeldEffects;
 import dev.iredsc.hadron.neoforge.PlayerEvents;
@@ -84,6 +85,19 @@ abstract class ServerPlayerMixin {
             }
             return arrived;
         });
+    }
+
+    /** A player placed off its vehicle at an exact spot: its dismount states that spot. */
+    @WrapMethod(method = "dismountTo")
+    private void hadron$dismountTo(double x, double y, double z, Operation<Void> original) {
+        EntityDismounts.dismountTo((ServerPlayer) (Object) this, new Vec3(x, y, z), () -> original.call(x, y, z));
+    }
+
+    /** A refused dismount keeps the player on: then it isn't placed either. */
+    @WrapWithCondition(method = "dismountTo", at = @At(value = "INVOKE",
+            target = "Lnet/minecraft/server/level/ServerPlayer;setPos(DDD)V"))
+    private boolean hadron$placeOnlyIfOff(ServerPlayer self, double x, double y, double z) {
+        return !self.isPassenger();
     }
 
     /** Counting a statistic: inside a hold it waits whole, and comes back through here when kept. */

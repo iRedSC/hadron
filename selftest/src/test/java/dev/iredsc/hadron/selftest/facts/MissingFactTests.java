@@ -10,6 +10,7 @@ import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockDamageEvent;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
+import dev.iredsc.hadron.api.event.entity.EntityDismountEvent;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
 import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
 import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
@@ -74,8 +75,7 @@ public final class MissingFactTests {
     }
 
     @HadronTest
-    @KnownGap("EntityTeleportEvent states where a teleport asked to go, not where it settles (chorus fruit, a mod's "
-            + "random teleport)")
+    @Covers(EntityTeleportEvent.class)
     void aTeleportStatesWhereItSettles(TestContext t) {
         TestPlayer alice = t.player("alice");
         List<EntityTeleportEvent> teleports = hear(t, EntityTeleportEvent.class);
@@ -114,7 +114,7 @@ public final class MissingFactTests {
     }
 
     @HadronTest
-    @KnownGap("Getting off a mount doesn't say where the rider is set down")
+    @Covers(EntityDismountEvent.class)
     void aDismountStatesWhereTheRiderIsSetDown(TestContext t) {
         TestPlayer alice = t.player("alice");
         Boat boat = spawn(t, EntityType.BOAT, t.pos(2, 0, 0));
@@ -194,6 +194,7 @@ public final class MissingFactTests {
     private static boolean arrivesAt(EntityEvent e, BlockPos pos) {
         if (e instanceof EntityMoveEvent m) return m.getToBlock().equals(pos);
         if (e instanceof EntityTeleportEvent tp) return BlockPos.containing(tp.getTo()).equals(pos);
+        if (e instanceof EntityDismountEvent off) return BlockPos.containing(off.getTo()).equals(pos);
         return false;
     }
 

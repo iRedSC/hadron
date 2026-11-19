@@ -20,6 +20,10 @@ public interface EntityMotionAccessor {
     @Accessor("pistonDeltasGameTime")
     long hadron$pistonDeltasGameTime();
 
+    /** The box it has at its position, as {@code setPos} would give it. */
+    @Invoker("makeBoundingBox")
+    net.minecraft.world.phys.AABB hadron$makeBoundingBox();
+
     @Accessor("stuckSpeedMultiplier")
     Vec3 hadron$stuckSpeedMultiplier();
 }
