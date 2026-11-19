@@ -48,6 +48,7 @@ import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
 import dev.iredsc.hadron.api.event.entity.EntityPotionEffectEvent;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.entity.MobCategory;
 import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
 import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
@@ -236,25 +237,42 @@ final class Protection implements Listener {
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void damage(EntityDamageEvent e) {
         Entity victim = e.getEntity();
-        if (victim instanceof ArmorStand) {
-            entityChange(e, e, victim, Flag.BUILD);
+        if (victim instanceof ServerPlayer hurt) {
+            pvp(e, hurt, e.getDamager()).ifPresent(no -> {
+                e.setCancelled(true);
+                tell(e, hurt.blockPosition(), no);
+            });
             return;
         }
-        if (!(victim instanceof ServerPlayer hurt)) return;
-        pvp(e, hurt, e.getDamager()).ifPresent(no -> {
-            e.setCancelled(true);
-            tell(e, hurt.blockPosition(), no);
-        });
+        if (!kept(victim)) return;
+        List<Place> places = new ArrayList<>(e.getPlaces());
+        // With nobody behind it, a hit also comes from where whoever dealt it stands: a skeleton outside, whose arrow
+        // is already inside when it lands.
+        if (worldOnItsOwn(e.getActor())) e.getDamager().ifPresent(d -> places.add(Place.of(d)));
+        refuse(e, e, places, Flag.BUILD, Optional.of(victim.blockPosition()));
+    }
+
+    /**
+     * Whether a region keeps this entity from outsiders: everything in it but people, who are PvP's, and monsters,
+     * which a visitor must be able to fight. What a monster is, Minecraft states for every type, a mod's too.
+     */
+    private static boolean kept(Entity entity) {
+        return !(entity instanceof Player) && entity.getType().getCategory() != MobCategory.MONSTER;
     }
 
     /**
      * A harmful effect put on a player (a splash of poison, a lingering cloud) is an attack, refused where the hit
-     * would be: its later ticks come from nobody, so this is the one moment to ask.
+     * would be: its later ticks come from nobody, so this is the one moment to ask. Put on an animal or villager, it
+     * is hurting it.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void effect(EntityPotionEffectEvent e) {
-        if (!(e.getEntity() instanceof ServerPlayer hurt) || e.getAction() == EntityPotionEffectEvent.Action.REMOVED
+        if (e.getAction() == EntityPotionEffectEvent.Action.REMOVED
                 || e.getEffect().value().getCategory() != MobEffectCategory.HARMFUL) return;
+        if (!(e.getEntity() instanceof ServerPlayer hurt)) {
+            if (kept(e.getEntity())) entityChange(e, e, e.getEntity(), Flag.BUILD);
+            return;
+        }
         pvp(e, hurt, Optional.empty()).ifPresent(no -> {
             e.setCancelled(true);
             tell(e, hurt.blockPosition(), no);
@@ -350,14 +368,15 @@ final class Protection implements Listener {
     }
 
     /**
-     * Removing a placed object outright (/kill on a stand, a mod's remover) is building, as breaking it is. Capturing
-     * anything into a block (a mob jar) builds there too; carried off by a player, it goes where they go.
+     * Removing an animal, a villager or a placed object outright (a mod's instant kill, a mob catcher, /kill on a
+     * stand) is building, as killing or breaking it is. Capturing anything into a block (a mob jar) builds there too;
+     * carried off by a player, it goes where they go.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void remove(EntityRemoveEvent e) {
         List<Place> places = new ArrayList<>();
-        // A placed object counts everywhere its event says it is: its block, and a frame's or painting's wall.
-        if (placed(e.getEntity())) places.addAll(e.getEntityPlaces());
+        // It counts everywhere its event says it is: its block, and a frame's or painting's wall.
+        if (kept(e.getEntity())) places.addAll(e.getEntityPlaces());
         if (e instanceof EntityCaptureEvent capture) {
             switch (capture.getStorage()) {
                 case EntityCaptureEvent.Storage.Block b -> places.add(Place.Spot.at(b.level(), b.pos()));
@@ -459,17 +478,18 @@ final class Protection implements Listener {
 
     /**
      * Every other action that can be refused, held to {@code build} wherever it happens: a mod's change to an
-     * entity's data, shearing, taming, leashing, a portal or lightning made, chunks force-loaded, a tick accelerator.
-     * The handlers above decide their own kinds; moving, aiming and breathing are anyone's, weather and time are a
-     * whole world's, a projectile's hit and an explosion about to go off are decided by what they do (damage, the
-     * blocks they change), and what happens to a player themselves is no region's, but PvP's.
+     * entity's data, shearing, taming, breeding, leashing, setting alight, a portal or lightning made, chunks
+     * force-loaded, a tick accelerator. The handlers above decide their own kinds; moving, aiming and breathing are
+     * anyone's, weather and time are a whole world's, a projectile's hit and an explosion about to go off are decided
+     * by what they do (damage, the blocks they change), what happens to a player themselves is no region's, but PvP's,
+     * and what happens to a monster is nobody's.
      */
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
     private void action(Event ev) {
         if (!(ev instanceof ActionEvent e) || !(ev instanceof Cancellable c) || decidedElsewhere(ev) || trusted(e)) {
             return;
         }
-        if (ev instanceof EntityEvent en && en.getEntity() instanceof Player) return;
+        if (ev instanceof EntityEvent en && !kept(en.getEntity())) return;
         refuse(e, c, List.copyOf(e.getPlaces()), Flag.BUILD, Optional.empty());
     }
 
@@ -605,6 +625,7 @@ final class Protection implements Listener {
         return out;
     }
 
+    /** What {@link #spawn} holds to {@code build}; everything else an entity event does to one goes by {@link #kept}. */
     private static boolean placed(Entity entity) {
         return entity instanceof HangingEntity || entity instanceof ArmorStand || entity instanceof VehicleEntity
                 || entity instanceof EndCrystal;

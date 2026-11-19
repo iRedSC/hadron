@@ -8,7 +8,10 @@ import java.util.Optional;
  * are exempt: a region keeps outsiders from building and using, lets them walk in, and leaves fighting alone.
  */
 public enum Flag {
-    /** Placing, breaking or changing blocks, item frames, paintings and armor stands. */
+    /**
+     * Placing, breaking or changing blocks, item frames, paintings and armor stands; hurting, taking or changing the
+     * animals and villagers there.
+     */
     BUILD(false, true),
     /** Right-clicking blocks and entities: doors, chests, levers, villagers. */
     USE(false, true),
