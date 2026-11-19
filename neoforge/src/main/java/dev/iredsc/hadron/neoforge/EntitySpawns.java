@@ -65,7 +65,8 @@ public final class EntitySpawns {
             event = switch (entity) {
                 case Projectile p -> new ProjectileLaunchEvent(p, p.getOwner() != null
                         ? EntityActors.of(p.getOwner()) : EntityActors.fromStack(p, Actor.Unknown.INSTANCE));
-                case HangingEntity h -> new HangingPlaceEvent(h, EntityActors.fromStack(h, Actor.Unknown.INSTANCE));
+                case HangingEntity h -> new HangingPlaceEvent(h, cause(itemUses > 0, null),
+                        EntityActors.fromStack(h, Actor.Unknown.INSTANCE));
                 default -> {
                     MobSpawnType reason = entity instanceof Mob mob ? mob.getSpawnType() : null;
                     yield new EntitySpawnEvent(entity, cause(itemUses > 0, reason), reason,
@@ -82,8 +83,8 @@ public final class EntitySpawns {
     }
 
     /**
-     * How an entity that is neither a projectile nor hanging came to be: placed when an item's own use or a dispenser's
-     * shot is running ({@link #itemUses}), or when Minecraft's own reason says an item made it (a spawn egg used on a
+     * How an entity that is no projectile came to be: placed when an item's own use or a dispenser's shot is running
+     * ({@link #itemUses}), or when Minecraft's own reason says an item made it (a spawn egg used on a
      * mob for its baby is no item use of its own); spawned otherwise. No entity class is asked, so a mod's furniture
      * placed by its item is placed.
      */
