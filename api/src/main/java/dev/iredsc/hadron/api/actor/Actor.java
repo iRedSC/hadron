@@ -81,7 +81,8 @@ public sealed interface Actor {
         /**
          * Where this entity entered the world, wherever it is now: {@link Actors#origin(Entity)}. With nobody behind
          * it ({@link #actingFor()} empty), this is where protection should judge it from: a hopper minecart rolled in
-         * from outside acts from outside.
+         * from outside acts from outside. For an entity still inside its own spawn event, it is the block it was
+         * about to enter when the event fired, settled only once the listeners are done.
          */
         public Place origin() {
             return Actors.origin(entity);

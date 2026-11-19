@@ -9,7 +9,6 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.EventHandler;
-import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
@@ -199,22 +198,27 @@ public final class EntityOriginTests {
     }
 
     @HadronTest
-    @Covers(value = EntityEvent.class, method = "getOrigin")
-    void aLaterSpawnListenerReadsTheOriginWhereAnEarlierOneMovedTheEntity(TestContext t) {
+    @Covers(value = Actors.class, method = "origin")
+    void aMovedSpawnAndTheCompanionItsListenerSpawnsEachEnterWhereTheyStand(TestContext t) {
         t.player("alice");
         ready(t);
         BlockPos moved = t.pos(-3, 0, 2);
-        moveSpawningCarts(t, moved);
-        List<Place> afterTheMove = new ArrayList<>();
+        BlockPos beside = t.pos(3, 0, -2);
+        List<Pig> companions = new ArrayList<>();
         t.registerEvents(new Listener() {
-            @EventHandler(priority = EventPriority.MONITOR)
+            @EventHandler
             void on(EntitySpawnEvent e) {
-                if (e.getEntity() instanceof MinecartHopper) afterTheMove.add(e.getOrigin());
+                if (!(e.getEntity() instanceof MinecartHopper)) return;
+                e.getEntity().moveTo(moved.getX() + 0.5, moved.getY(), moved.getZ() + 0.5);
+                companions.add(spawn(t, EntityType.PIG, beside));
             }
         });
-        spawn(t, EntityType.HOPPER_MINECART, t.pos(2, 0, 0));
-        t.assertEquals(List.of(spot(t, moved)), afterTheMove, "getOrigin() in the spawn event, after a listener "
-                + "moved the minecart");
+        MinecartHopper cart = spawn(t, EntityType.HOPPER_MINECART, t.pos(2, 0, 0));
+        t.assertEquals(1, companions.size(), "the number of companions the spawn listener spawned");
+        t.assertEquals(spot(t, moved), Actors.origin(cart), "the origin of a minecart its spawn listener moved "
+                + "before spawning a companion");
+        t.assertEquals(spot(t, beside), Actors.origin(companions.get(0)), "the origin of the companion spawned "
+                + "from inside the minecart's spawn event");
     }
 
     @HadronTest
@@ -425,8 +429,16 @@ public final class EntityOriginTests {
         BlockPos at = t.pos(2, 0, 0);
         MinecartHopper cart = spawn(t, EntityType.HOPPER_MINECART, at);
         cart.teleportTo(at.getX() - 3.5, at.getY(), at.getZ() + 0.5);
+        List<Place> heard = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntitySpawnEvent e) {
+                if (e.getEntity() == cart) heard.add(e.getOrigin());
+            }
+        });
         // A mod adding it again: Minecraft refuses, since it is in the world already, and it enters nowhere new.
         t.assertTrue(!t.level().addFreshEntity(cart), "adding a hopper minecart already in the world should fail");
+        t.assertEquals(List.of(spot(t, at)), heard, "getOrigin() in the spawn event of that second, failed add");
         t.assertEquals(spot(t, at), Actors.origin(cart), "the origin of a live hopper minecart after a second, "
                 + "failed addFreshEntity");
     }

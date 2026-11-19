@@ -238,6 +238,9 @@ public final class Actors {
      * that is no longer loaded. Protection should treat that as outside every region. An entity that left the world
      * and was put back in (released from a mob jar) entered it where it was put back.
      *
+     * <p>Inside an entity's own spawn event, this is the block it was about to enter when the event fired; if a
+     * listener moves it, the origin is settled as where it stands once the listeners are done.
+     *
      * <pre>{@code
      * if (actor instanceof Actor.EntityActor e && actor.actingFor().isEmpty()) {
      *     Place from = Actors.origin(e.entity()); // a hopper minecart nobody owns acts from where it was spawned

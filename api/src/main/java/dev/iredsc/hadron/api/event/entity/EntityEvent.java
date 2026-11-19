@@ -56,7 +56,9 @@ public abstract class EntityEvent extends ActionEvent {
 
     /**
      * Where the entity entered the world, wherever it is now: {@link Actors#origin(Entity)}, which answers for any
-     * other entity the event names too. Not one of the event's places: the action happens where the entity is.
+     * other entity the event names too. Not one of the event's places: the action happens where the entity is. In
+     * the entity's own spawn event it is the block it was about to enter when the event fired, settled only once the
+     * listeners are done.
      */
     public Place getOrigin() {
         return Actors.origin(entity);

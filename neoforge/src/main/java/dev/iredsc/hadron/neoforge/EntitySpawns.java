@@ -48,7 +48,8 @@ public final class EntitySpawns {
         // Kept whether or not anyone listens: where it entered the world can't be worked out later. Not for the new
         // mob of a conversion, which keeps exactly what the old one had (inherit), nor for an entity already in the
         // world, which this call won't add: it entered where it did.
-        if (!converted && !entity.isAddedToLevel()) AttributionMemory.enteredAt(entity);
+        boolean enters = !converted && !entity.isAddedToLevel();
+        if (enters) AttributionMemory.enteredAt(entity);
         rememberCause(entity);
         // What these carry was already taken from somewhere (a broken block, a dead mob's inventory, a falling
         // block's space), so refusing their arrival would destroy it rather than undo anything. Items have their
@@ -79,30 +80,12 @@ public final class EntitySpawns {
         } finally {
             if (build != 0) Actors.Port.exit(PortKey.KEY, build);
         }
-        Entity outer = entering;
-        entering = entity;
-        boolean cancelled;
-        try {
-            cancelled = Hooks.post(event).isCancelled();
-        } finally {
-            entering = outer;
-        }
+        boolean cancelled = Hooks.post(event).isCancelled();
         // A listener may have moved it: it enters the world where it stands now, not where it was first asked for.
-        if (!entity.isAddedToLevel()) AttributionMemory.enteredAt(entity);
+        if (enters) AttributionMemory.enteredAt(entity);
         tried(cancelled);
         if (cancelled && entity instanceof FishingHook hook) return refuseHook(hook);
         return !cancelled;
-    }
-
-    /**
-     * The entity whose spawn event is being heard, if any: until its listeners are done it has entered nowhere yet,
-     * so its origin reads as where it stands ({@link AttributionMemory#origin}).
-     */
-    @StaticState(reason = "the entity of the spawn event being heard on the server thread, put back when it returns")
-    private static @Nullable Entity entering;
-
-    static boolean entering(Entity entity) {
-        return entity == entering;
     }
 
     /**
