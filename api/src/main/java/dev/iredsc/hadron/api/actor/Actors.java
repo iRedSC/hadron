@@ -1,6 +1,7 @@
 package dev.iredsc.hadron.api.actor;
 
 import dev.iredsc.hadron.api.HostKey;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.checks.StaticState;
 import org.jspecify.annotations.Nullable;
 import java.util.Arrays;
@@ -227,6 +228,26 @@ public final class Actors {
         return memory.remembered(blockEntity);
     }
 
+    /**
+     * Where an entity entered the world: the block it was in when it was spawned, placed, launched or generated with
+     * the world, wherever it has gone since. Saved with it, so it is the same after a restart, after its chunk
+     * unloads and in another world. Who put it there is {@link #remembered(Entity)}, which the entity's actor carries.
+     *
+     * <p>{@link Place.Unknown} ({@link Place.Unknown.Reason#UNSEEN_ORIGIN}) when nothing recorded it: an entity saved
+     * before Hadron kept origins, a player (who comes and goes, and answers for themselves), or an origin in a world
+     * that is no longer loaded. Protection should treat that as outside every region. An entity that left the world
+     * and was put back in (released from a mob jar) entered it where it was put back.
+     *
+     * <pre>{@code
+     * if (actor instanceof Actor.EntityActor e && actor.actingFor().isEmpty()) {
+     *     Place from = Actors.origin(e.entity()); // a hopper minecart nobody owns acts from where it was spawned
+     * }
+     * }</pre>
+     */
+    public static Place origin(Entity entity) {
+        return memory.origin(Objects.requireNonNull(entity, "entity"));
+    }
+
     /** Where remembered attributions live. The loader port installs one that saves with the world. */
     public interface Memory {
         void remember(Entity entity, Attribution attribution);
@@ -236,6 +257,9 @@ public final class Actors {
         Attribution remembered(Entity entity);
 
         Attribution remembered(BlockEntity blockEntity);
+
+        /** Where the entity entered the world; see {@link Actors#origin(Entity)}. */
+        Place origin(Entity entity);
 
         /** Until a port installs its own: kept while loaded, lost on restart. */
         final class Transient implements Memory {
@@ -260,6 +284,12 @@ public final class Actors {
             @Override
             public Attribution remembered(BlockEntity blockEntity) {
                 return map.getOrDefault(blockEntity, Attribution.none());
+            }
+
+            /** Nothing records origins until a port does. */
+            @Override
+            public Place origin(Entity entity) {
+                return Place.Unknown.anywhere(Place.Unknown.Reason.UNSEEN_ORIGIN);
             }
         }
     }

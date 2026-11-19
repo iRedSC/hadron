@@ -6,7 +6,8 @@
   "mixins": [
     "LevelChunkMixin",
     "PistonBaseBlockMixin",
-    "PistonMovingBlockEntityMixin"
+    "PistonMovingBlockEntityMixin",
+    "ProtoChunkMixin"
   ],
   "injectors": { "defaultRequire": 1 }
 }
