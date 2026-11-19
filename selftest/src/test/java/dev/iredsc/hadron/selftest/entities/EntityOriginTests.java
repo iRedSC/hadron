@@ -9,9 +9,11 @@ import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
 import dev.iredsc.hadron.api.event.EventHandler;
+import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.entity.EntityEvent;
+import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
 import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
 import dev.iredsc.hadron.api.event.inventory.InventoryMoveItemEvent;
 import dev.iredsc.hadron.test.Covers;
@@ -40,6 +42,7 @@ import net.minecraft.world.entity.monster.Drowned;
 import net.minecraft.world.entity.monster.Zombie;
 import net.minecraft.world.entity.monster.ZombieVillager;
 import net.minecraft.world.entity.monster.ZombifiedPiglin;
+import net.minecraft.world.entity.vehicle.Minecart;
 import net.minecraft.world.entity.vehicle.MinecartHopper;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -167,6 +170,51 @@ public final class EntityOriginTests {
         t.assertEquals(List.of(spot(t, at)), atSpawn, "getOrigin() in the pig's own spawn event");
         pig.teleportTo(at.getX() - 3.5, at.getY(), at.getZ() + 0.5);
         t.assertEquals(spot(t, at), Actors.origin(pig), "the pig's origin once it has moved");
+    }
+
+    /** A plugin that relocates spawns: every hopper minecart spawning from now on is moved to {@code to}. */
+    private static void moveSpawningCarts(TestContext t, BlockPos to) {
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntitySpawnEvent e) {
+                if (e.getEntity() instanceof MinecartHopper) {
+                    e.getEntity().moveTo(to.getX() + 0.5, to.getY(), to.getZ() + 0.5);
+                }
+            }
+        });
+    }
+
+    @HadronTest
+    @Covers(value = Actors.class, method = "origin")
+    void aSpawnAListenerMovesEntersTheWorldWhereItWasMovedTo(TestContext t) {
+        t.player("alice");
+        ready(t);
+        BlockPos moved = t.pos(-3, 0, 2);
+        moveSpawningCarts(t, moved);
+        MinecartHopper cart = spawn(t, EntityType.HOPPER_MINECART, t.pos(2, 0, 0));
+        t.assertEquals(moved, cart.blockPosition(), "the block the minecart entered the world in, once moved");
+        t.assertEquals(spot(t, moved), Actors.origin(cart), "the origin of a minecart a spawn listener moved");
+        MinecartHopper loaded = reload(t, cart, tag -> {}, MinecartHopper.class);
+        t.assertEquals(spot(t, moved), Actors.origin(loaded), "the moved minecart's origin after a save and reload");
+    }
+
+    @HadronTest
+    @Covers(value = EntityEvent.class, method = "getOrigin")
+    void aLaterSpawnListenerReadsTheOriginWhereAnEarlierOneMovedTheEntity(TestContext t) {
+        t.player("alice");
+        ready(t);
+        BlockPos moved = t.pos(-3, 0, 2);
+        moveSpawningCarts(t, moved);
+        List<Place> afterTheMove = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler(priority = EventPriority.MONITOR)
+            void on(EntitySpawnEvent e) {
+                if (e.getEntity() instanceof MinecartHopper) afterTheMove.add(e.getOrigin());
+            }
+        });
+        spawn(t, EntityType.HOPPER_MINECART, t.pos(2, 0, 0));
+        t.assertEquals(List.of(spot(t, moved)), afterTheMove, "getOrigin() in the spawn event, after a listener "
+                + "moved the minecart");
     }
 
     @HadronTest
@@ -319,6 +367,54 @@ public final class EntityOriginTests {
         Drowned drowned = old.convertTo(EntityType.DROWNED, true);
         t.assertTrue(drowned != null, "the zombie should convert");
         t.assertEquals(unseen(), Actors.origin(drowned), "the origin of a drowned made of a zombie that had none");
+    }
+
+    /** Every origin a mount event states for a drowned from now on. */
+    private static List<Place> hearDrownedMounts(TestContext t) {
+        List<Place> origins = new ArrayList<>();
+        t.registerEvents(new Listener() {
+            @EventHandler
+            void on(EntityMountEvent e) {
+                if (e.getEntity() instanceof Drowned) origins.add(e.getOrigin());
+            }
+        });
+        return origins;
+    }
+
+    @HadronTest
+    @Covers(value = EntityEvent.class, method = "getOrigin")
+    void aConvertedRidersMountEventStatesTheOldMobsOrigin(TestContext t) {
+        t.player("alice");
+        ready(t);
+        BlockPos at = t.pos(2, 0, 0);
+        Zombie zombie = spawn(t, EntityType.ZOMBIE, at);
+        Minecart cart = spawn(t, EntityType.MINECART, t.pos(-3, 0, 2));
+        t.assertTrue(zombie.startRiding(cart, true), "the zombie should ride the minecart");
+        List<Place> origins = hearDrownedMounts(t);
+        // Vanilla seats the new mob on the old one's vehicle before the conversion returns.
+        Drowned drowned = zombie.convertTo(EntityType.DROWNED, true);
+        t.assertTrue(drowned != null && drowned.getVehicle() == cart, "the drowned should ride the zombie's "
+                + "minecart, but rides " + (drowned == null ? null : drowned.getVehicle()));
+        t.assertEquals(List.of(spot(t, at)), origins, "getOrigin() in the mount event of a drowned converted from "
+                + "a riding zombie");
+    }
+
+    @HadronTest
+    @Covers(value = EntityEvent.class, method = "getOrigin")
+    void aConvertedRidersMountEventStaysUnseenWhenTheOldMobHadNoOrigin(TestContext t) {
+        t.player("alice");
+        ready(t);
+        Zombie zombie = spawn(t, EntityType.ZOMBIE, t.pos(2, 0, 0));
+        Zombie old = reload(t, zombie, tag -> tag.getCompound(ATTACHMENTS).remove(ORIGIN), Zombie.class);
+        Minecart cart = spawn(t, EntityType.MINECART, t.pos(-3, 0, 2));
+        t.assertTrue(old.startRiding(cart, true), "the zombie should ride the minecart");
+        List<Place> origins = hearDrownedMounts(t);
+        Drowned drowned = old.convertTo(EntityType.DROWNED, true);
+        t.assertTrue(drowned != null && drowned.getVehicle() == cart, "the drowned should ride the zombie's "
+                + "minecart, but rides " + (drowned == null ? null : drowned.getVehicle()));
+        t.assertEquals(List.of(unseen()), origins, "getOrigin() in the mount event of a drowned converted from a "
+                + "riding zombie that had no origin");
+        t.assertEquals(unseen(), Actors.origin(drowned), "the origin of that drowned afterwards");
     }
 
     @HadronTest

@@ -79,10 +79,30 @@ public final class EntitySpawns {
         } finally {
             if (build != 0) Actors.Port.exit(PortKey.KEY, build);
         }
-        boolean cancelled = Hooks.post(event).isCancelled();
+        Entity outer = entering;
+        entering = entity;
+        boolean cancelled;
+        try {
+            cancelled = Hooks.post(event).isCancelled();
+        } finally {
+            entering = outer;
+        }
+        // A listener may have moved it: it enters the world where it stands now, not where it was first asked for.
+        if (!entity.isAddedToLevel()) AttributionMemory.enteredAt(entity);
         tried(cancelled);
         if (cancelled && entity instanceof FishingHook hook) return refuseHook(hook);
         return !cancelled;
+    }
+
+    /**
+     * The entity whose spawn event is being heard, if any: until its listeners are done it has entered nowhere yet,
+     * so its origin reads as where it stands ({@link AttributionMemory#origin}).
+     */
+    @StaticState(reason = "the entity of the spawn event being heard on the server thread, put back when it returns")
+    private static @Nullable Entity entering;
+
+    static boolean entering(Entity entity) {
+        return entity == entering;
     }
 
     /**
@@ -218,6 +238,14 @@ public final class EntitySpawns {
         }
         if (result != null) inherit(from, result);
         return result;
+    }
+
+    /**
+     * {@code Mob.convertTo} has just made its new mob: it has the old one's origin before it can fire anything (it
+     * is seated on the old one's vehicle, heard as a mount, before the conversion returns).
+     */
+    public static void converted(Entity from, Entity to) {
+        AttributionMemory.inheritOrigin(from, to);
     }
 
     /** The new entity of a conversion carries the old one's attribution, and entered the world where it did. */

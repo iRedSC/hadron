@@ -110,6 +110,10 @@ final class AttributionMemory implements Actors.Memory {
 
     @Override
     public Place origin(Entity entity) {
+        // Inside its own spawn event it is about to enter where it stands, wherever a listener has moved it since.
+        if (EntitySpawns.entering(entity) && entity.level() instanceof ServerLevel entersIn) {
+            return Place.Spot.at(entersIn, entity.blockPosition());
+        }
         Optional<GlobalPos> at = entity.hasData(ORIGIN) ? entity.getData(ORIGIN) : Optional.empty();
         MinecraftServer server = entity.getServer();
         ServerLevel level = at.isPresent() && server != null ? server.getLevel(at.get().dimension()) : null;
