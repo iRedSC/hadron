@@ -27,6 +27,7 @@ import net.minecraft.world.entity.animal.Pig;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
 import net.minecraft.world.entity.decoration.ArmorStand;
 import net.minecraft.world.entity.decoration.ItemFrame;
+import net.minecraft.world.entity.decoration.Painting;
 import net.minecraft.world.entity.item.PrimedTnt;
 import net.minecraft.world.entity.projectile.AbstractArrow;
 import net.minecraft.world.entity.projectile.Snowball;
@@ -224,6 +225,29 @@ public final class SpawnCauseTests {
         // The same entities a player places: what they are decides nothing, how they came to be does.
         assertCause(t, Cause.SPAWNED, only(t, boats, "the summoned boat"), "a summoned boat");
         assertCause(t, Cause.SPAWNED, only(t, stands, "the summoned armor stand"), "a summoned armor stand");
+    }
+
+    @HadronTest
+    @Covers(HangingPlaceEvent.class)
+    void aSummonedItemFrameOrPaintingIsSpawned(TestContext t) {
+        t.player("alice");
+        ready(t);
+        t.setBlock(t.pos(3, 0, 0), Blocks.STONE);
+        t.setBlock(t.pos(3, 0, 2), Blocks.STONE);
+        List<EntitySpawnEvent> frames = hear(t, ItemFrame.class);
+        List<EntitySpawnEvent> paintings = hear(t, Painting.class);
+        BlockPos frame = t.pos(2, 0, 0);
+        BlockPos painting = t.pos(2, 0, 2);
+        console(t, "summon minecraft:item_frame " + frame.getX() + " " + frame.getY() + " " + frame.getZ()
+                + " {Facing:4b}");
+        console(t, "summon minecraft:painting " + painting.getX() + " " + painting.getY() + " " + painting.getZ()
+                + " {facing:1b,variant:\"minecraft:kebab\"}");
+        // Hanging entities like the ones an item hangs: no item's use is behind these, so nothing placed them.
+        EntitySpawnEvent framed = only(t, frames, "the summoned item frame");
+        t.assertTrue(framed instanceof HangingPlaceEvent, "a summoned item frame's spawn should still be a "
+                + "HangingPlaceEvent, but was " + framed.getClass().getSimpleName());
+        assertCause(t, Cause.SPAWNED, framed, "a summoned item frame");
+        assertCause(t, Cause.SPAWNED, only(t, paintings, "the summoned painting"), "a summoned painting");
     }
 
     @HadronTest
