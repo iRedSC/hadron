@@ -44,7 +44,12 @@ public final class Actors {
     private static final long TOKEN_MASK = (1L << 40) - 1;
 
     private static final class Stack {
-        Actor[] actors = new Actor[16];
+        /** Each frame's actor; null for a lazy frame until something reads it. */
+        @Nullable Actor[] actors = new Actor[16];
+        /** Each lazy frame's actor, worked out the first time the frame is read; null for an ordinary one. */
+        Port.@Nullable Lazy[] lazies = new Port.Lazy[16];
+        /** Lazy frames being worked out right now: a read while one is, made by its own lookup, sees what is under it. */
+        boolean[] resolving = new boolean[16];
         Operation[] operations = new Operation[16];
         /** Which push holds each frame; a closed scope's token no longer matches, so closing it again does nothing. */
         long[] tokens = new long[16];
@@ -52,8 +57,14 @@ public final class Actors {
         long nextToken;
 
         long push(Actor actor, @Nullable Operation operation) {
+            return push(actor, null, operation);
+        }
+
+        long push(@Nullable Actor actor, Port.@Nullable Lazy lazy, @Nullable Operation operation) {
             if (depth == actors.length) {
                 actors = Arrays.copyOf(actors, depth * 2);
+                lazies = Arrays.copyOf(lazies, depth * 2);
+                resolving = Arrays.copyOf(resolving, depth * 2);
                 operations = Arrays.copyOf(operations, depth * 2);
                 tokens = Arrays.copyOf(tokens, depth * 2);
             }
@@ -61,10 +72,33 @@ public final class Actors {
             long token = nextToken = (nextToken + 1) & TOKEN_MASK;
             if (token == 0) token = nextToken = 1;
             actors[depth] = actor;
+            lazies[depth] = lazy;
             operations[depth] = operation;
             tokens[depth] = token;
             depth++;
             return token;
+        }
+
+        /**
+         * The actor at a frame, working out a lazy one the first time and keeping it for the frame's life. While a lazy
+         * frame is being worked out, its own lookup reading the stack sees the frame under it, so it never recurses.
+         */
+        @Nullable Actor actorAt(int index) {
+            for (int i = index; i >= 0; i--) {
+                Actor actor = actors[i];
+                if (actor != null) return actor;
+                if (resolving[i]) continue;
+                Port.Lazy lazy = Objects.requireNonNull(lazies[i], "a frame with neither actor nor lazy");
+                resolving[i] = true;
+                try {
+                    actor = checked(lazy.resolve());
+                } finally {
+                    resolving[i] = false;
+                }
+                actors[i] = actor;
+                return actor;
+            }
+            return null;
         }
 
         /** Closes the push at that index if it is still the one holding the token, and any left open above it. */
@@ -73,10 +107,11 @@ public final class Actors {
             if (depth > index + 1) {
                 LOG.warn("{} actor push(es) were left open inside {} and have been closed with it. Close every "
                         + "Actors.push and Operation.begin with try-with-resources.", depth - index - 1,
-                        actors[index], new IllegalStateException("leaked actor scope"));
+                        actorAt(index), new IllegalStateException("leaked actor scope"));
             }
             for (int i = index; i < depth; i++) {
                 actors[i] = null;
+                lazies[i] = null;
                 operations[i] = null;
                 tokens[i] = 0;
             }
@@ -155,7 +190,7 @@ public final class Actors {
 
     private static @Nullable Actor top() {
         Stack stack = STACK.get();
-        return stack.depth == 0 ? null : stack.actors[stack.depth - 1];
+        return stack.depth == 0 ? null : stack.actorAt(stack.depth - 1);
     }
 
     static Scope enter(Actor actor, Operation operation) {
@@ -266,6 +301,30 @@ public final class Actors {
             Stack stack = STACK.get();
             int index = stack.depth;
             long token = stack.push(checked(actor), Objects.requireNonNull(operation, "operation"));
+            return ((long) index << 40) | token;
+        }
+
+        /**
+         * An actor worked out only if something reads it while its frame is open: the first {@link Actors#current()}
+         * or event on top of it calls {@link #resolve()}, once, and the frame keeps what it returned until it closes.
+         * For the port's per-tick pushes whose actor costs a lookup (who poisoned an entity), so a tick nobody reads
+         * looks nothing up and keeps nothing.
+         */
+        public interface Lazy {
+            /** The actor; never null ({@link Actor.Unknown#INSTANCE} when nobody can be found). */
+            Actor resolve();
+        }
+
+        /**
+         * As {@link #enter(HostKey, Actor)}, with an actor worked out only when read ({@link Lazy}). Allocates nothing.
+         * Takes the {@link HostKey}.
+         */
+        public static long enterLazy(HostKey key, Lazy lazy) {
+            HostKey.require(key, "Actors.Port.enterLazy", PUSH);
+            Stack stack = STACK.get();
+            int index = stack.depth;
+            long token = stack.push(null, Objects.requireNonNull(lazy, "lazy"),
+                    index == 0 ? null : stack.operations[index - 1]);
             return ((long) index << 40) | token;
         }
 

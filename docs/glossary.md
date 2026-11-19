@@ -28,7 +28,9 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 - **Bridge event**: an event with no vanilla operation behind it (mana, claim trust), so only bridges fire it.
 - **Chokepoint**: a vanilla method every mod passes through, such as `Level.setBlock`, where core intercepts.
 - **Parent event**: an event higher in the hierarchy. A plugin listening to it hears every event below it, including ones added later; a bridge with no fitting event fires the nearest parent.
-- **Actor**: who or what caused an action: `Player`, `FakePlayer`, `Machine`, `EntityActor`, `Server`, `Nature` or `Unknown`. ([events](events.md#actors))
+- **Actor**: who or what caused an action: `Player`, `FakePlayer`, `Machine`, `EntityActor`, `Remembered`, `Server`, `Nature` or `Unknown`. ([events](events.md#actors))
+- **Remembered actor**: `Actor.Remembered`, an actor that caused something and has since gone (a player who logged off, a spent cloud, a removed entity), kept as its kind, its UUID and who was behind it, never as the thing itself. Acts for whoever `actingFor()` says, like any actor. ([events](events.md#attribution-reaches-every-tick))
+- **Applied at**: `getAppliedAt()` on damage and healing an effect or fire deals: where the effect was applied or the fire lit, which may be far from where the entity is hurt. Not one of the event's places.
 - **Responsible**: the person who answers for an actor, such as a machine's owner or a gun's shooter.
 - **Controller**: the person directing an actor right now, if different, such as a driver or a charmer. Protection uses the controller first.
 - **Authority**: whose permissions an actor's commands run with.

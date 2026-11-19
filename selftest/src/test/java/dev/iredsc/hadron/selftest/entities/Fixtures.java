@@ -46,7 +46,7 @@ public final class Fixtures {
         return entity;
     }
 
-    private static <T extends Entity> T create(TestContext t, EntityType<T> type, BlockPos at) {
+    static <T extends Entity> T create(TestContext t, EntityType<T> type, BlockPos at) {
         T entity = type.create(t.level());
         if (entity == null) throw new AssertionError(type + " can't be created in the test world");
         entity.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5, 0.0F, 0.0F);

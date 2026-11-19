@@ -1,0 +1,74 @@
+package dev.iredsc.hadron.neoforge.mixin.entity;
+
+import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
+import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
+import dev.iredsc.hadron.neoforge.DataEffectCauses;
+import dev.iredsc.hadron.neoforge.LastingActs;
+import net.minecraft.core.Holder;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.effect.MobEffect;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
+import org.jspecify.annotations.Nullable;
+import org.spongepowered.asm.mixin.Mixin;
+import org.spongepowered.asm.mixin.injection.At;
+import org.spongepowered.asm.mixin.injection.Inject;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
+
+/**
+ * Who applied each effect, kept on the entity as its chain changes ({@link DataEffectCauses}): recorded where an
+ * effect is applied, before its first tick, and dropped when it ends. Vanilla is handed a deep copy of what was passed
+ * in, so an instance active on one entity is never shared with another; an instance of a mod's own subclass is handed
+ * over as given, and must be a fresh one for each entity.
+ */
+@Mixin(LivingEntity.class)
+abstract class LivingEntityEffectMixin {
+    @WrapMethod(method = "addEffect(Lnet/minecraft/world/effect/MobEffectInstance;Lnet/minecraft/world/entity/Entity;)Z")
+    private boolean hadron$applied(MobEffectInstance effect, @Nullable Entity source, Operation<Boolean> original) {
+        LivingEntity self = (LivingEntity) (Object) this;
+        if (!(self.level() instanceof ServerLevel)) return original.call(effect, source);
+        return DataEffectCauses.applying(self, effect, source, applied -> original.call(applied, source));
+    }
+
+    @WrapMethod(method = "forceAddEffect")
+    private void hadron$forced(MobEffectInstance effect, @Nullable Entity source, Operation<Void> original) {
+        LivingEntity self = (LivingEntity) (Object) this;
+        if (!(self.level() instanceof ServerLevel)) {
+            original.call(effect, source);
+            return;
+        }
+        DataEffectCauses.applying(self, effect, source, applied -> {
+            original.call(applied, source);
+            return Boolean.TRUE;
+        });
+    }
+
+    /**
+     * A totem's effects and those of food it eats are the entity's own, like a potion it drinks
+     * ({@link ConsumedEffectMixin}): vanilla applies them with no source, the totem's from inside the killing hit,
+     * where the stack holds whoever dealt it (an attacker, or the cause of a fire or wither).
+     */
+    @WrapOperation(method = {"checkTotemDeathProtection", "addEatEffect"}, at = @At(value = "INVOKE", target = "Lnet/"
+            + "minecraft/world/entity/LivingEntity;addEffect(Lnet/minecraft/world/effect/MobEffectInstance;)Z"))
+    private boolean hadron$own(LivingEntity self, MobEffectInstance effect, Operation<Boolean> original) {
+        if (!(self.level() instanceof ServerLevel)) return original.call(self, effect);
+        return LastingActs.asOwnCause(self, () -> original.call(self, effect));
+    }
+
+    /** Ran out, cured (milk, a totem) or cleared: every path that ends an effect tells the entity here. */
+    @Inject(method = "onEffectRemoved", at = @At("HEAD"))
+    private void hadron$ended(MobEffectInstance effect, CallbackInfo ci) {
+        LivingEntity self = (LivingEntity) (Object) this;
+        if (self.level() instanceof ServerLevel) DataEffectCauses.removed(self, effect.getEffect());
+    }
+
+    /** Taken off without telling the entity, as some mods do. */
+    @Inject(method = "removeEffectNoUpdate", at = @At("RETURN"))
+    private void hadron$takenOff(Holder<MobEffect> effect, CallbackInfoReturnable<@Nullable MobEffectInstance> cir) {
+        LivingEntity self = (LivingEntity) (Object) this;
+        if (cir.getReturnValue() != null && self.level() instanceof ServerLevel) DataEffectCauses.removed(self, effect);
+    }
+}

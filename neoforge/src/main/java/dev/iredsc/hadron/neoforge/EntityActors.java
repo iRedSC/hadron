@@ -4,7 +4,6 @@ import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
-import java.util.Optional;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
@@ -42,6 +41,19 @@ public final class EntityActors {
         return new Actor.EntityActor(entity, Actors.remembered(entity));
     }
 
+    /**
+     * The entity as an actor for {@code attribution}, the people a cause had when it acted (a bridge's turret firing
+     * for its owner): its own actor when that already says them, so nothing is allocated, otherwise one that does. A
+     * real player always answers for themselves.
+     */
+    public static Actor as(Entity entity, Attribution attribution) {
+        Actor own = of(entity);
+        if (own.attribution().equals(attribution)) return own;
+        if (entity instanceof FakePlayer fake) return new Actor.FakePlayer(fake, attribution);
+        if (entity instanceof ServerPlayer) return own;
+        return new Actor.EntityActor(entity, attribution);
+    }
+
     /** The people behind an entity, to pass on to what it causes: a real player answers for themselves. */
     public static Attribution attributionOf(Entity cause) {
         if (cause instanceof ServerPlayer player && !(cause instanceof FakePlayer)) {
@@ -60,11 +72,16 @@ public final class EntityActors {
         };
     }
 
-    /** The actor on the stack, unless it is the subject itself or nothing: then the fallback. */
+    /**
+     * The actor on the stack, unless it is nothing, or the subject itself (an entity walking into lava hurts nobody's
+     * interest but nature's): then the fallback. The subject is kept where an effect or fire acting on it put it there
+     * as its cause (a player's own poison, see {@link LastingActs}).
+     */
     public static Actor fromStack(Entity subject, Actor fallback) {
-        Optional<Actor> current = Actors.current();
-        if (current.isEmpty() || isSelf(current.get(), subject)) return fallback;
-        return current.get();
+        Actor current = current();
+        if (current == null) return fallback;
+        if (isSelf(current, subject) && !LastingActs.isExplicitCause(subject, current)) return fallback;
+        return current;
     }
 
     /** Who dealt damage: the arrow (which remembers its shooter), the attacker, or what the stack says. */
