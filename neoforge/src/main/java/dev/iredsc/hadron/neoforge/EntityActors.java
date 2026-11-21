@@ -4,14 +4,22 @@ import org.jspecify.annotations.Nullable;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
+import dev.iredsc.hadron.api.event.Place;
+import java.util.Optional;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.DamageTypeTags;
 import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
+import net.minecraft.world.entity.projectile.Projectile;
+import net.minecraft.world.phys.Vec3;
 import net.neoforged.neoforge.common.util.FakePlayer;
 
 /** Who an entity is as an actor, and who is behind an effect on one. */
 public final class EntityActors {
+    private static final Place UNSEEN = Place.Unknown.anywhere(Place.Unknown.Reason.UNSEEN_ORIGIN);
+
     private EntityActors() {}
 
     /** The actor a bridge or Hadron pushed on this thread, or null when nothing did. */
@@ -91,6 +99,52 @@ public final class EntityActors {
         Entity cause = source.getEntity();
         if (cause != null && cause != victim) return of(cause);
         return fromStack(victim, Actor.Nature.INSTANCE);
+    }
+
+    /**
+     * Where a hit nothing applied earlier set out from ({@code EntityDamageEvent.getSourceLocation()}), given the
+     * actor {@link #damage} found for it. In order: the position the source names (a bed's blast); the entity that
+     * hit, unless it is the victim (a projectile from where it entered the world, a fake player from the machine
+     * acting, anything else from where it is); a cause named with nothing that carried it, or a blast or shot that
+     * names nothing, is unknown; otherwise whoever acts: a machine or an entity from where it is, a gone or unknown
+     * cause unknown, and the server or nature from nowhere at all (a fall, drowning, a command).
+     */
+    public static Optional<Place> sourceLocation(DamageSource source, LivingEntity victim, Actor actor) {
+        Vec3 at = source.sourcePositionRaw();
+        if (at != null) return Optional.of(Place.Spot.at((ServerLevel) victim.level(), at));
+        Entity direct = source.getDirectEntity();
+        if (direct != null && direct != victim) return Optional.of(hitFrom(direct));
+        Entity cause = source.getEntity();
+        if (cause != null && cause != victim) return Optional.of(UNSEEN);
+        if (source.is(DamageTypeTags.IS_EXPLOSION) || source.is(DamageTypeTags.IS_PROJECTILE)) {
+            return Optional.of(UNSEEN);
+        }
+        return switch (actor) {
+            case Actor.Machine m -> Optional.of(Place.Spot.at(m.level(), m.pos()));
+            case Actor.Player p -> Optional.of(standing(p.player()));
+            case Actor.EntityActor e -> Optional.of(standing(e.entity()));
+            case Actor.FakePlayer f -> Optional.of(machineActingOrUnseen());
+            case Actor.Remembered r -> Optional.of(UNSEEN);
+            case Actor.Unknown u -> Optional.of(UNSEEN);
+            case Actor.Server s -> Optional.empty();
+            case Actor.Nature n -> Optional.empty();
+        };
+    }
+
+    /** Where an entity that hit sent the hit from. */
+    private static Place hitFrom(Entity direct) {
+        if (direct instanceof FakePlayer) return machineActingOrUnseen();
+        if (direct instanceof Projectile) return Actors.origin(direct);
+        return standing(direct);
+    }
+
+    /** A fake player stands wherever its mod left it: the machine acting for it, if one is, otherwise unknown. */
+    private static Place machineActingOrUnseen() {
+        return current() instanceof Actor.Machine m ? Place.Spot.at(m.level(), m.pos()) : UNSEEN;
+    }
+
+    private static Place standing(Entity entity) {
+        return Place.Spot.at((ServerLevel) entity.level(), entity.position());
     }
 
     /** A living entity's hit in progress: the damage source while {@code hurt} runs, otherwise null. */
