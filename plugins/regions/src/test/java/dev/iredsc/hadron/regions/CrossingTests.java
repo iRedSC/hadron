@@ -1,14 +1,22 @@
 package dev.iredsc.hadron.regions;
 
+import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.event.block.BlockChange;
+import dev.iredsc.hadron.api.event.block.StructureMoveEvent;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
+import java.util.ArrayList;
+import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
 import net.minecraft.world.entity.EntityType;
+import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.entity.vehicle.Boat;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.Vec3;
+import org.joml.Matrix4d;
 
 /** Entry into what a move crosses on the way, as its event states it, as well as where it ends. */
 public final class CrossingTests {
@@ -89,5 +97,34 @@ public final class CrossingTests {
         Boat client = new Boat(EntityType.BOAT, boat.level());
         client.moveTo(boat.getX() + 6, boat.getY(), boat.getZ(), boat.getYRot(), 0f);
         carol.player().connection.handleMoveVehicle(new ServerboundMoveVehiclePacket(client));
+    }
+
+    /**
+     * A ship whose deck is at {@code (0, 0, z)}, moving six blocks east with {@code crew} aboard, steered by {@code
+     * pilot}, sweeping the blocks from there to {@code (6, 0, z)}, as a bridge fires it. Whether it was refused.
+     */
+    private static boolean sail(TestContext t, TestPlayer pilot, int z, List<Player> crew) {
+        BlockPos deck = t.pos(0, 0, z);
+        List<BlockPos> swept = new ArrayList<>();
+        for (int x = 1; x <= 6; x++) swept.add(t.pos(x, 0, z));
+        StructureMoveEvent e = new StructureMoveEvent(t.level(), deck, Blocks.OAK_PLANKS.defaultBlockState(),
+                StructureMoveEvent.Phase.MOVE, new Matrix4d(), new Matrix4d().translation(6, 0, 0), List.of(), swept,
+                List.of(BlockChange.unchanged(t.level(), deck, Blocks.OAK_PLANKS.defaultBlockState())),
+                List.copyOf(crew), new Actor.Player(pilot.player()));
+        t.plugin().getServer().getPluginManager().callEvent(e);
+        return e.isCancelled();
+    }
+
+    @HadronTest
+    void aShipCantCarryAnOutsiderAcrossARegion(TestContext t) {
+        TestPlayer alice = wall(t);
+        alice.command("rg addmember thin-wall alice");
+        TestPlayer bob = t.player("bob");
+        // Alice, a member, sails across the wall with bob, an outsider, aboard; both of bob's ends are outside.
+        t.assertTrue(sail(t, alice, 0, List.of(bob.player())), "a ship carrying bob across the wall is refused");
+        // The control: the same voyage along a lane the wall doesn't reach goes ahead.
+        t.assertFalse(sail(t, alice, 4, List.of(bob.player())), "a ship carrying bob past nothing denied sails");
+        // A member's crew crosses.
+        t.assertFalse(sail(t, alice, 0, List.of(alice.player())), "alice, a member, sails her crew across the wall");
     }
 }

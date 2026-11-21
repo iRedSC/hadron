@@ -230,9 +230,11 @@ final class Nodes {
         node(BlockTransformEvent.class, BLOCK_CHANGE);
         node(BlockDataChangeEvent.class, BLOCK_CHANGE);
         node(SignChangeEvent.class, BLOCK_SIGN);
-        // A move asks block.move of its actor, and enter.move of every player it carries.
+        // A move asks block.move of its actor, and enter.move of every player it carries, at their ends and across
+        // the space it sweeps: a carried player's own way across isn't stated, so it is the move's.
         Function<BlockMoveEvent, List<Ask>> move = e -> List.of(new Ask.Act(Node.of(BLOCK_MOVE),
-                List.copyOf(e.getPlaces())), new Ask.Enter(ENTER_MOVE, Optional.empty(), List.of(), e.getCarried()));
+                List.copyOf(e.getPlaces())), new Ask.Enter(ENTER_MOVE, Optional.empty(), List.of(), e.getCarried(),
+                e.getSweptSpace().stream().<Place>map(p -> Place.Spot.at(e.getLevel(), p)).toList()));
         asks(BlockMoveEvent.class, EnumSet.of(BLOCK_MOVE, ENTER_MOVE), move::apply);
         asks(BlockPistonEvent.class, EnumSet.of(BLOCK_MOVE, ENTER_MOVE), move::apply);
         asks(BlockPistonExtendEvent.class, EnumSet.of(BLOCK_MOVE, ENTER_MOVE), move::apply);

@@ -127,8 +127,8 @@ final class Protection implements Listener {
 
     /**
      * Whether a player it moves may not enter where they end up, asked as that player: each one moved or carried,
-     * from where that one sets out to where it ends up, and from where the carrier sets out to where it ends up and
-     * to what it crosses on the way. Only regions a player is not already in can refuse, so anyone inside can walk
+     * from where that one sets out to where it ends up, and from where the carrier sets out (or with none, where that
+     * one does) to where the carrier ends up and to what the move crosses on the way. Only regions a player is not already in can refuse, so anyone inside can walk
      * out. A move whose riders nobody can name is asked as anyone, wherever its bound reaches. Everyone going is shown
      * where they were refused.
      */
@@ -153,10 +153,9 @@ final class Protection implements Listener {
             if (no.isEmpty() && carrier.isPresent() && r != carrier.get()) {
                 no = refusingEntry(mayBeIn(carrier.get().from(), EVERY), carrier.get().to(), who, node);
             }
+            Place setOut = carrier.map(Carried.Ride::from).orElse(r.from());
             for (Place across : en.crossed()) {
-                if (no.isEmpty() && carrier.isPresent()) {
-                    no = refusingEntry(mayBeIn(carrier.get().from(), EVERY), across, who, node);
-                }
+                if (no.isEmpty()) no = refusingEntry(mayBeIn(setOut, EVERY), across, who, node);
             }
         }
         if (no.isEmpty()) return false;
