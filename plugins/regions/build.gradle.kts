@@ -55,3 +55,16 @@ apply(from = rootProject.file("gradle/hadron-test.gradle.kts"))
 // Compile-time checks every plugin build runs (gradle/hadron-checks.gradle.kts): Error Prone's errors, no static
 // mutable state, and deterministic tests.
 apply(from = rootProject.file("gradle/hadron-checks.gradle.kts"))
+
+// ./gradlew :plugins:regions:nodeTable rewrites README.md's node table from the code (Action and Nodes), as
+// bridgeHooks does for docs/bridge-hooks.md; the fast tests fail while it is stale.
+tasks.register<Test>("nodeTable") {
+    description = "Rewrites the node table in plugins/regions/README.md from Action and Nodes"
+    group = "documentation"
+    testClassesDirs = sourceSets.test.get().output.classesDirs
+    classpath = sourceSets.test.get().runtimeClasspath
+    useJUnitPlatform()
+    filter { includeTestsMatching("dev.iredsc.hadron.regions.NodeMappingTest.theReadmesNodeTableIsTheOneTheCodeMakes") }
+    systemProperty("regions.nodeTable.write", "true")
+    outputs.upToDateWhen { false }
+}
