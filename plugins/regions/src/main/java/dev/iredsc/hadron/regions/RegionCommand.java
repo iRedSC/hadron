@@ -8,6 +8,9 @@ import dev.iredsc.hadron.api.plugin.PluginCommand;
 import dev.iredsc.hadron.api.plugin.TabCompleter;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -18,7 +21,9 @@ import java.util.UUID;
 import java.util.function.Consumer;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.server.players.GameProfileCache;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -27,13 +32,16 @@ import org.jspecify.annotations.Nullable;
 /** {@code /region} (alias {@code /rg}): every way to make, change and look at regions. */
 final class RegionCommand implements CommandExecutor, TabCompleter {
     private static final List<String> SUBCOMMANDS = List.of("wand", "define", "redefine", "remove", "restore", "bypass",
-            "list", "info", "show", "flag", "priority", "addowner", "addmember", "removeplayer");
+            "list", "info", "show", "flag", "allow", "deny", "unset", "undo", "why", "watch", "priority", "addowner",
+            "addmember", "removeplayer");
     /** What a region's owners may do to it without regions.manage. */
-    private static final List<String> OWNER = List.of("info", "show", "flag", "addowner", "addmember",
-            "removeplayer");
+    private static final List<String> OWNER = List.of("info", "show", "flag", "allow", "deny", "unset", "undo", "why",
+            "watch", "addowner", "addmember", "removeplayer");
     /** Subcommands that check their own permission, so anyone may type them. */
-    private static final List<String> ANYONE = List.of("list", "info", "show", "flag", "addowner", "addmember",
-            "removeplayer", "bypass");
+    private static final List<String> ANYONE = List.of("list", "info", "show", "flag", "allow", "deny", "unset",
+            "undo", "why", "watch", "addowner", "addmember", "removeplayer", "bypass");
+    /** The subcommands that set rules, each its verdict; unset has none. */
+    private static final List<String> RULE_SUBCOMMANDS = List.of("allow", "deny", "unset");
     private static final String USAGE = "/region <" + String.join("|", SUBCOMMANDS) + ">";
 
     private final JavaPlugin plugin;
@@ -121,6 +129,14 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
                 feedback.outline(p, r.world(), r.box(), Feedback.Look.REGION);
             }
             case "flag" -> flag(sender, args);
+            case "allow", "deny", "unset" -> rule(sender, sub, args);
+            case "undo" -> undo(sender);
+            case "why" -> why(sender, args);
+            case "watch" -> {
+                boolean on = feedback.toggleWatch(player(sender));
+                ok(sender, on ? "Watching refusals within 32 blocks in regions you manage · /region watch stops"
+                        : "Stopped watching");
+            }
             case "priority" -> {
                 Region r = region(arg(args, 1, "/region priority <region> <number>"));
                 String n = arg(args, 2, "/region priority " + r.id() + " <number>");
@@ -184,8 +200,139 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
         else if (args[3].equalsIgnoreCase("allow")) value = Optional.of(Rules.Verdict.ALLOW);
         else if (args[3].equalsIgnoreCase("deny")) value = Optional.of(Rules.Verdict.DENY);
         else throw new Refusal("A flag is allow or deny, or leave it off to clear it, but was " + args[3]);
-        store.put(r.withRules(r.rules().withFlag(flag, value)));
-        ok(sender, r.id() + " " + flag.key() + ": " + value.map(Rules.Verdict::key).orElse("cleared"));
+        changeRules(sender, r, r.rules().withFlag(flag, value), Subject.EVERYONE);
+    }
+
+    /**
+     * {@code /region allow|deny|unset <region> [subject] <node>...}: each node or flag allowed, denied or taken out of
+     * the subject's lists (everyone when no subject is named). Nodes go through the same parser as regions.yml.
+     */
+    private void rule(CommandSourceStack sender, String sub, String[] args) {
+        String usage = "/region " + sub + " <region> [" + Subject.list().replace(", ", "|") + "] <node>...";
+        Region r = managed(sender, arg(args, 1, usage));
+        int at = 2;
+        Optional<Subject> named = Subject.parse(arg(args, 2, usage).toLowerCase(Locale.ROOT));
+        if (named.isPresent()) at = 3;
+        Subject subject = named.orElse(Subject.EVERYONE);
+        if (args.length <= at) throw new Refusal(usage);
+        Optional<Rules.Verdict> verdict = switch (sub) {
+            case "allow" -> Optional.of(Rules.Verdict.ALLOW);
+            case "deny" -> Optional.of(Rules.Verdict.DENY);
+            default -> Optional.empty();
+        };
+        Rules next = r.rules();
+        for (int i = at; i < args.length; i++) {
+            try {
+                next = next.with(subject, Pattern.parse(args[i]), verdict);
+            } catch (Pattern.Invalid e) {
+                throw new Refusal(e.getMessage());
+            }
+        }
+        changeRules(sender, r, next, subject);
+    }
+
+    /** Saves new rules, says the subject's rules as they now are, and offers [undo] in place of a confirmation. */
+    private void changeRules(CommandSourceStack sender, Region r, Rules next, Subject shown) {
+        if (next.equals(r.rules())) {
+            ok(sender, r.id() + " already says that · " + answer(r.id(), next, shown));
+            return;
+        }
+        store.put(r.withRules(next));
+        undo.put(senderKey(sender), new Undo(r.id(), r.rules(), next));
+        sender.sendSuccess(() -> Component.literal(answer(r.id(), next, shown) + " ").withStyle(ChatFormatting.GRAY)
+                .append(Component.literal("[undo]").withStyle(st -> st.withColor(ChatFormatting.YELLOW)
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/region undo"))
+                        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                Component.literal("Put " + r.id() + "'s rules back"))))), false);
+    }
+
+    private static String answer(String id, Rules rules, Subject subject) {
+        Rules.Lists lists = rules.of(subject);
+        return id + " · " + subject.key() + ": deny " + lists.deny() + " · allow " + lists.allow();
+    }
+
+    /** What one sender's last rule change was, so {@code [undo]} can put it back. */
+    private record Undo(String region, Rules before, Rules after) {}
+
+    private final Map<String, Undo> undo = new HashMap<>();
+
+    private static String senderKey(CommandSourceStack sender) {
+        return sender.getEntity() instanceof ServerPlayer p ? p.getUUID().toString() : sender.getTextName();
+    }
+
+    /** Puts back the rules the sender's last change replaced, unless they changed again since. */
+    private void undo(CommandSourceStack sender) {
+        Undo last = undo.get(senderKey(sender));
+        if (last == null) throw new Refusal("Nothing of yours to undo since the plugin started");
+        Region r = managed(sender, last.region());
+        if (!r.rules().equals(last.after())) {
+            throw new Refusal(r.id() + "'s rules changed since your last change, so it wasn't undone; /region info "
+                    + r.id() + " shows them now");
+        }
+        store.put(r.withRules(last.before()));
+        undo.remove(senderKey(sender));
+        ok(sender, "Undone · " + r.id() + " · everyone: deny " + last.before().of(Subject.EVERYONE).deny()
+                + " · allow " + last.before().of(Subject.EVERYONE).allow());
+    }
+
+    /**
+     * {@code /region why <node> [subject]}: at your feet, each region from the highest priority down, what it answers
+     * and why, and the one that decides outlined, red when it refuses. With no subject, you are judged as you are in
+     * each region (a member or everyone).
+     */
+    private void why(CommandSourceStack sender, String[] args) {
+        String usage = "/region why <node> [" + Subject.list().replace(", ", "|") + "]";
+        ServerPlayer p = player(sender);
+        Node node;
+        try {
+            node = Pattern.parse(arg(args, 1, usage).toLowerCase(Locale.ROOT)).leaf().orElseThrow(() -> new Refusal(
+                    "Name one node, such as entity.hurt.animal: " + args[1] + " covers several"));
+        } catch (Pattern.Invalid e) {
+            throw new Refusal(e.getMessage());
+        }
+        Optional<Subject> as = Optional.empty();
+        if (args.length > 2) {
+            as = Optional.of(Subject.parse(args[2].toLowerCase(Locale.ROOT)).orElseThrow(() -> new Refusal(
+                    args[2] + " isn't a subject; the subjects are " + Subject.list())));
+        }
+        List<Region> here = new ArrayList<>(store.at(p.serverLevel(), p.blockPosition()).stream()
+                .filter(r -> canManage(sender, r)).toList());
+        if (here.isEmpty()) throw new Refusal("No region you manage is at your feet");
+        here.sort(Comparator.comparingInt(Region::priority).reversed().thenComparing(Region::id));
+        Optional<Resolve.Decision> deciding = Optional.empty();
+        Integer decidedAt = null;
+        for (Region r : here) {
+            Subject subject = as.orElseGet(() -> r.isMember(p.getUUID()) ? Subject.MEMBERS : Subject.EVERYONE);
+            Optional<Resolve.Decision> d = Resolve.answer(r, subject, node, true);
+            String line = r.id() + " (" + r.priority() + "): " + d.map(RegionCommand::reason)
+                    .orElse(subject.key() + ", no rule, passes");
+            if (decidedAt == null && d.isPresent()) {
+                deciding = d;
+                decidedAt = r.priority();
+            } else if (decidedAt != null && d.isPresent() && r.priority() == decidedAt && d.get().refuses()
+                    && !deciding.get().refuses()) {
+                deciding = d;
+            }
+            ok(sender, line);
+        }
+        if (deciding.isEmpty()) {
+            ok(sender, "→ allowed: no region here decides " + node.key());
+            return;
+        }
+        Resolve.Decision d = deciding.get();
+        ok(sender, "→ " + (d.refuses() ? "refused by " : "allowed by ") + d.region().id());
+        feedback.outline(p, d.region().world(), d.region().box(), d.refuses() ? Feedback.Look.REFUSING
+                : Feedback.Look.REGION);
+    }
+
+    /** One region's answer, as {@code /region why} says it: {@code everyone deny build ⊃ entity.hurt.animal → refused}. */
+    private static String reason(Resolve.Decision d) {
+        String rule = switch (d.rule()) {
+            case Resolve.Rule.Named n -> d.subject().key() + " " + n.verdict().key() + " " + (n.pattern().toString()
+                    .equals(d.node().key()) ? d.node().key() : n.pattern() + " ⊃ " + d.node().key());
+            case Resolve.Rule.Implicit i -> d.subject().key() + ", " + i.why();
+        };
+        return rule + (d.refuses() ? " → refused" : " → allowed");
     }
 
     private void list(CommandSourceStack sender) {
@@ -229,21 +376,34 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
             String[] args) {
         boolean admin = Permissions.has(sender, RegionsPlugin.MANAGE);
         String last = args.length == 0 ? "" : args[args.length - 1].toLowerCase(Locale.ROOT);
+        String sub = args.length == 0 ? "" : args[0].toLowerCase(Locale.ROOT);
+        if (RULE_SUBCOMMANDS.contains(sub) && args.length >= 3) {
+            // The subject, or straight to nodes; the tree is walked one segment at a time.
+            List<String> out = new ArrayList<>(Pattern.completions(last));
+            if (args.length == 3) for (Subject s : Subject.values()) if (s.key().startsWith(last)) out.add(s.key());
+            return out;
+        }
+        if (sub.equals("why")) {
+            if (args.length == 2) return Pattern.completions(last);
+            if (args.length == 3) return Arrays.stream(Subject.values()).map(Subject::key)
+                    .filter(k -> k.startsWith(last)).toList();
+            return List.of();
+        }
         List<String> options = switch (args.length) {
             case 0, 1 -> admin ? SUBCOMMANDS : ANYONE;
-            case 2 -> switch (args[0].toLowerCase(Locale.ROOT)) {
+            case 2 -> switch (sub) {
                 // Only admins restore, so only they learn which removed regions there are.
                 case "restore" -> admin ? List.copyOf(store.restorable()) : List.of();
-                case "wand", "list", "define" -> List.of();
+                case "wand", "list", "define", "undo", "watch" -> List.of();
                 default -> store.all().stream().filter(r -> canManage(sender, r)).map(Region::id).toList();
             };
-            case 3 -> switch (args[0].toLowerCase(Locale.ROOT)) {
+            case 3 -> switch (sub) {
                 case "flag" -> List.of(Bundle.list().split(", "));
                 case "addowner", "addmember", "removeplayer" -> plugin.getServer().getOnlinePlayers().stream()
                         .map(p -> p.getGameProfile().getName()).toList();
                 default -> List.of();
             };
-            case 4 -> args[0].equalsIgnoreCase("flag") ? List.of("allow", "deny") : List.of();
+            case 4 -> sub.equals("flag") ? List.of("allow", "deny") : List.of();
             default -> List.<String>of();
         };
         return options.stream().filter(o -> o.startsWith(last)).sorted().toList();

@@ -49,7 +49,14 @@ final class Resolve {
 
     /** The region's own answer, or empty when it abstains (everyone, with no rule matching). */
     static Optional<Decision> answer(Region region, Who who, Node node) {
-        Subject subject = who.subjectIn(region);
+        return answer(region, who.subjectIn(region), node, who instanceof Who.World w && w.homeInside(region));
+    }
+
+    /**
+     * The region's answer for {@code subject}; {@code homeInside} says, for the world, whether it sets out from inside
+     * the region. {@code /region why} asks this way, for the world as if it acted from where they stand.
+     */
+    static Optional<Decision> answer(Region region, Subject subject, Node node, boolean homeInside) {
         Optional<Rules.Match> named = region.rules().match(subject, node);
         if (named.isPresent()) {
             return Optional.of(new Decision(region, subject, node, new Rule.Named(named.get().pattern(),
@@ -58,7 +65,7 @@ final class Resolve {
         Rule implicit = switch (subject) {
             case MEMBERS -> new Rule.Implicit(Rules.Verdict.ALLOW, "a member");
             case EVERYONE -> null;
-            case WORLD -> ((Who.World) who).homeInside(region) ? new Rule.Implicit(Rules.Verdict.ALLOW, "its own")
+            case WORLD -> homeInside ? new Rule.Implicit(Rules.Verdict.ALLOW, "its own")
                     : new Rule.Implicit(Rules.Verdict.DENY, "from outside");
             case UNKNOWN -> new Rule.Implicit(Rules.Verdict.DENY, "unknown, refused until a bridge says who");
         };

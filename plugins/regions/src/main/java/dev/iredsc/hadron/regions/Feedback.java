@@ -30,7 +30,9 @@ final class Feedback {
         /** Yellow: corners picked, not yet a region. */
         SELECTING(1f, 0.85f, 0.2f),
         /** Green: a region as it is saved. */
-        REGION(0.3f, 1f, 0.4f);
+        REGION(0.3f, 1f, 0.4f),
+        /** Red: the region that refuses, in {@code /region why}. */
+        REFUSING(1f, 0.25f, 0.25f);
 
         private final float r;
         private final float g;
