@@ -9,6 +9,7 @@ import dev.iredsc.hadron.api.event.block.BlockDamageEvent;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.EventHandler;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.block.BlockChange;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
@@ -51,6 +52,7 @@ import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.world.CompoundContainer;
@@ -1514,7 +1516,8 @@ public final class AcceptanceKitTests {
         Acceptance area = t.acceptance(around(t));
         Actor machine = new Actor.Machine(t.level(), t.pos(6, 0, 0), Attribution.of(bob.uuid()));
         t.assertFalse(Hadron.getPluginManager().callEvent(new EntityDamageEvent(pig,
-                t.level().damageSources().generic(), 1, machine)), "bob's machine hurting a pig outside isn't the "
+                t.level().damageSources().generic(), 1, machine,
+                Optional.of(Place.Spot.at(t.level(), t.pos(6, 0, 0))))), "bob's machine hurting a pig outside isn't the "
                 + "area's, though bob stands in it: " + area.events());
         t.assertTrue(area.events().isEmpty(), "nothing heard in the area: " + area.events());
     }
@@ -1545,8 +1548,10 @@ public final class AcceptanceKitTests {
         Pig victim = pig(t, t.pos(-3, 0, 0));
         Acceptance area = t.acceptance(around(t));
         t.assertFalse(Hadron.getPluginManager().callEvent(new EntityDamageEvent(victim,
-                t.level().damageSources().mobAttack(attacker), 1, Actor.Unknown.INSTANCE)),
-                "a pig outside hurt from the area isn't the area's: " + area.events());
+                t.level().damageSources().mobAttack(attacker), 1, Actor.Unknown.INSTANCE,
+                Optional.of(Place.Spot.at(t.level(), attacker.position())))),
+                "a pig outside hurt from the area isn't the area's (where a hit sets out from is not a place): "
+                        + area.events());
         t.assertTrue(area.events().isEmpty(), "nothing heard in the area: " + area.events());
     }
 

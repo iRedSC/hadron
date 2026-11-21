@@ -16,6 +16,7 @@ import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.effect.MobEffectInstance;
@@ -109,10 +110,11 @@ public final class EventInvariantTests {
         Pig pig = pig(t);
         for (float bad : new float[] {-1f, Float.NaN, Float.POSITIVE_INFINITY}) {
             refused(t, "An EntityDamageEvent built with " + bad + " damage", "setCancelled(true)",
-                    () -> new EntityDamageEvent(pig, t.level().damageSources().generic(), bad, NOBODY));
+                    () -> new EntityDamageEvent(pig, t.level().damageSources().generic(), bad, NOBODY,
+                            Optional.empty()));
         }
         EntityDamageEvent max = new EntityDamageEvent(pig, t.level().damageSources().generic(), Float.MAX_VALUE,
-                NOBODY);
+                NOBODY, Optional.empty());
         t.assertEquals(Float.MAX_VALUE, max.getDamage(), "the largest finite damage");
         refused(t, "setDamage(NaN)", "setCancelled(true)", () -> max.setDamage(Float.NaN));
     }
