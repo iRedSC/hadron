@@ -7,6 +7,9 @@ import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.List;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Husk;
 import net.minecraft.world.level.block.Blocks;
@@ -113,5 +116,47 @@ public final class RuleCommandTests {
         alice.command("rg why block.break");
         t.assertChat(alice, "town (10): everyone deny build ⊃ block.break → refused");
         t.assertChat(alice, "→ refused by town");
+    }
+
+    /** The command the newest {@code [undo]} sent to them runs when clicked, as they would type it. */
+    private static String newestUndoButton(TestPlayer p) {
+        List<ClientboundSystemChatPacket> sent = p.received(ClientboundSystemChatPacket.class);
+        for (int i = sent.size() - 1; i >= 0; i--) {
+            for (Component part : sent.get(i).content().getSiblings()) {
+                ClickEvent click = part.getStyle().getClickEvent();
+                if (click != null && part.getString().equals("[undo]")) return click.getValue().substring(1);
+            }
+        }
+        throw new AssertionError(p.name() + " was never sent an [undo]: " + p.chat());
+    }
+
+    @HadronTest
+    void undoSaysTheSubjectItRestored(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "east", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        alice.command("rg deny east world block.break");
+        t.assertChat(alice, "east · world: deny [block.break]");
+        alice.command("rg undo");
+        t.assertChat(alice, "Undone · east · world: deny [] ·");
+    }
+
+    @HadronTest
+    void anOlderUndoButtonDoesntUndoALaterChange(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "east", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        define(t, alice, "west", t.pos(3, 0, -2), t.pos(4, 1, -1));
+        RegionStore store = ((RegionsPlugin) t.plugin()).regions();
+        alice.command("rg deny east entity.hurt.monster");
+        String eastButton = newestUndoButton(alice);
+        alice.command("rg deny west entity.hurt.monster");
+        String westButton = newestUndoButton(alice);
+        Rules eastNow = store.get("east").orElseThrow().rules();
+        Rules westNow = store.get("west").orElseThrow().rules();
+        alice.command(eastButton);
+        t.assertChat(alice, "That [undo] is for an older change, so nothing was undone");
+        t.assertEquals(westNow, store.get("west").orElseThrow().rules(), "west's rules after east's old [undo]");
+        t.assertEquals(eastNow, store.get("east").orElseThrow().rules(), "east's rules after its old [undo]");
+        alice.command(westButton);
+        t.assertChat(alice, "Undone · west · everyone: deny [build, use] ·");
     }
 }

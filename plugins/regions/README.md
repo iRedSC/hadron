@@ -104,7 +104,7 @@ Any mistake stops the plugin with the file left as it is, naming the region, sub
 | `/region wand`, `define <name>`, `redefine <name>` | pick two corners, make a fresh region from them, move one |
 | `/region allow\|deny\|unset <region> [subject] <node>...` | set or clear nodes or flags for a subject (everyone when none is named); replies with that subject's rules and an `[undo]` |
 | `/region flag <region> <build\|use\|entry\|pvp> [allow\|deny]` | a flag for everyone (and members too for `pvp`); left off, it is cleared |
-| `/region undo` | puts back the rules your last change replaced, unless they changed since |
+| `/region undo` | puts back the rules your last change replaced, unless they changed since, and says that subject's rules as restored; an older change's `[undo]` undoes nothing and says so |
 | `/region why <node> [subject]` | traces each region at your feet from the top: `plot-1 (10): everyone, no rule, passes`, `spawn (0): everyone deny build ⊃ entity.hurt.animal → refused`, and outlines the one deciding. It decides as protection does, over every region there; one you don't manage isn't listed, and if it decides you're told only `refused by a region you don't manage` (or allowed) |
 | `/region watch` | for managers: every refusal within 32 blocks in regions you manage, marked by subject (red a person, blue the world, purple unknown) with `base · world · inventory.move · from outside` above the hotbar |
 | `/region info`, `list`, `show`, `priority`, `addowner`, `addmember`, `removeplayer`, `remove`, `restore`, `bypass` | as before |

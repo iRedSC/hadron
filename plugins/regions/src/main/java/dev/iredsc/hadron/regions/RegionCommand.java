@@ -130,7 +130,7 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
             }
             case "flag" -> flag(sender, args);
             case "allow", "deny", "unset" -> rule(sender, sub, args);
-            case "undo" -> undo(sender);
+            case "undo" -> undo(sender, args);
             case "why" -> why(sender, args);
             case "watch" -> {
                 boolean on = feedback.toggleWatch(player(sender));
@@ -238,10 +238,12 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
             return;
         }
         store.put(r.withRules(next));
-        undo.put(senderKey(sender), new Undo(r.id(), r.rules(), next));
+        Undo change = new Undo(++changes, r.id(), shown, r.rules(), next);
+        undo.put(senderKey(sender), change);
+        String undoIt = "/region undo " + change.number();
         sender.sendSuccess(() -> Component.literal(answer(r.id(), next, shown) + " ").withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("[undo]").withStyle(st -> st.withColor(ChatFormatting.YELLOW)
-                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/region undo"))
+                        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, undoIt))
                         .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
                                 Component.literal("Put " + r.id() + "'s rules back"))))), false);
     }
@@ -251,19 +253,31 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
         return id + " · " + subject.key() + ": deny " + lists.deny() + " · allow " + lists.allow();
     }
 
-    /** What one sender's last rule change was, so {@code [undo]} can put it back. */
-    private record Undo(String region, Rules before, Rules after) {}
+    /**
+     * What one sender's last rule change was, so {@code [undo]} can put it back: {@code number} is the change's own,
+     * which its button names, so an older button can't undo a later change.
+     */
+    private record Undo(int number, String region, Subject subject, Rules before, Rules after) {}
 
     private final Map<String, Undo> undo = new HashMap<>();
+    /** How many rule changes there have been since the plugin started, to number each one. */
+    private int changes;
 
     private static String senderKey(CommandSourceStack sender) {
         return sender.getEntity() instanceof ServerPlayer p ? p.getUUID().toString() : sender.getTextName();
     }
 
-    /** Puts back the rules the sender's last change replaced, unless they changed again since. */
-    private void undo(CommandSourceStack sender) {
+    /**
+     * Puts back the rules the sender's last change replaced, unless they changed again since. {@code /region undo
+     * <number>}, which an {@code [undo]} runs, does so only when that change is still their last.
+     */
+    private void undo(CommandSourceStack sender, String[] args) {
         Undo last = undo.get(senderKey(sender));
         if (last == null) throw new Refusal("Nothing of yours to undo since the plugin started");
+        if (args.length > 1 && !args[1].equals(Integer.toString(last.number()))) {
+            throw new Refusal("That [undo] is for an older change, so nothing was undone; only your latest change, to "
+                    + last.region() + ", can be undone");
+        }
         Region r = managed(sender, last.region());
         if (!r.rules().equals(last.after())) {
             throw new Refusal(r.id() + "'s rules changed since your last change, so it wasn't undone; /region info "
@@ -271,8 +285,7 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
         }
         store.put(r.withRules(last.before()));
         undo.remove(senderKey(sender));
-        ok(sender, "Undone · " + r.id() + " · everyone: deny " + last.before().of(Subject.EVERYONE).deny()
-                + " · allow " + last.before().of(Subject.EVERYONE).allow());
+        ok(sender, "Undone · " + answer(r.id(), last.before(), last.subject()));
     }
 
     /**
