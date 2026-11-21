@@ -108,12 +108,14 @@ public final class EntityEvents {
 
     /**
      * The one way core builds {@link EntityDamageEvent}, for every living entity, armor stands included: who dealt it,
-     * and where, when an effect or fire acting on the entity deals it ({@link LastingActs#appliedAt}).
+     * where it set out from ({@link EntityActors#sourceLocation}), and where, when an effect or fire acting on the
+     * entity deals it ({@link LastingActs#appliedAt}).
      */
     public static EntityDamageEvent damageEvent(LivingEntity entity, DamageSource source, float amount) {
         Actor actor = EntityActors.damage(source, entity);
         Place appliedAt = LastingActs.appliedAt(entity);
-        return appliedAt == null ? new EntityDamageEvent(entity, source, reportedDamage(amount), actor)
+        return appliedAt == null ? new EntityDamageEvent(entity, source, reportedDamage(amount), actor,
+                        EntityActors.sourceLocation(source, entity, actor))
                 : new EntityDamageEvent(entity, source, reportedDamage(amount), actor, appliedAt);
     }
 

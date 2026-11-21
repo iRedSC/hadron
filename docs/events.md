@@ -74,7 +74,7 @@ What each family states:
 | Family | Places |
 |---|---|
 | `BlockEvent` | `getPos()`, then each space in `getBlocks()`; a move adds each block's source and target, its swept space and each entity it carries; a flow both ends, a spread its source, a burn its fire, a drop where its items lie |
-| `EntityEvent` | the block the entity was in, then each other entity it names: a mount and the seat on it, a lead's holder, a breeding's parents (not the breeder), a target, a projectile's hit (point, block, entity; a hitscan shot, whose entity is its shooter, only these), a teleport's destination, each entity a move, teleport or mount carries or shifts, a capture's block or carrier, a fishing hook's player and catch. Whoever did it (a damager, a shooter, a tamer) is not a place |
+| `EntityEvent` | the block the entity was in, then each other entity it names: a mount and the seat on it, a lead's holder, a breeding's parents (not the breeder), a target, a projectile's hit (point, block, entity; a hitscan shot, whose entity is its shooter, only these), a teleport's destination, each entity a move, teleport or mount carries or shifts, a capture's block or carrier, a fishing hook's player and catch. Whoever did it (a damager, a shooter, a tamer) is not a place, nor is where a hit set out from (`getSourceLocation()`) |
 | `ItemEvent` | where the stack is: the inventory holding it (crafting, smelting, an anvil, a trade, a change in place), the entity using, eating, holding or wearing it, where it lies (a merge, a despawn), where a drop lands, a pickup's item and destination. A leaf naming none is `Unknown` within its level |
 | `InventoryEvent` | `getHolder()`; a change adds every inventory it touches; a click, an open and a close add every inventory behind the menu's slots (both halves of a double chest), and a slot that is the menu's own (a crafting grid) is where the menu says it is open (`getMenuHolder()`), `Unknown` for a menu nothing describes; an inventory nothing identifies (a double chest's half that isn't a chest) is its own `Unknown`, never another's place |
 | `ResourceEvent` | each holder: a block, a chunk (its full height), an entity, an item where the inventory it is in is (`ResourceHolder.Item(stack, heldIn)`; `Unknown` when nothing says), an account (`Nowhere`) |
@@ -125,6 +125,33 @@ Who put it there is the attribution the entity already keeps: whoever was acting
 A bridge does nothing for an entity its mod spawns the ordinary way. A mod that brings entities in by a path of its own, without a fresh spawn, leaves them `Unknown` until core offers a way to state it: none exists yet.
 
 Not kept yet: who last pushed a vehicle nobody placed.
+
+### Where a hit set out from
+
+`EntityDamageEvent.getSourceLocation()` says where a hit set out from, wherever its attacker is now, so a plugin can judge both ends of a hit: a safe zone's "no PvP if either end is in it" needs the attacker's end, and the attacker may have moved, died or logged off since. It is `Optional<Place>`: a `Spot`, `Unknown` (an unseen origin) when the hit came from somewhere nothing can say, and empty only for harm nothing sent. Named after Bukkit's `DamageSource.getSourceLocation()`, with one difference: Bukkit's, like Minecraft's `getSourcePosition()`, is where an arrow is as it lands; Hadron's is where it was shot from.
+
+Core works it out from Minecraft's damage source and the actor it already found, in this order:
+
+| The hit | Where it set out from |
+|---|---|
+| a source naming a position (a bed or respawn anchor blowing up in the wrong world, `/damage ... at`) | that position |
+| a projectile entity (an arrow, a trident, a fireball, a wither skull, a firework from a crossbow) | its origin (`Actors.origin`), where it was launched, whoever shot it and wherever they are now |
+| a fake player's blow | the machine acting for it, if one is on the stack; otherwise `Unknown`: a fake player stands wherever its mod left it |
+| any other entity that hit: a blow, a mob's bite, a guardian's beam, a warden's boom, a creeper or TNT going off, evoker fangs, a falling anvil, a mod's vehicle | the block that entity is in as it hits |
+| a cause named with nothing that carried it, or a blast or shot (Minecraft's `is_explosion` and `is_projectile` tags) naming nothing | `Unknown` |
+| nothing named, while a machine acts (an unbridged mod's turret dealing damage from its tick) | the machine's block |
+| nothing named, while a player or an entity acts | its block |
+| nothing named, while a gone cause (`Remembered`) or `Unknown` acts | `Unknown` |
+| nothing named, the server or nature acting: a fall, drowning, starving, lava, the void, a command | empty |
+| an effect or fire ticking | empty; `getAppliedAt()` says where it was applied |
+
+It is not one of the event's places: the hit happens where the victim is, the attacker's own position is never a place of its action, and whether a hit from inside an area counts against that area is a plugin's rule, not a fact. As a place it would also refuse a visitor standing in a protected spawn from hitting a cow outside it. A protection plugin that wants both ends judges `getSourceLocation()` alongside `getPlaces()` for the acts it means.
+
+A bridge states it: the constructor takes it, with no default, so a turret's hit can't be built without saying where it came from. A turret or gun firing a projectile entity needs nothing more than spawning it (its origin is where it was launched); a hitscan shot passes the shooter's or machine's block; a hit from somewhere nothing recorded passes `Unknown`. `Place.Nowhere` is refused: a hit sets out from somewhere in a world.
+
+With nobody listening to `EntityDamageEvent` nothing is worked out; with a listener, it is a few reads per hit, and one attachment read for a projectile.
+
+Not stated: a projectile turned back (a ghast's fireball punched back) still sets out from where it was first launched; an evoker's fangs whose evoker is gone (Minecraft then names nothing) read as harm nothing sent; `EntityKnockbackEvent`, `VehicleDamageEvent` and effect events (`EntityPotionEffectEvent`, a splash potion thrown out of a safe zone) don't state it yet.
 
 ### How an entity came to be
 
@@ -212,7 +239,7 @@ Payload: the entity and its position; each leaf adds what changed. A bridge whos
 | `EntitySpawnEvent` | an entity enters the world; how it came to be, for every entity (`getCause()`: placed with an item, launched, or spawned any other way), and Minecraft's reason for a mob (natural, spawner, egg, breeding, summoned, released from capture). Not for dropped items, experience orbs or falling blocks, whose cancelling would destroy what they carry; see `ItemDropEvent` | `addFreshEntity` |
 | `EntityRemoveEvent` | an entity leaves the world other than by dying, unloading or converting; cause (killed without damage, dismissed, converted in a mod's own code, captured, discarded) | `KillCommand`, for entities that don't die; `EndCrystal.hurt`, which shatters it; bridges for mods' own removals |
 | └ `EntityCaptureEvent` | an entity is stored into an item, block or carrier (bucket, mob catcher, Carry On); where it goes | `Bucketable`; bridges for catchers and carrying |
-| `EntityDamageEvent` | an entity is hurt; damage source, actor, and the weapon or spell; where an effect or fire dealing it was applied | `hurt`, and `ArmorStand.hurt`, which skips it |
+| `EntityDamageEvent` | an entity is hurt; damage source, actor, and the weapon or spell; where the hit set out from; where an effect or fire dealing it was applied | `hurt`, and `ArmorStand.hurt`, which skips it |
 | `EntityDeathEvent` | an entity is dying; drops, experience and where each item goes are editable; not cancellable | `die` |
 | └ `PlayerDeathEvent` | a player is dying; each item, including extra slots, is assigned to kept, dropped, grave or destroyed; the death line is editable and replaces vanilla's | `ServerPlayer.die` |
 | `EntityRegainHealthEvent` | healed, including absorption; where an effect healing it was applied | `heal`, `setAbsorptionAmount` |
