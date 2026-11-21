@@ -374,10 +374,10 @@ final class Nodes {
         node(ItemDamageEvent.class, ITEM_CHANGE, e -> placesOf(e.getHolder()));
         node(ItemRepairEvent.class, ITEM_CHANGE, e -> placesOf(e.getHolder()));
         node(ItemEnchantEvent.class, ITEM_CHANGE, e -> placesOf(e.getHolder()));
-        // Where the item lies, unless a player picks it up into their own inventory, and where it goes.
+        // Where the item lies, and where it goes: a player's own inventory is outside every region, the ground isn't.
         node(ItemPickupEvent.class, ITEM_PICKUP, e -> {
             List<Place> places = new ArrayList<>();
-            if (playersOwn(e.getDestination()).isEmpty()) places.add(Place.of(e.getItemEntity()));
+            places.add(Place.of(e.getItemEntity()));
             places.addAll(placesOf(e.getDestination()));
             return places;
         });

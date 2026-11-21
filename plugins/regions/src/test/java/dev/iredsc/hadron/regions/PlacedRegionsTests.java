@@ -254,6 +254,28 @@ public final class PlacedRegionsTests {
     }
 
     @HadronTest
+    void anOutsiderCantPickUpIntoTheirPocketsWhereItemPickupIsDenied(TestContext t) {
+        define(t, admin(t), "no-pickup", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        TestPlayer bob = t.player("bob");
+        standAt(bob, t.pos(3, 0, 0));
+        BlockPos at = t.pos(3, 0, 0);
+        ItemEntity diamond = new ItemEntity(t.level(), at.getX() + 0.5, at.getY(), at.getZ() + 0.5,
+                new ItemStack(Items.DIAMOND));
+        InventoryHolder pockets = new InventoryHolder.Entity(bob.player());
+        ItemPickupEvent open = new ItemPickupEvent(t.level(), diamond, pockets, new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(open);
+        t.assertFalse(open.isCancelled(), "nothing denies item.pickup yet, so bob may pick it up");
+        RegionStore store = ((RegionsPlugin) t.plugin()).regions();
+        Region region = store.get("no-pickup").orElseThrow();
+        store.put(region.withRules(region.rules().with(Subject.EVERYONE, Pattern.of(Node.of(Action.ITEM_PICKUP)),
+                java.util.Optional.of(Rules.Verdict.DENY))));
+        ItemPickupEvent denied = new ItemPickupEvent(t.level(), diamond, pockets, new Actor.Player(bob.player()));
+        t.plugin().getServer().getPluginManager().callEvent(denied);
+        t.assertTrue(denied.isCancelled(), "the diamond lies inside, where item.pickup is denied, though his pockets "
+                + "are outside every region");
+    }
+
+    @HadronTest
     void aDispenserOutsideCantDressAnArmorStandInside(TestContext t) {
         BlockPos at = t.pos(2, 0, 0);
         ArmorStand stand = EntityType.ARMOR_STAND.create(t.level());
