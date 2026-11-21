@@ -11,12 +11,23 @@ import net.minecraft.world.entity.decoration.HangingEntity;
 import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 
 /**
- * An item frame or painting is being hung. Cancel it and nothing is hung, and a player's item is not spent.
+ * An item frame or painting is being hung, however it came to be. Cancel it and nothing is hung, and a player's item
+ * is not spent. Its {@link #getCause()} is {@link EntitySpawnEvent.Cause#PLACED} when an item's use or a dispenser
+ * hung it and {@link EntitySpawnEvent.Cause#SPAWNED} otherwise (a summon, a mod's own code), never
+ * {@link EntitySpawnEvent.Cause#LAUNCHED}.
  */
 @FiredBy(core = FULL)
 public class HangingPlaceEvent extends EntitySpawnEvent {
-    public HangingPlaceEvent(HangingEntity hanging, Actor actor) {
-        super(hanging, null, actor);
+    /**
+     * @param cause {@link EntitySpawnEvent.Cause#PLACED} when an item's use or a placer hung it,
+     *     {@link EntitySpawnEvent.Cause#SPAWNED} otherwise
+     */
+    public HangingPlaceEvent(HangingEntity hanging, Cause cause, Actor actor) {
+        super(hanging, cause, null, actor);
+        if (cause == Cause.LAUNCHED) {
+            throw new IllegalArgumentException("a hanging entity is never launched; use Cause.PLACED when an item's "
+                    + "use or a placer hung it, Cause.SPAWNED otherwise");
+        }
     }
 
     @Override
