@@ -104,6 +104,7 @@ public final class RegionsTests {
         define(t, alice, "a-member-builds", t.pos(-2, 0, -2), t.pos(2, 2, 2));
         TestPlayer bob = t.player("bob");
         alice.command("rg addmember a-member-builds bob");
+        t.assertBlock(t.pos(1, 0, 1), Blocks.DIRT);
         bob.breakBlock(t.pos(1, 0, 1));
         t.assertBlock(t.pos(1, 0, 1), Blocks.AIR);
     }
@@ -113,6 +114,7 @@ public final class RegionsTests {
         define(t, admin(t), "an-outsider-builds-outside", t.pos(-2, 0, -2), t.pos(-1, 2, -1));
         TestPlayer bob = t.player("bob");
         t.setBlock(t.pos(2, 0, 2), Blocks.DIRT);
+        t.assertBlock(t.pos(2, 0, 2), Blocks.DIRT);
         bob.breakBlock(t.pos(2, 0, 2));
         t.assertBlock(t.pos(2, 0, 2), Blocks.AIR);
     }
@@ -212,6 +214,7 @@ public final class RegionsTests {
         alice.command("rg addowner owned-plot bob");
         bob.command("rg addmember owned-plot carol");
         t.assertChat(bob, "carol is a member of owned-plot");
+        t.assertBlock(t.pos(1, 0, 1), Blocks.DIRT);
         carol.breakBlock(t.pos(1, 0, 1));
         t.assertBlock(t.pos(1, 0, 1), Blocks.AIR);
         bob.command("rg remove owned-plot");
@@ -246,6 +249,7 @@ public final class RegionsTests {
         pearl.setPos(inside.getX() + 0.5, inside.getY() + 0.5, inside.getZ() + 0.5);
         pearl.setDeltaMovement(0, -0.5, 0);
         t.level().addFreshEntity(pearl);
+        t.assertTrue(t.level().getEntity(pearl.getId()) == pearl, "the pearl should be in the world before it lands");
         t.await("the pearl to land", pearl::isRemoved, 40);
         t.tick(2);
         t.assertTrue(bob.player().getBlockX() < t.pos(2, 0, 0).getX(),

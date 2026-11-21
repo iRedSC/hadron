@@ -243,6 +243,7 @@ public final class WorkedExampleTests {
         TestPlayer carol = t.player("carol");
         TestPlayer bob = t.player("bob");
         alice.command("rg addowner plot-1 carol");
+        t.assertBlock(carols, Blocks.DIRT);
         carol.breakBlock(carols);
         t.assertBlock(carols, Blocks.AIR);
         bob.breakBlock(bobs);

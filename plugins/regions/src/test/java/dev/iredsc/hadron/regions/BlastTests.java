@@ -69,6 +69,7 @@ public final class BlastTests {
         alice.command("rg deny vault world entity.hurt.misc entity.remove.misc");
         ItemEntity inside = diamond(t, t.pos(3, 0, 0));
         ItemEntity outside = diamond(t, t.pos(-2, 0, 0));
+        t.assertTrue(t.level().getEntity(outside.getId()) == outside, "the diamond outside should be there first");
         BlockPos blast = t.pos(0, 0, 0);
         t.level().explode(null, blast.getX() + 0.5, blast.getY(), blast.getZ() + 0.5, 5f,
                 Level.ExplosionInteraction.TNT);
@@ -96,8 +97,12 @@ public final class BlastTests {
         alice.command("rg addmember vault carol");
         carol.moveTo(t.pos(-4, 0, 0));
         BlockPos dirt = t.pos(4, 0, 0);
-        t.setBlock(dirt, Blocks.DIRT);
+        try (Actors.Scope scope = Actors.push(new Actor.Server("test setup"))) {
+            t.setBlock(dirt, Blocks.DIRT);
+        }
+        t.assertBlock(dirt, Blocks.DIRT);
         ItemEntity item = diamond(t, t.pos(2, 0, 0));
+        t.assertTrue(t.level().getEntity(item.getId()) == item, "the diamond inside should be there first");
         tnt(t, carol, t.pos(3, 0, 0));
         t.assertTrue(t.level().getBlockState(dirt).isAir(), "carol's blast in her own region should break the dirt");
         t.assertTrue(item.isRemoved(), "carol's blast in her own region should destroy the diamond");
