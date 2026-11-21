@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
@@ -15,6 +14,8 @@ import org.junit.jupiter.api.Test;
 class BoxesTest {
     private static final ResourceLocation WORLD = ResourceLocation.withDefaultNamespace("overworld");
     private static final BoundingBox CHUNK = new BoundingBox(0, -64, 0, 15, 319, 15);
+    private static final Who BOB = new Who.Person(new UUID(0, 2));
+    private static final Node USE = Node.of(Action.INVENTORY_OPEN);
 
     @Test
     void aBoxIsCoveredOnlyWhenEveryBlockIs() {
@@ -37,20 +38,19 @@ class BoxesTest {
     @Test
     void aHigherPlotOverTheWholeTownAreaDecidesForTheArea() {
         Region town = Region.of("town", WORLD, CHUNK);
-        Region plot = Region.of("plot", WORLD, CHUNK).withPriority(1).withFlag(Flag.USE, true);
+        Region plot = Region.of("plot", WORLD, CHUNK).withPriority(1).withRules(Rules.none());
         List<List<Region>> may = Protection.anywhereIn(List.of(town, plot), CHUNK);
         assertEquals(List.of(List.of(plot)), may, "the plot covers all of the town here, so the town never decides");
-        Optional<UUID> bob = Optional.of(new UUID(0, 2));
-        assertTrue(FlagRules.refusingAny(may, Flag.USE, bob).isEmpty());
+        assertTrue(Resolve.refusingAny(may, BOB, USE).isEmpty());
     }
 
     @Test
     void aHigherRegionElsewhereDoesntSpeakForAnother() {
         Region vault = Region.of("vault", WORLD, new BoundingBox(0, 0, 0, 3, 3, 3));
         Region park = Region.of("park", WORLD, new BoundingBox(10, 0, 0, 13, 3, 3)).withPriority(1)
-                .withFlag(Flag.USE, true);
+                .withRules(Rules.none());
         List<List<Region>> may = Protection.anywhereIn(List.of(vault, park), null);
         assertTrue(may.contains(List.of()), "a whole world always has room outside every region");
-        assertTrue(FlagRules.refusingAny(may, Flag.USE, Optional.of(new UUID(0, 2))).isPresent());
+        assertTrue(Resolve.refusingAny(may, BOB, USE).isPresent());
     }
 }

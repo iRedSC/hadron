@@ -14,6 +14,7 @@ import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.game.ServerboundMoveVehiclePacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerInputPacket;
@@ -38,7 +39,7 @@ public final class EntryTests {
         for (int i = 0; i < boxes.length; i++) {
             ((RegionsPlugin) t.plugin()).regions().put(Region.of(id + i, t.level().dimension().location(),
                     BoundingBox.fromCorners(t.pos(boxes[i][0], 0, boxes[i][1]), t.pos(boxes[i][2], 8, boxes[i][3])))
-                    .withFlag(Flag.ENTRY, false));
+                    .withRules(Rules.fresh().withFlag(Bundle.ENTRY, Optional.of(Rules.Verdict.DENY))));
         }
     }
 

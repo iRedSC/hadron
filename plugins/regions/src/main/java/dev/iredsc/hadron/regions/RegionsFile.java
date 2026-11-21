@@ -179,7 +179,7 @@ final class RegionsFile {
         Set<UUID> owners = people(id, s, "owners");
         Set<UUID> members = people(id, s, "members");
         return new Region(id, world, BoundingBox.fromCorners(min, max), s.getInt("priority", 0), owners, members,
-                Map.of(), rules(id, s));
+                rules(id, s));
     }
 
     /** A region's rules: a map of subjects, each holding allow and deny lists of nodes and flags. */

@@ -5,94 +5,37 @@ import dev.iredsc.hadron.api.event.ActionEvent;
 import dev.iredsc.hadron.api.event.Cancellable;
 import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.Event;
-import dev.iredsc.hadron.api.event.entity.EntityAirChangeEvent;
-import dev.iredsc.hadron.api.event.entity.EntityCaptureEvent;
-import dev.iredsc.hadron.api.event.entity.EntityCombustEvent;
-import dev.iredsc.hadron.api.event.entity.EntityEvent;
-import dev.iredsc.hadron.api.event.entity.EntityTargetEvent;
-import dev.iredsc.hadron.api.event.entity.EntityVelocityEvent;
-import dev.iredsc.hadron.api.event.entity.ProjectileHitEvent;
-import dev.iredsc.hadron.api.event.item.EquipEvent;
-import dev.iredsc.hadron.api.event.item.ItemChangeEvent;
-import dev.iredsc.hadron.api.event.item.ItemConsumeEvent;
-import dev.iredsc.hadron.api.event.item.ItemCraftEvent;
-import dev.iredsc.hadron.api.event.item.ItemEvent;
-import dev.iredsc.hadron.api.event.item.ItemPickupEvent;
-import dev.iredsc.hadron.api.event.item.ItemSmeltEvent;
-import dev.iredsc.hadron.api.event.item.ItemUseEvent;
-import dev.iredsc.hadron.api.event.item.TradeEvent;
-import dev.iredsc.hadron.api.event.world.TimeSkipEvent;
-import dev.iredsc.hadron.api.event.world.WeatherChangeEvent;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.EventPriority;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.Place;
-import dev.iredsc.hadron.api.event.block.BlockChange;
-import dev.iredsc.hadron.api.event.block.BlockDropItemEvent;
 import dev.iredsc.hadron.api.event.block.BlockEvent;
-import dev.iredsc.hadron.api.event.block.BlockFromToEvent;
-import dev.iredsc.hadron.api.event.block.BlockMoveEvent;
-import dev.iredsc.hadron.api.event.block.BlockSpreadEvent;
-import dev.iredsc.hadron.api.event.block.BlockUseEvent;
-import dev.iredsc.hadron.api.event.entity.ArmorStandManipulateEvent;
-import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
-import dev.iredsc.hadron.api.event.resource.ResourceEvent;
-import dev.iredsc.hadron.api.event.resource.ResourceHolder;
-import dev.iredsc.hadron.api.event.entity.EntityMountEvent;
-import dev.iredsc.hadron.api.event.inventory.InventoryMoveItemEvent;
-import dev.iredsc.hadron.api.event.inventory.InventoryHolder;
-import dev.iredsc.hadron.api.event.block.BlockIgniteEvent;
-import dev.iredsc.hadron.api.event.block.BlockBurnEvent;
-import net.minecraft.world.effect.MobEffectCategory;
-import dev.iredsc.hadron.api.event.inventory.InventoryOpenEvent;
-import dev.iredsc.hadron.api.event.inventory.InventoryClickEvent;
-import dev.iredsc.hadron.api.event.entity.EntityPotionEffectEvent;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.MobCategory;
-import dev.iredsc.hadron.api.event.inventory.InventoryEvent;
-import dev.iredsc.hadron.api.event.inventory.InventoryChangeEvent;
-import dev.iredsc.hadron.api.event.entity.EntityRemoveEvent;
-import dev.iredsc.hadron.api.event.entity.EntityDismountEvent;
-import dev.iredsc.hadron.api.event.entity.EntityMoveEvent;
-import dev.iredsc.hadron.api.event.entity.EntityUseEvent;
-import dev.iredsc.hadron.api.event.entity.HangingBreakEvent;
-import dev.iredsc.hadron.api.event.entity.ItemFrameChangeEvent;
-import dev.iredsc.hadron.api.event.entity.VehicleDamageEvent;
-import dev.iredsc.hadron.api.event.entity.EntitySpawnEvent;
-import dev.iredsc.hadron.api.event.entity.EntityTeleportEvent;
-import dev.iredsc.hadron.api.event.world.ExplosionEvent;
-import dev.iredsc.hadron.api.event.world.ExplosionPrimeEvent;
+import dev.iredsc.hadron.api.event.entity.EntityEvent;
+import dev.iredsc.hadron.api.event.player.PlayerEvent;
 import java.util.ArrayList;
-import net.minecraft.resources.ResourceLocation;
-import java.util.Map;
 import java.util.HashMap;
-import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
-import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
-import net.minecraft.world.entity.Entity;
-import net.minecraft.world.entity.decoration.ArmorStand;
-import net.minecraft.world.entity.decoration.HangingEntity;
-import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
-import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.entity.vehicle.VehicleEntity;
 import net.minecraft.world.level.levelgen.structure.BoundingBox;
 import org.jspecify.annotations.Nullable;
 
 /**
- * Refuses what regions forbid, through Hadron's events, so it covers every mod whose bridge is installed and treats
- * every mod without one as an outsider. Who is asked is the actor's {@link Actor#actingFor()}: a player, a machine's
- * owner, a drone's operator. The server is always let through; the world on its own is held to
- * {@link FlagRules#refusingCrossing}.
+ * Refuses what regions forbid, through one listener: {@link Nodes} turns each event into the nodes it asks, at the
+ * places its event states, and {@link Resolve} answers each from the regions there, for whoever {@link Who} says is
+ * behind it. So it covers every mod whose bridge is installed, and an act nothing maps fails closed as
+ * {@link Action#OTHER}. The server, and a player with {@code /region bypass} on, are never asked.
  */
 final class Protection implements Listener {
     private final RegionStore store;
     private final Feedback feedback;
     private final Bypass bypass;
+    private final Nodes nodes = new Nodes();
+
     Protection(RegionStore store, Feedback feedback, Bypass bypass) {
         this.store = store;
         this.feedback = feedback;
@@ -100,484 +43,150 @@ final class Protection implements Listener {
     }
 
     @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void block(BlockEvent e) {
-        // Drops follow a break this already decided.
-        if (!(e instanceof Cancellable c) || e instanceof BlockDropItemEvent) return;
-        ServerLevel level = e.getLevel();
-        if (!store.hasAny(level)) return;
-        Flag flag = e instanceof BlockUseEvent ? Flag.USE : Flag.BUILD;
-        // A ship's crew enters where it carries them, as a boat's riders do.
-        if (e instanceof BlockMoveEvent m && entry(e, c, null, List.of(), m.getCarried())) return;
-        if (e.getActor() instanceof Actor.Nature) {
-            List<Region> from = source(e).map(at -> store.at(level, at)).orElse(List.of());
-            for (BlockPos pos : touched(e)) {
-                if (FlagRules.refusingCrossing(from, store.at(level, pos)).isPresent()) {
-                    c.setCancelled(true);
-                    return;
+    private void on(Event event) {
+        if (!(event instanceof Cancellable c) || store.all().isEmpty()) return;
+        List<Ask> asks = nodes.asks(event);
+        if (asks.isEmpty()) return;
+        Actor actor = actorOf(event);
+        for (Ask ask : asks) {
+            boolean refused = switch (ask) {
+                case Ask.Act a -> act(event, actor, a);
+                case Ask.Spare s -> {
+                    spare(event, actor, s);
+                    yield false;
                 }
-            }
-            return;
-        }
-        for (BlockPos pos : touched(e)) {
-            Optional<Region> no = refusing(e, level, pos, flag);
-            if (no.isPresent()) {
+                case Ask.Enter en -> enter(actor, en);
+            };
+            if (refused) {
                 c.setCancelled(true);
-                tell(e, pos, no.get());
                 return;
             }
         }
     }
 
-    /** Spares the protected blocks; the rest of the blast goes off. */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void explosion(ExplosionEvent e) {
-        ServerLevel level = e.getLevel();
-        if (!store.hasAny(level)) return;
-        if (e.getActor() instanceof Actor.Nature) {
-            List<Region> from = store.at(level, BlockPos.containing(e.getLocation()));
-            e.blockList().removeIf(pos -> FlagRules.refusingCrossing(from, store.at(level, pos)).isPresent());
-            return;
+    /** Who did it: the event's actor, or for a player's own event the player. */
+    private static Actor actorOf(Event event) {
+        return switch (event) {
+            case ActionEvent a -> a.getActor();
+            case PlayerEvent p -> new Actor.Player(p.getPlayer());
+            default -> Actor.Unknown.INSTANCE;
+        };
+    }
+
+    /** The online player acting for it, the one {@code /region bypass} lets through. */
+    private static Optional<ServerPlayer> actingPlayer(Event event) {
+        return switch (event) {
+            case ActionEvent a -> a.getActingPlayer();
+            case PlayerEvent p -> Optional.of(p.getPlayer());
+            default -> Optional.empty();
+        };
+    }
+
+    private Optional<Who> who(Event event, Actor actor, List<Place> natureHome) {
+        if (actingPlayer(event).map(bypass::active).orElse(false)) return Optional.empty();
+        return Who.of(actor, () -> natureHome);
+    }
+
+    /** Whether a region at any of the act's places refuses it; shows who is told where. */
+    private boolean act(Event event, Actor actor, Ask.Act a) {
+        List<Place> home = a.home().orElseGet(() -> event instanceof BlockEvent b
+                ? List.of(Place.Spot.at(b.getLevel(), b.getPos())) : a.places());
+        Optional<Who> who = who(event, actor, home);
+        if (who.isEmpty()) return false;
+        for (Place place : a.places()) {
+            for (List<Region> here : mayBeIn(place)) {
+                Optional<Resolve.Decision> no = Resolve.refusing(here, who.get(), a.node());
+                if (no.isEmpty()) continue;
+                tell(actor, no.get(), place, event);
+                return true;
+            }
         }
-        e.blockList().removeIf(pos -> refusing(e, level, pos, Flag.BUILD).isPresent());
+        return false;
+    }
+
+    /** Spares each block a region keeps; the rest of the blast goes off. */
+    private void spare(Event event, Actor actor, Ask.Spare s) {
+        Optional<Who> who = who(event, actor, s.home());
+        if (who.isEmpty()) return;
+        s.blocks().removeIf(pos -> {
+            Optional<Resolve.Decision> no = Resolve.refusing(store.at(s.level(), pos), who.get(), s.node());
+            no.ifPresent(d -> feedback.watched(s.level(), pos, d));
+            return no.isPresent();
+        });
     }
 
     /**
-     * Entry, for everything that takes a player somewhere: walking, a vehicle, a piston's push, a teleport, boarding
-     * and getting off. Each event states where the entity and everyone it carries sets out and ends up, before any
-     * of it shows; nothing here works that out.
+     * Whether a player it moves may not enter where they end up, asked as that player: each one moved or carried,
+     * from where that one sets out to where it ends up, and from where the carrier sets out to where it ends up. Only
+     * regions a player is not already in can refuse, so anyone inside can walk out. A move whose riders nobody can
+     * name is asked as anyone, wherever its bound reaches. Everyone going is shown where they were refused.
      */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void move(EntityMoveEvent e) {
-        ServerLevel level = e.getLevel();
-        carries(e, Place.Spot.at(level, e.getFromBlock()), Place.Spot.at(level, e.getToBlock()), e.getCarried());
-    }
-
-    /** An ender pearl, chorus fruit, a portal, a mod's teleporter: judged where it lands, which the event states. */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void teleport(EntityTeleportEvent e) {
-        carries(e, Place.Spot.at(e.getFromLevel(), e.getFrom()), Place.Spot.at(e.getToLevel(), e.getTo()),
-                e.getCarried());
-    }
-
-    /**
-     * Boarding is entering the seat, which can be another block than the mount's, and it moves who the rider brings
-     * and who is already aboard and has to shift: the event states each. What carries them all is the mount.
-     */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void mount(EntityMountEvent e) {
-        Place from = Place.Spot.at(e.getLevel(), e.getPosition());
-        entry(e, e, new Carried.Ride(e.getEntity(), from, Place.of(e.getMount())),
-                List.of(new Carried.Ride(e.getEntity(), from, Place.Spot.at(e.getLevel(), e.getTo()))), e.getCarried());
-    }
-
-    /** Getting off is entering where the rider is set down: beside a boat at a region's edge can be inside it. */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void dismount(EntityDismountEvent e) {
-        carries(e, Place.Spot.at(e.getLevel(), e.getPosition()), Place.Spot.at(e.getLevel(), e.getTo()),
-                Carried.none());
-    }
-
-    /** {@link #entry} for an entity whose own ride, {@code from} to {@code to}, is what carries everyone else. */
-    private <E extends EntityEvent & Cancellable> void carries(E e, Place from, Place to, Carried carried) {
-        Carried.Ride ride = new Carried.Ride(e.getEntity(), from, to);
-        entry(e, e, ride, List.of(ride), carried);
-    }
-
-    /**
-     * Refuses {@code e} if a player it moves may not enter where they end up: {@code moved} and everyone
-     * {@code carried}, each judged from where that one sets out to where that one ends up, and from where
-     * {@code carrier}, the entity carrying them all, sets out to where it ends up. Both, because a seat can be lower
-     * or further over than the vehicle it is in: a boat's riders have their feet in the ground it stands on. Null when
-     * no entity carries them (a ship's crew). The server's own moves and bypassing players are let through. Everyone
-     * going is shown where they were refused.
-     *
-     * @return whether it was refused.
-     */
-    private boolean entry(ActionEvent e, Cancellable c, Carried.@Nullable Ride carrier, List<Carried.Ride> moved,
-            Carried carried) {
-        if (e.getActor() instanceof Actor.Server) return false;
-        List<Carried.Ride> going = new ArrayList<>(moved);
-        Optional<Region> no = Optional.empty();
-        switch (carried) {
+    private boolean enter(Actor actor, Ask.Enter en) {
+        if (actor instanceof Actor.Server) return false;
+        Node node = en.node();
+        List<Carried.Ride> going = new ArrayList<>(en.moved());
+        Optional<Resolve.Decision> no = Optional.empty();
+        switch (en.carried()) {
             case Carried.Known k -> going.addAll(k.rides());
-            // Nobody can say who goes along, so an outsider may, anywhere its bound reaches.
             case Carried.Unknown u -> {
-                for (Place within : u.places()) no = refusingEntry(List.of(List.of()), within, Optional.empty());
+                for (Place within : u.places()) {
+                    if (no.isEmpty()) no = refusingEntry(List.of(List.of()), within, new Who.Anyone(), node);
+                }
             }
         }
         going.removeIf(r -> !(r.entity() instanceof ServerPlayer p) || bypass.active(p));
+        Optional<Carried.Ride> carrier = en.carrier();
         for (Carried.Ride r : going) {
-            Optional<UUID> who = Optional.of(r.entity().getUUID());
-            if (no.isEmpty()) no = refusingEntry(mayBeIn(r.from()), r.to(), who);
-            if (no.isEmpty() && carrier != null && r != carrier) {
-                no = refusingEntry(mayBeIn(carrier.from()), carrier.to(), who);
+            Who who = new Who.Person(r.entity().getUUID());
+            if (no.isEmpty()) no = refusingEntry(mayBeIn(r.from()), r.to(), who, node);
+            if (no.isEmpty() && carrier.isPresent() && r != carrier.get()) {
+                no = refusingEntry(mayBeIn(carrier.get().from()), carrier.get().to(), who, node);
             }
         }
         if (no.isEmpty()) return false;
-        c.setCancelled(true);
         for (Carried.Ride r : going) {
             if (r.entity() instanceof ServerPlayer p) {
-                feedback.refused(p, r.to() instanceof Place.Spot s ? s.box().getCenter() : p.blockPosition(), no.get());
+                BlockPos at = r.to() instanceof Place.Spot s ? s.box().getCenter() : p.blockPosition();
+                feedback.refused(p, at, no.get());
+                feedback.watched(p.serverLevel(), at, no.get());
             }
         }
         return true;
     }
 
-    /** The region refusing {@code who} entry to {@code to} from regions they may be leaving, wherever {@code to} may be. */
-    private Optional<Region> refusingEntry(List<List<Region>> from, Place to, Optional<UUID> who) {
+    /** The decision refusing {@code who} entry to {@code to} from regions they may be leaving, wherever it may be. */
+    private Optional<Resolve.Decision> refusingEntry(List<List<Region>> from, Place to, Who who, Node node) {
         for (List<Region> left : from) {
             for (List<Region> entered : mayBeIn(to)) {
-                Optional<Region> no = FlagRules.refusingEntry(left, entered, who);
+                if (left.containsAll(entered)) continue;
+                Optional<Resolve.Decision> no = Resolve.refusing(entered, who, node, left);
                 if (no.isPresent()) return no;
             }
         }
         return Optional.empty();
     }
 
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void damage(EntityDamageEvent e) {
-        Entity victim = e.getEntity();
-        if (victim instanceof ServerPlayer hurt) {
-            pvp(e, hurt, e.getDamager()).ifPresent(no -> {
-                e.setCancelled(true);
-                tell(e, hurt.blockPosition(), no);
-            });
-            return;
-        }
-        if (!kept(victim)) return;
-        List<Place> places = new ArrayList<>(e.getPlaces());
-        // With nobody behind it, a hit also comes from where whoever dealt it stands: a skeleton outside, whose arrow
-        // is already inside when it lands.
-        if (worldOnItsOwn(e.getActor())) e.getDamager().ifPresent(d -> places.add(Place.of(d)));
-        refuse(e, e, places, Flag.BUILD, Optional.of(victim.blockPosition()));
-    }
-
     /**
-     * Whether a region keeps this entity from outsiders: everything in it but people, who are PvP's, and monsters,
-     * which a visitor must be able to fight. What a monster is, Minecraft states for every type, a mod's too.
+     * Marks a refusal where it happened: to a player acting directly, and to whoever watches the region. Machines and
+     * mobs are refused quietly but for watchers.
      */
-    private static boolean kept(Entity entity) {
-        return !(entity instanceof Player) && entity.getType().getCategory() != MobCategory.MONSTER;
-    }
-
-    /**
-     * A harmful effect put on a player (a splash of poison, a lingering cloud) is an attack, refused where the hit
-     * would be: its later ticks come from nobody, so this is the one moment to ask. Put on an animal or villager, it
-     * is hurting it.
-     */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void effect(EntityPotionEffectEvent e) {
-        if (e.getAction() == EntityPotionEffectEvent.Action.REMOVED
-                || e.getEffect().value().getCategory() != MobEffectCategory.HARMFUL) return;
-        if (!(e.getEntity() instanceof ServerPlayer hurt)) {
-            if (kept(e.getEntity())) entityChange(e, e, e.getEntity(), Flag.BUILD);
-            return;
+    private void tell(Actor actor, Resolve.Decision no, Place place, Event event) {
+        ServerLevel level = null;
+        BlockPos at = null;
+        if (place instanceof Place.Spot s) {
+            level = s.level();
+            at = s.isBlock() ? new BlockPos(s.box().minX(), s.box().minY(), s.box().minZ()) : s.box().getCenter();
+        } else if (event instanceof EntityEvent e) {
+            level = e.getLevel();
+            at = e.getBlockPos();
+        } else if (event instanceof BlockEvent b) {
+            level = b.getLevel();
+            at = b.getPos();
         }
-        pvp(e, hurt, Optional.empty()).ifPresent(no -> {
-            e.setCancelled(true);
-            tell(e, hurt.blockPosition(), no);
-        });
-    }
-
-    /** Setting a player alight is an attack, refused where a hit would be. */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void ignite(EntityCombustEvent e) {
-        if (!(e.getEntity() instanceof ServerPlayer hurt)) return;
-        pvp(e, hurt, Optional.empty()).ifPresent(no -> {
-            e.setCancelled(true);
-            tell(e, hurt.blockPosition(), no);
-        });
-    }
-
-    /** The region refusing this attack on {@code hurt}, if it is PvP and a region on either side denies it. */
-    private Optional<Region> pvp(ActionEvent e, ServerPlayer hurt, Optional<Entity> damager) {
-        if (e.getActor() instanceof Actor.Server) return Optional.empty();
-        // Whoever answers for it, online or not: a turret keeps its owner while they're away. Anything else made to
-        // hurt (a machine, an arrow, something unknown) is an outsider when nobody owns it; only the world (lava, a
-        // fall) and a mob acting on its own aren't PvP.
-        Optional<UUID> who = e.getActor().actingFor();
-        if (who.isPresent() && who.get().equals(hurt.getUUID())) return Optional.empty();
-        if (who.isEmpty() && (e.getActor() instanceof Actor.Nature
-                || e.getActor() instanceof Actor.EntityActor a && a.entity() instanceof Mob)) return Optional.empty();
-        // Every side counts, each in its own world: nobody fights out of a safe zone or into one, even across worlds.
-        List<Place.Spot> sides = new ArrayList<>(4);
-        sides.add(Place.Spot.at(hurt.serverLevel(), hurt.blockPosition()));
-        e.getActingPlayer().ifPresent(a -> sides.add(Place.Spot.at(a.serverLevel(), a.blockPosition())));
-        damager.ifPresent(d -> spotOf(d).ifPresent(sides::add));
-        // Where the attack comes from: a turret block, a fake player, a thrown potion, a mob someone controls.
-        switch (e.getActor()) {
-            case Actor.Machine m -> sides.add(Place.Spot.at(m.level(), m.pos()));
-            case Actor.FakePlayer f -> sides.add(Place.Spot.at(f.fake().serverLevel(), f.fake().blockPosition()));
-            case Actor.EntityActor a -> spotOf(a.entity()).ifPresent(sides::add);
-            default -> { }
+        if (actor instanceof Actor.Player p) {
+            feedback.refused(p.player(), at != null ? at : p.player().blockPosition(), no);
         }
-        for (Place.Spot side : sides) {
-            Optional<Region> no = FlagRules.refusing(store.at(side.level(), new BlockPos(side.box().minX(),
-                    side.box().minY(), side.box().minZ())), Flag.PVP, who);
-            if (no.isPresent()) return no;
-        }
-        return Optional.empty();
-    }
-
-    private static Optional<Place.Spot> spotOf(Entity entity) {
-        return entity.level() instanceof ServerLevel level ? Optional.of(Place.Spot.at(level, entity.blockPosition()))
-                : Optional.empty();
-    }
-
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void use(EntityUseEvent e) {
-        Entity target = e.getEntity();
-        // People aren't a region's: trading items with a player, healing one, is between the two of them.
-        if (target instanceof Player) return;
-        entityChange(e, e, target, target instanceof ArmorStand || target instanceof HangingEntity ? Flag.BUILD
-                : Flag.USE);
-    }
-
-    /** Taking, giving or swapping an armor stand's equipment, from a click or a mod's editing screen: building. */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void armorStand(ArmorStandManipulateEvent e) {
-        entityChange(e, e, e.getEntity(), Flag.BUILD);
-    }
-
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void hangingBreak(HangingBreakEvent e) {
-        entityChange(e, e, e.getEntity(), Flag.BUILD);
-    }
-
-    /** Hitting a boat or minecart wears it down and breaks it: building. */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void vehicleHit(VehicleDamageEvent e) {
-        entityChange(e, e, e.getEntity(), Flag.BUILD);
-    }
-
-    /** A frame's item going in, coming out or turning is building, whoever or whatever does it. */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void frame(ItemFrameChangeEvent e) {
-        entityChange(e, e, e.getEntity(), Flag.BUILD);
-    }
-
-    /**
-     * Placing an object is building: item frames and paintings, armor stands, boats and minecarts, end crystals. Mobs
-     * aren't: regions don't decide what spawns.
-     */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void spawn(EntitySpawnEvent e) {
-        Entity spawned = e.getEntity();
-        // Every place it names: an item frame's wall as well as the frame, so one can't hang inward across an edge.
-        if (placed(spawned)) refuse(e, e, List.copyOf(e.getPlaces()), Flag.BUILD, Optional.of(spawned.blockPosition()));
-    }
-
-    /**
-     * Removing an animal, a villager or a placed object outright (a mod's instant kill, a mob catcher, /kill on a
-     * stand) is building, as killing or breaking it is. Capturing anything into a block (a mob jar) builds there too;
-     * carried off by a player, it goes where they go.
-     */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void remove(EntityRemoveEvent e) {
-        List<Place> places = new ArrayList<>();
-        // It counts everywhere its event says it is: its block, and a frame's or painting's wall.
-        if (kept(e.getEntity())) places.addAll(e.getEntityPlaces());
-        if (e instanceof EntityCaptureEvent capture) {
-            switch (capture.getStorage()) {
-                case EntityCaptureEvent.Storage.Block b -> places.add(Place.Spot.at(b.level(), b.pos()));
-                case EntityCaptureEvent.Storage.Carried c -> places.add(placeOf(c.carrier()));
-                case EntityCaptureEvent.Storage.Item i -> { }
-            }
-        }
-        if (!places.isEmpty()) refuse(e, e, places, Flag.BUILD, Optional.of(e.getEntity().blockPosition()));
-    }
-
-    /**
-     * Inventories in regions: a menu opened or clicked in, items moved in or out by a hopper, a pipe, a machine.
-     * Someone behind it (a player, a machine's owner) needs {@code use} wherever each inventory it reaches stands,
-     * even after the menu is open: a click is checked against every inventory behind the menu, since a shift-click can
-     * move items into any of them. The world on its own (a hopper nobody owns) is held to
-     * {@link FlagRules#refusingCrossing} both ways, as a piston is. An inventory with no place in a world (linked storage,
-     * a plugin's own menu) stands outside every region. So does a player's own inventory, and what they carry in it
-     * (a backpack): it goes where they go, so no region's {@code use} covers it, yet a hopper nobody owns can't empty a
-     * chest inside into a player outside.
-     */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void inventory(InventoryEvent e) {
-        if (!(e instanceof Cancellable c) || trusted(e)) return;
-        Set<InventoryHolder> holders = new LinkedHashSet<>();
-        holders.add(e.getHolder());
-        if (e instanceof InventoryChangeEvent change) holders.addAll(change.getHolders());
-        if (e instanceof InventoryClickEvent click) {
-            holders.add(click.getMenuHolder());
-            holders.addAll(click.getSlotHolders());
-        }
-        if (e instanceof InventoryOpenEvent open) {
-            holders.add(open.getMenuHolder());
-            holders.addAll(open.getSlotHolders());
-        }
-        List<Place> places = new ArrayList<>();
-        for (InventoryHolder holder : holders) places.addAll(placesOf(holder));
-        refuse(e, c, places, Flag.USE,
-                e.getHolder() instanceof InventoryHolder.Block b ? Optional.of(b.pos()) : Optional.empty());
-    }
-
-    /**
-     * Energy, fluids and other resources a mod moves, makes or spends: draining a protected battery, a pipe filling a
-     * tank. Held to {@code use}, as inventories are, wherever each holder stands; a player's own (their experience,
-     * what they carry) stands outside every region, as their inventory does.
-     */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void resource(ResourceEvent e) {
-        if (trusted(e)) return;
-        List<Place> places = new ArrayList<>();
-        List<ResourceHolder> holders = e.getHolders();
-        if (holders.isEmpty()) places.addAll(e.getPlaces());
-        for (ResourceHolder holder : holders) {
-            Optional<UUID> own = switch (holder) {
-                case ResourceHolder.Entity en when en.entity() instanceof Player p -> Optional.of(p.getUUID());
-                case ResourceHolder.Item i -> playersOwn(i.heldIn());
-                default -> Optional.empty();
-            };
-            if (own.isPresent()) {
-                places.add(Place.Nowhere.player(own.get()));
-            } else {
-                places.addAll(Place.of(holder));
-            }
-        }
-        refuse(e, e, places, Flag.USE, Optional.empty());
-    }
-
-    /**
-     * An item used, eaten, crafted, changed, traded or picked up: held to {@code use} where what holds it stands, and
-     * putting one on (a dispenser dressing an armor stand) to {@code build}. What a player holds, eats or picks up is
-     * their own, so it stands outside every region; a loose item a player picks up isn't a region's either. Drops,
-     * merges, despawns and switching slots aren't a region's business.
-     */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void item(ItemEvent e) {
-        if (!(e instanceof Cancellable c) || trusted(e)) return;
-        List<Place> places = new ArrayList<>();
-        Flag flag = Flag.USE;
-        switch (e) {
-            case ItemChangeEvent ch -> places.addAll(placesOf(ch.getHolder()));
-            case ItemCraftEvent cr -> places.addAll(placesOf(cr.getHolder()));
-            case ItemSmeltEvent sm -> places.addAll(placesOf(sm.getHolder()));
-            case TradeEvent tr -> places.addAll(placesOf(tr.getTrader()));
-            case ItemConsumeEvent co -> places.add(placeOf(co.getConsumer()));
-            case ItemUseEvent us -> places.add(placeOf(us.getUser()));
-            case EquipEvent eq -> {
-                places.add(placeOf(eq.getEntity()));
-                flag = Flag.BUILD;
-            }
-            case ItemPickupEvent pk -> {
-                if (playersOwn(pk.getDestination()).isEmpty()) places.add(Place.of(pk.getItemEntity()));
-                places.addAll(placesOf(pk.getDestination()));
-            }
-            default -> {
-                return;
-            }
-        }
-        refuse(e, c, places, flag, Optional.empty());
-    }
-
-    /**
-     * Every other action that can be refused, held to {@code build} wherever it happens: a mod's change to an
-     * entity's data, shearing, taming, breeding, leashing, setting alight, a portal or lightning made, chunks
-     * force-loaded, a tick accelerator. The handlers above decide their own kinds; moving, aiming and breathing are
-     * anyone's, weather and time are a whole world's, a projectile's hit and an explosion about to go off are decided
-     * by what they do (damage, the blocks they change), what happens to a player themselves is no region's, but PvP's,
-     * and what happens to a monster is nobody's.
-     */
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
-    private void action(Event ev) {
-        if (!(ev instanceof ActionEvent e) || !(ev instanceof Cancellable c) || decidedElsewhere(ev) || trusted(e)) {
-            return;
-        }
-        if (ev instanceof EntityEvent en && !kept(en.getEntity())) return;
-        refuse(e, c, List.copyOf(e.getPlaces()), Flag.BUILD, Optional.empty());
-    }
-
-    /** Kinds a handler above decides, or that no region decides. */
-    private static final List<Class<?>> DECIDED_ELSEWHERE = List.of(BlockEvent.class, ExplosionEvent.class,
-            InventoryEvent.class, ResourceEvent.class, ItemEvent.class, EntityMoveEvent.class, EntityTeleportEvent.class,
-            EntityMountEvent.class, EntityDismountEvent.class, EntityDamageEvent.class, EntityPotionEffectEvent.class,
-            EntityUseEvent.class, ArmorStandManipulateEvent.class, HangingBreakEvent.class, VehicleDamageEvent.class,
-            ItemFrameChangeEvent.class, EntitySpawnEvent.class, EntityRemoveEvent.class, EntityVelocityEvent.class,
-            EntityTargetEvent.class, EntityAirChangeEvent.class, ProjectileHitEvent.class, ExplosionPrimeEvent.class,
-            WeatherChangeEvent.class, TimeSkipEvent.class);
-
-    private static boolean decidedElsewhere(Event e) {
-        for (Class<?> kind : DECIDED_ELSEWHERE) if (kind.isInstance(e)) return true;
-        return false;
-    }
-
-    /** Where an entity stands for regions: outside every one for a player, who goes where they go. */
-    private static Place placeOf(Entity entity) {
-        return entity instanceof Player p ? Place.Nowhere.player(p.getUUID()) : Place.of(entity);
-    }
-
-    /** Where an inventory stands for regions: outside every one for a player's own, or what they carry in it. */
-    private static List<Place> placesOf(InventoryHolder holder) {
-        Optional<UUID> own = playersOwn(holder);
-        return own.isPresent() ? List.of(Place.Nowhere.player(own.get())) : Place.of(holder);
-    }
-
-    /** The player whose own inventory this is, or is carried in (a backpack in their pocket, however deep). */
-    private static Optional<UUID> playersOwn(InventoryHolder holder) {
-        return switch (holder) {
-            case InventoryHolder.Entity en when en.entity() instanceof Player p -> Optional.of(p.getUUID());
-            case InventoryHolder.Item i -> playersOwn(i.outer());
-            default -> Optional.empty();
-        };
-    }
-
-    /**
-     * Refuses {@code e} if a region at any of {@code places} forbids {@code flag} to whoever is behind it, or, with
-     * nobody behind it, forbids carrying it between them. A place that may be in more than one spot is refused if any
-     * spot it may be in refuses.
-     */
-    private void refuse(ActionEvent e, Cancellable c, List<Place> places, Flag flag, Optional<BlockPos> shown) {
-        if (trusted(e)) return;
-        List<List<List<Region>>> possible = new ArrayList<>(places.size() + 1);
-        for (Place place : places) possible.add(mayBeIn(place));
-        // The world on its own carries a change from where the machine or mob doing it stands, too.
-        if (worldOnItsOwn(e.getActor())) source(e.getActor()).ifPresent(at -> possible.add(mayBeIn(at)));
-        Optional<Region> no = worldOnItsOwn(e.getActor()) ? crossing(possible)
-                : FlagRules.refusingAny(possible.stream().flatMap(List::stream).toList(), flag, e.getActor().actingFor());
-        if (no.isEmpty()) return;
-        c.setCancelled(true);
-        shown.ifPresent(pos -> tell(e, pos, no.get()));
-    }
-
-    /** Where a machine or mob acting on its own stands. */
-    private static Optional<Place> source(Actor actor) {
-        return switch (actor) {
-            case Actor.Machine m -> Optional.of(Place.Spot.at(m.level(), m.pos()));
-            case Actor.EntityActor a -> Optional.of(Place.of(a.entity()));
-            default -> Optional.empty();
-        };
-    }
-
-    /** Nobody behind it: nature, or a machine or mob nobody owns. */
-    private static boolean worldOnItsOwn(Actor actor) {
-        if (actor.actingFor().isPresent()) return false;
-        return actor instanceof Actor.Nature || actor instanceof Actor.Machine || actor instanceof Actor.EntityActor;
-    }
-
-    /**
-     * The first region refusing a carry between two of the places, either way, for any spot each may be in. A block
-     * never crosses into itself; a place that may be in more than one spot may, since one unknown place can stand for
-     * several inventories (every inventory nothing identifies is the same {@code Unknown}).
-     */
-    private static Optional<Region> crossing(List<List<List<Region>>> places) {
-        for (int i = 0; i < places.size(); i++) {
-            for (int j = 0; j < places.size(); j++) {
-                if (i == j && places.get(i).size() == 1) continue;
-                for (List<Region> from : places.get(i)) {
-                    for (List<Region> to : places.get(j)) {
-                        Optional<Region> no = FlagRules.refusingCrossing(from, to);
-                        if (no.isPresent()) return no;
-                    }
-                }
-            }
-        }
-        return Optional.empty();
+        if (level != null && at != null) feedback.watched(level, at, no);
     }
 
     /**
@@ -621,75 +230,6 @@ final class Protection implements Listener {
             List<BoundingBox> higher = reached.stream().filter(h -> h.priority() > r.priority()).map(Region::box)
                     .toList();
             if (!Boxes.covered(part, higher)) out.add(List.of(r));
-        }
-        return out;
-    }
-
-    /** What {@link #spawn} holds to {@code build}; everything else an entity event does to one goes by {@link #kept}. */
-    private static boolean placed(Entity entity) {
-        return entity instanceof HangingEntity || entity instanceof ArmorStand || entity instanceof VehicleEntity
-                || entity instanceof EndCrystal;
-    }
-
-    /**
-     * Refuses a change to {@code target} wherever its event says it happens: its own block and, for a frame or
-     * painting, the wall it hangs on, so one facing out from a protected wall stays protected.
-     */
-    private void entityChange(ActionEvent e, Cancellable c, Entity target, Flag flag) {
-        refuse(e, c, List.copyOf(e.getPlaces()), flag, Optional.of(target.blockPosition()));
-    }
-
-    /** The region refusing this actor here, unless the actor is trusted. */
-    private Optional<Region> refusing(ActionEvent e, ServerLevel level, BlockPos pos, Flag flag) {
-        if (trusted(e)) return Optional.empty();
-        return FlagRules.refusing(store.at(level, pos), flag, e.getActor().actingFor());
-    }
-
-    /** The server, or a player with /region bypass on. */
-    private boolean trusted(ActionEvent e) {
-        if (e.getActor() instanceof Actor.Server) return true;
-        return e.getActingPlayer().map(bypass::active).orElse(false);
-    }
-
-    /** Shows a player acting directly where they were refused; machines and mobs are refused quietly. */
-    private void tell(ActionEvent e, BlockPos pos, Region region) {
-        if (e.getActor() instanceof Actor.Player p) feedback.refused(p.player(), pos, region);
-    }
-
-    /**
-     * Where the world's own change comes from: the fluid's source, the spreading block, the fire burning it, the
-     * piston. Empty when fire's origin isn't known (lava, spreading flames), which counts as outside every region, so
-     * fire that may have come from outside can't burn or catch inside one.
-     */
-    private static Optional<BlockPos> source(BlockEvent e) {
-        if (e instanceof BlockFromToEvent f) return Optional.of(f.getFromPos());
-        if (e instanceof BlockSpreadEvent s) return Optional.of(s.getSourcePos());
-        if (e instanceof BlockBurnEvent b) return b.getIgnitingPos();
-        if (e instanceof BlockIgniteEvent) return Optional.empty();
-        return Optional.of(e.getPos());
-    }
-
-    /**
-     * Every space the event touches, including all a move sweeps through, and, for a block used, every block the use
-     * acts on (a bed's or door's other half, a double chest's), so the half outside a region doesn't reach the half in.
-     */
-    private static Set<BlockPos> touched(BlockEvent e) {
-        Set<BlockPos> out = new LinkedHashSet<>();
-        out.add(e.getPos());
-        if (e instanceof BlockUseEvent) {
-            for (Place p : e.getPlaces()) {
-                if (p instanceof Place.Spot s && s.level() == e.getLevel()) {
-                    BlockPos.betweenClosedStream(s.box()).forEach(pos -> out.add(pos.immutable()));
-                }
-            }
-        }
-        for (BlockChange change : e.getBlocks()) out.add(change.getPos());
-        if (e instanceof BlockMoveEvent m) {
-            out.addAll(m.getSweptSpace());
-            for (BlockMoveEvent.Move move : m.getMoves()) {
-                out.add(move.from());
-                out.add(move.to());
-            }
         }
         return out;
     }

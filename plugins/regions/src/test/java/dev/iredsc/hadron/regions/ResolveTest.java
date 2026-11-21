@@ -181,4 +181,24 @@ class ResolveTest {
         assertEquals("spawn · everyone · entity.hurt.animal", Resolve.refusing(List.of(named), bob, HURT_ANIMAL)
                 .orElseThrow().line());
     }
+
+    @Test
+    void ownersAndMembersStayApart() {
+        Region r = spawn().withOwner(alice).withMember(alice);
+        assertTrue(r.members().contains(alice));
+        assertTrue(!r.owners().contains(alice));
+        assertTrue(r.withOwner(alice).members().isEmpty());
+        assertTrue(!r.without(alice).isMember(alice));
+    }
+
+    @Test
+    void theWorldFollowsTheHighestPriorityToo() {
+        Who outside = new Who.World(List.of(new Who.Home.At(WORLD, new BoundingBox(new BlockPos(99, 1, 99)))));
+        Region town = Region.of("town", WORLD, SPAWN_BOX);
+        Region plot = with(Region.of("plot", WORLD, SPAWN_BOX).withPriority(1), Subject.WORLD, Rules.Verdict.ALLOW,
+                "block.flow");
+        Node flow = Node.of(Action.BLOCK_FLOW);
+        assertTrue(!refused(List.of(town, plot), outside, flow), "the plot lets water in, before the town is asked");
+        assertEquals("town", Resolve.refusing(List.of(town), outside, flow).orElseThrow().region().id());
+    }
 }

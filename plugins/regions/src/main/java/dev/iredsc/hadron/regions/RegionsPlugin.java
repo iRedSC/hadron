@@ -2,6 +2,7 @@ package dev.iredsc.hadron.regions;
 
 import dev.iredsc.hadron.api.Default;
 import dev.iredsc.hadron.api.Node;
+import dev.iredsc.hadron.api.Permissions;
 import dev.iredsc.hadron.api.event.EventHandler;
 import dev.iredsc.hadron.api.event.Listener;
 import dev.iredsc.hadron.api.event.world.WorldLoadEvent;
@@ -9,6 +10,7 @@ import dev.iredsc.hadron.api.plugin.JavaPlugin;
 import dev.iredsc.hadron.api.plugin.PluginCommand;
 import dev.iredsc.hadron.api.plugin.PluginException;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.server.level.ServerPlayer;
 import org.jspecify.annotations.Nullable;
 
 /**
@@ -49,6 +51,12 @@ public final class RegionsPlugin extends JavaPlugin implements Listener {
         region.setExecutor(command);
         region.setTabCompleter(command);
         getLogger().info("Protecting {} region(s)", loaded.all().size());
+    }
+
+    /** Whether this player may change this region: an admin, or one of its owners holding regions.manage.owned. */
+    static boolean canManage(ServerPlayer player, Region region) {
+        return Permissions.has(player, MANAGE)
+                || region.owners().contains(player.getUUID()) && Permissions.has(player, MANAGE_OWNED);
     }
 
     /** The regions, while enabled. */
