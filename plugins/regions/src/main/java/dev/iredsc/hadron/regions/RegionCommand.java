@@ -8,7 +8,6 @@ import dev.iredsc.hadron.api.plugin.PluginCommand;
 import dev.iredsc.hadron.api.plugin.TabCompleter;
 import java.io.UncheckedIOException;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -175,19 +174,18 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
     }
 
     private void flag(CommandSourceStack sender, String[] args) {
-        String usage = "/region flag <region> <" + RegionsFile.flagList().replace(", ", "|") + "> [allow|deny]";
+        String usage = "/region flag <region> <" + Bundle.list().replace(", ", "|") + "> [allow|deny]";
         Region r = managed(sender, arg(args, 1, usage));
         String key = arg(args, 2, usage);
-        Flag flag = Flag.parse(key).orElseThrow(() -> new Refusal("No flag " + key + "; the flags are "
-                + RegionsFile.flagList()));
-        Boolean value;
-        if (args.length < 4) value = null;
-        else if (args[3].equalsIgnoreCase("allow")) value = true;
-        else if (args[3].equalsIgnoreCase("deny")) value = false;
+        Bundle flag = Bundle.named(key.toLowerCase(Locale.ROOT)).orElseThrow(() -> new Refusal("No flag " + key
+                + "; the flags are " + Bundle.list()));
+        Optional<Rules.Verdict> value;
+        if (args.length < 4) value = Optional.empty();
+        else if (args[3].equalsIgnoreCase("allow")) value = Optional.of(Rules.Verdict.ALLOW);
+        else if (args[3].equalsIgnoreCase("deny")) value = Optional.of(Rules.Verdict.DENY);
         else throw new Refusal("A flag is allow or deny, or leave it off to clear it, but was " + args[3]);
-        store.put(r.withFlag(flag, value));
-        ok(sender, r.id() + " " + flag.key() + ": " + (value == null ? "default (" + word(flag.outsiderDefault)
-                + " for outsiders)" : word(value)));
+        store.put(r.withRules(r.rules().withFlag(flag, value)));
+        ok(sender, r.id() + " " + flag.key() + ": " + value.map(Rules.Verdict::key).orElse("cleared"));
     }
 
     private void list(CommandSourceStack sender) {
@@ -217,9 +215,11 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
             ok(sender, r.id() + " · " + r.world() + " " + b.minX() + " " + b.minY() + " " + b.minZ() + " to "
                     + b.maxX() + " " + b.maxY() + " " + b.maxZ() + " · priority " + r.priority());
             ok(sender, "  owners: " + names(r.owners()) + " · members: " + names(r.members()));
-            List<String> flags = new ArrayList<>();
-            for (Flag f : Flag.values()) r.flag(f).ifPresent(v -> flags.add(f.key() + " " + word(v)));
-            ok(sender, "  flags: " + (flags.isEmpty() ? "defaults" : String.join(", ", flags)));
+            for (Subject subject : Subject.values()) {
+                Rules.Lists lists = r.rules().of(subject);
+                if (lists.isEmpty()) continue;
+                ok(sender, "  " + subject.key() + ": deny " + lists.deny() + " · allow " + lists.allow());
+            }
             if (sender.getEntity() instanceof ServerPlayer p) feedback.outline(p, r.world(), b, Feedback.Look.REGION);
         }
     }
@@ -238,7 +238,7 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
                 default -> store.all().stream().filter(r -> canManage(sender, r)).map(Region::id).toList();
             };
             case 3 -> switch (args[0].toLowerCase(Locale.ROOT)) {
-                case "flag" -> Arrays.stream(Flag.values()).map(Flag::key).toList();
+                case "flag" -> List.of(Bundle.list().split(", "));
                 case "addowner", "addmember", "removeplayer" -> plugin.getServer().getOnlinePlayers().stream()
                         .map(p -> p.getGameProfile().getName()).toList();
                 default -> List.of();
@@ -356,10 +356,6 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
     private static String arg(String[] args, int i, String usage) {
         if (args.length <= i) throw new Refusal(usage);
         return args[i];
-    }
-
-    private static String word(boolean allowed) {
-        return allowed ? "allow" : "deny";
     }
 
     private static void ok(CommandSourceStack sender, String text) {

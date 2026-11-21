@@ -10,12 +10,12 @@ import java.nio.file.Files;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
@@ -39,8 +39,13 @@ import org.yaml.snakeyaml.constructor.SafeConstructor;
  *     priority: 0
  *     owners: []
  *     members: [5f2b...]
- *     flags: {use: allow, pvp: deny}
+ *     rules:
+ *       everyone: {deny: [build, use], allow: [block.use]}
+ *       world: {allow: [entity.*.player]}
  * </pre>
+ *
+ * <p>Rules are lists of nodes and flags per subject, read through {@link Pattern#parse}, the only way text becomes a
+ * rule; nodes are list items, never keys.
  *
  * <p>Reading refuses the whole file on any mistake, naming where it is, so a typo can never quietly drop a region
  * and the next save can never write the file without it.
@@ -144,16 +149,20 @@ final class RegionsFile {
     /** The keys a region may have; anything else is a typo that would otherwise drop what it meant to set. */
     private static boolean known(String key) {
         return switch (key) {
-            case "world", "min", "max", "priority", "owners", "members", "flags" -> true;
+            case "world", "min", "max", "priority", "owners", "members", "rules" -> true;
             default -> false;
         };
     }
 
     private static Region region(String id, ConfigurationSection s) throws Problem {
+        if (s.contains("flags")) {
+            throw new Problem(at(id, "flags") + "flags became rules: write rules: {everyone: {deny: [build]}} for "
+                    + "flags: {build: deny}, and one list entry for each other flag");
+        }
         for (String key : s.getKeys(false)) {
             if (!known(key)) {
                 throw new Problem(at(id, key) + "isn't a region setting; a region has world, min, max, priority, "
-                        + "owners, members and flags");
+                        + "owners, members and rules");
             }
         }
         String worldText = s.get("world") instanceof String text ? text : null;
@@ -163,29 +172,84 @@ final class RegionsFile {
         }
         BlockPos min = pos(id, s, "min");
         BlockPos max = pos(id, s, "max");
-        Map<Flag, Boolean> flags = new EnumMap<>(Flag.class);
-        ConfigurationSection f = s.getConfigurationSection("flags");
-        if (f == null && s.contains("flags")) {
-            throw new Problem(at(id, "flags") + "must be a map such as {pvp: deny}, but was " + s.get("flags"));
-        }
         if (s.contains("priority") && !(s.get("priority") instanceof Integer)) {
             throw new Problem(at(id, "priority") + "must be a whole number from " + Integer.MIN_VALUE + " to "
                     + Integer.MAX_VALUE + ", but was " + s.get("priority"));
         }
-        if (f != null) {
-            for (String key : f.getKeys(false)) {
-                Flag flag = Flag.parse(key).orElseThrow(() -> new Problem(at(id, "flags." + key)
-                        + "isn't a flag; the flags are " + flagList()));
-                String value = String.valueOf(f.get(key));
-                switch (value) {
-                    case "allow" -> flags.put(flag, true);
-                    case "deny" -> flags.put(flag, false);
-                    default -> throw new Problem(at(id, "flags." + key) + "must be allow or deny, but was " + value);
+        Set<UUID> owners = people(id, s, "owners");
+        Set<UUID> members = people(id, s, "members");
+        return new Region(id, world, BoundingBox.fromCorners(min, max), s.getInt("priority", 0), owners, members,
+                Map.of(), rules(id, s));
+    }
+
+    /** A region's rules: a map of subjects, each holding allow and deny lists of nodes and flags. */
+    private static Rules rules(String id, ConfigurationSection s) throws Problem {
+        if (!s.contains("rules")) {
+            throw new Problem(at(id, "") + "a region needs rules; write rules: {} for a region that only marks an "
+                    + "area, or rules: {everyone: {deny: [build, use]}} to protect it");
+        }
+        ConfigurationSection all = s.getConfigurationSection("rules");
+        if (all == null) {
+            throw new Problem(at(id, "rules") + "must be a map of subjects such as {everyone: {deny: [build]}}, but "
+                    + "was " + s.get("rules"));
+        }
+        Rules rules = Rules.none();
+        for (String key : all.getKeys(false)) {
+            String where = at(id, "rules") + key + ": ";
+            if (key.equals("players")) {
+                throw new Problem(where + "per-player rules aren't in this version; remove players");
+            }
+            if (key.equals("owners")) {
+                throw new Problem(where + "owners are judged as members; write members");
+            }
+            Subject subject = Subject.parse(key).orElseThrow(() -> new Problem(at(id, "rules") + "`" + key
+                    + "` isn't a subject; the subjects are " + Subject.list()));
+            ConfigurationSection lists = all.getConfigurationSection(key);
+            if (lists == null) {
+                throw new Problem(where + "must be a map such as {deny: [build, use]}, but was " + all.get(key));
+            }
+            for (String verdict : lists.getKeys(false)) {
+                if (!verdict.equals("allow") && !verdict.equals("deny")) {
+                    throw new Problem(where + "`" + verdict + "` isn't allow or deny, the only lists a subject has");
+                }
+            }
+            for (Rules.Verdict v : Rules.Verdict.values()) {
+                for (Pattern p : patterns(where + v.key() + ": ", lists, v.key())) {
+                    if (rules.of(subject).allow().contains(p) || rules.of(subject).deny().contains(p)) {
+                        throw new Problem(where + "`" + p + "` is both allowed and denied for " + subject.key()
+                                + "; remove one");
+                    }
+                    rules = rules.with(subject, p, Optional.of(v));
                 }
             }
         }
-        return new Region(id, world, BoundingBox.fromCorners(min, max), s.getInt("priority", 0),
-                people(id, s, "owners"), people(id, s, "members"), flags, Rules.fresh());
+        return rules;
+    }
+
+    /** One allow or deny list, each entry parsed; an entry written twice is refused, so a save keeps the file as is. */
+    private static List<Pattern> patterns(String where, ConfigurationSection lists, String key) throws Problem {
+        if (!lists.contains(key)) return List.of();
+        List<?> raw = lists.isList(key) ? lists.getList(key) : null;
+        if (raw == null) {
+            throw new Problem(where + "must be a list of nodes and flags such as [build, use], but was "
+                    + lists.get(key));
+        }
+        List<Pattern> out = new ArrayList<>();
+        for (Object item : raw) {
+            if (!(item instanceof String text)) {
+                throw new Problem(where + "holds " + item + ", which isn't text; write a node such as block.break, "
+                        + "or a flag: " + Bundle.list());
+            }
+            Pattern p;
+            try {
+                p = Pattern.parse(text);
+            } catch (Pattern.Invalid e) {
+                throw new Problem(where + e.getMessage());
+            }
+            if (out.contains(p)) throw new Problem(where + "`" + p + "` is written twice; remove one");
+            out.add(p);
+        }
+        return out;
     }
 
     private static BlockPos pos(String id, ConfigurationSection s, String key) throws Problem {
@@ -229,19 +293,18 @@ final class RegionsFile {
             s.set("priority", r.priority());
             s.set("owners", r.owners().stream().map(UUID::toString).sorted().toList());
             s.set("members", r.members().stream().map(UUID::toString).sorted().toList());
-            Map<String, Object> flags = new LinkedHashMap<>();
-            for (Flag flag : Flag.values()) {
-                r.flag(flag).ifPresent(v -> flags.put(flag.key(), v ? "allow" : "deny"));
+            // Subjects in a fixed order, deny before allow, each list flags first: a hand edit round-trips.
+            ConfigurationSection rules = s.createSection("rules");
+            for (Subject subject : Subject.values()) {
+                Rules.Lists lists = r.rules().of(subject);
+                if (lists.isEmpty()) continue;
+                Map<String, Object> out = new LinkedHashMap<>();
+                if (!lists.deny().isEmpty()) out.put("deny", lists.deny().stream().map(Pattern::toString).toList());
+                if (!lists.allow().isEmpty()) out.put("allow", lists.allow().stream().map(Pattern::toString).toList());
+                rules.set(subject.key(), out);
             }
-            s.set("flags", flags);
         }
         return yaml;
-    }
-
-    static String flagList() {
-        List<String> keys = new ArrayList<>();
-        for (Flag f : Flag.values()) keys.add(f.key());
-        return String.join(", ", keys);
     }
 
     private static String at(String id, String key) {
