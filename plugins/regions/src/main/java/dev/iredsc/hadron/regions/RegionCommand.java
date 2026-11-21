@@ -238,9 +238,9 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
             return;
         }
         store.put(r.withRules(next));
-        Undo change = new Undo(++changes, r.id(), shown, r.rules(), next);
+        Undo change = new Undo(UUID.randomUUID(), r.id(), shown, r.rules(), next);
         undo.put(senderKey(sender), change);
-        String undoIt = "/region undo " + change.number();
+        String undoIt = "/region undo " + change.id();
         sender.sendSuccess(() -> Component.literal(answer(r.id(), next, shown) + " ").withStyle(ChatFormatting.GRAY)
                 .append(Component.literal("[undo]").withStyle(st -> st.withColor(ChatFormatting.YELLOW)
                         .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, undoIt))
@@ -254,14 +254,13 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
     }
 
     /**
-     * What one sender's last rule change was, so {@code [undo]} can put it back: {@code number} is the change's own,
-     * which its button names, so an older button can't undo a later change.
+     * What one sender's last rule change was, so {@code [undo]} can put it back: {@code id} is the change's own,
+     * which its button names. It is random rather than counted, so no later change, even after the plugin reloads and
+     * forgets every earlier one, has the id of a button still in someone's chat.
      */
-    private record Undo(int number, String region, Subject subject, Rules before, Rules after) {}
+    private record Undo(UUID id, String region, Subject subject, Rules before, Rules after) {}
 
     private final Map<String, Undo> undo = new HashMap<>();
-    /** How many rule changes there have been since the plugin started, to number each one. */
-    private int changes;
 
     private static String senderKey(CommandSourceStack sender) {
         return sender.getEntity() instanceof ServerPlayer p ? p.getUUID().toString() : sender.getTextName();
@@ -269,12 +268,12 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
 
     /**
      * Puts back the rules the sender's last change replaced, unless they changed again since. {@code /region undo
-     * <number>}, which an {@code [undo]} runs, does so only when that change is still their last.
+     * <id>}, which an {@code [undo]} runs, does so only when that change is still their last.
      */
     private void undo(CommandSourceStack sender, String[] args) {
         Undo last = undo.get(senderKey(sender));
         if (last == null) throw new Refusal("Nothing of yours to undo since the plugin started");
-        if (args.length > 1 && !args[1].equals(Integer.toString(last.number()))) {
+        if (args.length > 1 && !args[1].equals(last.id().toString())) {
             throw new Refusal("That [undo] is for an older change, so nothing was undone; only your latest change, to "
                     + last.region() + ", can be undone");
         }

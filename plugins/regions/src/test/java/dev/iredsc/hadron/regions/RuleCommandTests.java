@@ -3,10 +3,13 @@ package dev.iredsc.hadron.regions;
 import static dev.iredsc.hadron.regions.RegionsTests.admin;
 import static dev.iredsc.hadron.regions.RegionsTests.define;
 
+import dev.iredsc.hadron.api.plugin.CommandExecutor;
+import dev.iredsc.hadron.api.plugin.PluginCommand;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.List;
+import java.util.Objects;
 import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ClientboundSystemChatPacket;
@@ -158,5 +161,36 @@ public final class RuleCommandTests {
         t.assertEquals(eastNow, store.get("east").orElseThrow().rules(), "east's rules after its old [undo]");
         alice.command(westButton);
         t.assertChat(alice, "Undone · west · everyone: deny [build, use] ·");
+    }
+
+    /** A command as a fresh load of the plugin makes it: it remembers no earlier change. */
+    private static RegionCommand freshCommand(TestContext t) throws RegionsFile.Problem {
+        RegionsPlugin plugin = (RegionsPlugin) t.plugin();
+        Feedback feedback = new Feedback(plugin);
+        return new RegionCommand(plugin, plugin.regions(), new Wand(feedback), feedback, Bypass.load(plugin));
+    }
+
+    @HadronTest
+    void anUndoButtonFromBeforeAReloadDoesntUndoALaterChange(TestContext t) throws RegionsFile.Problem {
+        TestPlayer alice = admin(t);
+        define(t, alice, "east", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        define(t, alice, "west", t.pos(3, 0, -2), t.pos(4, 1, -1));
+        RegionStore store = ((RegionsPlugin) t.plugin()).regions();
+        PluginCommand region = Objects.requireNonNull(t.plugin().getCommand("region"));
+        CommandExecutor loaded = region.getExecutor();
+        try {
+            // Each load's first change: a counted id would give both buttons the same one.
+            region.setExecutor(freshCommand(t));
+            alice.command("rg deny east entity.hurt.monster");
+            String eastButton = newestUndoButton(alice);
+            region.setExecutor(freshCommand(t));
+            alice.command("rg deny west entity.hurt.monster");
+            Rules westNow = store.get("west").orElseThrow().rules();
+            alice.command(eastButton);
+            t.assertChat(alice, "That [undo] is for an older change, so nothing was undone");
+            t.assertEquals(westNow, store.get("west").orElseThrow().rules(), "west's rules after east's old [undo]");
+        } finally {
+            region.setExecutor(loaded);
+        }
     }
 }
