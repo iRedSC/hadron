@@ -67,6 +67,7 @@ One meaning per word, in code, docs and reviews. A new concept gets a line here 
 ## Permissions
 
 - **Node**: a permission string such as `hadron.trace` or `use.ae2.wireless_terminal`. ([design](design.md#permissions))
+- **Region node**: what the regions plugin decides, named after what happens, such as `entity.hurt.animal`: a region allows or denies it per subject in `regions.yml`. Not a permission node; LuckPerms never sees it. ([regions](../plugins/regions/README.md))
 - **Reserved root**: a node root Hadron owns (`use`, `place`, `break`, `open`, `attack`, `command`, `packet`, `hadron`). A plugin declaring a node under one fails to load.
 
 ## Testing

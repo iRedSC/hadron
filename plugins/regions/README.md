@@ -1,5 +1,123 @@
 # Regions
 
+Boxes of the world an operator protects. Every act a region can decide has a **node** named after what happens (`block.break`, `entity.hurt.animal`, `inventory.move`), and each region grants or denies nodes per **subject**: its members, everyone else, the world on its own, and mods nobody named. The four flags of the first cut (`build`, `use`, `entry`, `pvp`) are kept as named bundles of nodes.
+
+It protects through Hadron's events and actors, so it covers every mod whose bridge is installed, and refuses what an unbridged mod does inside a region rather than letting it through unseen. One listener (`Protection`) asks one table (`Nodes`) what each event is and one resolver (`Resolve`) whether the regions where it happens allow it.
+
+## Nodes
+
+A node is dotted segments: a root (`block`, `entity`, `item`, `inventory`, `resource`, `world`, `player`, `enter`, `other`), the act, and for most acts on an entity the **kind** of entity acted on: `player`, `monster`, `animal` or `misc`. The kind comes only from facts Minecraft states: being a player, or the entity type's `MobCategory` (`MONSTER`; `CREATURE`, `AMBIENT`, `AXOLOTLS` and the water categories are animals; `MISC` is villagers, golems, armor stands, boats, minecarts, frames, paintings and a mod's furniture). A mod's entity type declares its own category, so its mobs and furniture get the right kind without the plugin knowing the mod.
+
+In a rule:
+
+- a node covers everything below it: `entity.hurt` covers `entity.hurt.animal`;
+- `*` stands for exactly one segment anywhere but the first: `entity.*.animal` is anything done to an animal;
+- a flag name stands for every node in its bundle: `build`.
+
+A pattern that matches no node is refused, with the nearest node and what is under the deepest valid prefix: ``entity.hurt.animals` isn't a node. Did you mean `entity.hurt.animal`? Under entity.hurt: animal, misc, monster, player``.
+
+Every node, its flag, and the events asking it is in [the node table](#node-table) below. One event can ask more than one node: anything that carries players asks `enter.*` for each player aboard, as that player, besides its own node. An event a bridge fires whose class, and every parent up to `ActionEvent`, has no entry asks `other`, which is in `build`, so it fails closed.
+
+## Subjects
+
+| subject | who | when no rule in the region matches |
+|---|---|---|
+| `members` | owners and members, judged by who the actor acts for, so a member's turret or drone is a member | allowed |
+| `everyone` | anyone else, online or not, and an outsider's machine | the region doesn't decide (abstains) |
+| `world` | nobody behind it: nature, a machine or fake player nobody owns, an entity nobody is behind | the home rule |
+| `unknown` | a mod acted and nothing said who | refused |
+
+Owners are judged as members; owning only adds managing. The server, and a player with `/region bypass` on, are never asked. For `enter.*` the subject is the player being moved: a piston pushing a visitor in asks about the visitor. A move whose riders nobody can name is asked as everyone.
+
+### The home rule
+
+The world on its own sets out from somewhere: what its event states as the source (a flow's `getFromPos()`, a spread's `getSourcePos()`, a fire's igniting block; fire from nowhere known is outside every region), otherwise the block itself; a machine or fake player nobody owns from where it stands; an entity nobody is behind from where it entered the world (`Actors.origin`), wherever it is now; a remembered actor with nobody behind it, which has no place, from outside every region.
+
+Where the world has no rule for a node, **it may act in a region only if every place it sets out from is inside that region**. So a hopper inside a region works, one outside can't feed a chest inside, water can't flow in, and a skeleton outside can't shoot a cow inside: its arrow entered the world where it was shot, whether the skeleton stays, moves away or is gone. A rule overrides it both ways: `world: {allow: [block.flow]}` lets water in, `world: {deny: [entity.spawn.monster]}` stops monsters spawning even inside.
+
+## How a decision is made
+
+For each place the event states (a place no one can pin down counts as every region its bound reaches), take the regions there:
+
+1. Highest priority first; every region at that priority answers for the subject it judges the act as.
+2. Within a region the most specific matching rule wins. Specificity is the number of segments named: `entity.hurt.animal` (3) beats `entity.*.animal` (2) and `entity.hurt` (2). A flag counts as 1, so anything named beats a flag. At equal specificity, deny wins. A rule beats the subject's own answer.
+3. At one priority, any region refusing refuses; otherwise any allowing allows; if every region there abstains, the next priority down decides.
+4. If every region abstains, it is allowed.
+
+The act is refused if any place refuses. For entry, a region the player is already in never refuses, so anyone inside can walk out. A plot inside spawn only states what differs: its members are allowed before spawn is asked, and what it says nothing about passes down to spawn.
+
+A player's own inventory, and anything carried in it, stands outside every region, since it goes where they go.
+
+## Flags
+
+Each node names its flag in code, so a node added later lands in its flag and is protected from the day it exists:
+
+- **build**: every `block.*` but `block.use` and `block.redstone`; `entity.place.*`, `entity.spawn.*`, `entity.break`; what is done to animals and objects; what is done to players beyond pvp (removing, capturing, leashing, changing); `world.*`; `other`.
+- **use**: `block.use`, `block.redstone`, `entity.use.animal`, `entity.use.misc`, the `item.*` acts on what is kept here, `inventory.*`, `resource.*`, `player.sleep`.
+- **entry**: `enter.*`.
+- **pvp**: `entity.hurt.player`, `entity.ignite.player`, `entity.effect.player`.
+- **no flag**: everything done to monsters, `entity.use.player`, `entity.equip.player`, `entity.launch`, `entity.push.*`, `entity.target.*`, `item.pickup`, `item.drop`, `player.fish`. Allowed unless a region denies it by name.
+
+`/region define` writes a fresh region's rules into the file, so what a region does is all there and a later version can't change it quietly:
+
+```yaml
+rules:
+  everyone: {deny: [build, use]}
+  world: {allow: [entity.*.player]}
+```
+
+The world rule lets a monster that wandered in hurt players inside; delete it for a mob-safe zone.
+
+## regions.yml
+
+```yaml
+format: 1
+regions:
+  spawn:
+    world: minecraft:overworld
+    min: [-50, -64, -50]
+    max: [50, 320, 50]
+    priority: 0
+    owners: []
+    members: []
+    rules:
+      everyone:
+        deny: [build, use, pvp]
+        allow: [block.use, inventory.open]   # doors and buttons work; chests can be looked in, not taken from
+      members:
+        deny: [pvp]
+      world:
+        deny: [entity.spawn.monster]         # no monsters spawn here
+        allow: [entity.*.player]
+```
+
+Any mistake stops the plugin with the file left as it is, naming the region, subject and list and saying the fix: a region without `rules` (write `rules: {}` for one that only marks an area), `flags` from the first cut (each says how to write it as rules), an unknown subject, `owners` as a subject (write `members`), `players` (per-player rules aren't in this version), a key under a subject other than `allow` or `deny`, a list that isn't a list of text, a node that isn't one, a leading `*`, an empty segment, capitals, an entry written twice, and one both allowed and denied. Saving writes subjects in order, deny before allow, flags first, so a hand edit round-trips unchanged.
+
+## Commands
+
+| command | what it does |
+|---|---|
+| `/region wand`, `define <name>`, `redefine <name>` | pick two corners, make a fresh region from them, move one |
+| `/region allow\|deny\|unset <region> [subject] <node>...` | set or clear nodes or flags for a subject (everyone when none is named); replies with that subject's rules and an `[undo]` |
+| `/region flag <region> <build\|use\|entry\|pvp> [allow\|deny]` | a flag for everyone (and members too for `pvp`); left off, it is cleared |
+| `/region undo` | puts back the rules your last change replaced, unless they changed since |
+| `/region why <node> [subject]` | traces each region at your feet from the top: `plot-1 (10): everyone, no rule, passes`, `spawn (0): everyone deny build ⊃ entity.hurt.animal → refused`, and outlines the one deciding |
+| `/region watch` | for managers: every refusal within 32 blocks in regions you manage, marked by subject (red a person, blue the world, purple unknown) with `base · world · inventory.move · from outside` above the hotbar |
+| `/region info`, `list`, `show`, `priority`, `addowner`, `addmember`, `removeplayer`, `remove`, `restore`, `bypass` | as before |
+
+Tab completion walks the node tree one segment at a time. `world` names the subject right after the region, so to deny the `world` root to everyone write `/region deny spawn everyone world`.
+
+A refused player sees smoke where it happened and the region's name above the hotbar. Someone who can change that region sees the decision instead (`spawn · everyone · entity.hurt.animal (build)`) and, once a minute per region and node, a chat line whose `[allow]` fills in the `/region allow` that would let it through.
+
+## Known gaps
+
+- **Where a hit set out from isn't stated.** A hit is judged where it lands, so a safe zone keeps hits out, but a player or an owned turret standing inside one can hit someone outside. Two in-game tests carry this as a known gap. A hit by an entity nobody is behind needs no such fact: it is judged from that entity's origin.
+- A rider swung across an edge by a boat turning in place, in a region starting above the boat's block (a known gap since the first cut).
+
+Left out of this version: per-player rules (the `players` key is reserved), qualifiers beyond kind (an entity type id, a resource id), custom bundles, and testing as a visitor (`/region why <node> everyone` answers it on paper).
+
+## Node table
+
 <!-- node table: generated by NodeMappingTest; ./gradlew :plugins:regions:nodeTable -->
 | node | flag | meaning | asked by |
 |---|---|---|---|
