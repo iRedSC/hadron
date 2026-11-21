@@ -112,7 +112,10 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
             }
             case "restore" -> {
                 String id = arg(args, 1, "/region restore <region>");
-                if (store.get(id).isPresent()) throw new Refusal(id + " exists; remove it first to restore the old one");
+                if (store.get(id).isPresent()) {
+                    throw new Refusal("Nothing to restore: " + id + " exists, and a removed region can't come back "
+                            + "once another takes its name");
+                }
                 Region back = store.restore(id).orElseThrow(() -> new Refusal("Nothing named " + id
                         + " was removed since the plugin last started"));
                 showIfPlayer(sender, back);

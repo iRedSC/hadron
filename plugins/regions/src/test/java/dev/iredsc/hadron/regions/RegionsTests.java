@@ -177,6 +177,21 @@ public final class RegionsTests {
     }
 
     @HadronTest
+    void restoringANameARegionTookSinceSaysTheOldOneIsGoneAndKeepsTheNewOne(TestContext t) {
+        TestPlayer alice = admin(t);
+        RegionStore store = ((RegionsPlugin) t.plugin()).regions();
+        define(t, alice, "taken-name", t.pos(-2, 0, -2), t.pos(2, 2, 2));
+        alice.command("rg remove taken-name");
+        define(t, alice, "taken-name", t.pos(3, 0, 3), t.pos(4, 1, 4));
+        Region replacement = store.get("taken-name").orElseThrow();
+        alice.command("rg restore taken-name");
+        t.assertChat(alice, "Nothing to restore: taken-name exists, and a removed region can't come back once another "
+                + "takes its name");
+        t.assertEquals(replacement, store.get("taken-name").orElseThrow(), "taken-name after the refused restore");
+        t.assertFalse(store.restorable().contains("taken-name"), "the removed taken-name is still restorable");
+    }
+
+    @HadronTest
     void anOpBuildsInRegionsOnlyWithBypassOn(TestContext t) {
         t.setBlock(t.pos(1, 0, 1), Blocks.DIRT);
         t.setBlock(t.pos(-1, 0, -1), Blocks.DIRT);
