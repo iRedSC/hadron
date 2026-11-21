@@ -145,7 +145,7 @@ Left out of this version: per-player rules (the `players` key is reserved), qual
 | `entity.place.<kind>` | player: build, monster: build, animal: build, misc: build | put an entity here with an item: a boat, armor stand, frame, spawn egg, a mod's chair | EntitySpawnEvent, HangingPlaceEvent |
 | `entity.spawn.<kind>` | player: build, monster: build, animal: build, misc: build | bring one in any other way: a summon, TNT lit, a mob spawning | EntitySpawnEvent, HangingPlaceEvent |
 | `entity.launch` | open | fire or throw something; the hit is judged by what it does | EntitySpawnEvent, HangingPlaceEvent, ProjectileLaunchEvent |
-| `entity.hurt.<kind>` | player: pvp, monster: open, animal: build, misc: build | hurt or hit it | EntityDamageEvent, VehicleDamageEvent |
+| `entity.hurt.<kind>` | player: pvp, monster: open, animal: build, misc: build | hurt or hit it | EntityDamageEvent, ExplosionEvent, VehicleDamageEvent |
 | `entity.ignite.<kind>` | player: pvp, monster: open, animal: build, misc: build | set it alight | EntityCombustEvent |
 | `entity.effect.<kind>` | player: pvp, monster: open, animal: build, misc: build | put a harmful effect on it | EntityPotionEffectEvent |
 | `entity.break` | build | break a painting or frame | HangingBreakEvent |

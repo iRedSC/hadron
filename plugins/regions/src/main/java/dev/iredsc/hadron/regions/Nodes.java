@@ -146,6 +146,7 @@ import java.util.UUID;
 import java.util.function.Function;
 import net.minecraft.world.effect.MobEffectCategory;
 import net.minecraft.world.entity.Entity;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
 
 /**
@@ -460,9 +461,15 @@ final class Nodes {
         node(PortalCreateEvent.class, WORLD_PORTAL);
         node(TickAccelerateEvent.class, WORLD_ACCELERATE);
         node(ChunkForceLoadEvent.class, WORLD_CHUNKLOAD);
-        // Each block a region keeps is spared; the rest of the blast goes off. Nature's blast sets out from its centre.
-        asks(ExplosionEvent.class, EnumSet.of(BLOCK_EXPLODE), e -> List.of(new Ask.Spare(Node.of(BLOCK_EXPLODE),
-                e.getLevel(), e.blockList(), List.of(Place.Spot.at(e.getLevel(), e.getLocation())))));
+        // Each block and entity a region keeps is spared; the rest of the blast goes off. Nature's blast sets out from
+        // its centre. A blast hurts what it hits, an item or a boat as much as a cow; a living one is left to the
+        // damage event it then fires, which asks the same node, so it is judged once.
+        asks(ExplosionEvent.class, EnumSet.of(BLOCK_EXPLODE, ENTITY_HURT), e -> {
+            List<Place> centre = List.of(Place.Spot.at(e.getLevel(), e.getLocation()));
+            return List.of(new Ask.Spare(Node.of(BLOCK_EXPLODE), e.getLevel(), e.blockList(), centre),
+                    new Ask.SpareEntities(en -> en instanceof LivingEntity ? Optional.empty()
+                            : Optional.of(Node.of(ENTITY_HURT, Kind.of(en))), e.getEntities(), centre));
+        });
         notRegions(ExplosionPrimeEvent.class, "judged by the blocks and entities the blast then touches");
         notRegions(WeatherChangeEvent.class, "a whole world's");
         notRegions(TimeSkipEvent.class, "a whole world's");

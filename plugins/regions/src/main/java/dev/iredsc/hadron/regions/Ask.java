@@ -6,8 +6,10 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.Function;
 import net.minecraft.core.BlockPos;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 
 /** One question an event puts to the regions, as {@link Nodes} reads it from the event's own facts. */
 sealed interface Ask {
@@ -54,6 +56,20 @@ sealed interface Ask {
             Objects.requireNonNull(node, "node");
             Objects.requireNonNull(level, "level");
             Objects.requireNonNull(blocks, "blocks");
+            home = List.copyOf(home);
+        }
+    }
+
+    /**
+     * The event's actor does {@code node} of each of {@code entities}, and one a region refuses is spared from the
+     * event rather than the whole event refused: an explosion's list. {@code entities} is the event's own, live list;
+     * {@code node} is empty for one judged elsewhere. Who acts sets out from {@code home}, as for {@link Spare}.
+     */
+    record SpareEntities(Function<Entity, Optional<Node>> node, List<Entity> entities, List<Place> home)
+            implements Ask {
+        public SpareEntities {
+            Objects.requireNonNull(node, "node");
+            Objects.requireNonNull(entities, "entities");
             home = List.copyOf(home);
         }
     }

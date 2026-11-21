@@ -61,6 +61,10 @@ final class Protection implements Listener {
                     spare(event, actor, s);
                     yield false;
                 }
+                case Ask.SpareEntities s -> {
+                    spareEntities(event, actor, s);
+                    yield false;
+                }
                 case Ask.Enter en -> enter(actor, en);
             };
             if (refused) {
@@ -123,6 +127,21 @@ final class Protection implements Listener {
             no.ifPresent(d -> feedback.watched(s.level(), pos, d));
             return no.isPresent();
         });
+    }
+
+    /** Spares each entity a region keeps, decided where it is; the rest of the blast goes off. */
+    private void spareEntities(Event event, Actor actor, Ask.SpareEntities s) {
+        Optional<Who> who = who(event, actor, s.home());
+        if (who.isEmpty()) return;
+        s.entities().removeIf(entity -> s.node().apply(entity).map(node -> {
+            for (List<Region> here : mayBeIn(Place.of(entity), Resolve.answers(who.get(), node, List.of()))) {
+                Optional<Resolve.Decision> no = Resolve.refusing(here, who.get(), node);
+                if (no.isEmpty()) continue;
+                feedback.watched((ServerLevel) entity.level(), entity.blockPosition(), no.get());
+                return true;
+            }
+            return false;
+        }).orElse(false));
     }
 
     /**
