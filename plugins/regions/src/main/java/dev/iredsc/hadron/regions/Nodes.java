@@ -262,13 +262,14 @@ final class Nodes {
         asks(EntitySpawnEvent.class, EnumSet.of(ENTITY_PLACE, ENTITY_SPAWN, ENTITY_LAUNCH), this::spawn);
         asks(HangingPlaceEvent.class, EnumSet.of(ENTITY_PLACE, ENTITY_SPAWN, ENTITY_LAUNCH), this::spawn);
         node(ProjectileLaunchEvent.class, ENTITY_LAUNCH);
-        hurt(EntityDamageEvent.class, ENTITY_HURT);
+        // A hit states where it set out from; a pvp node is decided there too (Bundle.bothEnds).
+        asks(EntityDamageEvent.class, EnumSet.of(ENTITY_HURT), e -> attack(e, ENTITY_HURT, e.getSourceLocation()));
         hurt(VehicleDamageEvent.class, ENTITY_HURT);
         hurt(EntityCombustEvent.class, ENTITY_IGNITE);
         // Only a harmful effect taking hold is an attack; a removed or helpful one is nobody's to refuse.
         asks(EntityPotionEffectEvent.class, EnumSet.of(ENTITY_EFFECT), e -> e.getAction()
                 == EntityPotionEffectEvent.Action.REMOVED || e.getEffect().value().getCategory()
-                != MobEffectCategory.HARMFUL ? List.of() : attack(e, ENTITY_EFFECT));
+                != MobEffectCategory.HARMFUL ? List.of() : attack(e, ENTITY_EFFECT, Optional.empty()));
         node(HangingBreakEvent.class, ENTITY_BREAK);
         byKind(EntityRemoveEvent.class, ENTITY_REMOVE);
         // Where it is and where it is stored; carried off by a player, it goes where they go.
@@ -318,14 +319,16 @@ final class Nodes {
     }
 
     /** An attack on the event's entity; on a player by themselves (their own arrow, their own potion) it is theirs. */
-    private static List<Ask> attack(EntityEvent e, Action a) {
+    private static List<Ask> attack(EntityEvent e, Action a, Optional<Place> setOutFrom) {
         Entity victim = e.getEntity();
         if (victim instanceof Player p && e.getActor().actingFor().equals(Optional.of(p.getUUID()))) return List.of();
-        return List.of(new Ask.Act(Node.of(a, Kind.of(victim)), List.copyOf(e.getPlaces())));
+        return List.of(new Ask.Act(Node.of(a, Kind.of(victim)), List.copyOf(e.getPlaces()), Optional.empty(),
+                setOutFrom));
     }
 
+    /** An attack whose event doesn't state where it set out from: it is decided where it lands. */
     private <E extends EntityEvent> void hurt(Class<E> type, Action a) {
-        asks(type, EnumSet.of(a), e -> attack(e, a));
+        asks(type, EnumSet.of(a), e -> attack(e, a, Optional.empty()));
     }
 
     // ---- What takes a player somewhere ----------------------------------------------------------------------------

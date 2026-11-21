@@ -2,6 +2,7 @@ package dev.iredsc.hadron.regions;
 
 import dev.iredsc.hadron.api.event.Carried;
 import dev.iredsc.hadron.api.event.Place;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -15,17 +16,32 @@ sealed interface Ask {
      *
      * @param home where the world on its own sets out, when the event states a source (a flow's, a spread's, a
      *     fire's); empty to use the default: the block itself for a block event, otherwise the event's places
+     * @param setOutFrom where the act set out from, when its event states it (a hit's {@code getSourceLocation()});
+     *     decided on only for a node whose flag {@linkplain Bundle#bothEnds judges both ends}
      */
-    record Act(Node node, List<Place> places, Optional<List<Place>> home) implements Ask {
+    record Act(Node node, List<Place> places, Optional<List<Place>> home, Optional<Place> setOutFrom) implements Ask {
         public Act {
             Objects.requireNonNull(node, "node");
             places = List.copyOf(places);
             Objects.requireNonNull(home, "home");
             home = home.map(List::copyOf);
+            Objects.requireNonNull(setOutFrom, "setOutFrom");
+        }
+
+        Act(Node node, List<Place> places, Optional<List<Place>> home) {
+            this(node, places, home, Optional.empty());
         }
 
         Act(Node node, List<Place> places) {
             this(node, places, Optional.empty());
+        }
+
+        /** Every place a region decides it at: its places, and where it set out from when its node judges both ends. */
+        List<Place> decidedAt() {
+            if (setOutFrom.isEmpty() || !node.bundle().bothEnds()) return places;
+            List<Place> out = new ArrayList<>(places);
+            out.add(setOutFrom.get());
+            return List.copyOf(out);
         }
     }
 

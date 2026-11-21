@@ -134,7 +134,8 @@ public final class WorkedExampleTests {
         t.tick(2);
         t.assertTrue(zombie.getHealth() < zombie.getMaxHealth(), "bob's hit should land on the husk in spawn");
         EntityDamageEvent back = new EntityDamageEvent(bob.player(), t.level().damageSources().mobAttack(zombie), 3f,
-                new Actor.EntityActor(zombie, Attribution.none()));
+                new Actor.EntityActor(zombie, Attribution.none()),
+                java.util.Optional.of(dev.iredsc.hadron.api.event.Place.Spot.at(t.level(), zombie.position())));
         fire(t, back);
         t.assertFalse(back.isCancelled(), "fresh regions carry world: allow [entity.*.player], so it hits bob");
     }

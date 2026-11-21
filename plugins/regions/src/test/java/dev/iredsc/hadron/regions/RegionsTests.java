@@ -2,6 +2,7 @@ package dev.iredsc.hadron.regions;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Attribution;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.block.BlockBurnEvent;
 import dev.iredsc.hadron.api.event.block.BlockIgniteEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
@@ -18,12 +19,12 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.SimpleContainer;
 import net.minecraft.world.entity.EquipmentSlot;
 import dev.iredsc.hadron.test.HadronTest;
-import dev.iredsc.hadron.test.KnownGap;
 import dev.iredsc.hadron.test.SideEffects;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import dev.iredsc.hadron.api.plugin.PluginCommand;
 import java.util.List;
+import java.util.Optional;
 import java.util.Objects;
 import net.minecraft.commands.arguments.EntityAnchorArgument;
 import net.minecraft.core.BlockPos;
@@ -354,9 +355,12 @@ public final class RegionsTests {
         effects.assertNone("a refused boarding");
     }
 
+    /** Where a machine's hit sets out from, as core states it for one: the machine's own block. */
+    static Optional<Place> fromBlock(TestContext t, BlockPos pos) {
+        return Optional.of(Place.Spot.at(t.level(), pos));
+    }
+
     @HadronTest
-    @KnownGap("Where a hit set out from isn't stated: EntityDamageEvent places only where it lands, so a safe zone "
-            + "keeps hits out but can't keep a turret or player inside it from hitting someone outside")
     void aMachineCantAttackOutOfASafeZone(TestContext t) {
         TestPlayer alice = admin(t);
         define(t, alice, "safe-zone", t.pos(2, 0, -1), t.pos(4, 2, 1));
@@ -366,7 +370,7 @@ public final class RegionsTests {
         // Bob's turret stands in the safe zone; bob and carol are both outside it.
         Actor turret = new Actor.Machine(t.level(), t.pos(3, 0, 0), Attribution.of(bob.uuid()));
         EntityDamageEvent shot = new EntityDamageEvent(carol.player(), t.level().damageSources().generic(), 4f,
-                turret);
+                turret, fromBlock(t, t.pos(3, 0, 0)));
         t.plugin().getServer().getPluginManager().callEvent(shot);
         t.assertTrue(shot.isCancelled(), "a turret inside a pvp deny region should not hurt a player");
     }
@@ -383,15 +387,15 @@ public final class RegionsTests {
         TestPlayer carol = t.player("carol");
         Actor turret = new Actor.Machine(t.level(), t.pos(3, 0, 0), Attribution.none());
         EntityDamageEvent shot = new EntityDamageEvent(carol.player(), t.level().damageSources().generic(), 4f,
-                turret);
+                turret, fromBlock(t, t.pos(3, 0, 0)));
         t.plugin().getServer().getPluginManager().callEvent(shot);
         t.assertFalse(shot.isCancelled(), "pvp is about people; the region's world: allow [entity.*.player] lets it");
         RegionStore store = ((RegionsPlugin) t.plugin()).regions();
         Region zone = store.get("ownerless-zone").orElseThrow();
         store.put(zone.withRules(zone.rules().with(Subject.WORLD, Pattern.of(Node.of(Action.ENTITY_HURT,
-                Kind.PLAYER)), java.util.Optional.of(Rules.Verdict.DENY))));
+                Kind.PLAYER)), Optional.of(Rules.Verdict.DENY))));
         EntityDamageEvent again = new EntityDamageEvent(carol.player(), t.level().damageSources().generic(), 4f,
-                turret);
+                turret, fromBlock(t, t.pos(3, 0, 0)));
         t.plugin().getServer().getPluginManager().callEvent(again);
         t.assertTrue(again.isCancelled(), "world: deny [entity.hurt.player] beats the fresh entity.*.player");
     }
@@ -523,7 +527,8 @@ public final class RegionsTests {
         alice.command("rg flag unknown-safe pvp deny");
         TestPlayer carol = t.player("carol");
         EntityDamageEvent hit = new EntityDamageEvent(carol.player(), t.level().damageSources().generic(), 4f,
-                Actor.Unknown.INSTANCE);
+                Actor.Unknown.INSTANCE, Optional.of(Place.Unknown.anywhere(
+                        Place.Unknown.Reason.UNSEEN_ORIGIN)));
         t.plugin().getServer().getPluginManager().callEvent(hit);
         t.assertTrue(hit.isCancelled(), "damage nobody is behind should not hurt a player in a pvp deny region");
     }
@@ -594,7 +599,7 @@ public final class RegionsTests {
         alice.command("rg flag server-safe pvp deny");
         TestPlayer carol = t.player("carol");
         EntityDamageEvent hit = new EntityDamageEvent(carol.player(), t.level().damageSources().generic(), 4f,
-                new Actor.Server("plugin Test"));
+                new Actor.Server("plugin Test"), Optional.empty());
         t.plugin().getServer().getPluginManager().callEvent(hit);
         t.assertFalse(hit.isCancelled(), "the server's own damage should go through");
     }

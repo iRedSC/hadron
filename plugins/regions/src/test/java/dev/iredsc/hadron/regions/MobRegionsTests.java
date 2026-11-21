@@ -5,11 +5,13 @@ import static dev.iredsc.hadron.regions.RegionsTests.define;
 
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.actor.Attribution;
+import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.event.entity.EntityCaptureEvent;
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
 import dev.iredsc.hadron.test.HadronTest;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
+import java.util.Optional;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
@@ -118,15 +120,17 @@ public final class MobRegionsTests {
         Wolf wolf = spawn(t, EntityType.WOLF, t.pos(3, 0, 0));
         define(t, alice, "edge-pen", t.pos(2, 0, -1), t.pos(4, 2, 1));
         EntityDamageEvent across = new EntityDamageEvent(cow, t.level().damageSources().mobAttack(zombie), 3f,
-                new Actor.EntityActor(zombie, Attribution.none()));
+                new Actor.EntityActor(zombie, Attribution.none()), Optional.of(Place.Spot.at(t.level(),
+                zombie.position())));
         t.plugin().getServer().getPluginManager().callEvent(across);
         t.assertTrue(across.isCancelled(), "a zombie outside should not hurt a cow inside across the edge");
         EntityDamageEvent within = new EntityDamageEvent(cow, t.level().damageSources().mobAttack(wolf), 3f,
-                new Actor.EntityActor(wolf, Attribution.none()));
+                new Actor.EntityActor(wolf, Attribution.none()), Optional.of(Place.Spot.at(t.level(),
+                wolf.position())));
         t.plugin().getServer().getPluginManager().callEvent(within);
         t.assertFalse(within.isCancelled(), "a wolf inside the region may hurt a cow in it");
         EntityDamageEvent fall = new EntityDamageEvent(cow, t.level().damageSources().fall(), 3f,
-                Actor.Nature.INSTANCE);
+                Actor.Nature.INSTANCE, Optional.empty());
         t.plugin().getServer().getPluginManager().callEvent(fall);
         t.assertFalse(fall.isCancelled(), "a cow inside still takes a fall");
     }

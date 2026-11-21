@@ -10,15 +10,29 @@ import java.util.Optional;
  */
 enum Bundle {
     /** Placing, breaking and changing blocks; doing things to animals and objects; the world's own changes. */
-    BUILD,
+    BUILD(false),
     /** Right-clicking blocks and entities, inventories, items and resources. */
-    USE,
+    USE(false),
     /** A player ending up inside: walking, carried, teleported, seated, set down. */
-    ENTRY,
-    /** Players hurting players. */
-    PVP,
+    ENTRY(false),
+    /** Players hurting players, judged at both ends: a safe zone keeps hits out and keeps its own from leaving. */
+    PVP(true),
     /** No flag holds it. Can't be named in a rule. */
-    OPEN;
+    OPEN(false);
+
+    private final boolean bothEnds;
+
+    Bundle(boolean bothEnds) {
+        this.bothEnds = bothEnds;
+    }
+
+    /**
+     * Whether its nodes are decided where the act set out from as well as where it happens, when the event states
+     * where it set out from.
+     */
+    boolean bothEnds() {
+        return bothEnds;
+    }
 
     /** As written in regions.yml and commands; {@code open} is never written. */
     String key() {

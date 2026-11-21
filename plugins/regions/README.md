@@ -44,7 +44,9 @@ For each place the event states (a place no one can pin down counts as every reg
 3. At one priority, any region refusing refuses; otherwise any allowing allows; if every region there abstains, the next priority down decides.
 4. If every region abstains, it is allowed.
 
-The act is refused if any place refuses. For entry, a region the player is already in never refuses, so anyone inside can walk out. A plot inside spawn only states what differs: its members are allowed before spawn is asked, and what it says nothing about passes down to spawn.
+The act is refused if any place refuses.
+
+A hit on a player (`entity.hurt.player`, in `pvp`) is also decided where it set out from, as its event states it (`getSourceLocation()`): the attacker's block for a blow, where an arrow was shot from however far the shooter has gone since, a turret's block. So a no-PvP zone keeps hits out and keeps its own from leaving. A hit from somewhere nothing can say counts as every region its bound reaches, like any unknown place; harm nothing sent (a fall, a burning tick) adds nothing. Every other node is decided where it lands only: a visitor standing in spawn can still hit a cow or a zombie outside it. For entry, a region the player is already in never refuses, so anyone inside can walk out. A plot inside spawn only states what differs: its members are allowed before spawn is asked, and what it says nothing about passes down to spawn.
 
 A player's own inventory, and anything carried in it, stands outside every region, since it goes where they go.
 
@@ -55,7 +57,7 @@ Each node names its flag in code, so a node added later lands in its flag and is
 - **build**: every `block.*` but `block.use` and `block.redstone`; `entity.place.*`, `entity.spawn.*`, `entity.break`; what is done to animals and objects; what is done to players beyond pvp (removing, capturing, leashing, changing); `world.*`; `other`.
 - **use**: `block.use`, `block.redstone`, `entity.use.animal`, `entity.use.misc`, the `item.*` acts on what is kept here, `inventory.*`, `resource.*`, `player.sleep`.
 - **entry**: `enter.*`.
-- **pvp**: `entity.hurt.player`, `entity.ignite.player`, `entity.effect.player`.
+- **pvp**: `entity.hurt.player`, `entity.ignite.player`, `entity.effect.player`. Judged at both ends wherever the event says where the act set out from, which today is a hit.
 - **no flag**: everything done to monsters, `entity.use.player`, `entity.equip.player`, `entity.launch`, `entity.push.*`, `entity.target.*`, `item.pickup`, `item.drop`, `player.fish`. Allowed unless a region denies it by name.
 
 `/region define` writes a fresh region's rules into the file, so what a region does is all there and a later version can't change it quietly:
@@ -111,7 +113,7 @@ A refused player sees smoke where it happened and the region's name above the ho
 
 ## Known gaps
 
-- **Where a hit set out from isn't stated.** A hit is judged where it lands, so a safe zone keeps hits out, but a player or an owned turret standing inside one can hit someone outside. Two in-game tests carry this as a known gap. A hit by an entity nobody is behind needs no such fact: it is judged from that entity's origin.
+- **Setting a player alight or poisoning them is judged where it lands only.** `EntityCombustEvent` and `EntityPotionEffectEvent` don't say where the act set out from, so a splash potion thrown out of a safe zone takes hold on a player outside it. Their burning and poison ticks set out from nowhere, so they are judged where they land too.
 - A rider swung across an edge by a boat turning in place, in a region starting above the boat's block (a known gap since the first cut).
 
 Left out of this version: per-player rules (the `players` key is reserved), qualifiers beyond kind (an entity type id, a resource id), custom bundles, and testing as a visitor (`/region why <node> everyone` answers it on paper).

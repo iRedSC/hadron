@@ -39,7 +39,6 @@ import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import dev.iredsc.hadron.test.HadronTest;
-import dev.iredsc.hadron.test.KnownGap;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.List;
@@ -309,8 +308,6 @@ public final class PlacedRegionsTests {
     }
 
     @HadronTest
-    @KnownGap("Where a hit set out from isn't stated: EntityDamageEvent places only where it lands, so a safe zone "
-            + "keeps hits out but can't keep a turret or player inside it from hitting someone outside")
     void aTurretInASafeZoneCantHitAPlayerInAnotherWorld(TestContext t) {
         TestPlayer alice = admin(t);
         define(t, alice, "world-safe", t.pos(2, 0, -1), t.pos(4, 2, 1));
@@ -321,7 +318,8 @@ public final class PlacedRegionsTests {
         t.assertTrue(nether != null, "the server should have a Nether");
         carol.player().teleportTo(nether, 0.5, 64, 0.5, 0f, 0f);
         Actor turret = new Actor.Machine(t.level(), t.pos(3, 0, 0), Attribution.of(bob.uuid()));
-        EntityDamageEvent shot = new EntityDamageEvent(carol.player(), t.level().damageSources().generic(), 4f, turret);
+        EntityDamageEvent shot = new EntityDamageEvent(carol.player(), t.level().damageSources().generic(), 4f, turret,
+                RegionsTests.fromBlock(t, t.pos(3, 0, 0)));
         t.plugin().getServer().getPluginManager().callEvent(shot);
         t.assertTrue(shot.isCancelled(), "a turret in a safe zone should not hurt carol in the Nether either");
     }

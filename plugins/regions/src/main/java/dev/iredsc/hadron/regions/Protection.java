@@ -87,13 +87,16 @@ final class Protection implements Listener {
         return Who.of(actor, () -> natureHome);
     }
 
-    /** Whether a region at any of the act's places refuses it; shows who is told where. */
+    /**
+     * Whether a region at any place the act is decided at refuses it ({@link Ask.Act#decidedAt}); shows who is told
+     * where.
+     */
     private boolean act(Event event, Actor actor, Ask.Act a) {
         List<Place> home = a.home().orElseGet(() -> event instanceof BlockEvent b
                 ? List.of(Place.Spot.at(b.getLevel(), b.getPos())) : a.places());
         Optional<Who> who = who(event, actor, home);
         if (who.isEmpty()) return false;
-        for (Place place : a.places()) {
+        for (Place place : a.decidedAt()) {
             for (List<Region> here : mayBeIn(place)) {
                 Optional<Resolve.Decision> no = Resolve.refusing(here, who.get(), a.node());
                 if (no.isEmpty()) continue;
