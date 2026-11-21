@@ -27,7 +27,8 @@ import net.minecraft.world.entity.projectile.FishingHook;
 import net.minecraft.world.entity.projectile.Projectile;
 
 /**
- * {@code ServerLevel.addFreshEntity}: records who caused each new entity, then fires the spawn event. Server thread
+ * {@code ServerLevel.addFreshEntity}: records where each new entity enters the world and who caused it, then fires
+ * the spawn event. Server thread
  * only.
  */
 public final class EntitySpawns {
@@ -40,15 +41,21 @@ public final class EntitySpawns {
     /** True to let the entity in. */
     public static boolean add(ServerLevel level, Entity entity) {
         if (entity instanceof Player) return true;
+        EntityState state = (EntityState) entity;
+        boolean carried = entity instanceof ItemEntity || entity instanceof ExperienceOrb
+                || entity instanceof FallingBlockEntity;
+        boolean converted = !carried && (converting > 0 || state.hadron$converted());
+        // Kept whether or not anyone listens: where it entered the world can't be worked out later. Not for the new
+        // mob of a conversion, which keeps exactly what the old one had (inherit), nor for an entity already in the
+        // world, which this call won't add: it entered where it did.
+        boolean enters = !converted && !entity.isAddedToLevel();
+        if (enters) AttributionMemory.enteredAt(entity);
         rememberCause(entity);
         // What these carry was already taken from somewhere (a broken block, a dead mob's inventory, a falling
         // block's space), so refusing their arrival would destroy it rather than undo anything. Items have their
         // own events in the item family.
-        if (entity instanceof ItemEntity || entity instanceof ExperienceOrb || entity instanceof FallingBlockEntity) {
-            return true;
-        }
-        EntityState state = (EntityState) entity;
-        if (converting > 0 || state.hadron$converted()) {
+        if (carried) return true;
+        if (converted) {
             state.hadron$setConverted(false);
             return true;
         }
@@ -74,6 +81,8 @@ public final class EntitySpawns {
             if (build != 0) Actors.Port.exit(PortKey.KEY, build);
         }
         boolean cancelled = Hooks.post(event).isCancelled();
+        // A listener may have moved it: it enters the world where it stands now, not where it was first asked for.
+        if (enters) AttributionMemory.enteredAt(entity);
         tried(cancelled);
         if (cancelled && entity instanceof FishingHook hook) return refuseHook(hook);
         return !cancelled;
@@ -192,6 +201,15 @@ public final class EntitySpawns {
         if (!cause.isEmpty()) Actors.remember(entity, cause);
     }
 
+    /**
+     * An entity generated with the world is about to be saved into its chunk, riders with it (they are saved inside
+     * it): each entered the world where it stands. Runs on a generation thread, on entities only that thread holds.
+     */
+    public static void generated(Entity entity) {
+        if (entity.level().isClientSide()) return;
+        for (Entity each : entity.getSelfAndPassengers().toList()) AttributionMemory.enteredAt(each);
+    }
+
     /** Runs a conversion, whose new mob is not announced as a spawn, and passes on who was behind the old one. */
     public static <T extends Entity> T converting(Entity from, Supplier<T> conversion) {
         converting++;
@@ -205,9 +223,18 @@ public final class EntitySpawns {
         return result;
     }
 
-    /** The new entity of a conversion carries the old one's attribution. */
+    /**
+     * {@code Mob.convertTo} has just made its new mob: it has the old one's origin before it can fire anything (it
+     * is seated on the old one's vehicle, heard as a mount, before the conversion returns).
+     */
+    public static void converted(Entity from, Entity to) {
+        AttributionMemory.inheritOrigin(from, to);
+    }
+
+    /** The new entity of a conversion carries the old one's attribution, and entered the world where it did. */
     static void inherit(Entity from, Entity to) {
         Attribution attribution = Actors.remembered(from);
         if (!attribution.isEmpty() && Actors.remembered(to).isEmpty()) Actors.remember(to, attribution);
+        AttributionMemory.inheritOrigin(from, to);
     }
 }

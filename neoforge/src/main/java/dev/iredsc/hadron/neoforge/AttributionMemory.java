@@ -1,16 +1,24 @@
 package dev.iredsc.hadron.neoforge;
 
 import org.jspecify.annotations.Nullable;
+import com.mojang.datafixers.util.Pair;
 import com.mojang.serialization.Codec;
+import com.mojang.serialization.DataResult;
+import com.mojang.serialization.Decoder;
+import com.mojang.serialization.DynamicOps;
 import com.mojang.serialization.codecs.RecordCodecBuilder;
 import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.actor.Attribution;
+import dev.iredsc.hadron.api.event.Place;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Supplier;
+import net.minecraft.core.GlobalPos;
 import net.minecraft.core.UUIDUtil;
+import net.minecraft.server.MinecraftServer;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.entity.BlockEntity;
@@ -21,8 +29,8 @@ import net.neoforged.neoforge.registries.NeoForgeRegistries;
 
 /**
  * Remembered attribution, saved with each entity and block entity as a NeoForge data attachment, so a shell landing
- * after a restart still knows who fired it. Also holds who set a burning entity alight, and the items a dead player
- * keeps until they respawn.
+ * after a restart still knows who fired it. Also holds where each entity entered the world, who set a burning entity
+ * alight, and the items a dead player keeps until they respawn.
  */
 final class AttributionMemory implements Actors.Memory {
     static final Codec<Attribution> CODEC = RecordCodecBuilder.create(i -> i.group(
@@ -61,6 +69,53 @@ final class AttributionMemory implements Actors.Memory {
      */
     static final Supplier<AttachmentType<UUID>> MACHINE_ID = ATTACHMENTS.register("machine_id",
             () -> AttachmentType.builder(UUID::randomUUID).serialize(UUIDUtil.CODEC).build());
+
+    /**
+     * Read leniently: an origin that can't be read is no origin, never an error (NeoForge logs one for every entity
+     * whose attachment fails to decode).
+     */
+    private static final Codec<Optional<GlobalPos>> ORIGIN_CODEC = Codec.of(
+            GlobalPos.CODEC.comap(Optional::orElseThrow), new Decoder<>() {
+                @Override
+                public <T> DataResult<Pair<Optional<GlobalPos>, T>> decode(DynamicOps<T> ops, T input) {
+                    return DataResult.success(Pair.of(GlobalPos.CODEC.parse(ops, input).result(), ops.empty()));
+                }
+            });
+
+    /**
+     * Where an entity entered the world ({@link #enteredAt}): a dimension and a block, about 72 bytes saved. One saved
+     * before Hadron kept it has none.
+     */
+    static final Supplier<AttachmentType<Optional<GlobalPos>>> ORIGIN = ATTACHMENTS.register("origin",
+            () -> AttachmentType.<Optional<GlobalPos>>builder(Optional::empty)
+                    .serialize(ORIGIN_CODEC, Optional::isPresent).build());
+
+    /**
+     * The entity is entering the world now, where it stands: a fresh spawn, or one generated with the world. Written
+     * over any origin it came with: an entity built from saved data (a structure's, a mob jar's) enters here, not
+     * where the copy it was saved from once did.
+     */
+    static void enteredAt(Entity entity) {
+        entity.setData(ORIGIN, Optional.of(GlobalPos.of(entity.level().dimension(), entity.blockPosition())));
+    }
+
+    /**
+     * The new entity of a conversion entered the world where the old one did: it keeps exactly what the old one had,
+     * no origin included, whatever it was given before the conversion was announced.
+     */
+    static void inheritOrigin(Entity from, Entity to) {
+        if (from.hasData(ORIGIN)) to.setData(ORIGIN, from.getData(ORIGIN));
+        else to.removeData(ORIGIN);
+    }
+
+    @Override
+    public Place origin(Entity entity) {
+        Optional<GlobalPos> at = entity.hasData(ORIGIN) ? entity.getData(ORIGIN) : Optional.empty();
+        MinecraftServer server = entity.getServer();
+        ServerLevel level = at.isPresent() && server != null ? server.getLevel(at.get().dimension()) : null;
+        return level == null ? Place.Unknown.anywhere(Place.Unknown.Reason.UNSEEN_ORIGIN)
+                : Place.Spot.at(level, at.get().pos());
+    }
 
     /** The machine's id, given to it now (and saved with it) if it has none yet. */
     static UUID machineId(BlockEntity blockEntity) {

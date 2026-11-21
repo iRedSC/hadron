@@ -1,5 +1,6 @@
 package dev.iredsc.hadron.api.actor;
 
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 import java.util.Optional;
@@ -75,6 +76,16 @@ public sealed interface Actor {
         public EntityActor {
             Objects.requireNonNull(entity, "entity");
             Objects.requireNonNull(attribution, "attribution; use Attribution.none() for nobody");
+        }
+
+        /**
+         * Where this entity entered the world, wherever it is now: {@link Actors#origin(Entity)}. With nobody behind
+         * it ({@link #actingFor()} empty), this is where protection should judge it from: a hopper minecart rolled in
+         * from outside acts from outside. For an entity still inside its own spawn event, it is the block it was
+         * about to enter when the event fired, settled only once the listeners are done.
+         */
+        public Place origin() {
+            return Actors.origin(entity);
         }
     }
 
