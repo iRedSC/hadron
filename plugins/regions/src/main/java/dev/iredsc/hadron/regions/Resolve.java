@@ -4,6 +4,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.TreeSet;
+import java.util.function.Predicate;
 
 /**
  * Whether the regions at one spot let an act through. Plain functions over {@link Region}s, so every rule is checked on
@@ -101,6 +102,14 @@ final class Resolve {
             if (allowed != null) return Optional.empty();
         }
         return Optional.empty();
+    }
+
+    /**
+     * Whether a region answers for {@code who} at {@code node}, so that below it nothing decides: it has an answer, or
+     * {@code who} is already in it. A region that abstains hides nothing beneath it.
+     */
+    static Predicate<Region> answers(Who who, Node node, Collection<Region> alreadyIn) {
+        return r -> alreadyIn.contains(r) || answer(r, who, node).isPresent();
     }
 
     static Optional<Decision> refusing(Collection<Region> here, Who who, Node node) {

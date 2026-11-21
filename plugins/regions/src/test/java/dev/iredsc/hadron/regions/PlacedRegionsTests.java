@@ -39,6 +39,8 @@ import net.minecraft.world.level.block.BedBlock;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.level.block.state.properties.BedPart;
 import dev.iredsc.hadron.test.HadronTest;
+import dev.iredsc.hadron.api.event.world.ChunkForceLoadEvent;
+import net.minecraft.world.level.ChunkPos;
 import dev.iredsc.hadron.test.TestContext;
 import dev.iredsc.hadron.test.TestPlayer;
 import java.util.List;
@@ -163,6 +165,20 @@ public final class PlacedRegionsTests {
         t.plugin().getServer().getPluginManager().callEvent(click);
         t.assertTrue(click.isCancelled(), "an inventory nobody can place may be in the vault, which the park, "
                 + "though higher, doesn't cover");
+    }
+
+    @HadronTest
+    void aSilentRegionAboveDoesntLetAnOutsiderForceLoadAChunkBelowDenies(TestContext t) {
+        TestPlayer alice = admin(t);
+        define(t, alice, "loaded-below", t.pos(2, 0, -1), t.pos(4, 2, 1));
+        RegionStore store = ((RegionsPlugin) t.plugin()).regions();
+        Region below = store.get("loaded-below").orElseThrow();
+        store.put(Region.of("silent-above", below.world(), below.box()).withPriority(1).withRules(Rules.none()));
+        TestPlayer bob = t.player("bob");
+        ChunkForceLoadEvent load = new ChunkForceLoadEvent(new Actor.Player(bob.player()), t.level(),
+                new ChunkPos(t.pos(3, 0, 0)), true);
+        t.plugin().getServer().getPluginManager().callEvent(load);
+        t.assertTrue(load.isCancelled(), "silent-above says nothing, so loaded-below, which denies build, decides");
     }
 
     @HadronTest

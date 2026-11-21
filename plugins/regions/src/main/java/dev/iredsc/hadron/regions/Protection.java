@@ -17,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 import net.minecraft.core.BlockPos;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
@@ -96,8 +97,9 @@ final class Protection implements Listener {
                 ? List.of(Place.Spot.at(b.getLevel(), b.getPos())) : a.places());
         Optional<Who> who = who(event, actor, home);
         if (who.isEmpty()) return false;
+        Predicate<Region> answers = Resolve.answers(who.get(), a.node(), List.of());
         for (Place place : a.decidedAt()) {
-            for (List<Region> here : mayBeIn(place)) {
+            for (List<Region> here : mayBeIn(place, answers)) {
                 Optional<Resolve.Decision> no = Resolve.refusing(here, who.get(), a.node());
                 if (no.isEmpty()) continue;
                 tell(actor, no.get(), place, event);
@@ -141,9 +143,9 @@ final class Protection implements Listener {
         Optional<Carried.Ride> carrier = en.carrier();
         for (Carried.Ride r : going) {
             Who who = new Who.Person(r.entity().getUUID());
-            if (no.isEmpty()) no = refusingEntry(mayBeIn(r.from()), r.to(), who, node);
+            if (no.isEmpty()) no = refusingEntry(mayBeIn(r.from(), EVERY), r.to(), who, node);
             if (no.isEmpty() && carrier.isPresent() && r != carrier.get()) {
-                no = refusingEntry(mayBeIn(carrier.get().from()), carrier.get().to(), who, node);
+                no = refusingEntry(mayBeIn(carrier.get().from(), EVERY), carrier.get().to(), who, node);
             }
         }
         if (no.isEmpty()) return false;
@@ -160,7 +162,7 @@ final class Protection implements Listener {
     /** The decision refusing {@code who} entry to {@code to} from regions they may be leaving, wherever it may be. */
     private Optional<Resolve.Decision> refusingEntry(List<List<Region>> from, Place to, Who who, Node node) {
         for (List<Region> left : from) {
-            for (List<Region> entered : mayBeIn(to)) {
+            for (List<Region> entered : mayBeIn(to, Resolve.answers(who, node, left))) {
                 if (left.containsAll(entered)) continue;
                 Optional<Resolve.Decision> no = Resolve.refusing(entered, who, node, left);
                 if (no.isPresent()) return no;
@@ -193,28 +195,35 @@ final class Protection implements Listener {
     }
 
     /**
+     * Where a player may set out from, as the regions they may already be in: fewest regions is the strictest, since a
+     * region they are in never refuses them, so each region alone is enough.
+     */
+    private static final Predicate<Region> EVERY = r -> true;
+
+    /**
      * The sets of regions a place may stand in, each standing for a spot it may be: a block is in exactly the regions
      * there. For a place that covers or may be anywhere in an area (a chunk, a level, one nobody can place): outside
      * every region if some of the area is, and each region alone wherever part of it holds the area and no region of
-     * higher priority covers that part. Alone is enough there: only regions of its own priority decide with it, and any
-     * of those refusing is its own entry. One with no place in a world is outside every region.
+     * higher priority that {@code answers} covers that part. Alone is enough there: a higher region covering it there
+     * abstains, only regions of its own priority decide with it, and any of those refusing is its own entry. One with
+     * no place in a world is outside every region.
      */
-    private List<List<Region>> mayBeIn(Place place) {
+    private List<List<Region>> mayBeIn(Place place, Predicate<Region> answers) {
         return switch (place) {
             case Place.Spot s when s.isBlock() -> List.of(store.at(s.level(),
                     new BlockPos(s.box().minX(), s.box().minY(), s.box().minZ())));
-            case Place.Spot s -> anywhereIn(store.overlapping(s.level(), s.box()), s.box());
-            case Place.Level l -> anywhereIn(store.in(l.level()), null);
+            case Place.Spot s -> anywhereIn(store.overlapping(s.level(), s.box()), s.box(), answers);
+            case Place.Level l -> anywhereIn(store.in(l.level()), null, answers);
             case Place.Nowhere n -> List.of(List.of());
             case Place.Unknown u -> switch (u.bound()) {
-                case Place.Spot s -> anywhereIn(store.overlapping(s.level(), s.box()), s.box());
-                case Place.Level l -> anywhereIn(store.in(l.level()), null);
+                case Place.Spot s -> anywhereIn(store.overlapping(s.level(), s.box()), s.box(), answers);
+                case Place.Level l -> anywhereIn(store.in(l.level()), null, answers);
                 case Place.Anywhere a -> {
                     List<List<Region>> out = new ArrayList<>();
                     out.add(List.of());
                     Map<ResourceLocation, List<Region>> byWorld = new HashMap<>();
                     for (Region r : store.all()) byWorld.computeIfAbsent(r.world(), w -> new ArrayList<>()).add(r);
-                    for (List<Region> world : byWorld.values()) out.addAll(anywhereIn(world, null));
+                    for (List<Region> world : byWorld.values()) out.addAll(anywhereIn(world, null, answers));
                     yield out;
                 }
             };
@@ -223,14 +232,15 @@ final class Protection implements Listener {
 
     /**
      * {@link #mayBeIn} for an area of one world, given the regions that reach it; {@code area} null for a whole world,
-     * which always has room outside every region.
+     * which always has room outside every region. Only a region that {@code answers} hides one of lower priority.
      */
-    static List<List<Region>> anywhereIn(List<Region> reached, @Nullable BoundingBox area) {
+    static List<List<Region>> anywhereIn(List<Region> reached, @Nullable BoundingBox area, Predicate<Region> answers) {
         List<List<Region>> out = new ArrayList<>(reached.size() + 1);
         if (area == null || !Boxes.covered(area, reached.stream().map(Region::box).toList())) out.add(List.of());
         for (Region r : reached) {
             BoundingBox part = area == null ? r.box() : Boxes.intersection(r.box(), area);
-            List<BoundingBox> higher = reached.stream().filter(h -> h.priority() > r.priority()).map(Region::box)
+            List<BoundingBox> higher = reached.stream().filter(h -> h.priority() > r.priority() && answers.test(h))
+                    .map(Region::box)
                     .toList();
             if (!Boxes.covered(part, higher)) out.add(List.of(r));
         }
