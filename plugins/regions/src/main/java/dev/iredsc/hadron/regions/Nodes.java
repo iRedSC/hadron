@@ -506,12 +506,21 @@ final class Nodes {
         return own.isPresent() ? List.of(Place.Nowhere.player(own.get())) : Place.of(holder);
     }
 
-    /** The player whose own inventory this is, or is carried in (a backpack in their pocket, however deep). */
+    /**
+     * The player whose own inventory this is, or is carried in (a backpack in their pocket, however deep), through
+     * every holder that stands for another (a plugin's view of it, a per-player copy of it). No default: a holder type
+     * the API adds fails to compile here until someone decides whether it can be a player's own.
+     */
     static Optional<UUID> playersOwn(InventoryHolder holder) {
         return switch (holder) {
-            case InventoryHolder.Entity en when en.entity() instanceof Player p -> Optional.of(p.getUUID());
+            case InventoryHolder.Entity en -> en.entity() instanceof Player p ? Optional.of(p.getUUID())
+                    : Optional.empty();
             case InventoryHolder.Item i -> playersOwn(i.outer());
-            default -> Optional.empty();
+            case InventoryHolder.Plugin p -> p.at().flatMap(Nodes::playersOwn);
+            case InventoryHolder.PerPlayer p -> playersOwn(p.at());
+            case InventoryHolder.Block b -> Optional.empty();
+            case InventoryHolder.Linked l -> Optional.empty();
+            case InventoryHolder.Unknown u -> Optional.empty();
         };
     }
 
