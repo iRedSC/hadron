@@ -3,6 +3,7 @@ package dev.iredsc.hadron.api.event.entity;
 import dev.iredsc.hadron.api.event.Places;
 import dev.iredsc.hadron.api.event.Place;
 import dev.iredsc.hadron.api.actor.Actor;
+import dev.iredsc.hadron.api.actor.Actors;
 import dev.iredsc.hadron.api.event.ActionEvent;
 import java.util.Objects;
 import net.minecraft.core.BlockPos;
@@ -51,6 +52,16 @@ public abstract class EntityEvent extends ActionEvent {
     /** Where the entity was when this fired. */
     public Vec3 getPosition() {
         return position;
+    }
+
+    /**
+     * Where the entity entered the world, wherever it is now: {@link Actors#origin(Entity)}, which answers for any
+     * other entity the event names too. Not one of the event's places: the action happens where the entity is. In
+     * the entity's own spawn event it is the block it was about to enter when the event fired, settled only once the
+     * listeners are done.
+     */
+    public Place getOrigin() {
+        return Actors.origin(entity);
     }
 
     /** The block the entity was in when this fired. */

@@ -2,14 +2,18 @@ package dev.iredsc.hadron.neoforge.mixin.entity;
 
 import com.llamalad7.mixinextras.injector.wrapmethod.WrapMethod;
 import com.llamalad7.mixinextras.injector.wrapoperation.Operation;
+import com.llamalad7.mixinextras.injector.wrapoperation.WrapOperation;
 import dev.iredsc.hadron.api.actor.Actor;
 import dev.iredsc.hadron.api.event.entity.EntityStatusChangeEvent;
 import dev.iredsc.hadron.neoforge.EntityActors;
 import dev.iredsc.hadron.neoforge.EntitySpawns;
 import dev.iredsc.hadron.neoforge.Hooks;
 import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.Mob;
+import net.minecraft.world.level.Level;
+import org.jspecify.annotations.Nullable;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
@@ -27,6 +31,15 @@ abstract class MobMixin {
                 EntityActors.fromStack(self, Actor.Unknown.INSTANCE))).isCancelled()) {
             ci.cancel();
         }
+    }
+
+    /** The new mob of a conversion has the old one's origin from the moment it exists, before any event names it. */
+    @WrapOperation(method = "convertTo", at = @At(value = "INVOKE", target = "Lnet/minecraft/world/entity/EntityType;"
+            + "create(Lnet/minecraft/world/level/Level;)Lnet/minecraft/world/entity/Entity;"))
+    private @Nullable Entity hadron$converted(EntityType<?> type, Level level, Operation<Entity> original) {
+        Entity created = original.call(type, level);
+        if (created != null && level instanceof ServerLevel) EntitySpawns.converted((Mob) (Object) this, created);
+        return created;
     }
 
     /**

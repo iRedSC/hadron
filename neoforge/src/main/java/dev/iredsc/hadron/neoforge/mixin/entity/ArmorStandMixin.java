@@ -1,7 +1,6 @@
 package dev.iredsc.hadron.neoforge.mixin.entity;
 
 import dev.iredsc.hadron.api.event.entity.EntityDamageEvent;
-import dev.iredsc.hadron.neoforge.EntityActors;
 import dev.iredsc.hadron.neoforge.EntityEvents;
 import dev.iredsc.hadron.neoforge.EntityHandling;
 import dev.iredsc.hadron.neoforge.Hooks;
@@ -48,8 +47,7 @@ abstract class ArmorStandMixin {
                 || !Hooks.listens(EntityDamageEvent.class)) return;
         // Every amount fires it, a negative or NaN one reported as 0, since vanilla breaks a stand on any hit. A
         // stand breaks by hits counted, not health, so what a listener sets the amount to changes nothing.
-        if (Hooks.post(new EntityDamageEvent(self, source, EntityEvents.reportedDamage(amount),
-                EntityActors.damage(source, self))).isCancelled()) {
+        if (Hooks.post(EntityEvents.damageEvent(self, source, amount)).isCancelled()) {
             cir.setReturnValue(false);
         }
     }

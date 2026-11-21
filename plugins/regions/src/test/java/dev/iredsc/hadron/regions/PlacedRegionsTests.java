@@ -321,7 +321,7 @@ public final class PlacedRegionsTests {
         ArmorStand stand = EntityType.ARMOR_STAND.create(t.level());
         BlockPos at = t.pos(1, 0, 1);
         stand.moveTo(at.getX() + 0.5, at.getY(), at.getZ() + 0.5);
-        EntitySpawnEvent spawn = new EntitySpawnEvent(stand, null, new Actor.Server("a plugin's arena reset"));
+        EntitySpawnEvent spawn = new EntitySpawnEvent(stand, EntitySpawnEvent.Cause.SPAWNED, null, new Actor.Server("a plugin's arena reset"));
         t.plugin().getServer().getPluginManager().callEvent(spawn);
         t.assertFalse(spawn.isCancelled(), "the server's own spawn is trusted");
         EntityRemoveEvent remove = new EntityRemoveEvent(stand, EntityRemoveEvent.Cause.KILLED,

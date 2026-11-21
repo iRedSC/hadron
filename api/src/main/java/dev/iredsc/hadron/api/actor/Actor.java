@@ -1,10 +1,12 @@
 package dev.iredsc.hadron.api.actor;
 
+import dev.iredsc.hadron.api.event.Place;
 import org.jspecify.annotations.Nullable;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.Entity;
@@ -18,6 +20,7 @@ import net.minecraft.world.entity.Entity;
  *     case Actor.FakePlayer f -> ...
  *     case Actor.Machine m -> ...
  *     case Actor.EntityActor e -> ...
+ *     case Actor.Remembered r -> ...
  *     case Actor.Server s -> ...
  *     case Actor.Nature n -> ...
  *     case Actor.Unknown u -> ...
@@ -72,6 +75,39 @@ public sealed interface Actor {
     record EntityActor(Entity entity, Attribution attribution) implements Actor {
         public EntityActor {
             Objects.requireNonNull(entity, "entity");
+            Objects.requireNonNull(attribution, "attribution; use Attribution.none() for nobody");
+        }
+
+        /**
+         * Where this entity entered the world, wherever it is now: {@link Actors#origin(Entity)}. With nobody behind
+         * it ({@link #actingFor()} empty), this is where protection should judge it from: a hopper minecart rolled in
+         * from outside acts from outside. For an entity still inside its own spawn event, it is the block it was
+         * about to enter when the event fired, settled only once the listeners are done.
+         */
+        public Place origin() {
+            return Actors.origin(entity);
+        }
+    }
+
+    /**
+     * An actor that caused something and has since gone, kept by what it was rather than by the thing itself: a player
+     * who logged off before their poison wore off, a spent area-effect cloud, a removed entity, a broken machine. Core
+     * hands it out where it kept a cause across ticks (an effect, an entity's fire) and that cause is no longer
+     * there; a bridge carrying an actor into later ticks (a ritual, a turret's lingering cloud) uses it the same way.
+     * Protection treats it like any other actor: it acts for whoever {@link #actingFor()} says.
+     *
+     * @param kind what it was, namespaced: an entity type's id ({@code minecraft:player},
+     *     {@code minecraft:area_effect_cloud}); {@code hadron:fake_player} for a fake player, never
+     *     {@code minecraft:player}; for a machine its block entity type's id, or its block's where it had no block entity
+     * @param id which one: the entity's UUID (a player's is their account's; a fake player's may be borrowed from a
+     *     real player, so ask {@link #actingFor()}, never this, who answers), or for a machine the id Hadron gave its
+     *     block entity; empty where there was none
+     * @param attribution the people who were behind it; {@link Attribution#none()} for nobody
+     */
+    record Remembered(ResourceLocation kind, Optional<UUID> id, Attribution attribution) implements Actor {
+        public Remembered {
+            Objects.requireNonNull(kind, "kind; such as the entity type's id, minecraft:player");
+            Objects.requireNonNull(id, "id; use Optional.empty() for a machine, which has none");
             Objects.requireNonNull(attribution, "attribution; use Attribution.none() for nobody");
         }
     }

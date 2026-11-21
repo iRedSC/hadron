@@ -11,12 +11,13 @@ import static dev.iredsc.hadron.api.event.FiredBy.Core.FULL;
 /**
  * A projectile is fired or thrown: an arrow, a trident, a snowball, a fireball, a modded shell. The actor is the
  * shooter. Cancel it and the projectile never appears, but the ammunition or thrown item is already spent; to stop a
- * weapon before it spends anything, cancel the item use instead.
+ * weapon before it spends anything, cancel the item use instead. Its {@link #getCause()} is always
+ * {@link EntitySpawnEvent.Cause#LAUNCHED}.
  */
 @FiredBy(core = FULL)
 public class ProjectileLaunchEvent extends EntitySpawnEvent {
     public ProjectileLaunchEvent(Projectile projectile, Actor actor) {
-        super(projectile, null, actor);
+        super(projectile, Cause.LAUNCHED, null, actor);
     }
 
     @Override
