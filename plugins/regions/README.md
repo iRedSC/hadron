@@ -44,9 +44,9 @@ For each place the event states (a place no one can pin down counts as every reg
 3. At one priority, any region refusing refuses; otherwise any allowing allows; if every region there abstains, the next priority down decides.
 4. If every region abstains, it is allowed.
 
-The act is refused if any place refuses.
+The act is refused if any place refuses. For entry, a region the player is already in never refuses, so anyone inside can walk out. A plot inside spawn only states what differs: its members are allowed before spawn is asked, and what it says nothing about passes down to spawn.
 
-A hit on a player (`entity.hurt.player`, in `pvp`) is also decided where it set out from, as its event states it (`getSourceLocation()`): the attacker's block for a blow, where an arrow was shot from however far the shooter has gone since, a turret's block. So a no-PvP zone keeps hits out and keeps its own from leaving. A hit from somewhere nothing can say counts as every region its bound reaches, like any unknown place; harm nothing sent (a fall, a burning tick) adds nothing. Every other node is decided where it lands only: a visitor standing in spawn can still hit a cow or a zombie outside it. For entry, a region the player is already in never refuses, so anyone inside can walk out. A plot inside spawn only states what differs: its members are allowed before spawn is asked, and what it says nothing about passes down to spawn.
+A hit on a player (`entity.hurt.player`, in `pvp`) is also decided where it set out from, as its event states it (`getSourceLocation()`): the attacker's block for a blow, where an arrow was shot from however far the shooter has gone since, a turret's block. So a no-PvP zone keeps hits out and keeps its own from leaving. A hit from somewhere nothing can say counts as every region its bound reaches, like any unknown place; harm nothing sent (a fall, a burning tick) adds nothing. Every other node is decided where it lands only: a visitor standing in spawn can still hit a cow or a zombie outside it.
 
 A player's own inventory, and anything carried in it, stands outside every region, since it goes where they go.
 
