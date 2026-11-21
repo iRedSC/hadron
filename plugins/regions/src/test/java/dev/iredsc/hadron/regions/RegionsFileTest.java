@@ -229,6 +229,32 @@ class RegionsFileTest {
     }
 
     @Test
+    void aKeyWithNothingAfterItIsRefusedNotDropped(@TempDir Path dir) throws Exception {
+        refusedOnDisk(dir, "regions.yml", """
+                regions:
+                  spawn:
+                    world: minecraft:overworld
+                    min: [0, 0, 0]
+                    max: [1, 1, 1]
+                    rules:
+                      everyone:
+                        deny:
+                """, true, "under regions > spawn > rules > everyone: \"deny\" has nothing after it",
+                "Write [] for an empty list or {} for an empty map, or remove the key");
+        refusedOnDisk(dir, "regions.yml", """
+                regions:
+                  spawn: {world: 'minecraft:overworld', min: [0, 0, 0], max: [1, 1, 1], rules: {}}
+                  market:
+                """, true, "under regions: \"market\" has nothing after it", "or remove the key");
+    }
+
+    @Test
+    void aBypassKeyWithNothingAfterItIsRefusedNotDropped(@TempDir Path dir) throws Exception {
+        refusedOnDisk(dir, "bypass.yml", "players: []\nplayer:\n", false, "\"player\" has nothing after it",
+                "or remove the key");
+    }
+
+    @Test
     void anUnknownKeyInBypassIsRefused(@TempDir Path dir) throws Exception {
         refusedOnDisk(dir, "bypass.yml", "player:\n- 00000000-0000-0005-0000-000000000006\n", false,
                 "\"player\" isn't a setting", "only players");

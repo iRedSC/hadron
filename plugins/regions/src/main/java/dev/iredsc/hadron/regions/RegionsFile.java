@@ -66,9 +66,9 @@ final class RegionsFile {
 
     /**
      * Reads one of the plugin's data files (regions.yml, bypass.yml), refusing what {@link YamlConfiguration} would
-     * take and quietly fold into one key: a key written twice in the same map, and a key with a dot in it, which it
-     * reads as a key inside a key. Either would drop what the owner wrote, and the next save would write the file
-     * without it.
+     * take and quietly fold into one key or drop: a key written twice in the same map, a key with a dot in it, which it
+     * reads as a key inside a key, and a key with nothing after it. Each would drop what the owner wrote, and the next
+     * save would write the file without it.
      */
     static YamlConfiguration open(File file) throws Problem {
         String text;
@@ -97,7 +97,10 @@ final class RegionsFile {
         return yaml;
     }
 
-    /** Refuses the keys YamlConfiguration folds together though YAML holds them apart, in maps at any depth. */
+    /**
+     * Refuses the keys YamlConfiguration folds together though YAML holds them apart, or drops for holding nothing, in
+     * maps at any depth.
+     */
     private static void foldedKeys(String name, String under, Object node) throws Problem {
         if (!(node instanceof Map<?, ?> map)) return;
         String where = name + (under.isEmpty() ? "" : ", under " + under) + ": \"";
@@ -111,6 +114,10 @@ final class RegionsFile {
             if (!seen.add(key)) {
                 throw new Problem(where + key + "\" is written twice in the same map, once as text and once as a "
                         + "number or other value, so one of the two would be lost. Rename or remove one of them");
+            }
+            if (e.getValue() == null) {
+                throw new Problem(where + key + "\" has nothing after it, so it would be dropped. Write [] for an "
+                        + "empty list or {} for an empty map, or remove the key");
             }
             foldedKeys(name, under.isEmpty() ? key : under + " > " + key, e.getValue());
         }

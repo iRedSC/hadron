@@ -93,7 +93,7 @@ regions:
         allow: [entity.*.player]
 ```
 
-Any mistake stops the plugin with the file left as it is, naming the region, subject and list and saying the fix: a region without `rules` (write `rules: {}` for one that only marks an area), `flags` from the first cut (each says how to write it as rules), an unknown subject, `owners` as a subject (write `members`), `players` (per-player rules aren't in this version), a key under a subject other than `allow` or `deny`, a list that isn't a list of text, a node that isn't one, a leading `*`, an empty segment, capitals, an entry written twice, and one both allowed and denied. Saving writes subjects in order, deny before allow, flags first, so a hand edit round-trips unchanged.
+Any mistake stops the plugin with the file left as it is, naming the region, subject and list and saying the fix: a region without `rules` (write `rules: {}` for one that only marks an area), `flags` from the first cut (each says how to write it as rules), an unknown subject, `owners` as a subject (write `members`), `players` (per-player rules aren't in this version), a key under a subject other than `allow` or `deny`, a list that isn't a list of text, a node that isn't one, a leading `*`, an empty segment, capitals, an entry written twice, one both allowed and denied, and a key with nothing after it (write `[]` or `{}` for none, or remove the key). Saving writes subjects in order, deny before allow, flags first, so a hand edit round-trips unchanged.
 
 ## Commands
 
