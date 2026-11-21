@@ -87,7 +87,7 @@ import org.jspecify.annotations.Nullable;
  * Refuses what regions forbid, through Hadron's events, so it covers every mod whose bridge is installed and treats
  * every mod without one as an outsider. Who is asked is the actor's {@link Actor#actingFor()}: a player, a machine's
  * owner, a drone's operator. The server is always let through; the world on its own is held to
- * {@link Rules#refusingCrossing}.
+ * {@link FlagRules#refusingCrossing}.
  */
 final class Protection implements Listener {
     private final RegionStore store;
@@ -111,7 +111,7 @@ final class Protection implements Listener {
         if (e.getActor() instanceof Actor.Nature) {
             List<Region> from = source(e).map(at -> store.at(level, at)).orElse(List.of());
             for (BlockPos pos : touched(e)) {
-                if (Rules.refusingCrossing(from, store.at(level, pos)).isPresent()) {
+                if (FlagRules.refusingCrossing(from, store.at(level, pos)).isPresent()) {
                     c.setCancelled(true);
                     return;
                 }
@@ -135,7 +135,7 @@ final class Protection implements Listener {
         if (!store.hasAny(level)) return;
         if (e.getActor() instanceof Actor.Nature) {
             List<Region> from = store.at(level, BlockPos.containing(e.getLocation()));
-            e.blockList().removeIf(pos -> Rules.refusingCrossing(from, store.at(level, pos)).isPresent());
+            e.blockList().removeIf(pos -> FlagRules.refusingCrossing(from, store.at(level, pos)).isPresent());
             return;
         }
         e.blockList().removeIf(pos -> refusing(e, level, pos, Flag.BUILD).isPresent());
@@ -227,7 +227,7 @@ final class Protection implements Listener {
     private Optional<Region> refusingEntry(List<List<Region>> from, Place to, Optional<UUID> who) {
         for (List<Region> left : from) {
             for (List<Region> entered : mayBeIn(to)) {
-                Optional<Region> no = Rules.refusingEntry(left, entered, who);
+                Optional<Region> no = FlagRules.refusingEntry(left, entered, who);
                 if (no.isPresent()) return no;
             }
         }
@@ -312,7 +312,7 @@ final class Protection implements Listener {
             default -> { }
         }
         for (Place.Spot side : sides) {
-            Optional<Region> no = Rules.refusing(store.at(side.level(), new BlockPos(side.box().minX(),
+            Optional<Region> no = FlagRules.refusing(store.at(side.level(), new BlockPos(side.box().minX(),
                     side.box().minY(), side.box().minZ())), Flag.PVP, who);
             if (no.isPresent()) return no;
         }
@@ -392,7 +392,7 @@ final class Protection implements Listener {
      * Someone behind it (a player, a machine's owner) needs {@code use} wherever each inventory it reaches stands,
      * even after the menu is open: a click is checked against every inventory behind the menu, since a shift-click can
      * move items into any of them. The world on its own (a hopper nobody owns) is held to
-     * {@link Rules#refusingCrossing} both ways, as a piston is. An inventory with no place in a world (linked storage,
+     * {@link FlagRules#refusingCrossing} both ways, as a piston is. An inventory with no place in a world (linked storage,
      * a plugin's own menu) stands outside every region. So does a player's own inventory, and what they carry in it
      * (a backpack): it goes where they go, so no region's {@code use} covers it, yet a hopper nobody owns can't empty a
      * chest inside into a player outside.
@@ -539,7 +539,7 @@ final class Protection implements Listener {
         // The world on its own carries a change from where the machine or mob doing it stands, too.
         if (worldOnItsOwn(e.getActor())) source(e.getActor()).ifPresent(at -> possible.add(mayBeIn(at)));
         Optional<Region> no = worldOnItsOwn(e.getActor()) ? crossing(possible)
-                : Rules.refusingAny(possible.stream().flatMap(List::stream).toList(), flag, e.getActor().actingFor());
+                : FlagRules.refusingAny(possible.stream().flatMap(List::stream).toList(), flag, e.getActor().actingFor());
         if (no.isEmpty()) return;
         c.setCancelled(true);
         shown.ifPresent(pos -> tell(e, pos, no.get()));
@@ -571,7 +571,7 @@ final class Protection implements Listener {
                 if (i == j && places.get(i).size() == 1) continue;
                 for (List<Region> from : places.get(i)) {
                     for (List<Region> to : places.get(j)) {
-                        Optional<Region> no = Rules.refusingCrossing(from, to);
+                        Optional<Region> no = FlagRules.refusingCrossing(from, to);
                         if (no.isPresent()) return no;
                     }
                 }
@@ -642,7 +642,7 @@ final class Protection implements Listener {
     /** The region refusing this actor here, unless the actor is trusted. */
     private Optional<Region> refusing(ActionEvent e, ServerLevel level, BlockPos pos, Flag flag) {
         if (trusted(e)) return Optional.empty();
-        return Rules.refusing(store.at(level, pos), flag, e.getActor().actingFor());
+        return FlagRules.refusing(store.at(level, pos), flag, e.getActor().actingFor());
     }
 
     /** The server, or a player with /region bypass on. */

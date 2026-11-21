@@ -20,9 +20,10 @@ import org.jspecify.annotations.Nullable;
  *
  * @param priority where regions overlap, only those with the highest priority decide.
  * @param flags only what was set; anything missing uses the flag's default.
+ * @param rules what it grants and denies, per subject
  */
 public record Region(String id, ResourceLocation world, BoundingBox box, int priority, Set<UUID> owners,
-        Set<UUID> members, Map<Flag, Boolean> flags) {
+        Set<UUID> members, Map<Flag, Boolean> flags, Rules rules) {
     private static final Pattern ID = Pattern.compile("[a-z0-9_-]{1,32}");
 
     public Region {
@@ -35,10 +36,11 @@ public record Region(String id, ResourceLocation world, BoundingBox box, int pri
         rest.removeAll(owners);
         members = Set.copyOf(rest);
         flags = flags.isEmpty() ? Map.of() : Map.copyOf(new EnumMap<>(flags));
+        Objects.requireNonNull(rules, "rules; use Rules.none() for a region that only marks an area");
     }
 
     public static Region of(String id, ResourceLocation world, BoundingBox box) {
-        return new Region(id, world, box, 0, Set.of(), Set.of(), Map.of());
+        return new Region(id, world, box, 0, Set.of(), Set.of(), Map.of(), Rules.fresh());
     }
 
     /** Why {@code id} can't name a region, said so the reader knows the fix. */
@@ -65,11 +67,11 @@ public record Region(String id, ResourceLocation world, BoundingBox box, int pri
     }
 
     public Region withBox(ResourceLocation world, BoundingBox box) {
-        return new Region(id, world, box, priority, owners, members, flags);
+        return new Region(id, world, box, priority, owners, members, flags, rules);
     }
 
     public Region withPriority(int priority) {
-        return new Region(id, world, box, priority, owners, members, flags);
+        return new Region(id, world, box, priority, owners, members, flags, rules);
     }
 
     /** {@code value} null clears the flag back to its default. */
@@ -78,7 +80,11 @@ public record Region(String id, ResourceLocation world, BoundingBox box, int pri
         next.putAll(flags);
         if (value == null) next.remove(flag);
         else next.put(flag, value);
-        return new Region(id, world, box, priority, owners, members, next);
+        return new Region(id, world, box, priority, owners, members, next, rules);
+    }
+
+    public Region withRules(Rules rules) {
+        return new Region(id, world, box, priority, owners, members, flags, rules);
     }
 
     public Region withOwner(UUID who) {
@@ -86,7 +92,7 @@ public record Region(String id, ResourceLocation world, BoundingBox box, int pri
         next.add(who);
         Set<UUID> rest = new HashSet<>(members);
         rest.remove(who);
-        return new Region(id, world, box, priority, next, rest, flags);
+        return new Region(id, world, box, priority, next, rest, flags, rules);
     }
 
     public Region withMember(UUID who) {
@@ -94,7 +100,7 @@ public record Region(String id, ResourceLocation world, BoundingBox box, int pri
         rest.remove(who);
         Set<UUID> next = new HashSet<>(members);
         next.add(who);
-        return new Region(id, world, box, priority, rest, next, flags);
+        return new Region(id, world, box, priority, rest, next, flags, rules);
     }
 
     /** Neither an owner nor a member any more. */
@@ -103,6 +109,6 @@ public record Region(String id, ResourceLocation world, BoundingBox box, int pri
         o.remove(who);
         Set<UUID> m = new HashSet<>(members);
         m.remove(who);
-        return new Region(id, world, box, priority, o, m, flags);
+        return new Region(id, world, box, priority, o, m, flags, rules);
     }
 }

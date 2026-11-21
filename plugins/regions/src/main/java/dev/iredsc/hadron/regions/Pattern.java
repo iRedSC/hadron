@@ -92,7 +92,7 @@ final class Pattern implements Comparable<Pattern> {
     private static String noNode(String text, List<String> prefix, String seg, List<Node> under) {
         String at = String.join(".", prefix);
         TreeSet<String> kids = children(prefix, under);
-        if (kids.isEmpty()) return "`" + text + "` isn't a node: " + at + " has nothing below it, so write `" + at + "`";
+        if (kids.isEmpty()) return "`" + text + "` matches no node: " + at + " has nothing below it, so write `" + at + "`";
         String guess = "";
         if (!seg.equals(WILD)) {
             String best = null;

@@ -25,68 +25,68 @@ class RulesTest {
     void outsidersCantBuildOrUseButCanWalkInAndFight() {
         List<Region> spawn = List.of(region("spawn"));
         Optional<UUID> who = Optional.of(bob);
-        assertTrue(Rules.refusing(spawn, Flag.BUILD, who).isPresent());
-        assertTrue(Rules.refusing(spawn, Flag.USE, who).isPresent());
-        assertTrue(Rules.refusing(spawn, Flag.ENTRY, who).isEmpty());
-        assertTrue(Rules.refusing(spawn, Flag.PVP, who).isEmpty());
+        assertTrue(FlagRules.refusing(spawn, Flag.BUILD, who).isPresent());
+        assertTrue(FlagRules.refusing(spawn, Flag.USE, who).isPresent());
+        assertTrue(FlagRules.refusing(spawn, Flag.ENTRY, who).isEmpty());
+        assertTrue(FlagRules.refusing(spawn, Flag.PVP, who).isEmpty());
     }
 
     @Test
     void membersAndOwnersBuild() {
-        assertTrue(Rules.refusing(List.of(region("a").withMember(alice)), Flag.BUILD, Optional.of(alice)).isEmpty());
-        assertTrue(Rules.refusing(List.of(region("a").withOwner(alice)), Flag.BUILD, Optional.of(alice)).isEmpty());
+        assertTrue(FlagRules.refusing(List.of(region("a").withMember(alice)), Flag.BUILD, Optional.of(alice)).isEmpty());
+        assertTrue(FlagRules.refusing(List.of(region("a").withOwner(alice)), Flag.BUILD, Optional.of(alice)).isEmpty());
     }
 
     @Test
     void nobodyBehindItIsAnOutsider() {
-        assertTrue(Rules.refusing(List.of(region("a").withOwner(alice)), Flag.BUILD, Optional.empty()).isPresent());
+        assertTrue(FlagRules.refusing(List.of(region("a").withOwner(alice)), Flag.BUILD, Optional.empty()).isPresent());
     }
 
     @Test
     void anAllowFlagLetsOutsidersIn() {
-        assertTrue(Rules.refusing(List.of(region("a").withFlag(Flag.USE, true)), Flag.USE, Optional.of(bob))
+        assertTrue(FlagRules.refusing(List.of(region("a").withFlag(Flag.USE, true)), Flag.USE, Optional.of(bob))
                 .isEmpty());
     }
 
     @Test
     void pvpDenyBindsMembersToo() {
         Region safe = region("safe").withMember(alice).withFlag(Flag.PVP, false);
-        assertTrue(Rules.refusing(List.of(safe), Flag.PVP, Optional.of(alice)).isPresent());
+        assertTrue(FlagRules.refusing(List.of(safe), Flag.PVP, Optional.of(alice)).isPresent());
     }
 
     @Test
     void theHighestPriorityDecides() {
         Region town = region("town");
         Region plot = region("plot").withPriority(1).withMember(bob);
-        assertTrue(Rules.refusing(List.of(town, plot), Flag.BUILD, Optional.of(bob)).isEmpty(),
+        assertTrue(FlagRules.refusing(List.of(town, plot), Flag.BUILD, Optional.of(bob)).isEmpty(),
                 "bob builds on his plot inside the town");
-        assertEquals(Optional.of(town), Rules.refusing(List.of(town), Flag.BUILD, Optional.of(bob)));
+        assertEquals(Optional.of(town), FlagRules.refusing(List.of(town), Flag.BUILD, Optional.of(bob)));
     }
 
     @Test
     void anyRegionAtTheTopPriorityDenying() {
         Region a = region("a").withMember(bob);
         Region b = region("b");
-        assertEquals(Optional.of(b), Rules.refusing(List.of(a, b), Flag.BUILD, Optional.of(bob)));
+        assertEquals(Optional.of(b), FlagRules.refusing(List.of(a, b), Flag.BUILD, Optional.of(bob)));
     }
 
     @Test
     void natureCrossesOnlyIntoRegionsItStartsInOrThatAllowBuilding() {
         Region spawn = region("spawn");
-        assertTrue(Rules.refusingCrossing(List.of(), List.of(spawn)).isPresent(), "water flowing in from outside");
-        assertTrue(Rules.refusingCrossing(List.of(spawn), List.of(spawn)).isEmpty(), "a piston door inside");
-        assertTrue(Rules.refusingCrossing(List.of(spawn), List.of()).isEmpty(), "flowing out");
-        assertTrue(Rules.refusingCrossing(List.of(), List.of(spawn.withFlag(Flag.BUILD, true))).isEmpty());
+        assertTrue(FlagRules.refusingCrossing(List.of(), List.of(spawn)).isPresent(), "water flowing in from outside");
+        assertTrue(FlagRules.refusingCrossing(List.of(spawn), List.of(spawn)).isEmpty(), "a piston door inside");
+        assertTrue(FlagRules.refusingCrossing(List.of(spawn), List.of()).isEmpty(), "flowing out");
+        assertTrue(FlagRules.refusingCrossing(List.of(), List.of(spawn.withFlag(Flag.BUILD, true))).isEmpty());
     }
 
     @Test
     void entryIsCheckedOnlyWhenComingIn() {
         Region vault = region("vault").withFlag(Flag.ENTRY, false);
         Optional<UUID> who = Optional.of(bob);
-        assertTrue(Rules.refusingEntry(List.of(), List.of(vault), who).isPresent());
-        assertTrue(Rules.refusingEntry(List.of(vault), List.of(vault), who).isEmpty(), "already inside");
-        assertTrue(Rules.refusingEntry(List.of(vault), List.of(), who).isEmpty(), "leaving");
-        assertTrue(Rules.refusingEntry(List.of(), List.of(vault.withMember(bob)), who).isEmpty(), "a member");
+        assertTrue(FlagRules.refusingEntry(List.of(), List.of(vault), who).isPresent());
+        assertTrue(FlagRules.refusingEntry(List.of(vault), List.of(vault), who).isEmpty(), "already inside");
+        assertTrue(FlagRules.refusingEntry(List.of(vault), List.of(), who).isEmpty(), "leaving");
+        assertTrue(FlagRules.refusingEntry(List.of(), List.of(vault.withMember(bob)), who).isEmpty(), "a member");
     }
 
     @Test
@@ -102,8 +102,8 @@ class RulesTest {
     void natureFollowsTheHighestPriorityToo() {
         Region town = region("town");
         Region plot = region("plot").withPriority(1).withFlag(Flag.BUILD, true);
-        assertTrue(Rules.refusingCrossing(List.of(), List.of(town, plot)).isEmpty(),
+        assertTrue(FlagRules.refusingCrossing(List.of(), List.of(town, plot)).isEmpty(),
                 "water may flow into an open plot inside a closed town, as anyone may build there");
-        assertEquals(Optional.of(town), Rules.refusingCrossing(List.of(), List.of(town)));
+        assertEquals(Optional.of(town), FlagRules.refusingCrossing(List.of(), List.of(town)));
     }
 }

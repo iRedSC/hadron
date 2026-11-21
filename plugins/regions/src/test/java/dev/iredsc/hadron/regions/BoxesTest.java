@@ -41,7 +41,7 @@ class BoxesTest {
         List<List<Region>> may = Protection.anywhereIn(List.of(town, plot), CHUNK);
         assertEquals(List.of(List.of(plot)), may, "the plot covers all of the town here, so the town never decides");
         Optional<UUID> bob = Optional.of(new UUID(0, 2));
-        assertTrue(Rules.refusingAny(may, Flag.USE, bob).isEmpty());
+        assertTrue(FlagRules.refusingAny(may, Flag.USE, bob).isEmpty());
     }
 
     @Test
@@ -51,6 +51,6 @@ class BoxesTest {
                 .withFlag(Flag.USE, true);
         List<List<Region>> may = Protection.anywhereIn(List.of(vault, park), null);
         assertTrue(may.contains(List.of()), "a whole world always has room outside every region");
-        assertTrue(Rules.refusingAny(may, Flag.USE, Optional.of(new UUID(0, 2))).isPresent());
+        assertTrue(FlagRules.refusingAny(may, Flag.USE, Optional.of(new UUID(0, 2))).isPresent());
     }
 }

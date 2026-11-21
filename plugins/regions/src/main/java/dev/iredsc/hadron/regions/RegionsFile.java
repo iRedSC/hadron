@@ -185,7 +185,7 @@ final class RegionsFile {
             }
         }
         return new Region(id, world, BoundingBox.fromCorners(min, max), s.getInt("priority", 0),
-                people(id, s, "owners"), people(id, s, "members"), flags);
+                people(id, s, "owners"), people(id, s, "members"), flags, Rules.fresh());
     }
 
     private static BlockPos pos(String id, ConfigurationSection s, String key) throws Problem {
