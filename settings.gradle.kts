@@ -25,7 +25,7 @@ include("test-api")
 include("examples:hello")
 
 // Plugins bundled with Hadron, written the way plugin authors write theirs.
-include("plugins:luckperms")
+include("plugins:luckperms", "plugins:regions")
 
 // Hadron's own tests: a plugin whose src/test/java checks Hadron's events and APIs with the harness plugin authors use.
 include("selftest")
