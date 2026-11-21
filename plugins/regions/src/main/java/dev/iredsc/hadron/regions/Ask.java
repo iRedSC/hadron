@@ -62,10 +62,12 @@ sealed interface Ask {
      * Each player this moves enters where they end up, asking {@code action} as themselves, not as the actor: those
      * {@code moved} and everyone {@code carried}, each judged from where that one sets out to where that one ends up,
      * and from where {@code carrier}, the entity carrying them all, sets out to where it ends up (a seat can be lower or
-     * further over than its vehicle). No carrier when no entity carries them: a ship's crew.
+     * further over than its vehicle). No carrier when no entity carries them: a ship's crew. Everyone also enters
+     * each place {@code crossed}, what its event states the carrier passes through on the way (a fast move's blocks
+     * between its ends), from where the carrier sets out: a rider's own way across isn't stated.
      */
-    record Enter(Action action, Optional<Carried.Ride> carrier, List<Carried.Ride> moved, Carried carried)
-            implements Ask {
+    record Enter(Action action, Optional<Carried.Ride> carrier, List<Carried.Ride> moved, Carried carried,
+            List<Place> crossed) implements Ask {
         public Enter {
             if (action.kinded() || action.key().indexOf("enter.") != 0) {
                 throw new IllegalArgumentException(action.key() + " isn't an enter.* node");
@@ -73,6 +75,11 @@ sealed interface Ask {
             Objects.requireNonNull(carrier, "carrier");
             moved = List.copyOf(moved);
             Objects.requireNonNull(carried, "carried");
+            crossed = List.copyOf(crossed);
+        }
+
+        Enter(Action action, Optional<Carried.Ride> carrier, List<Carried.Ride> moved, Carried carried) {
+            this(action, carrier, moved, carried, List.of());
         }
 
         Node node() {

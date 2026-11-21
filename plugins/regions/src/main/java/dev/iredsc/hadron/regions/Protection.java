@@ -127,9 +127,10 @@ final class Protection implements Listener {
 
     /**
      * Whether a player it moves may not enter where they end up, asked as that player: each one moved or carried,
-     * from where that one sets out to where it ends up, and from where the carrier sets out to where it ends up. Only
-     * regions a player is not already in can refuse, so anyone inside can walk out. A move whose riders nobody can
-     * name is asked as anyone, wherever its bound reaches. Everyone going is shown where they were refused.
+     * from where that one sets out to where it ends up, and from where the carrier sets out to where it ends up and
+     * to what it crosses on the way. Only regions a player is not already in can refuse, so anyone inside can walk
+     * out. A move whose riders nobody can name is asked as anyone, wherever its bound reaches. Everyone going is shown
+     * where they were refused.
      */
     private boolean enter(Actor actor, Ask.Enter en) {
         if (actor instanceof Actor.Server) return false;
@@ -151,6 +152,11 @@ final class Protection implements Listener {
             if (no.isEmpty()) no = refusingEntry(mayBeIn(r.from(), EVERY), r.to(), who, node);
             if (no.isEmpty() && carrier.isPresent() && r != carrier.get()) {
                 no = refusingEntry(mayBeIn(carrier.get().from(), EVERY), carrier.get().to(), who, node);
+            }
+            for (Place across : en.crossed()) {
+                if (no.isEmpty() && carrier.isPresent()) {
+                    no = refusingEntry(mayBeIn(carrier.get().from(), EVERY), across, who, node);
+                }
             }
         }
         if (no.isEmpty()) return false;

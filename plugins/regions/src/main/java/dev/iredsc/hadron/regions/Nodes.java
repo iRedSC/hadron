@@ -334,10 +334,16 @@ final class Nodes {
     // ---- What takes a player somewhere ----------------------------------------------------------------------------
 
     private void movement() {
+        // What it crosses is every place it states beyond its own ends and its riders' (a fast move's blocks between).
         Function<EntityMoveEvent, List<Ask>> walk = e -> {
             Carried.Ride ride = new Carried.Ride(e.getEntity(), Place.Spot.at(e.getLevel(), e.getFromBlock()),
                     Place.Spot.at(e.getLevel(), e.getToBlock()));
-            return List.of(new Ask.Enter(ENTER_MOVE, Optional.of(ride), List.of(ride), e.getCarried()));
+            Carried carried = e.getCarried();
+            List<Place> ends = new ArrayList<>(carried.places());
+            ends.add(ride.from());
+            ends.add(ride.to());
+            List<Place> crossed = e.getPlaces().stream().filter(p -> !ends.contains(p)).toList();
+            return List.of(new Ask.Enter(ENTER_MOVE, Optional.of(ride), List.of(ride), carried, crossed));
         };
         asks(EntityMoveEvent.class, EnumSet.of(ENTER_MOVE), walk::apply);
         asks(PlayerMoveEvent.class, EnumSet.of(ENTER_MOVE), walk::apply);
