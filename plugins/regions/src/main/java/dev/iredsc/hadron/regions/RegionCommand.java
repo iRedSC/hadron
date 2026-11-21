@@ -276,8 +276,9 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
     }
 
     /**
-     * {@code /region why <node> [subject]}: at your feet, each region from the highest priority down, what it answers
-     * and why, and the one that decides outlined, red when it refuses. With no subject, you are judged as you are in
+     * {@code /region why <node> [subject]}: at your feet, each region you manage from the highest priority down, what
+     * it answers and why, then what every region there decides, resolved as protection resolves it. A region you
+     * don't manage decides without its id or rules, so ids don't leak. With no subject, you are judged as you are in
      * each region (a member or everyone).
      */
     private void why(CommandSourceStack sender, String[] args) {
@@ -290,37 +291,44 @@ final class RegionCommand implements CommandExecutor, TabCompleter {
         } catch (Pattern.Invalid e) {
             throw new Refusal(e.getMessage());
         }
-        Optional<Subject> as = Optional.empty();
+        Who who = new Who.Person(p.getUUID());
         if (args.length > 2) {
-            as = Optional.of(Subject.parse(args[2].toLowerCase(Locale.ROOT)).orElseThrow(() -> new Refusal(
-                    args[2] + " isn't a subject; the subjects are " + Subject.list())));
+            Subject as = Subject.parse(args[2].toLowerCase(Locale.ROOT)).orElseThrow(() -> new Refusal(
+                    args[2] + " isn't a subject; the subjects are " + Subject.list()));
+            who = switch (as) {
+                case MEMBERS -> new Who.Member();
+                case EVERYONE -> new Who.Anyone();
+                // As if it set out from where they stand, so inside every region here.
+                case WORLD -> new Who.World(List.of(new Who.Home.At(p.serverLevel().dimension().location(),
+                        new BoundingBox(p.blockPosition()))));
+                case UNKNOWN -> new Who.Unknown();
+            };
         }
-        List<Region> here = new ArrayList<>(store.at(p.serverLevel(), p.blockPosition()).stream()
-                .filter(r -> canManage(sender, r)).toList());
-        if (here.isEmpty()) throw new Refusal("No region you manage is at your feet");
+        List<Region> here = new ArrayList<>(store.at(p.serverLevel(), p.blockPosition()));
         here.sort(Comparator.comparingInt(Region::priority).reversed().thenComparing(Region::id));
-        Optional<Resolve.Decision> deciding = Optional.empty();
-        Integer decidedAt = null;
+        if (here.stream().noneMatch(r -> canManage(sender, r))) throw new Refusal("No region you manage is at your feet");
         for (Region r : here) {
-            Subject subject = as.orElseGet(() -> r.isMember(p.getUUID()) ? Subject.MEMBERS : Subject.EVERYONE);
-            Optional<Resolve.Decision> d = Resolve.answer(r, subject, node, true);
-            String line = r.id() + " (" + r.priority() + "): " + d.map(RegionCommand::reason)
-                    .orElse(subject.key() + ", no rule, passes");
-            if (decidedAt == null && d.isPresent()) {
-                deciding = d;
-                decidedAt = r.priority();
-            } else if (decidedAt != null && d.isPresent() && r.priority() == decidedAt && d.get().refuses()
-                    && !deciding.get().refuses()) {
-                deciding = d;
-            }
-            ok(sender, line);
+            if (!canManage(sender, r)) continue;
+            Optional<Resolve.Decision> d = Resolve.answer(r, who, node);
+            ok(sender, r.id() + " (" + r.priority() + "): " + d.map(RegionCommand::reason)
+                    .orElse(who.subjectIn(r).key() + ", no rule, passes"));
         }
+        // Refused if protection refuses; otherwise the topmost region with an answer is the one that let it through.
+        Who judged = who;
+        Optional<Resolve.Decision> deciding = Resolve.refusing(here, who, node).or(() -> here.stream()
+                .filter(Resolve.answers(judged, node, List.of())).findFirst()
+                .flatMap(r -> Resolve.answer(r, judged, node)));
         if (deciding.isEmpty()) {
             ok(sender, "→ allowed: no region here decides " + node.key());
             return;
         }
         Resolve.Decision d = deciding.get();
-        ok(sender, "→ " + (d.refuses() ? "refused by " : "allowed by ") + d.region().id());
+        String verdict = d.refuses() ? "refused by " : "allowed by ";
+        if (!canManage(sender, d.region())) {
+            ok(sender, "→ " + verdict + "a region you don't manage");
+            return;
+        }
+        ok(sender, "→ " + verdict + d.region().id());
         feedback.outline(p, d.region().world(), d.region().box(), d.refuses() ? Feedback.Look.REFUSING
                 : Feedback.Look.REGION);
     }

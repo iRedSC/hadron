@@ -9,6 +9,7 @@ import dev.iredsc.hadron.test.TestPlayer;
 import java.util.List;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.monster.Husk;
+import net.minecraft.world.level.block.Blocks;
 
 /** Setting nodes from chat, taking a change back, and asking why. */
 public final class RuleCommandTests {
@@ -83,5 +84,34 @@ public final class RuleCommandTests {
         t.assertChat(alice, "Name one node, such as entity.hurt.animal: entity.hurt covers several");
         List<String> chat = alice.chat();
         t.assertTrue(chat.stream().noneMatch(l -> l.contains("Exception")), "no command threw: " + chat);
+    }
+
+    @HadronTest
+    void whyDecidesAsProtectionDoesAndHidesARegionYouDontManage(TestContext t) {
+        TestPlayer alice = admin(t);
+        // Set before any region exists: once one does, the test's own writes are refused.
+        t.setBlock(t.pos(1, 0, 1), Blocks.DIRT);
+        define(t, alice, "plot", t.pos(-2, 0, -2), t.pos(2, 3, 2));
+        WorkedExampleTests.put(t, "town", t.pos(-6, 0, -6), t.pos(6, 3, 6));
+        alice.command("rg priority town 10");
+        TestPlayer bob = t.player("bob");
+        alice.command("rg addowner plot bob");
+        t.assertChat(alice, "bob owns plot");
+        bob.moveTo(t.pos(0, 1, 0));
+        t.assertBlock(t.pos(1, 0, 1), Blocks.DIRT);
+        bob.breakBlock(t.pos(1, 0, 1));
+        t.assertBlock(t.pos(1, 0, 1), Blocks.DIRT);
+        int seen = bob.chat().size();
+        bob.command("rg why block.break");
+        List<String> why = bob.chat().subList(seen, bob.chat().size());
+        t.assertTrue(why.stream().anyMatch(l -> l.contains("plot (0): members, a member → allowed")),
+                "bob's own plot should answer: " + why);
+        t.assertTrue(why.stream().anyMatch(l -> l.contains("→ refused by a region you don't manage")),
+                "town refuses bob's break: " + why);
+        t.assertTrue(why.stream().noneMatch(l -> l.contains("town")), "bob doesn't manage town: " + why);
+        alice.moveTo(t.pos(0, 1, 0));
+        alice.command("rg why block.break");
+        t.assertChat(alice, "town (10): everyone deny build ⊃ block.break → refused");
+        t.assertChat(alice, "→ refused by town");
     }
 }

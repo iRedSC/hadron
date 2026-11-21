@@ -27,6 +27,9 @@ sealed interface Who {
     /** Anyone at all, such as whoever may be aboard a move nobody traced: judged as everyone, in every region. */
     record Anyone() implements Who {}
 
+    /** Someone judged as a member in every region: only {@code /region why <node> members} asks this way. */
+    record Member() implements Who {}
+
     /** Nobody behind it, setting out from every one of {@code home}: never empty, so "inside" is never vacuous. */
     record World(List<Home> home) implements Who {
         public World {
@@ -89,6 +92,7 @@ sealed interface Who {
         return switch (this) {
             case Person p -> region.isMember(p.id()) ? Subject.MEMBERS : Subject.EVERYONE;
             case Anyone a -> Subject.EVERYONE;
+            case Member m -> Subject.MEMBERS;
             case World w -> Subject.WORLD;
             case Unknown u -> Subject.UNKNOWN;
         };
