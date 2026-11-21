@@ -43,7 +43,12 @@ final class Protection implements Listener {
         this.bypass = bypass;
     }
 
-    @EventHandler(priority = EventPriority.LOW, ignoreCancelled = true)
+    /**
+     * At the last priority that may still change an event, so it judges what the event will do once other plugins have
+     * redirected a teleport, retargeted a mob or put a block back in a blast's list. Only {@code MONITOR}, which must
+     * not change it, and another plugin's {@code HIGHEST} registered later come after.
+     */
+    @EventHandler(priority = EventPriority.HIGHEST, ignoreCancelled = true)
     private void on(Event event) {
         if (!(event instanceof Cancellable c) || store.all().isEmpty()) return;
         List<Ask> asks = nodes.asks(event);

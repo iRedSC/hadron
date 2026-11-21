@@ -37,6 +37,8 @@ Where the world has no rule for a node, **it may act in a region only if every p
 
 ## How a decision is made
 
+Regions decide once other plugins' ordinary listeners are done (at `HIGHEST`), so a teleport another plugin redirects, a target it changes or a block it puts back in a blast is judged as it will happen. A plugin listening at `NORMAL` still hears an act regions then refuse: to act only on what goes ahead, listen at `MONITOR` and check `isCancelled()`.
+
 For each place the event states (a place no one can pin down counts as every region its bound reaches), take the regions there:
 
 1. Highest priority first; every region at that priority answers for the subject it judges the act as.
