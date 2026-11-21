@@ -67,12 +67,18 @@ class ResolveTest {
     @Test
     void theMostSpecificRuleWinsAndAnythingNamedBeatsAFlag() {
         Region farm = with(spawn(), Subject.EVERYONE, Rules.Verdict.ALLOW, "entity.hurt.animal");
-        assertTrue(!refused(List.of(farm), bob, HURT_ANIMAL), "entity.hurt.animal (3) beats build (1)");
+        assertTrue(!refused(List.of(farm), bob, HURT_ANIMAL), "entity.hurt.animal (3) beats build (0)");
         assertTrue(refused(List.of(farm), bob, HURT_MISC), "a villager is still build's");
         Region doors = with(spawn(), Subject.EVERYONE, Rules.Verdict.ALLOW, "block");
-        assertTrue(refused(List.of(doors), bob, BREAK), "block (1) ties build (1), and deny wins a tie");
+        assertTrue(!refused(List.of(doors), bob, BREAK), "block (1) beats build (0)");
+        Region walls = with(Region.of("r", WORLD, SPAWN_BOX).withRules(Rules.none()), Subject.EVERYONE,
+                Rules.Verdict.DENY, "block");
+        walls = with(walls, Subject.EVERYONE, Rules.Verdict.ALLOW, "build");
+        assertTrue(refused(List.of(walls), bob, BREAK), "block denied (1) beats build allowed (0)");
+        Region anyEntity = with(spawn(), Subject.EVERYONE, Rules.Verdict.ALLOW, "entity.*");
+        assertTrue(!refused(List.of(anyEntity), bob, HURT_ANIMAL), "entity.* (1) beats build (0)");
         Region named = with(spawn(), Subject.EVERYONE, Rules.Verdict.ALLOW, "block.break");
-        assertTrue(!refused(List.of(named), bob, BREAK), "block.break (2) beats build (1)");
+        assertTrue(!refused(List.of(named), bob, BREAK), "block.break (2) beats build (0)");
     }
 
     @Test

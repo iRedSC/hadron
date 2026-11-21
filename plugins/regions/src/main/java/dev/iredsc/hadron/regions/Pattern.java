@@ -182,9 +182,12 @@ final class Pattern implements Comparable<Pattern> {
         return true;
     }
 
-    /** How many segments it names outright; a flag counts as 1, so anything named beats a flag. */
+    /**
+     * How many segments it names outright; a flag counts as 0, so anything named beats a flag, a root alone included
+     * (a pattern can't start with {@code *}, so it names at least its root).
+     */
     int specificity() {
-        if (bundle.isPresent()) return 1;
+        if (bundle.isPresent()) return 0;
         int n = 0;
         for (String s : segments) if (!s.equals(WILD)) n++;
         return n;

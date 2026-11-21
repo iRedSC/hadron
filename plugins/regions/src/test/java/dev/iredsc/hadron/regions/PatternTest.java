@@ -57,4 +57,18 @@ class PatternTest {
         assertTrue(Pattern.completions("entity.*.").contains("entity.*.animal"));
         assertEquals(List.of(), Pattern.completions("block.break."));
     }
+
+    @Test
+    void anythingNamedOutranksAFlagAndNamedPatternsRankBySegmentsNamed() throws Pattern.Invalid {
+        int flag = Pattern.of(Bundle.BUILD).specificity();
+        assertEquals(flag, Pattern.of(Bundle.USE).specificity(), "a flag ranks with a flag, so deny wins their tie");
+        for (String named : List.of("block", "entity.*", "entity.*.animal", "entity.hurt", "entity.hurt.animal")) {
+            assertTrue(Pattern.parse(named).specificity() > flag, named + " outranks a flag");
+        }
+        assertEquals(1, Pattern.parse("block").specificity());
+        assertEquals(1, Pattern.parse("entity.*").specificity());
+        assertEquals(2, Pattern.parse("entity.*.animal").specificity());
+        assertEquals(2, Pattern.parse("entity.hurt").specificity());
+        assertEquals(3, Pattern.parse("entity.hurt.animal").specificity());
+    }
 }

@@ -42,7 +42,7 @@ Regions decide once other plugins' ordinary listeners are done (at `HIGHEST`), s
 For each place the event states (a place no one can pin down counts as every region its bound reaches), take the regions there:
 
 1. Highest priority first; every region at that priority answers for the subject it judges the act as.
-2. Within a region the most specific matching rule wins. Specificity is the number of segments named: `entity.hurt.animal` (3) beats `entity.*.animal` (2) and `entity.hurt` (2). A flag counts as 1, so anything named beats a flag. At equal specificity, deny wins. A rule beats the subject's own answer.
+2. Within a region the most specific matching rule wins. Specificity is the number of segments named: `entity.hurt.animal` (3) beats `entity.*.animal` (2) and `entity.hurt` (2). A flag counts as 0, so anything named beats a flag, a root alone such as `block` included. At equal specificity, deny wins. A rule beats the subject's own answer.
 3. At one priority, any region refusing refuses; otherwise any allowing allows; if every region there abstains, the next priority down decides.
 4. If every region abstains, it is allowed.
 
